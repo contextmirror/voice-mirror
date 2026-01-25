@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice Mirror</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #0d0d1a;  /* Fallback for no transparency */
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 0;
+        }
+
+        /* Orb State */
+        #orb {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            cursor: grab;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+            -webkit-app-region: drag;
+            /* Styled background since transparency doesn't work on Wayland */
+            background: radial-gradient(circle, #2d1b4e 0%, #1a1a2e 50%, #0d0d1a 100%);
+            box-shadow: 0 4px 20px rgba(102, 126, 234, 0.3);
+            border: 2px solid rgba(102, 126, 234, 0.5);
+        }
+
+        #orb:active {
+            cursor: grabbing;
+        }
+
+        #orb-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            pointer-events: none;  /* Let clicks pass through to orb */
+        }
+
+        #orb:hover {
+            transform: scale(1.1);
+            filter: brightness(1.1);
+        }
+
+        #orb.listening {
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        #orb.recording {
+            animation: recording-pulse 0.5s ease-in-out infinite;
+            filter: hue-rotate(30deg) saturate(1.3);
+        }
+
+        #orb.speaking {
+            animation: speaking-wave 1s ease-in-out infinite;
+            filter: hue-rotate(-30deg) brightness(1.2);
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.05); opacity: 0.9; }
+        }
+
+        @keyframes recording-pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.15); }
+        }
+
+        @keyframes speaking-wave {
+            0%, 100% { transform: scale(1); }
+            25% { transform: scale(1.08); }
+            75% { transform: scale(0.95); }
+        }
+
+        /* Removed - orb-icon is now styled above with no-drag */
+
+        /* Panel State */
+        #panel {
+            display: none;
+            width: 100%;
+            height: 100%;
+            background: rgba(20, 20, 30, 0.95);
+            border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(20px);
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        #panel.visible {
+            display: flex;
+        }
+
+        #panel-header {
+            display: flex;
+            align-items: center;
+            padding: 12px 16px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            -webkit-app-region: drag;
+        }
+
+        #panel-header .orb-mini {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            margin-right: 12px;
+            cursor: pointer;
+            -webkit-app-region: no-drag;
+            overflow: hidden;
+        }
+
+        #panel-header .orb-mini img {
+            width: 100%;
+            height: 100%;
+        }
+
+        #panel-header h1 {
+            color: white;
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        #chat-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+        }
+
+        .message {
+            margin-bottom: 12px;
+            padding: 12px 16px;
+            border-radius: 12px;
+            max-width: 85%;
+        }
+
+        .message.user {
+            background: rgba(102, 126, 234, 0.3);
+            color: white;
+            margin-left: auto;
+        }
+
+        .message.assistant {
+            background: rgba(255, 255, 255, 0.1);
+            color: #e0e0e0;
+        }
+
+        #status-bar {
+            padding: 12px 16px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            align-items: center;
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 14px;
+        }
+
+        #status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #4ade80;
+            margin-right: 8px;
+            animation: status-blink 2s ease-in-out infinite;
+        }
+
+        #status-indicator.recording {
+            background: #f5576c;
+            animation: status-blink 0.5s ease-in-out infinite;
+        }
+
+        @keyframes status-blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* Image Preview */
+        #image-preview {
+            display: none;
+            padding: 12px 16px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(0, 0, 0, 0.3);
+        }
+
+        #image-preview.visible {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        #image-preview img {
+            max-width: 80px;
+            max-height: 60px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        #image-preview .preview-info {
+            flex: 1;
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 12px;
+        }
+
+        #image-preview .preview-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        #image-preview button {
+            padding: 6px 12px;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s;
+        }
+
+        #image-preview .send-btn {
+            background: #667eea;
+            color: white;
+        }
+
+        #image-preview .send-btn:hover {
+            background: #5a6fd6;
+        }
+
+        #image-preview .cancel-btn {
+            background: rgba(255, 255, 255, 0.1);
+            color: rgba(255, 255, 255, 0.8);
+        }
+
+        #image-preview .cancel-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        /* Action buttons in status bar */
+        #action-buttons {
+            display: flex;
+            gap: 8px;
+            margin-left: auto;
+        }
+
+        .action-btn {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            border: none;
+            background: rgba(255, 255, 255, 0.1);
+            color: rgba(255, 255, 255, 0.7);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+
+        .action-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+        }
+
+        /* Drop zone overlay */
+        #drop-zone {
+            display: none;
+            position: absolute;
+            inset: 0;
+            background: rgba(102, 126, 234, 0.9);
+            border-radius: 16px;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 18px;
+            font-weight: 600;
+            z-index: 100;
+        }
+
+        #drop-zone.visible {
+            display: flex;
+        }
+
+        /* Message with image */
+        .message-image {
+            max-width: 100%;
+            max-height: 150px;
+            border-radius: 8px;
+            margin-bottom: 8px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Orb View (collapsed) -->
+    <div id="orb" class="listening">
+        <img id="orb-icon" src="../assets/icon-64.png" alt="Voice Mirror">
+    </div>
+
+    <!-- Panel View (expanded) -->
+    <div id="panel">
+        <div id="panel-header">
+            <div class="orb-mini" onclick="collapse()">
+                <img src="../assets/icon-32.png" alt="Voice Mirror">
+            </div>
+            <h1>Voice Mirror</h1>
+        </div>
+
+        <div id="chat-container">
+            <!-- Messages will be added here -->
+            <div class="message assistant">
+                Hello! I'm Voice Mirror. Say "Hey Claude" or click the orb to start.
+            </div>
+        </div>
+
+        <!-- Image Preview (shown when image is pasted/dropped) -->
+        <div id="image-preview">
+            <img id="preview-image" src="" alt="Preview">
+            <div class="preview-info">
+                <div id="preview-filename">screenshot.png</div>
+                <div id="preview-size">0 KB</div>
+            </div>
+            <div class="preview-actions">
+                <button class="send-btn" onclick="sendImage()">Send</button>
+                <button class="cancel-btn" onclick="cancelImage()">Cancel</button>
+            </div>
+        </div>
+
+        <div id="status-bar">
+            <div id="status-indicator"></div>
+            <span id="status-text">Listening...</span>
+            <div id="action-buttons">
+                <button class="action-btn" onclick="captureScreen()" title="Capture Screen">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="18" height="18" rx="2"/>
+                        <circle cx="12" cy="12" r="3"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- Drop zone overlay -->
+        <div id="drop-zone">Drop image here</div>
+    </div>
+
+    <script>
+        const orb = document.getElementById('orb');
+        const panel = document.getElementById('panel');
+        const statusIndicator = document.getElementById('status-indicator');
+        const statusText = document.getElementById('status-text');
+
+        let isExpanded = false;
+
+        // Right-click orb to expand (left click/drag to move)
+        orb.addEventListener('contextmenu', async (e) => {
+            e.preventDefault();
+            isExpanded = await window.voiceMirror.toggleExpand();
+            updateUI();
+        });
+
+        // Collapse from panel
+        function collapse() {
+            window.voiceMirror.toggleExpand().then(state => {
+                isExpanded = state;
+                updateUI();
+            });
+        }
+
+        function updateUI() {
+            if (isExpanded) {
+                orb.style.display = 'none';
+                panel.classList.add('visible');
+            } else {
+                orb.style.display = 'flex';
+                panel.classList.remove('visible');
+            }
+        }
+
+        // Listen for state changes from main process
+        window.voiceMirror.onStateChange((data) => {
+            isExpanded = data.expanded;
+            updateUI();
+        });
+
+        // Listen for voice events
+        window.voiceMirror.onVoiceEvent((data) => {
+            switch (data.type) {
+                case 'wake':
+                    orb.className = 'listening';
+                    statusText.textContent = 'Wake word detected!';
+                    break;
+                case 'recording':
+                    orb.className = 'recording';
+                    statusIndicator.className = 'recording';
+                    statusText.textContent = 'Recording...';
+                    break;
+                case 'speaking':
+                    orb.className = 'speaking';
+                    statusIndicator.className = '';
+                    statusText.textContent = 'Speaking...';
+                    break;
+                case 'idle':
+                    orb.className = 'listening';
+                    statusIndicator.className = '';
+                    statusText.textContent = 'Listening...';
+                    break;
+            }
+        });
+
+        // Initialize
+        window.voiceMirror.getState().then(state => {
+            isExpanded = state.expanded;
+            updateUI();
+        });
+
+        // ========== Image Handling ==========
+        const imagePreview = document.getElementById('image-preview');
+        const previewImage = document.getElementById('preview-image');
+        const previewFilename = document.getElementById('preview-filename');
+        const previewSize = document.getElementById('preview-size');
+        const dropZone = document.getElementById('drop-zone');
+        const chatContainer = document.getElementById('chat-container');
+
+        let pendingImageData = null;
+
+        // Paste handler
+        document.addEventListener('paste', async (e) => {
+            const items = e.clipboardData?.items;
+            if (!items) return;
+
+            for (const item of items) {
+                if (item.type.startsWith('image/')) {
+                    e.preventDefault();
+                    const blob = item.getAsFile();
+                    await handleImageBlob(blob, 'pasted-image.png');
+                    break;
+                }
+            }
+        });
+
+        // Drag and drop handlers
+        document.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            if (isExpanded) {
+                dropZone.classList.add('visible');
+            }
+        });
+
+        document.addEventListener('dragleave', (e) => {
+            if (e.relatedTarget === null || !document.contains(e.relatedTarget)) {
+                dropZone.classList.remove('visible');
+            }
+        });
+
+        document.addEventListener('drop', async (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('visible');
+
+            const file = e.dataTransfer?.files[0];
+            if (file && file.type.startsWith('image/')) {
+                await handleImageBlob(file, file.name);
+            }
+        });
+
+        // Handle image blob (from paste or drop)
+        async function handleImageBlob(blob, filename) {
+            const base64 = await blobToBase64(blob);
+            pendingImageData = {
+                base64: base64,
+                filename: filename,
+                size: blob.size,
+                type: blob.type
+            };
+
+            // Show preview
+            previewImage.src = base64;
+            previewFilename.textContent = filename;
+            previewSize.textContent = formatSize(blob.size);
+            imagePreview.classList.add('visible');
+        }
+
+        // Convert blob to base64
+        function blobToBase64(blob) {
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result);
+                reader.readAsDataURL(blob);
+            });
+        }
+
+        // Format file size
+        function formatSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        }
+
+        // Screen capture button
+        async function captureScreen() {
+            statusText.textContent = 'Capturing screen...';
+            try {
+                const dataUrl = await window.voiceMirror.captureScreen();
+                if (dataUrl) {
+                    // Convert data URL to blob info
+                    const base64 = dataUrl;
+                    const sizeEstimate = Math.round((base64.length * 3) / 4);
+
+                    pendingImageData = {
+                        base64: base64,
+                        filename: 'screenshot.png',
+                        size: sizeEstimate,
+                        type: 'image/png'
+                    };
+
+                    previewImage.src = base64;
+                    previewFilename.textContent = 'screenshot.png';
+                    previewSize.textContent = formatSize(sizeEstimate);
+                    imagePreview.classList.add('visible');
+                }
+            } catch (err) {
+                console.error('Screen capture failed:', err);
+                statusText.textContent = 'Capture failed';
+            }
+            setTimeout(() => {
+                statusText.textContent = 'Listening...';
+            }, 2000);
+        }
+
+        // Send image to Claude
+        async function sendImage() {
+            if (!pendingImageData) return;
+
+            // Add image message to chat
+            addMessage('user', null, pendingImageData.base64);
+            addMessage('user', "What's in this image?");
+
+            // Send to backend
+            try {
+                const response = await window.voiceMirror.sendImageToBackend(pendingImageData);
+                if (response && response.text) {
+                    addMessage('assistant', response.text);
+                }
+            } catch (err) {
+                console.error('Failed to send image:', err);
+                addMessage('assistant', 'Sorry, I could not process that image.');
+            }
+
+            cancelImage();
+        }
+
+        // Cancel image preview
+        function cancelImage() {
+            pendingImageData = null;
+            imagePreview.classList.remove('visible');
+            previewImage.src = '';
+        }
+
+        // Add message to chat
+        function addMessage(role, text, imageBase64 = null) {
+            const msg = document.createElement('div');
+            msg.className = `message ${role}`;
+
+            if (imageBase64) {
+                const img = document.createElement('img');
+                img.className = 'message-image';
+                img.src = imageBase64;
+                msg.appendChild(img);
+            }
+
+            if (text) {
+                const textNode = document.createElement('div');
+                textNode.textContent = text;
+                msg.appendChild(textNode);
+            }
+
+            chatContainer.appendChild(msg);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+    </script>
+</body>
+</html>
