@@ -9,7 +9,7 @@
  * NOTE: Uses Electron 28. The basic window works - tested 2026-01-24.
  */
 
-const { app, BrowserWindow, Tray, Menu, ipcMain, desktopCapturer, screen } = require('electron');
+const { app, BrowserWindow, Tray, Menu, ipcMain, desktopCapturer, screen, globalShortcut } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 const fs = require('fs');
@@ -179,7 +179,18 @@ function createTray() {
     }
 
     const contextMenu = Menu.buildFromTemplate([
-        { label: 'Show Voice Mirror', click: () => mainWindow?.show() },
+        {
+            label: 'Toggle Panel',
+            accelerator: 'CommandOrControl+Shift+V',
+            click: () => {
+                if (isExpanded) {
+                    collapseToOrb();
+                } else {
+                    expandPanel();
+                }
+            }
+        },
+        { label: 'Show Window', click: () => mainWindow?.show() },
         { type: 'separator' },
         { label: 'Settings', click: () => { /* TODO */ } },
         { type: 'separator' },
@@ -412,6 +423,23 @@ app.whenReady().then(() => {
     createWindow();
     createTray();
 
+    // Register global shortcut to toggle panel (Ctrl+Shift+V)
+    const shortcut = 'CommandOrControl+Shift+V';
+    const registered = globalShortcut.register(shortcut, () => {
+        console.log('[Voice Mirror] Global shortcut triggered');
+        if (isExpanded) {
+            collapseToOrb();
+        } else {
+            expandPanel();
+        }
+    });
+
+    if (registered) {
+        console.log(`[Voice Mirror] Global shortcut registered: ${shortcut}`);
+    } else {
+        console.log(`[Voice Mirror] Failed to register shortcut: ${shortcut}`);
+    }
+
     // Optionally start Python Voice Mirror
     // Uncomment when ready to integrate:
     // startPythonVoiceMirror();
@@ -433,6 +461,9 @@ app.on('activate', () => {
 });
 
 app.on('before-quit', () => {
+    // Unregister all shortcuts
+    globalShortcut.unregisterAll();
+
     if (pythonProcess) {
         pythonProcess.kill();
     }
