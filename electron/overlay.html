@@ -84,6 +84,36 @@
             75% { transform: scale(0.95); }
         }
 
+        @keyframes thinking-spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        #orb.thinking {
+            animation: thinking-spin 2s linear infinite;
+            filter: hue-rotate(180deg) brightness(1.1);
+        }
+
+        /* Status indicator states */
+        #status-indicator.wake {
+            background: #fbbf24;
+            animation: status-blink 0.3s ease-in-out infinite;
+        }
+
+        #status-indicator.thinking {
+            background: #8b5cf6;
+            animation: status-blink 0.5s ease-in-out infinite;
+        }
+
+        #status-indicator.speaking {
+            background: #3b82f6;
+            animation: status-blink 0.8s ease-in-out infinite;
+        }
+
+        #status-indicator.error {
+            background: #ef4444;
+        }
+
         /* Removed - orb-icon is now styled above with no-drag */
 
         /* Panel State */
@@ -391,19 +421,39 @@
 
         // Listen for voice events
         window.voiceMirror.onVoiceEvent((data) => {
+            console.log('[Voice Event]', data);
             switch (data.type) {
+                case 'starting':
+                    statusText.textContent = 'Starting...';
+                    statusIndicator.className = '';
+                    break;
+                case 'ready':
+                    statusText.textContent = 'Ready - say "Hey Claude"';
+                    statusIndicator.className = '';
+                    break;
                 case 'wake':
                     orb.className = 'listening';
                     statusText.textContent = 'Wake word detected!';
+                    statusIndicator.className = 'wake';
                     break;
                 case 'recording':
                     orb.className = 'recording';
                     statusIndicator.className = 'recording';
                     statusText.textContent = 'Recording...';
                     break;
+                case 'processing':
+                    orb.className = 'thinking';
+                    statusIndicator.className = 'thinking';
+                    statusText.textContent = 'Processing...';
+                    break;
+                case 'thinking':
+                    orb.className = 'thinking';
+                    statusIndicator.className = 'thinking';
+                    statusText.textContent = data.source ? `Asking ${data.source}...` : 'Thinking...';
+                    break;
                 case 'speaking':
                     orb.className = 'speaking';
-                    statusIndicator.className = '';
+                    statusIndicator.className = 'speaking';
                     statusText.textContent = 'Speaking...';
                     break;
                 case 'idle':
@@ -411,13 +461,40 @@
                     statusIndicator.className = '';
                     statusText.textContent = 'Listening...';
                     break;
+                case 'call_active':
+                    statusText.textContent = 'Call active - speak anytime';
+                    break;
+                case 'mode_change':
+                    console.log('Mode changed to:', data.mode);
+                    break;
+                case 'disconnected':
+                    statusText.textContent = 'Disconnected';
+                    statusIndicator.className = 'error';
+                    break;
+                case 'error':
+                    statusText.textContent = 'Error: ' + (data.message || 'Unknown');
+                    statusIndicator.className = 'error';
+                    break;
             }
+        });
+
+        // Listen for chat messages from Python backend
+        window.voiceMirror.onChatMessage((data) => {
+            console.log('[Chat Message]', data);
+            addMessage(data.role, data.text);
         });
 
         // Initialize
         window.voiceMirror.getState().then(state => {
             isExpanded = state.expanded;
             updateUI();
+        });
+
+        // Check Python status on load
+        window.voiceMirror.python.getStatus().then(status => {
+            if (!status.running) {
+                statusText.textContent = 'Voice backend not running';
+            }
         });
 
         // ========== Image Handling ==========

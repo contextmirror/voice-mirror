@@ -192,6 +192,26 @@ function createTray() {
         },
         { label: 'Show Window', click: () => mainWindow?.show() },
         { type: 'separator' },
+        {
+            label: 'Start Voice',
+            click: () => {
+                if (!pythonProcess) {
+                    startPythonVoiceMirror();
+                }
+            }
+        },
+        {
+            label: 'Stop Voice',
+            click: () => {
+                if (pythonProcess) {
+                    sendToPython({ command: 'stop' });
+                    pythonProcess.kill();
+                    pythonProcess = null;
+                    mainWindow?.webContents.send('voice-event', { type: 'disconnected' });
+                }
+            }
+        },
+        { type: 'separator' },
         { label: 'Settings', click: () => { /* TODO */ } },
         { type: 'separator' },
         { label: 'Quit', click: () => app.quit() }
@@ -209,6 +229,130 @@ function createTray() {
     });
 }
 
+/**
+ * Handle JSON events from Python electron_bridge.py
+ */
+function handlePythonEvent(event) {
+    const { event: eventType, data } = event;
+
+    switch (eventType) {
+        case 'starting':
+            console.log('[Voice Mirror] Python bridge starting...');
+            mainWindow?.webContents.send('voice-event', { type: 'starting' });
+            break;
+
+        case 'ready':
+            console.log('[Voice Mirror] Python backend ready');
+            mainWindow?.webContents.send('voice-event', { type: 'ready' });
+            break;
+
+        case 'wake_word':
+            mainWindow?.webContents.send('voice-event', {
+                type: 'wake',
+                model: data.model,
+                score: data.score
+            });
+            break;
+
+        case 'recording_start':
+            mainWindow?.webContents.send('voice-event', {
+                type: 'recording',
+                subtype: data.type || 'normal'
+            });
+            break;
+
+        case 'recording_stop':
+            mainWindow?.webContents.send('voice-event', { type: 'processing' });
+            break;
+
+        case 'listening':
+            mainWindow?.webContents.send('voice-event', { type: 'idle' });
+            break;
+
+        case 'transcription':
+            mainWindow?.webContents.send('voice-event', {
+                type: 'transcription',
+                text: data.text
+            });
+            // Also add to chat as user message
+            mainWindow?.webContents.send('chat-message', {
+                role: 'user',
+                text: data.text
+            });
+            break;
+
+        case 'processing':
+            mainWindow?.webContents.send('voice-event', {
+                type: 'thinking',
+                source: data.source
+            });
+            break;
+
+        case 'response':
+            mainWindow?.webContents.send('voice-event', { type: 'speaking' });
+            mainWindow?.webContents.send('chat-message', {
+                role: 'assistant',
+                text: data.text,
+                source: data.source
+            });
+            break;
+
+        case 'speaking_start':
+            mainWindow?.webContents.send('voice-event', {
+                type: 'speaking',
+                text: data.text
+            });
+            break;
+
+        case 'speaking_end':
+            mainWindow?.webContents.send('voice-event', { type: 'idle' });
+            break;
+
+        case 'call_start':
+            mainWindow?.webContents.send('voice-event', { type: 'call_active' });
+            break;
+
+        case 'call_end':
+            mainWindow?.webContents.send('voice-event', { type: 'idle' });
+            break;
+
+        case 'mode_change':
+            mainWindow?.webContents.send('voice-event', {
+                type: 'mode_change',
+                mode: data.mode
+            });
+            break;
+
+        case 'error':
+            console.error('[Voice Mirror] Error:', data.message);
+            mainWindow?.webContents.send('voice-event', {
+                type: 'error',
+                message: data.message
+            });
+            break;
+
+        case 'pong':
+            console.log('[Voice Mirror] Pong received');
+            break;
+
+        default:
+            console.log('[Voice Mirror] Unknown event:', eventType, data);
+    }
+}
+
+/**
+ * Send a command to Python backend via stdin
+ */
+function sendToPython(command) {
+    if (pythonProcess && pythonProcess.stdin) {
+        const json = JSON.stringify(command);
+        pythonProcess.stdin.write(json + '\n');
+        console.log('[Voice Mirror] Sent command:', command.command);
+    } else {
+        console.error('[Voice Mirror] Cannot send command - Python not running');
+    }
+}
+
 function startPythonVoiceMirror() {
     // Path to Python Voice Mirror (sibling folder)
     const pythonPath = path.join(__dirname, '..', '..', 'Voice Mirror');
@@ -218,35 +362,66 @@ function startPythonVoiceMirror() {
     if (!fileExists(venvPython)) {
         console.error('[Voice Mirror] Python executable not found:', venvPython);
         console.error('[Voice Mirror] Please ensure the Voice Mirror venv is set up.');
+        mainWindow?.webContents.send('voice-event', {
+            type: 'error',
+            message: 'Python not found. Please set up the Voice Mirror venv.'
+        });
         return;
     }
 
+    // Check if electron_bridge.py exists
+    const bridgeScript = path.join(pythonPath, 'electron_bridge.py');
+    const scriptToRun = fileExists(bridgeScript) ? 'electron_bridge.py' : 'voice_agent.py';
+
     console.log('[Voice Mirror] Starting Python backend from:', pythonPath);
     console.log('[Voice Mirror] Using Python:', venvPython);
+    console.log('[Voice Mirror] Script:', scriptToRun);
 
     // Platform-specific spawn options
     const spawnOptions = {
         cwd: pythonPath,
         env: { ...process.env },
-        // Windows needs shell: true for some Python setups
         shell: isWindows
     };
 
-    pythonProcess = spawn(venvPython, ['voice_agent.py'], spawnOptions);
+    pythonProcess = spawn(venvPython, [scriptToRun], spawnOptions);
+
+    // Buffer for incomplete JSON lines
+    let stdoutBuffer = '';
 
     pythonProcess.stdout.on('data', (data) => {
-        const output = data.toString();
-        console.log('[Voice Mirror]', output);
+        stdoutBuffer += data.toString();
 
-        // Forward relevant events to renderer
-        if (output.includes('Wake word detected')) {
-            mainWindow?.webContents.send('voice-event', { type: 'wake' });
-        } else if (output.includes('Recording')) {
-            mainWindow?.webContents.send('voice-event', { type: 'recording' });
-        } else if (output.includes('Speaking')) {
-            mainWindow?.webContents.send('voice-event', { type: 'speaking' });
-        } else if (output.includes('Listening')) {
-            mainWindow?.webContents.send('voice-event', { type: 'idle' });
+        // Process complete lines
+        const lines = stdoutBuffer.split('\n');
+        stdoutBuffer = lines.pop(); // Keep incomplete line in buffer
+
+        for (const line of lines) {
+            if (!line.trim()) continue;
+
+            // Try to parse as JSON event from electron_bridge.py
+            try {
+                const event = JSON.parse(line);
+                if (event.event) {
+                    console.log('[Voice Mirror Event]', event.event, event.data || '');
+                    handlePythonEvent(event);
+                    continue;
+                }
+            } catch (e) {
+                // Not JSON, handle as legacy text output
+            }
+
+            // Legacy text parsing (for voice_agent.py without bridge)
+            console.log('[Voice Mirror]', line);
+            if (line.includes('Wake word detected')) {
+                mainWindow?.webContents.send('voice-event', { type: 'wake' });
+            } else if (line.includes('Recording')) {
+                mainWindow?.webContents.send('voice-event', { type: 'recording' });
+            } else if (line.includes('Speaking')) {
+                mainWindow?.webContents.send('voice-event', { type: 'speaking' });
+            } else if (line.includes('Listening')) {
+                mainWindow?.webContents.send('voice-event', { type: 'idle' });
+            }
         }
     });
 
@@ -257,6 +432,7 @@ function startPythonVoiceMirror() {
     pythonProcess.on('close', (code) => {
         console.log(`[Voice Mirror] Python process exited with code ${code}`);
         pythonProcess = null;
+        mainWindow?.webContents.send('voice-event', { type: 'disconnected' });
     });
 }
 
@@ -418,6 +594,42 @@ app.whenReady().then(() => {
     // Image handling - send to Python backend
     ipcMain.handle('send-image', async (event, imageData) => {
         return sendImageToPython(imageData);
+    });
+
+    // Python backend communication
+    ipcMain.handle('send-query', (event, query) => {
+        sendToPython({ command: 'query', text: query.text, image: query.image });
+        return { sent: true };
+    });
+
+    ipcMain.handle('set-voice-mode', (event, mode) => {
+        sendToPython({ command: 'set_mode', mode: mode });
+        return { sent: true };
+    });
+
+    ipcMain.handle('get-python-status', () => {
+        return {
+            running: pythonProcess !== null,
+            pid: pythonProcess?.pid
+        };
+    });
+
+    ipcMain.handle('start-python', () => {
+        if (!pythonProcess) {
+            startPythonVoiceMirror();
+            return { started: true };
+        }
+        return { started: false, reason: 'already running' };
+    });
+
+    ipcMain.handle('stop-python', () => {
+        if (pythonProcess) {
+            sendToPython({ command: 'stop' });
+            pythonProcess.kill();
+            pythonProcess = null;
+            return { stopped: true };
+        }
+        return { stopped: false, reason: 'not running' };
     });
 
     createWindow();
