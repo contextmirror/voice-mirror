@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Quick restart script for Voice Mirror Electron
+# Kills all related processes before starting fresh
+
+echo "Stopping Voice Mirror..."
+
+# Kill Electron
+pkill -9 -f "electron.*Voice Mirror" 2>/dev/null
+pkill -9 -f "electron \\." 2>/dev/null
+
+# Kill Python voice processes
+pkill -9 -f "electron_bridge.py" 2>/dev/null
+pkill -9 -f "voice_agent.py" 2>/dev/null
+
+# Kill Claude processes spawned by Voice Mirror (but not main Claude Code sessions)
+# Match on the Voice Mirror prompt text to avoid killing unrelated claude instances
+pkill -9 -f "claude.*Voice Mirror" 2>/dev/null
+pkill -9 -f "claude.*voice-claude" 2>/dev/null
+
+# Also kill any node MCP servers that might be dangling
+pkill -9 -f "voice-mirror-electron.*mcp" 2>/dev/null
+
+sleep 1
+
+echo "Starting Voice Mirror Electron..."
+cd "/home/nayballs/Project/context-mirror-ecosystem/Voice Mirror Electron"
+npm start &
+
+echo "Done!"

@@ -1,0 +1,19 @@
+# Voice Mirror dependencies
+
+# Wake word detection
+openwakeword>=0.6.0
+
+# Audio capture
+sounddevice>=0.4.6
+numpy>=1.24.0
+
+# Claude API for CLI responses (optional)
+anthropic>=0.40.0
+
+# Local STT (Parakeet)
+onnx-asr>=0.10.0
+
+# Local TTS (Kokoro)
+kokoro-onnx>=0.4.0
+soundfile>=0.13.0
+psutil
