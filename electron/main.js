@@ -14,7 +14,7 @@ const path = require('path');
 const { spawn } = require('child_process');
 const fs = require('fs');
 const config = require('./config');
-const { spawnClaude, stopClaude, configureMCPServer, isClaudeAvailable, processVoiceMessage } = require('./claude-spawner');
+const { spawnClaude, stopClaude, sendInput, sendRawInput, sendInputWhenReady, isClaudeRunning, isClaudeReady, configureMCPServer, isClaudeAvailable, resizePty } = require('./claude-spawner');
 
 // Handle EPIPE errors gracefully (happens when terminal pipe breaks)
 process.stdout.on('error', (err) => {
@@ -59,7 +59,6 @@ function fileExists(filePath) {
 let mainWindow = null;
 let tray = null;
 let pythonProcess = null;
-// claudeProcess removed - using --print mode now (no persistent process)
 let appConfig = null;
 
 // Window state
@@ -229,7 +228,7 @@ function createTray() {
                 if (!pythonProcess) {
                     startPythonVoiceMirror();
                 }
-                if (!claudeReady) {
+                if (!isClaudeRunning()) {
                     startClaudeCode();
                 }
             }
@@ -260,7 +259,7 @@ function createTray() {
         {
             label: 'Start Claude Only',
             click: () => {
-                if (!claudeReady) {
+                if (!isClaudeRunning()) {
                     startClaudeCode();
                 }
             }
@@ -412,17 +411,17 @@ function sendToPython(command) {
 }
 
 function startPythonVoiceMirror() {
-    // Path to Python Voice Mirror (original sibling folder - it works!)
-    const pythonPath = path.join(__dirname, '..', '..', 'Voice Mirror');
+    // Path to local Python backend (standalone - no external dependencies)
+    const pythonPath = path.join(__dirname, '..', 'python');
     const venvPython = getPythonExecutable(pythonPath);
 
     // Verify Python executable exists before spawning
     if (!fileExists(venvPython)) {
         console.error('[Voice Mirror] Python executable not found:', venvPython);
-        console.error('[Voice Mirror] Please ensure the Voice Mirror venv is set up.');
+        console.error('[Voice Mirror] Please run: cd python && python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt');
         mainWindow?.webContents.send('voice-event', {
             type: 'error',
-            message: 'Python not found. Please set up the Voice Mirror venv.'
+            message: 'Python venv not found. Set up the python folder venv.'
         });
         return;
     }
@@ -615,61 +614,104 @@ async function sendImageToPython(imageData) {
 
 /**
  * Start Claude Code with Voice Mirror MCP tools.
- * Claude will watch the inbox for voice messages and respond.
+ * Spawns a real PTY terminal running Claude Code.
+ * Claude will use claude_listen MCP tool to wait for voice messages.
  */
-let claudeReady = false;
-
 function startClaudeCode() {
-    if (claudeReady) {
-        console.log('[Voice Mirror] Claude already ready');
+    if (isClaudeRunning()) {
+        console.log('[Voice Mirror] Claude already running');
         return;
     }
 
-    console.log('[Voice Mirror] Starting Claude Code backend...');
-
-    // Configure MCP server (for --print mode, no persistent process needed)
-    configureMCPServer();
+    console.log('[Voice Mirror] Starting Claude Code PTY...');
 
     // Check if Claude CLI is available
     if (!isClaudeAvailable()) {
         console.error('[Voice Mirror] Claude CLI not found!');
         mainWindow?.webContents.send('claude-terminal', {
             type: 'stderr',
-            text: '[Claude Code] Not found - install with: npm install -g @anthropic-ai/claude-code'
+            text: '[Claude Code] Not found - install with: npm install -g @anthropic-ai/claude-code\n'
         });
         return;
     }
 
-    claudeReady = true;
-
-    mainWindow?.webContents.send('claude-terminal', {
-        type: 'start',
-        text: '[Claude Code] Ready (--print mode)\n'
+    // Spawn Claude in a real PTY terminal
+    const pty = spawnClaude({
+        onOutput: (data) => {
+            // Forward PTY output to the UI terminal
+            mainWindow?.webContents.send('claude-terminal', {
+                type: 'stdout',
+                text: data
+            });
+        },
+        onExit: (code) => {
+            console.log('[Voice Mirror] Claude PTY exited with code:', code);
+            mainWindow?.webContents.send('claude-terminal', {
+                type: 'exit',
+                code: code
+            });
+            mainWindow?.webContents.send('voice-event', {
+                type: 'claude_disconnected'
+            });
+        },
+        cols: 120,
+        rows: 30
     });
-    mainWindow?.webContents.send('voice-event', {
-        type: 'claude_connected'
-    });
 
-    console.log('[Voice Mirror] Claude ready (--print mode)');
+    if (pty) {
+        mainWindow?.webContents.send('claude-terminal', {
+            type: 'start',
+            text: '[Claude Code] PTY terminal started\n'
+        });
+        mainWindow?.webContents.send('voice-event', {
+            type: 'claude_connected'
+        });
+        console.log('[Voice Mirror] Claude PTY started');
+
+        // Wait for Claude TUI to be ready, then send voice mode command
+        const voicePrompt = 'Use claude_listen to wait for voice input from nathan, then reply with claude_send. Loop forever.\n';
+        sendInputWhenReady(voicePrompt, 20000)
+            .then(() => {
+                console.log('[Voice Mirror] Voice mode command sent successfully');
+            })
+            .catch((err) => {
+                console.error('[Voice Mirror] Failed to send voice mode command:', err.message);
+                // Fallback: try sending anyway after a delay
+                setTimeout(() => {
+                    if (isClaudeRunning()) {
+                        sendInput(voicePrompt + '\r');
+                        console.log('[Voice Mirror] Sent voice mode command (fallback)');
+                    }
+                }, 8000);
+            });
+    } else {
+        mainWindow?.webContents.send('claude-terminal', {
+            type: 'stderr',
+            text: '[Claude Code] Failed to start PTY\n'
+        });
+    }
 }
 
 /**
- * Stop Claude Code backend.
+ * Stop Claude Code PTY process.
  */
 function stopClaudeCode() {
-    claudeReady = false;
-    console.log('[Voice Mirror] Claude Code stopped');
+    if (isClaudeRunning()) {
+        stopClaude();
+        console.log('[Voice Mirror] Claude Code PTY stopped');
+        mainWindow?.webContents.send('voice-event', {
+            type: 'claude_disconnected'
+        });
+    }
 }
 
 /**
- * Watch for new Claude messages in the MCP inbox.
- * When Claude sends a message via claude_send, we display it in the UI.
+ * Watch for Claude messages in the MCP inbox.
+ * Claude sends responses via claude_send MCP tool - we display them in the UI.
+ * Note: Claude uses claude_listen to get voice messages directly (PTY mode).
  */
 let inboxWatcher = null;
-let lastSeenMessageId = null;
 let displayedMessageIds = new Set();  // Track messages already shown in UI
-let processedUserMessageIds = new Set();  // Track user messages we've processed
-let isProcessingMessage = false;  // Prevent concurrent processing
 
 function startInboxWatcher() {
     const dataDir = path.join(app.getPath('home'), '.config', 'voice-mirror-electron', 'data');
@@ -680,8 +722,8 @@ function startInboxWatcher() {
         fs.mkdirSync(dataDir, { recursive: true });
     }
 
-    // Poll every 500ms for new messages
-    inboxWatcher = setInterval(async () => {
+    // Poll every 500ms for new Claude messages
+    inboxWatcher = setInterval(() => {
         try {
             if (!fs.existsSync(inboxPath)) return;
 
@@ -690,48 +732,7 @@ function startInboxWatcher() {
 
             if (messages.length === 0) return;
 
-            // PART 1: Watch for new "nathan" messages and process with Claude
-            if (!isProcessingMessage) {
-                for (let i = messages.length - 1; i >= 0; i--) {
-                    const msg = messages[i];
-                    if (msg.from === 'nathan' && msg.thread_id === 'voice-mirror' && !processedUserMessageIds.has(msg.id)) {
-                        // New voice message - process it!
-                        processedUserMessageIds.add(msg.id);
-                        isProcessingMessage = true;
-
-                        console.log('[Voice Mirror] Processing voice message:', msg.message?.slice(0, 50));
-
-                        // Update UI
-                        mainWindow?.webContents.send('claude-terminal', {
-                            type: 'stdout',
-                            text: `[Processing] "${msg.message?.slice(0, 50)}..."\n`
-                        });
-
-                        try {
-                            // Call Claude (--print mode) and write response to inbox
-                            const response = await processVoiceMessage(msg.message);
-                            if (response) {
-                                console.log('[Voice Mirror] Claude responded:', response.slice(0, 50));
-                                mainWindow?.webContents.send('claude-terminal', {
-                                    type: 'stdout',
-                                    text: `[Response] ${response}\n`
-                                });
-                            }
-                        } catch (err) {
-                            console.error('[Voice Mirror] Claude error:', err.message);
-                            mainWindow?.webContents.send('claude-terminal', {
-                                type: 'stderr',
-                                text: `[Error] ${err.message}\n`
-                            });
-                        }
-
-                        isProcessingMessage = false;
-                        break;  // Process one message at a time
-                    }
-                }
-            }
-
-            // PART 2: Watch for Claude responses and display in UI
+            // Watch for Claude responses and display in UI
             let latestClaudeMessage = null;
             for (let i = messages.length - 1; i >= 0; i--) {
                 const msg = messages[i];
@@ -749,10 +750,6 @@ function startInboxWatcher() {
                 if (displayedMessageIds.size > 100) {
                     const iterator = displayedMessageIds.values();
                     displayedMessageIds.delete(iterator.next().value);
-                }
-                if (processedUserMessageIds.size > 100) {
-                    const iterator = processedUserMessageIds.values();
-                    processedUserMessageIds.delete(iterator.next().value);
                 }
 
                 console.log('[Voice Mirror] New Claude message:', latestClaudeMessage.message?.slice(0, 50));
@@ -992,17 +989,51 @@ app.whenReady().then(() => {
         return { stopped: false, reason: 'not running' };
     });
 
+    // Call mode handlers (always listening, no wake word)
+    ipcMain.handle('set-call-mode', (event, active) => {
+        const callPath = path.join(app.getPath('home'), '.config', 'voice-mirror-electron', 'data', 'voice_call.json');
+
+        // Ensure directory exists
+        const dir = path.dirname(callPath);
+        if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+        }
+
+        fs.writeFileSync(callPath, JSON.stringify({ active: active }, null, 2));
+        console.log(`[Voice Mirror] Call mode: ${active ? 'ON' : 'OFF'}`);
+
+        mainWindow?.webContents.send('voice-event', {
+            type: active ? 'call_active' : 'idle',
+            callMode: active
+        });
+
+        return { callMode: active };
+    });
+
+    ipcMain.handle('get-call-mode', () => {
+        const callPath = path.join(app.getPath('home'), '.config', 'voice-mirror-electron', 'data', 'voice_call.json');
+
+        try {
+            if (fs.existsSync(callPath)) {
+                const data = JSON.parse(fs.readFileSync(callPath, 'utf-8'));
+                return { active: data.active || false };
+            }
+        } catch {}
+
+        return { active: false };
+    });
+
     // Claude Code backend IPC handlers
     ipcMain.handle('start-claude', () => {
-        if (!claudeReady) {
+        if (!isClaudeRunning()) {
             startClaudeCode();
             return { started: true };
         }
-        return { started: false, reason: 'already ready' };
+        return { started: false, reason: 'already running' };
     });
 
     ipcMain.handle('stop-claude', () => {
-        if (claudeReady) {
+        if (isClaudeRunning()) {
             stopClaudeCode();
             return { stopped: true };
         }
@@ -1011,15 +1042,33 @@ app.whenReady().then(() => {
 
     ipcMain.handle('get-claude-status', () => {
         return {
-            running: claudeReady,
-            mode: '--print'
+            running: isClaudeRunning(),
+            mode: 'pty'
         };
+    });
+
+    // PTY input/resize handlers for xterm.js
+    // Use sendRawInput for keyboard input (passes through directly)
+    ipcMain.handle('claude-pty-input', (event, data) => {
+        if (isClaudeRunning()) {
+            sendRawInput(data);
+            return { sent: true };
+        }
+        return { sent: false, reason: 'not running' };
+    });
+
+    ipcMain.handle('claude-pty-resize', (event, cols, rows) => {
+        if (isClaudeRunning()) {
+            resizePty(cols, rows);
+            return { resized: true };
+        }
+        return { resized: false, reason: 'not running' };
     });
 
     // Start both Voice + Claude together
     ipcMain.handle('start-all', () => {
         if (!pythonProcess) startPythonVoiceMirror();
-        if (!claudeReady) startClaudeCode();
+        if (!isClaudeRunning()) startClaudeCode();
         return { started: true };
     });
 
@@ -1080,8 +1129,8 @@ app.on('window-all-closed', () => {
         pythonProcess = null;
     }
 
-    // No persistent Claude process in --print mode
-    claudeReady = false;
+    // Stop Claude PTY process
+    stopClaudeCode();
 
     // Stop all watchers
     stopScreenCaptureWatcher();
@@ -1110,6 +1159,6 @@ app.on('before-quit', () => {
         pythonProcess.kill();
     }
 
-    // No persistent Claude process to stop
-    claudeReady = false;
+    // Stop Claude PTY process
+    stopClaudeCode();
 });

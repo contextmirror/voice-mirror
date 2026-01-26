@@ -6,6 +6,10 @@
 
 cd "$(dirname "$0")"
 
+# IMPORTANT: Unset ELECTRON_RUN_AS_NODE if set (VSCode sets this)
+# This env var makes Electron run as plain Node.js instead of full Electron
+unset ELECTRON_RUN_AS_NODE
+
 # Temporarily rename node_modules/electron so it doesn't shadow the built-in
 mv node_modules/electron node_modules/_electron_launcher 2>/dev/null
 

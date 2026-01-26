@@ -38,8 +38,8 @@ const DEFAULT_CONFIG = {
     appearance: {
         orbSize: 64,
         theme: 'dark',
-        panelWidth: 400,
-        panelHeight: 500
+        panelWidth: 500,
+        panelHeight: 700
     },
 
     // Behavior

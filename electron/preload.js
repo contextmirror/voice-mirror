@@ -69,7 +69,13 @@ contextBridge.exposeInMainWorld('voiceMirror', {
         start: () => ipcRenderer.invoke('start-python'),
 
         // Stop Python backend
-        stop: () => ipcRenderer.invoke('stop-python')
+        stop: () => ipcRenderer.invoke('stop-python'),
+
+        // Call mode - always listening, no wake word needed
+        setCallMode: (active) => ipcRenderer.invoke('set-call-mode', active),
+
+        // Get current call mode status
+        getCallMode: () => ipcRenderer.invoke('get-call-mode')
     },
 
     // Claude Code backend control
@@ -83,10 +89,16 @@ contextBridge.exposeInMainWorld('voiceMirror', {
         // Get Claude process status
         getStatus: () => ipcRenderer.invoke('get-claude-status'),
 
-        // Listen for Claude terminal output
+        // Listen for Claude terminal output (raw PTY data for xterm.js)
         onOutput: (callback) => {
             ipcRenderer.on('claude-terminal', (event, data) => callback(data));
-        }
+        },
+
+        // Send input to Claude PTY (keyboard input from xterm.js)
+        sendInput: (data) => ipcRenderer.invoke('claude-pty-input', data),
+
+        // Resize Claude PTY (when xterm.js resizes)
+        resize: (cols, rows) => ipcRenderer.invoke('claude-pty-resize', cols, rows)
     },
 
     // Combined controls

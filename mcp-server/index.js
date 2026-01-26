@@ -34,10 +34,28 @@ const CLAUDE_STATUS_PATH = path.join(HOME_DATA_DIR, 'status.json');
 // Constants
 const STALE_TIMEOUT_MS = 2 * 60 * 1000;  // 2 minutes
 const AUTO_CLEANUP_HOURS = 24;
+const LISTENER_LOCK_TIMEOUT_MS = 70 * 1000;  // Lock expires after 70s (slightly longer than default 60s listen timeout)
+
+// Lock file for exclusive listener
+const LISTENER_LOCK_PATH = path.join(HOME_DATA_DIR, 'listener_lock.json');
 
 // Ensure directory exists
 if (!fs.existsSync(HOME_DATA_DIR)) {
     fs.mkdirSync(HOME_DATA_DIR, { recursive: true });
+}
+
+// Clean up any stale listener lock from previous crashes
+if (fs.existsSync(LISTENER_LOCK_PATH)) {
+    try {
+        const lock = JSON.parse(fs.readFileSync(LISTENER_LOCK_PATH, 'utf-8'));
+        if (lock.expires_at < Date.now()) {
+            fs.unlinkSync(LISTENER_LOCK_PATH);
+            console.error('[MCP] Cleaned up stale listener lock');
+        }
+    } catch {
+        // If we can't read it, remove it
+        fs.unlinkSync(LISTENER_LOCK_PATH);
+    }
 }
 
 // Create MCP server
@@ -302,6 +320,71 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 });
 
 /**
+ * Acquire exclusive listener lock
+ * Returns { success: true } or { success: false, lockedBy: string }
+ */
+function acquireListenerLock(instanceId) {
+    try {
+        const now = Date.now();
+
+        // Check existing lock
+        if (fs.existsSync(LISTENER_LOCK_PATH)) {
+            const lock = JSON.parse(fs.readFileSync(LISTENER_LOCK_PATH, 'utf-8'));
+
+            // If lock is still valid and held by another instance, deny
+            if (lock.expires_at > now && lock.instance_id !== instanceId) {
+                return { success: false, lockedBy: lock.instance_id };
+            }
+        }
+
+        // Acquire or refresh lock
+        const lock = {
+            instance_id: instanceId,
+            acquired_at: now,
+            expires_at: now + LISTENER_LOCK_TIMEOUT_MS
+        };
+        fs.writeFileSync(LISTENER_LOCK_PATH, JSON.stringify(lock, null, 2), 'utf-8');
+
+        return { success: true };
+    } catch (err) {
+        // On error, assume we can acquire (fail open for resilience)
+        return { success: true };
+    }
+}
+
+/**
+ * Release listener lock
+ */
+function releaseListenerLock(instanceId) {
+    try {
+        if (fs.existsSync(LISTENER_LOCK_PATH)) {
+            const lock = JSON.parse(fs.readFileSync(LISTENER_LOCK_PATH, 'utf-8'));
+
+            // Only release if we own the lock
+            if (lock.instance_id === instanceId) {
+                fs.unlinkSync(LISTENER_LOCK_PATH);
+            }
+        }
+    } catch {}
+}
+
+/**
+ * Refresh listener lock (extend timeout)
+ */
+function refreshListenerLock(instanceId) {
+    try {
+        if (fs.existsSync(LISTENER_LOCK_PATH)) {
+            const lock = JSON.parse(fs.readFileSync(LISTENER_LOCK_PATH, 'utf-8'));
+
+            if (lock.instance_id === instanceId) {
+                lock.expires_at = Date.now() + LISTENER_LOCK_TIMEOUT_MS;
+                fs.writeFileSync(LISTENER_LOCK_PATH, JSON.stringify(lock, null, 2), 'utf-8');
+            }
+        }
+    } catch {}
+}
+
+/**
  * Update heartbeat for presence tracking
  */
 function updateHeartbeat(instanceId, status = 'active', currentTask) {
@@ -496,8 +579,11 @@ async function handleClaudeInbox(args) {
 
 /**
  * claude_listen - Wait for messages from a specific sender
+ * Uses exclusive locking to ensure only ONE Claude instance can listen at a time.
  */
 async function handleClaudeListen(args) {
+    let lockAcquired = false;
+
     try {
         const instanceId = args?.instance_id;
         const fromSender = args?.from_sender;
@@ -511,11 +597,27 @@ async function handleClaudeListen(args) {
             };
         }
 
+        // Try to acquire exclusive listener lock
+        const lockResult = acquireListenerLock(instanceId);
+        if (!lockResult.success) {
+            return {
+                content: [{
+                    type: 'text',
+                    text: `Cannot listen: Another Claude instance (${lockResult.lockedBy}) is already listening.\n` +
+                          `Only one listener is allowed to prevent duplicate responses.`
+                }],
+                isError: true
+            };
+        }
+        lockAcquired = true;
+
         updateHeartbeat(instanceId, 'active', `Listening for ${fromSender}`);
 
         const startTime = Date.now();
         const timeoutMs = timeoutSeconds * 1000;
         const pollIntervalMs = 500;
+        const lockRefreshIntervalMs = 30000;  // Refresh lock every 30s
+        let lastLockRefresh = Date.now();
 
         // Capture existing message IDs
         const existingIds = new Set();
@@ -528,6 +630,12 @@ async function handleClaudeListen(args) {
 
         while (Date.now() - startTime < timeoutMs) {
             await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
+
+            // Periodically refresh lock to keep it valid during long listens
+            if (Date.now() - lastLockRefresh > lockRefreshIntervalMs) {
+                refreshListenerLock(instanceId);
+                lastLockRefresh = Date.now();
+            }
 
             try {
                 if (!fs.existsSync(CLAUDE_MESSAGES_PATH)) continue;
@@ -546,6 +654,9 @@ async function handleClaudeListen(args) {
                     const latest = newMsgs[newMsgs.length - 1];
                     const waitTime = Math.round((Date.now() - startTime) / 1000);
 
+                    // Release lock before returning
+                    releaseListenerLock(instanceId);
+
                     return {
                         content: [{
                             type: 'text',
@@ -560,6 +671,9 @@ async function handleClaudeListen(args) {
             } catch {}
         }
 
+        // Release lock on timeout
+        releaseListenerLock(instanceId);
+
         return {
             content: [{
                 type: 'text',
@@ -567,6 +681,10 @@ async function handleClaudeListen(args) {
             }]
         };
     } catch (err) {
+        // Release lock on error
+        if (lockAcquired) {
+            releaseListenerLock(args?.instance_id);
+        }
         return {
             content: [{ type: 'text', text: `Error: ${err.message}` }],
             isError: true
@@ -631,10 +749,75 @@ async function handleClaudeStatus(args) {
 }
 
 /**
- * capture_screen - Request screenshot (delegated to Electron)
- * Waits for Electron to capture and returns the image path
+ * Clean up old screenshots, keeping only the most recent N
+ */
+function cleanupOldScreenshots(imagesDir, keepCount = 3) {
+    try {
+        if (!fs.existsSync(imagesDir)) return;
+
+        // Get all screenshot files (various naming patterns)
+        const files = fs.readdirSync(imagesDir)
+            .filter(f => f.endsWith('.png'))
+            .map(f => ({
+                name: f,
+                path: path.join(imagesDir, f),
+                mtime: fs.statSync(path.join(imagesDir, f)).mtime.getTime()
+            }))
+            .sort((a, b) => b.mtime - a.mtime);  // Sort newest first
+
+        // Delete all but the most recent keepCount files
+        if (files.length > keepCount) {
+            const toDelete = files.slice(keepCount);
+            for (const file of toDelete) {
+                fs.unlinkSync(file.path);
+                console.error(`[capture_screen] Cleaned up old screenshot: ${file.name}`);
+            }
+        }
+    } catch (err) {
+        console.error(`[capture_screen] Cleanup error: ${err.message}`);
+    }
+}
+
+/**
+ * capture_screen - Request screenshot
+ * Uses cosmic-screenshot on Cosmic desktop (bypasses permission dialog)
+ * Falls back to Electron desktopCapturer on other platforms
  */
 async function handleCaptureScreen(args) {
+    const { execSync } = require('child_process');
+    const imagesDir = path.join(HOME_DATA_DIR, 'images');
+
+    // Ensure images directory exists
+    if (!fs.existsSync(imagesDir)) {
+        fs.mkdirSync(imagesDir, { recursive: true });
+    }
+
+    // Clean up old screenshots before capturing new one (keep last 3)
+    cleanupOldScreenshots(imagesDir, 3);
+
+    // Try cosmic-screenshot first (works on Pop!_OS Cosmic without permission dialog)
+    try {
+        const result = execSync(
+            `cosmic-screenshot --interactive=false --modal=false --notify=false --save-dir="${imagesDir}"`,
+            { encoding: 'utf-8', timeout: 5000 }
+        ).trim();
+
+        // cosmic-screenshot returns the file path on success
+        if (result && fs.existsSync(result)) {
+            return {
+                content: [{
+                    type: 'text',
+                    text: `Screenshot captured and saved to: ${result}\n` +
+                          `You can now analyze this image. The path is: ${result}`
+                }]
+            };
+        }
+    } catch (err) {
+        // cosmic-screenshot not available or failed, fall back to Electron
+        console.error('[capture_screen] cosmic-screenshot failed, falling back to Electron:', err.message);
+    }
+
+    // Fallback: Request screenshot from Electron via file-based IPC
     const requestPath = path.join(HOME_DATA_DIR, 'screen_capture_request.json');
     const responsePath = path.join(HOME_DATA_DIR, 'screen_capture_response.json');
 

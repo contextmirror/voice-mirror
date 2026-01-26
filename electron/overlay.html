@@ -4,6 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Voice Mirror</title>
+    <!-- xterm.js styles and scripts (UMD bundles, not ES modules) -->
+    <link rel="stylesheet" href="../node_modules/xterm/css/xterm.css">
+    <script src="../node_modules/xterm/lib/xterm.js"></script>
+    <script src="../node_modules/xterm-addon-fit/lib/xterm-addon-fit.js"></script>
     <style>
         * {
             margin: 0;
@@ -330,8 +334,8 @@
         /* Terminal Panel */
         #terminal-container {
             display: flex;
-            height: 180px;
-            min-height: 32px;
+            height: 350px;
+            min-height: 100px;
             background: #0a0a12;
             border-top: 1px solid rgba(255, 255, 255, 0.15);
             flex-direction: column;
@@ -342,12 +346,27 @@
             height: 32px;
         }
 
-        #terminal-container.minimized #terminal-output {
+        #terminal-container.minimized #xterm-container {
             display: none;
         }
 
         #terminal-container.hidden {
             display: none;
+        }
+
+        /* xterm.js container */
+        #xterm-container {
+            flex: 1;
+            overflow: hidden;
+            padding: 4px;
+        }
+
+        #xterm-container .xterm {
+            height: 100%;
+        }
+
+        #xterm-container .xterm-viewport {
+            overflow-y: auto !important;
         }
 
         #terminal-header {
@@ -423,32 +442,19 @@
             color: white;
         }
 
-        #terminal-output {
-            flex: 1;
-            overflow-y: auto;
-            padding: 8px 12px;
+        /* Legacy terminal output classes kept for fallback */
+        .terminal-line {
             font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
             font-size: 12px;
             line-height: 1.5;
-            color: #e0e0e0;
-            white-space: pre-wrap;
-            word-break: break-all;
         }
 
-        #terminal-output .stdout {
-            color: #e0e0e0;
-        }
-
-        #terminal-output .stderr {
-            color: #f87171;
-        }
-
-        #terminal-output .info {
+        .terminal-line.info {
             color: #60a5fa;
         }
 
-        #terminal-output .success {
-            color: #4ade80;
+        .terminal-line.error {
+            color: #f87171;
         }
 
         /* Terminal toggle button */
@@ -473,6 +479,18 @@
 
         .action-btn.terminal-btn .badge.stopped {
             background: #ef4444;
+        }
+
+        /* Call mode button active state */
+        .action-btn.call-active {
+            background: rgba(74, 222, 128, 0.3);
+            color: #4ade80;
+            animation: call-pulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes call-pulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.4); }
+            50% { box-shadow: 0 0 0 8px rgba(74, 222, 128, 0); }
         }
 
         /* Control buttons */
@@ -543,7 +561,7 @@
         <!-- Terminal Panel (visible by default, collapsible) -->
         <div id="terminal-container">
             <div id="terminal-header">
-                <span class="terminal-title">⌘ Terminal</span>
+                <span class="terminal-title">⌘ Claude Code</span>
                 <span id="terminal-status" class="terminal-status stopped">Stopped</span>
                 <button id="terminal-start" class="control-btn start" onclick="startClaude()">Start</button>
                 <div class="terminal-controls">
@@ -551,13 +569,19 @@
                     <button class="terminal-ctrl-btn" onclick="hideTerminal()" title="Hide">×</button>
                 </div>
             </div>
-            <div id="terminal-output"></div>
+            <div id="xterm-container"></div>
         </div>
 
         <div id="status-bar">
             <div id="status-indicator"></div>
             <span id="status-text">Listening...</span>
             <div id="action-buttons">
+                <!-- Call Mode Toggle -->
+                <button id="call-mode-btn" class="action-btn" onclick="toggleCallMode()" title="Call Mode (always listening)">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+                    </svg>
+                </button>
                 <button class="action-btn" onclick="captureScreen()" title="Capture Screen">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <rect x="3" y="3" width="18" height="18" rx="2"/>
@@ -889,9 +913,9 @@
             chatContainer.scrollTop = chatContainer.scrollHeight;
         }
 
-        // ========== Terminal Panel ==========
+        // ========== Terminal Panel with xterm.js ==========
         const terminalContainer = document.getElementById('terminal-container');
-        const terminalOutput = document.getElementById('terminal-output');
+        const xtermContainer = document.getElementById('xterm-container');
         const terminalStatus = document.getElementById('terminal-status');
         const terminalStartBtn = document.getElementById('terminal-start');
         const terminalBtn = document.querySelector('.terminal-btn');
@@ -899,17 +923,102 @@
 
         let terminalVisible = true;
         let claudeRunning = false;
-
         let terminalMinimized = false;
 
+        // xterm.js instance
+        let term = null;
+        let fitAddon = null;
+
+        // Initialize xterm.js
+        async function initXterm() {
+            // xterm.js loaded via script tags (UMD bundles expose on window)
+            const Terminal = window.Terminal;
+            const FitAddon = window.FitAddon.FitAddon;
+
+            if (!Terminal) {
+                console.error('[xterm] Terminal not loaded - check script tags');
+                return;
+            }
+
+            term = new Terminal({
+                cursorBlink: true,
+                fontSize: 13,
+                fontFamily: "'SF Mono', 'Monaco', 'Consolas', 'Liberation Mono', monospace",
+                theme: {
+                    background: '#0a0a12',
+                    foreground: '#e0e0e0',
+                    cursor: '#667eea',
+                    cursorAccent: '#0a0a12',
+                    selection: 'rgba(102, 126, 234, 0.3)',
+                    black: '#1a1a2e',
+                    red: '#f87171',
+                    green: '#4ade80',
+                    yellow: '#fbbf24',
+                    blue: '#60a5fa',
+                    magenta: '#c084fc',
+                    cyan: '#22d3ee',
+                    white: '#e0e0e0',
+                    brightBlack: '#4a4a5e',
+                    brightRed: '#fca5a5',
+                    brightGreen: '#86efac',
+                    brightYellow: '#fde047',
+                    brightBlue: '#93c5fd',
+                    brightMagenta: '#d8b4fe',
+                    brightCyan: '#67e8f9',
+                    brightWhite: '#ffffff'
+                },
+                scrollback: 1000,
+                convertEol: true
+            });
+
+            fitAddon = new FitAddon();
+            term.loadAddon(fitAddon);
+
+            term.open(xtermContainer);
+            fitAddon.fit();
+
+            // Send keyboard input to PTY
+            term.onData((data) => {
+                window.voiceMirror.claude.sendInput(data);
+            });
+
+            // Handle resize
+            const resizeObserver = new ResizeObserver(() => {
+                if (fitAddon && !terminalMinimized && terminalVisible) {
+                    fitAddon.fit();
+                    // Tell PTY about new size
+                    window.voiceMirror.claude.resize(term.cols, term.rows);
+                }
+            });
+            resizeObserver.observe(xtermContainer);
+
+            // Welcome message
+            term.writeln('\x1b[36m╔════════════════════════════════════════╗\x1b[0m');
+            term.writeln('\x1b[36m║\x1b[0m   \x1b[1;35mVoice Mirror\x1b[0m - Claude Code Terminal   \x1b[36m║\x1b[0m');
+            term.writeln('\x1b[36m╚════════════════════════════════════════╝\x1b[0m');
+            term.writeln('');
+            term.writeln('\x1b[90mClick "Start" to launch Claude Code...\x1b[0m');
+            term.writeln('');
+
+            console.log('[xterm] Initialized');
+        }
+
+        // Initialize xterm on load
+        initXterm().catch(err => {
+            console.error('[xterm] Failed to initialize:', err);
+        });
+
         function toggleTerminal() {
-            // Toggle between hidden and visible
             const isHidden = terminalContainer.classList.contains('hidden');
             if (isHidden) {
                 terminalContainer.classList.remove('hidden');
                 terminalContainer.classList.remove('minimized');
                 terminalMinimized = false;
                 terminalVisible = true;
+                // Refit terminal after showing
+                setTimeout(() => {
+                    if (fitAddon) fitAddon.fit();
+                }, 100);
             } else {
                 terminalContainer.classList.add('hidden');
                 terminalVisible = false;
@@ -920,25 +1029,16 @@
         function minimizeTerminal() {
             terminalMinimized = !terminalMinimized;
             terminalContainer.classList.toggle('minimized', terminalMinimized);
+            // Refit when expanding
+            if (!terminalMinimized && fitAddon) {
+                setTimeout(() => fitAddon.fit(), 100);
+            }
         }
 
         function hideTerminal() {
             terminalContainer.classList.add('hidden');
             terminalVisible = false;
             terminalBtn.classList.remove('active');
-        }
-
-        function appendTerminalOutput(text, type = 'stdout') {
-            const line = document.createElement('div');
-            line.className = type;
-            line.textContent = text;
-            terminalOutput.appendChild(line);
-            terminalOutput.scrollTop = terminalOutput.scrollHeight;
-
-            // Keep max 500 lines
-            while (terminalOutput.children.length > 500) {
-                terminalOutput.removeChild(terminalOutput.firstChild);
-            }
         }
 
         function updateClaudeStatus(running) {
@@ -961,38 +1061,57 @@
         }
 
         async function startClaude() {
-            appendTerminalOutput('[Starting Claude Code...]', 'info');
+            if (term) {
+                term.writeln('');
+                term.writeln('\x1b[34m[Starting Claude Code...]\x1b[0m');
+            }
             try {
                 await window.voiceMirror.claude.start();
             } catch (err) {
-                appendTerminalOutput(`Failed to start: ${err.message}`, 'stderr');
+                if (term) {
+                    term.writeln(`\x1b[31m[Failed to start: ${err.message}]\x1b[0m`);
+                }
             }
         }
 
         async function stopClaude() {
-            appendTerminalOutput('[Stopping Claude Code...]', 'info');
+            if (term) {
+                term.writeln('');
+                term.writeln('\x1b[34m[Stopping Claude Code...]\x1b[0m');
+            }
             try {
                 await window.voiceMirror.claude.stop();
             } catch (err) {
-                appendTerminalOutput(`Failed to stop: ${err.message}`, 'stderr');
+                if (term) {
+                    term.writeln(`\x1b[31m[Failed to stop: ${err.message}]\x1b[0m`);
+                }
             }
         }
 
-        // Listen for Claude terminal output
+        // Listen for Claude terminal output (raw PTY data)
         window.voiceMirror.claude.onOutput((data) => {
+            if (!term) return;
+
             switch (data.type) {
                 case 'start':
-                    appendTerminalOutput(data.text, 'info');
+                    term.writeln(`\x1b[34m${data.text}\x1b[0m`);
                     updateClaudeStatus(true);
+                    // Fit terminal after Claude starts
+                    setTimeout(() => {
+                        if (fitAddon) fitAddon.fit();
+                    }, 100);
                     break;
                 case 'stdout':
-                    appendTerminalOutput(data.text, 'stdout');
+                    // Write raw PTY data directly (includes ANSI codes)
+                    term.write(data.text);
                     break;
                 case 'stderr':
-                    appendTerminalOutput(data.text, 'stderr');
+                    // stderr also gets written as raw data
+                    term.write(data.text);
                     break;
                 case 'exit':
-                    appendTerminalOutput(`[Process exited with code ${data.code}]`, 'info');
+                    term.writeln('');
+                    term.writeln(`\x1b[33m[Process exited with code ${data.code}]\x1b[0m`);
                     updateClaudeStatus(false);
                     break;
             }
@@ -1010,6 +1129,47 @@
         // Check Claude status on load
         window.voiceMirror.claude.getStatus().then(status => {
             updateClaudeStatus(status.running);
+        });
+
+        // ========== Call Mode ==========
+        const callModeBtn = document.getElementById('call-mode-btn');
+        let callModeActive = false;
+
+        async function toggleCallMode() {
+            callModeActive = !callModeActive;
+            try {
+                await window.voiceMirror.python.setCallMode(callModeActive);
+                updateCallModeUI();
+            } catch (err) {
+                console.error('Failed to toggle call mode:', err);
+                callModeActive = !callModeActive;  // Revert
+            }
+        }
+
+        function updateCallModeUI() {
+            if (callModeActive) {
+                callModeBtn.classList.add('call-active');
+                callModeBtn.title = 'Call Mode ON (always listening)';
+                statusText.textContent = 'Call active - speak anytime';
+            } else {
+                callModeBtn.classList.remove('call-active');
+                callModeBtn.title = 'Call Mode (always listening)';
+                statusText.textContent = 'Listening...';
+            }
+        }
+
+        // Check call mode on load
+        window.voiceMirror.python.getCallMode().then(status => {
+            callModeActive = status.active;
+            updateCallModeUI();
+        });
+
+        // Update UI when voice events indicate call mode changes
+        window.voiceMirror.onVoiceEvent((data) => {
+            if (data.callMode !== undefined) {
+                callModeActive = data.callMode;
+                updateCallModeUI();
+            }
         });
     </script>
 </body>

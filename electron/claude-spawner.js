@@ -1,11 +1,10 @@
 /**
  * Claude Code Spawner for Voice Mirror Electron
  *
- * Uses --print mode to get single responses.
- * Electron handles the loop by watching the inbox.
+ * Spawns a REAL interactive Claude Code terminal using node-pty.
+ * Claude runs with a system prompt to use claude_listen for voice input.
  */
 
-const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -13,8 +12,10 @@ const os = require('os');
 // Path to MCP server
 const MCP_SERVER_PATH = path.join(__dirname, '..', 'mcp-server', 'index.js');
 
-// Claude settings directory
-const CLAUDE_CONFIG_DIR = path.join(os.homedir(), '.claude');
+// Claude settings directory (Claude Code uses ~/.config/claude-code on Linux)
+const CLAUDE_CONFIG_DIR = process.platform === 'linux'
+    ? path.join(os.homedir(), '.config', 'claude-code')
+    : path.join(os.homedir(), '.claude');
 const MCP_SETTINGS_PATH = path.join(CLAUDE_CONFIG_DIR, 'mcp_settings.json');
 
 // Voice Mirror working directory
@@ -25,19 +26,33 @@ const DATA_DIR = path.join(os.homedir(), '.config', 'voice-mirror-electron', 'da
 const INBOX_PATH = path.join(DATA_DIR, 'inbox.json');
 
 /**
- * System prompt for Voice Mirror's Claude (concise for --print mode)
+ * System prompt for Voice Mirror's Claude
  */
-const VOICE_CLAUDE_SYSTEM = `You are Voice Mirror's Claude - a voice-controlled AI assistant.
-You receive voice transcriptions and respond conversationally.
-Keep responses SHORT (1-3 sentences) since they will be spoken aloud.
-No markdown, bullets, or code blocks - just plain speech.
-Be helpful and conversational.`;
+const VOICE_CLAUDE_SYSTEM = `Use claude_listen to wait for voice input from nathan, then reply with claude_send. Loop forever.
+
+Keep responses SHORT (1-3 sentences) for TTS. No markdown - just plain speech.`;
+
+let ptyProcess = null;
+let outputCallback = null;
+let readyCallbacks = [];
+let isReady = false;
+
+// Debug logging to file
+const DEBUG_LOG_PATH = path.join(os.homedir(), '.config', 'voice-mirror-electron', 'claude-spawner-debug.log');
+function debugLog(msg) {
+    const timestamp = new Date().toISOString();
+    const line = `[${timestamp}] ${msg}\n`;
+    console.log('[Claude Spawner]', msg);
+    try {
+        fs.appendFileSync(DEBUG_LOG_PATH, line);
+    } catch (e) {}
+}
 
 /**
  * Configure MCP server for Claude Code
  */
 function configureMCPServer() {
-    // Ensure .claude directory exists
+    // Ensure config directory exists
     if (!fs.existsSync(CLAUDE_CONFIG_DIR)) {
         fs.mkdirSync(CLAUDE_CONFIG_DIR, { recursive: true });
     }
@@ -55,7 +70,8 @@ function configureMCPServer() {
     settings.mcpServers['voice-mirror-electron'] = {
         command: 'node',
         args: [MCP_SERVER_PATH],
-        env: {}
+        env: {},
+        disabled: false
     };
 
     fs.writeFileSync(MCP_SETTINGS_PATH, JSON.stringify(settings, null, 2), 'utf-8');
@@ -69,7 +85,7 @@ function isClaudeAvailable() {
     const claudePath = process.platform === 'win32' ? 'claude.cmd' : 'claude';
     try {
         const { execSync } = require('child_process');
-        execSync(`${claudePath} --version`, { stdio: 'ignore' });
+        execSync(`which ${claudePath}`, { stdio: 'ignore' });
         return true;
     } catch {
         return false;
@@ -77,81 +93,251 @@ function isClaudeAvailable() {
 }
 
 /**
- * Send a single message to Claude and get a response (--print mode)
+ * Spawn Claude Code in a real PTY terminal
  */
-function askClaude(message, options = {}) {
-    return new Promise((resolve, reject) => {
-        const {
-            onOutput = () => {},
-            timeout = 60000
-        } = options;
+function spawnClaude(options = {}) {
+    const {
+        onOutput = () => {},
+        onExit = () => {},
+        cols = 120,
+        rows = 30
+    } = options;
 
-        if (!isClaudeAvailable()) {
-            reject(new Error('Claude CLI not found'));
-            return;
-        }
+    outputCallback = onOutput;
 
-        const claudePath = process.platform === 'win32' ? 'claude.cmd' : 'claude';
+    if (ptyProcess) {
+        console.log('[Claude Spawner] Already running');
+        return ptyProcess;
+    }
 
-        // Build the prompt with context
-        const prompt = `${message}`;
+    // Configure MCP server
+    configureMCPServer();
 
-        console.log('[Claude] Asking:', prompt.slice(0, 100) + '...');
+    if (!isClaudeAvailable()) {
+        onOutput('[Error] Claude CLI not found. Install with: npm install -g @anthropic-ai/claude-code\n');
+        return null;
+    }
 
-        const claudeProcess = spawn(claudePath, [
-            '--print',
-            '--dangerously-skip-permissions',
-            '-p', VOICE_CLAUDE_SYSTEM,
-            prompt
-        ], {
+    // Lazy load node-pty (native module)
+    let pty;
+    try {
+        pty = require('node-pty');
+    } catch (err) {
+        onOutput(`[Error] Failed to load node-pty: ${err.message}\n`);
+        return null;
+    }
+
+    const shell = process.platform === 'win32' ? 'cmd.exe' : 'bash';
+    const claudeCmd = process.platform === 'win32' ? 'claude.cmd' : 'claude';
+
+    // Start Claude interactively - shows full TUI
+    // Voice prompt is injected via PTY after TUI loads (see main.js sendInputWhenReady)
+    const claudeArgs = [
+        '--dangerously-skip-permissions'
+    ];
+
+    console.log('[Claude Spawner] Spawning Claude Code PTY...');
+    onOutput('[Claude] Starting interactive session...\n');
+
+    try {
+        // Reset ready state
+        isReady = false;
+        readyCallbacks = [];
+
+        ptyProcess = pty.spawn(claudeCmd, claudeArgs, {
+            name: 'xterm-256color',
+            cols: cols,
+            rows: rows,
             cwd: VOICE_MIRROR_DIR,
             env: {
                 ...process.env,
-                FORCE_COLOR: '0'  // No colors in --print mode
-            },
-            stdio: ['pipe', 'pipe', 'pipe']
-        });
-
-        let stdout = '';
-        let stderr = '';
-
-        claudeProcess.stdout.on('data', (data) => {
-            const chunk = data.toString();
-            stdout += chunk;
-            onOutput(chunk);
-        });
-
-        claudeProcess.stderr.on('data', (data) => {
-            stderr += data.toString();
-        });
-
-        const timeoutId = setTimeout(() => {
-            claudeProcess.kill();
-            reject(new Error('Claude response timed out'));
-        }, timeout);
-
-        claudeProcess.on('close', (code) => {
-            clearTimeout(timeoutId);
-            if (code === 0) {
-                // Clean up the response (remove any ANSI codes)
-                const cleanResponse = stdout
-                    .replace(/\x1B\[[0-9;]*[mK]/g, '')  // Remove ANSI codes
-                    .trim();
-                resolve(cleanResponse);
-            } else {
-                reject(new Error(`Claude exited with code ${code}: ${stderr}`));
+                TERM: 'xterm-256color',
+                COLORTERM: 'truecolor'
             }
         });
 
-        claudeProcess.on('error', (err) => {
-            clearTimeout(timeoutId);
-            reject(err);
+        // Buffer to detect ready state
+        let outputBuffer = '';
+
+        ptyProcess.onData((data) => {
+            // Send raw data to xterm.js (preserves ANSI codes for proper rendering)
+            onOutput(data);
+
+            // Accumulate output to detect ready state
+            outputBuffer += data;
+
+            // Claude Code TUI is ready when we see the input prompt
+            // The TUI shows a ">" prompt or similar when ready to accept input
+            // Also detect "What would you like to do?" or initial prompt patterns
+            if (!isReady) {
+                // Look for patterns indicating Claude is ready for input
+                // The TUI typically shows ">" or has a visible prompt area
+                // We can detect this by looking for certain ANSI sequences or text
+                const hasPrompt = outputBuffer.includes('>') ||
+                                  outputBuffer.includes('What would you like') ||
+                                  outputBuffer.includes('How can I help') ||
+                                  outputBuffer.length > 500;  // Fallback: enough output received
+
+                if (hasPrompt) {
+                    isReady = true;
+                    debugLog(`TUI ready detected. Buffer length: ${outputBuffer.length}`);
+
+                    // Call all waiting callbacks
+                    debugLog(`Calling ${readyCallbacks.length} ready callbacks`);
+                    readyCallbacks.forEach(cb => {
+                        try {
+                            cb();
+                        } catch (err) {
+                            debugLog(`Ready callback error: ${err}`);
+                        }
+                    });
+                    readyCallbacks = [];
+                }
+            }
         });
+
+        ptyProcess.onExit(({ exitCode, signal }) => {
+            console.log(`[Claude Spawner] Exited with code ${exitCode}, signal ${signal}`);
+            onOutput(`\n[Claude] Process exited (code: ${exitCode})\n`);
+            ptyProcess = null;
+            onExit(exitCode);
+        });
+
+        console.log('[Claude Spawner] PTY spawned successfully');
+        return ptyProcess;
+
+    } catch (err) {
+        console.error('[Claude Spawner] Failed to spawn:', err);
+        onOutput(`[Error] Failed to spawn Claude: ${err.message}\n`);
+        return null;
+    }
+}
+
+/**
+ * Send raw input to the Claude PTY (for xterm.js keyboard input)
+ * Passes through keystrokes directly without modification
+ */
+function sendRawInput(data) {
+    if (ptyProcess) {
+        ptyProcess.write(data);
+    }
+}
+
+/**
+ * Send a complete message to the Claude PTY
+ * Strips trailing newlines and adds Enter key after a delay
+ * Use this for programmatic message sending, not for raw keyboard input
+ */
+function sendInput(text) {
+    if (ptyProcess) {
+        // Strip trailing newlines - we'll send Enter separately
+        const cleanText = text.replace(/[\r\n]+$/g, '');
+        debugLog(`Sending input to PTY: "${cleanText.slice(0, 60)}..." (${cleanText.length} chars)`);
+
+        // Write the text first (without Enter)
+        ptyProcess.write(cleanText);
+        debugLog('Text written to PTY');
+
+        // Small delay then send Enter key separately
+        // This ensures the TUI has processed all characters before we submit
+        setTimeout(() => {
+            if (ptyProcess) {
+                debugLog('Sending Enter key (\\r)');
+                ptyProcess.write('\r');
+                debugLog('Enter key sent');
+            }
+        }, 100);
+    } else {
+        debugLog('ERROR: Cannot send input - PTY not running');
+    }
+}
+
+/**
+ * Send input when Claude is ready
+ * Waits for TUI to be ready before sending
+ */
+function sendInputWhenReady(text, timeout = 15000) {
+    debugLog(`sendInputWhenReady called. isReady=${isReady}, timeout=${timeout}`);
+    return new Promise((resolve, reject) => {
+        if (!ptyProcess) {
+            debugLog('ERROR: PTY not running in sendInputWhenReady');
+            reject(new Error('PTY not running'));
+            return;
+        }
+
+        if (isReady) {
+            // Already ready, send immediately
+            debugLog('Already ready, sending immediately');
+            sendInput(text);
+            resolve(true);
+            return;
+        }
+
+        debugLog('Waiting for TUI to be ready...');
+
+        // Set up timeout
+        const timeoutId = setTimeout(() => {
+            debugLog(`TIMEOUT: Still not ready after ${timeout}ms`);
+            // Remove from callbacks
+            const idx = readyCallbacks.indexOf(sendCallback);
+            if (idx > -1) readyCallbacks.splice(idx, 1);
+            reject(new Error('Timeout waiting for Claude TUI'));
+        }, timeout);
+
+        // Callback when ready
+        const sendCallback = () => {
+            debugLog('Ready callback triggered, clearing timeout');
+            clearTimeout(timeoutId);
+            // Small delay after ready detection to ensure TUI is fully loaded
+            debugLog('Waiting 500ms before sending...');
+            setTimeout(() => {
+                debugLog('Delay complete, sending input now');
+                sendInput(text);
+                resolve(true);
+            }, 500);
+        };
+
+        readyCallbacks.push(sendCallback);
+        debugLog(`Added callback, now ${readyCallbacks.length} callbacks waiting`);
     });
 }
 
 /**
- * Write a response to the inbox
+ * Check if Claude TUI is ready for input
+ */
+function isClaudeReady() {
+    return isReady;
+}
+
+/**
+ * Stop the Claude PTY process
+ */
+function stopClaude() {
+    if (ptyProcess) {
+        console.log('[Claude Spawner] Stopping...');
+        ptyProcess.kill();
+        ptyProcess = null;
+    }
+}
+
+/**
+ * Check if Claude is running
+ */
+function isClaudeRunning() {
+    return ptyProcess !== null;
+}
+
+/**
+ * Resize the PTY
+ */
+function resizePty(cols, rows) {
+    if (ptyProcess) {
+        ptyProcess.resize(cols, rows);
+    }
+}
+
+/**
+ * Write a response to the inbox (for manual/fallback use)
  */
 function writeResponseToInbox(message) {
     // Ensure data directory exists
@@ -186,52 +372,20 @@ function writeResponseToInbox(message) {
     }
 
     fs.writeFileSync(INBOX_PATH, JSON.stringify(data, null, 2), 'utf-8');
-    console.log('[Claude] Response written to inbox');
-
     return newMessage;
-}
-
-/**
- * Process a voice message - ask Claude and write response
- */
-async function processVoiceMessage(message) {
-    try {
-        const response = await askClaude(message, {
-            onOutput: (chunk) => console.log('[Claude output]', chunk)
-        });
-
-        if (response) {
-            writeResponseToInbox(response);
-            return response;
-        }
-        return null;
-    } catch (err) {
-        console.error('[Claude] Error processing message:', err.message);
-        return null;
-    }
-}
-
-// Legacy exports for compatibility
-function spawnClaude(options = {}) {
-    // Configure MCP server
-    configureMCPServer();
-
-    // Return a dummy object - actual processing happens via processVoiceMessage
-    console.log('[Claude Spawner] Claude ready (--print mode)');
-    return { dummy: true };
-}
-
-function stopClaude(process) {
-    // No persistent process in --print mode
 }
 
 module.exports = {
     spawnClaude,
     stopClaude,
+    sendInput,
+    sendRawInput,
+    sendInputWhenReady,
+    isClaudeRunning,
+    isClaudeReady,
+    resizePty,
     configureMCPServer,
     isClaudeAvailable,
-    askClaude,
-    processVoiceMessage,
     writeResponseToInbox,
     VOICE_CLAUDE_SYSTEM
 };
