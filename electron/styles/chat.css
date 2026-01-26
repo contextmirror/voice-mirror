@@ -6,6 +6,7 @@
     overflow-y: auto;
     padding: 16px;
     position: relative;
+    -webkit-app-region: drag;  /* Allow dragging window from empty space */
 }
 
 /* Gradient fade at bottom of chat */
@@ -31,6 +32,7 @@
     font-size: 14px;
     position: relative;
     animation: rise var(--duration-normal) var(--ease-out);
+    -webkit-app-region: no-drag;  /* Messages are interactive */
 }
 
 .message.user {
@@ -79,6 +81,7 @@
     gap: 12px;
     margin-bottom: 16px;
     animation: rise var(--duration-normal) var(--ease-out);
+    -webkit-app-region: no-drag;  /* Messages are interactive, not draggable */
 }
 
 .message-group.user {

@@ -8,8 +8,9 @@ export const state = {
     pendingImageData: null,
     callModeActive: false,
     claudeRunning: false,
-    terminalVisible: true,
+    terminalVisible: false,         // Whether terminal panel is visible on chat page
     terminalMinimized: false,
+    terminalLocation: 'fullscreen', // 'fullscreen' | 'chat-bottom' - where terminal is displayed
     settingsVisible: false,
     recordingKeybind: null,
     currentConfig: {},

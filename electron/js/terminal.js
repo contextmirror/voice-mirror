@@ -7,10 +7,12 @@ import { state } from './state.js';
 // xterm.js instance
 let term = null;
 let fitAddon = null;
+let resizeObserver = null;
 
 // DOM elements (initialized in initTerminal)
-let terminalContainer;
-let xtermContainer;
+let terminalContainer;      // Chat page bottom panel container
+let xtermContainer;         // Chat page xterm mount point
+let fullscreenContainer;    // Fullscreen page xterm mount point
 let terminalStatus;
 let terminalStartBtn;
 let terminalBtn;
@@ -23,6 +25,7 @@ export async function initXterm() {
     // Get DOM elements
     terminalContainer = document.getElementById('terminal-container');
     xtermContainer = document.getElementById('xterm-container');
+    fullscreenContainer = document.getElementById('xterm-fullscreen-container');
     terminalStatus = document.getElementById('terminal-status');
     terminalStartBtn = document.getElementById('terminal-start');
     terminalBtn = document.querySelector('.terminal-btn');
@@ -35,6 +38,16 @@ export async function initXterm() {
     if (!Terminal) {
         console.error('[xterm] Terminal not loaded - check script tags');
         return;
+    }
+
+    // Load saved terminal location preference
+    try {
+        const config = await window.voiceMirror.config.get();
+        if (config.behavior?.terminalLocation) {
+            state.terminalLocation = config.behavior.terminalLocation;
+        }
+    } catch (err) {
+        console.warn('[xterm] Failed to load terminal location preference:', err);
     }
 
     term = new Terminal({
@@ -71,23 +84,44 @@ export async function initXterm() {
     fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
 
-    term.open(xtermContainer);
-    fitAddon.fit();
+    // Mount terminal to the appropriate container based on saved preference
+    const mountContainer = state.terminalLocation === 'chat-bottom' ? xtermContainer : fullscreenContainer;
+    term.open(mountContainer);
+
+    // Update visibility based on location
+    if (state.terminalLocation === 'chat-bottom') {
+        terminalContainer.classList.remove('hidden');
+        state.terminalVisible = true;
+    } else {
+        terminalContainer.classList.add('hidden');
+        state.terminalVisible = false;
+    }
 
     // Send keyboard input to PTY
     term.onData((data) => {
         window.voiceMirror.claude.sendInput(data);
     });
 
-    // Handle resize
-    const resizeObserver = new ResizeObserver(() => {
-        if (fitAddon && !state.terminalMinimized && state.terminalVisible) {
-            fitAddon.fit();
-            // Tell PTY about new size
-            window.voiceMirror.claude.resize(term.cols, term.rows);
+    // Handle resize - create observer for current container
+    resizeObserver = new ResizeObserver(() => {
+        if (fitAddon && !state.terminalMinimized) {
+            // Only fit if the current container is visible
+            const currentContainer = state.terminalLocation === 'chat-bottom' ? xtermContainer : fullscreenContainer;
+            if (currentContainer.offsetParent !== null) {
+                fitAddon.fit();
+                // Tell PTY about new size
+                if (term.cols && term.rows) {
+                    window.voiceMirror.claude.resize(term.cols, term.rows);
+                }
+            }
         }
     });
-    resizeObserver.observe(xtermContainer);
+    resizeObserver.observe(mountContainer);
+
+    // Initial fit after a small delay to ensure container is sized
+    setTimeout(() => {
+        fitAddon.fit();
+    }, 100);
 
     // Welcome message
     term.writeln('\x1b[36m╔════════════════════════════════════════╗\x1b[0m');
@@ -97,7 +131,7 @@ export async function initXterm() {
     term.writeln('\x1b[90mClick "Start" to launch Claude Code...\x1b[0m');
     term.writeln('');
 
-    console.log('[xterm] Initialized');
+    console.log('[xterm] Initialized at:', state.terminalLocation);
 }
 
 /**
@@ -118,7 +152,7 @@ export function toggleTerminal() {
         terminalContainer.classList.add('hidden');
         state.terminalVisible = false;
     }
-    terminalBtn.classList.toggle('active', state.terminalVisible);
+    if (terminalBtn) terminalBtn.classList.toggle('active', state.terminalVisible);
 }
 
 /**
@@ -139,7 +173,80 @@ export function minimizeTerminal() {
 export function hideTerminal() {
     terminalContainer.classList.add('hidden');
     state.terminalVisible = false;
-    terminalBtn.classList.remove('active');
+    if (terminalBtn) terminalBtn.classList.remove('active');
+}
+
+/**
+ * Relocate terminal between fullscreen and chat-bottom views
+ * @param {string} location - 'fullscreen' | 'chat-bottom'
+ */
+export async function relocateTerminal(location) {
+    if (!term || !term.element) {
+        console.warn('[xterm] Cannot relocate - terminal not initialized');
+        return;
+    }
+
+    if (location === state.terminalLocation) {
+        console.log('[xterm] Already at location:', location);
+        return;
+    }
+
+    const xtermElement = term.element;
+    const oldContainer = state.terminalLocation === 'chat-bottom' ? xtermContainer : fullscreenContainer;
+    const newContainer = location === 'chat-bottom' ? xtermContainer : fullscreenContainer;
+
+    // Update resize observer to watch new container
+    if (resizeObserver) {
+        resizeObserver.unobserve(oldContainer);
+    }
+
+    // Move the xterm DOM element to new container
+    newContainer.appendChild(xtermElement);
+
+    // Update visibility of chat page terminal panel
+    if (location === 'chat-bottom') {
+        terminalContainer.classList.remove('hidden');
+        state.terminalVisible = true;
+    } else {
+        terminalContainer.classList.add('hidden');
+        state.terminalVisible = false;
+    }
+
+    // Observe new container
+    if (resizeObserver) {
+        resizeObserver.observe(newContainer);
+    }
+
+    // Update state
+    state.terminalLocation = location;
+
+    // Refit terminal to new container size
+    setTimeout(() => {
+        if (fitAddon) {
+            fitAddon.fit();
+            if (term.cols && term.rows) {
+                window.voiceMirror.claude.resize(term.cols, term.rows);
+            }
+        }
+    }, 50);
+
+    // Save preference to config
+    try {
+        await window.voiceMirror.config.set({
+            behavior: { terminalLocation: location }
+        });
+        console.log('[xterm] Relocated to:', location);
+    } catch (err) {
+        console.error('[xterm] Failed to save terminal location:', err);
+    }
+}
+
+/**
+ * Get current terminal location
+ * @returns {string} 'fullscreen' | 'chat-bottom'
+ */
+export function getTerminalLocation() {
+    return state.terminalLocation;
 }
 
 /**
@@ -280,3 +387,5 @@ window.stopClaude = stopClaude;
 window.toggleTerminal = toggleTerminal;
 window.minimizeTerminal = minimizeTerminal;
 window.hideTerminal = hideTerminal;
+window.relocateTerminal = relocateTerminal;
+window.getTerminalLocation = getTerminalLocation;

@@ -150,7 +150,8 @@ function spawnClaude(options = {}) {
             env: {
                 ...process.env,
                 TERM: 'xterm-256color',
-                COLORTERM: 'truecolor'
+                COLORTERM: 'truecolor',
+                VOICE_MIRROR_SESSION: 'true'  // Flag for hooks to identify this session
             }
         });
 

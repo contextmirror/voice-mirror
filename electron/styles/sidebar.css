@@ -148,7 +148,113 @@
     border-top: 1px solid var(--border);
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 8px;
+}
+
+/* Sidebar Action Buttons */
+#sidebar-actions {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+}
+
+.sidebar-action-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    background: var(--bg-elevated);
+    color: var(--muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all var(--duration-fast) var(--ease-out);
+}
+
+.sidebar-action-btn:hover {
+    background: var(--bg-hover);
+    border-color: var(--border-strong);
+    color: var(--text-strong);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-sm);
+}
+
+.sidebar-action-btn:active {
+    transform: translateY(0);
+    box-shadow: none;
+}
+
+.sidebar-action-btn svg {
+    width: 18px;
+    height: 18px;
+}
+
+/* Call mode button active state */
+.sidebar-action-btn.call-active {
+    background: rgba(74, 222, 128, 0.3);
+    color: #4ade80;
+    border-color: rgba(74, 222, 128, 0.5);
+    animation: call-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes call-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.4); }
+    50% { box-shadow: 0 0 0 8px rgba(74, 222, 128, 0); }
+}
+
+/* Sidebar Status */
+#sidebar-status {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 8px;
+    background: var(--bg);
+    border-radius: var(--radius-md);
+    color: var(--muted);
+    font-size: 12px;
+}
+
+#sidebar-status #status-indicator {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--ok);
+    flex-shrink: 0;
+    box-shadow: 0 0 8px rgba(74, 222, 128, 0.5);
+    animation: status-glow 2s ease-in-out infinite;
+}
+
+#sidebar-status #status-indicator.recording {
+    background: var(--danger);
+    box-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
+    animation: status-glow 0.5s ease-in-out infinite;
+}
+
+@keyframes status-glow {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+#sidebar-status #status-text {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Collapsed state for sidebar footer */
+#sidebar.collapsed #sidebar-actions {
+    flex-direction: column;
+}
+
+#sidebar.collapsed #sidebar-status {
+    flex-direction: column;
+    padding: 6px;
+}
+
+#sidebar.collapsed #sidebar-status #status-text {
+    display: none;
 }
 
 #sidebar-collapse-btn {
@@ -203,6 +309,7 @@
     flex-direction: column;
     overflow: hidden;
     min-width: 0; /* Allow flex item to shrink below content size */
+    -webkit-app-region: drag;  /* Allow dragging window from empty space */
 }
 
 /* ========== Page Container ========== */
@@ -211,6 +318,7 @@
     flex: 1;
     flex-direction: column;
     overflow: hidden;
+    -webkit-app-region: no-drag;  /* Pages handle drag regions individually */
 }
 
 .page.active {
@@ -282,4 +390,67 @@
 
 #sidebar.collapsed .nav-item:hover::after {
     opacity: 1;
+}
+
+/* ========== Context Menu ========== */
+.context-menu {
+    position: fixed;
+    z-index: 10000;
+    min-width: 160px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    padding: 4px;
+    animation: context-menu-in 0.15s var(--ease-out);
+}
+
+.context-menu.hidden {
+    display: none;
+}
+
+@keyframes context-menu-in {
+    from {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.context-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 8px 12px;
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all var(--duration-fast) var(--ease-out);
+}
+
+.context-menu-item:hover {
+    background: var(--bg-hover);
+    color: var(--text-strong);
+}
+
+.context-menu-item:active {
+    background: var(--accent-subtle);
+}
+
+.context-menu-item svg {
+    width: 16px;
+    height: 16px;
+    color: var(--muted);
+    flex-shrink: 0;
+}
+
+.context-menu-item:hover svg {
+    color: var(--accent);
 }

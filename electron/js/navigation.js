@@ -5,6 +5,9 @@
 
 import { state } from './state.js';
 
+// Context menu element
+let contextMenu = null;
+
 /**
  * Initialize navigation
  * Sets up nav click handlers and loads saved sidebar state
@@ -12,6 +15,9 @@ import { state } from './state.js';
 export function initNavigation() {
     // Load saved sidebar state
     loadSidebarState();
+
+    // Get context menu element
+    contextMenu = document.getElementById('terminal-context-menu');
 
     // Set up nav item click handlers
     document.querySelectorAll('.nav-item').forEach(btn => {
@@ -21,6 +27,14 @@ export function initNavigation() {
                 navigateTo(page);
             }
         });
+
+        // Add right-click handler for terminal nav item
+        if (btn.dataset.page === 'terminal') {
+            btn.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+                showTerminalContextMenu(e.clientX, e.clientY);
+            });
+        }
     });
 
     // Collapse button handler
@@ -28,6 +42,16 @@ export function initNavigation() {
     if (collapseBtn) {
         collapseBtn.addEventListener('click', toggleSidebarCollapse);
     }
+
+    // Set up context menu handlers
+    setupContextMenu();
+
+    // Close context menu on click outside
+    document.addEventListener('click', (e) => {
+        if (contextMenu && !contextMenu.contains(e.target)) {
+            hideContextMenu();
+        }
+    });
 
     // Apply initial page state
     navigateTo(state.currentPage);
@@ -60,9 +84,8 @@ export function navigateTo(page) {
         p.classList.toggle('active', pageId === page);
     });
 
-    // Special handling for terminal page
-    if (page === 'terminal') {
-        // Trigger resize so xterm.js fits correctly
+    // Special handling for terminal page - trigger resize for xterm.js
+    if (page === 'terminal' || page === 'chat') {
         setTimeout(() => {
             window.dispatchEvent(new Event('resize'));
         }, 50);
@@ -141,4 +164,84 @@ export function getCurrentPage() {
  */
 export function isSidebarCollapsed() {
     return state.sidebarCollapsed;
+}
+
+/**
+ * Show terminal context menu at position
+ * @param {number} x - X coordinate
+ * @param {number} y - Y coordinate
+ */
+function showTerminalContextMenu(x, y) {
+    if (!contextMenu) return;
+
+    // Update menu items based on current terminal location
+    const snapItem = contextMenu.querySelector('[data-action="snap-to-chat"]');
+    const fullscreenItem = contextMenu.querySelector('[data-action="show-fullscreen"]');
+
+    if (state.terminalLocation === 'fullscreen') {
+        // Currently fullscreen - show "Snap to Chat" option
+        if (snapItem) snapItem.style.display = 'flex';
+        if (fullscreenItem) fullscreenItem.style.display = 'none';
+    } else {
+        // Currently snapped - show "Show Fullscreen" option
+        if (snapItem) snapItem.style.display = 'none';
+        if (fullscreenItem) fullscreenItem.style.display = 'flex';
+    }
+
+    // Position menu
+    contextMenu.style.left = `${x}px`;
+    contextMenu.style.top = `${y}px`;
+    contextMenu.classList.remove('hidden');
+
+    // Ensure menu stays within viewport
+    const rect = contextMenu.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+
+    if (rect.right > viewportWidth) {
+        contextMenu.style.left = `${viewportWidth - rect.width - 8}px`;
+    }
+    if (rect.bottom > viewportHeight) {
+        contextMenu.style.top = `${viewportHeight - rect.height - 8}px`;
+    }
+}
+
+/**
+ * Hide terminal context menu
+ */
+function hideContextMenu() {
+    if (contextMenu) {
+        contextMenu.classList.add('hidden');
+    }
+}
+
+/**
+ * Set up context menu click handlers
+ */
+function setupContextMenu() {
+    if (!contextMenu) return;
+
+    contextMenu.querySelectorAll('.context-menu-item').forEach(item => {
+        item.addEventListener('click', async () => {
+            const action = item.dataset.action;
+
+            if (action === 'snap-to-chat') {
+                // Move terminal to chat page bottom
+                if (window.relocateTerminal) {
+                    await window.relocateTerminal('chat-bottom');
+                    // Navigate to chat page to see it
+                    navigateTo('chat');
+                }
+            } else if (action === 'show-fullscreen') {
+                // Move terminal to fullscreen page
+                if (window.relocateTerminal) {
+                    await window.relocateTerminal('fullscreen');
+                    // Navigate to terminal page to see it
+                    navigateTo('terminal');
+                }
+            }
+
+            hideContextMenu();
+        });
+    });
 }

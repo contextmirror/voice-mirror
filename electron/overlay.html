@@ -67,6 +67,26 @@
                 </button>
             </nav>
             <div id="sidebar-footer">
+                <!-- Action Buttons -->
+                <div id="sidebar-actions">
+                    <button id="call-mode-btn" class="sidebar-action-btn" onclick="toggleCallMode()" title="Call Mode" data-tooltip="Call Mode">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+                        </svg>
+                    </button>
+                    <button class="sidebar-action-btn" onclick="captureScreen()" title="Capture Screen" data-tooltip="Screenshot">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="3" width="18" height="18" rx="2"/>
+                            <circle cx="12" cy="12" r="3"/>
+                        </svg>
+                    </button>
+                </div>
+                <!-- Status Indicator -->
+                <div id="sidebar-status">
+                    <div id="status-indicator"></div>
+                    <span id="status-text">Listening...</span>
+                </div>
+                <!-- Collapse Button -->
                 <button id="sidebar-collapse-btn">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <polyline points="15 18 9 12 15 6"/>
@@ -118,15 +138,15 @@
                     </div>
                 </div>
 
-                <!-- Terminal Panel (at bottom of chat page) -->
-                <div id="terminal-container">
+                <!-- Terminal Panel (at bottom of chat page) - hidden by default -->
+                <div id="terminal-container" class="hidden">
                     <div id="terminal-header">
                         <span class="terminal-title">⌘ Claude Code</span>
                         <span id="terminal-status" class="terminal-status stopped">Stopped</span>
                         <button id="terminal-start" class="control-btn start" onclick="startClaude()">Start</button>
                         <div class="terminal-controls">
                             <button class="terminal-ctrl-btn" onclick="minimizeTerminal()" title="Minimize">─</button>
-                            <button class="terminal-ctrl-btn" onclick="hideTerminal()" title="Hide">×</button>
+                            <button class="terminal-ctrl-btn" onclick="relocateTerminal('fullscreen')" title="Move to fullscreen">⬆</button>
                         </div>
                     </div>
                     <div id="xterm-container"></div>
@@ -294,29 +314,29 @@
                 </div>
             </div>
 
-            <!-- Status Bar (shared across pages) -->
-            <div id="status-bar">
-                <div id="status-indicator"></div>
-                <span id="status-text">Listening...</span>
-                <div id="action-buttons">
-                    <!-- Call Mode Toggle -->
-                    <button id="call-mode-btn" class="action-btn" onclick="toggleCallMode()" title="Call Mode (always listening)">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
-                        </svg>
-                    </button>
-                    <button class="action-btn" onclick="captureScreen()" title="Capture Screen">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <rect x="3" y="3" width="18" height="18" rx="2"/>
-                            <circle cx="12" cy="12" r="3"/>
-                        </svg>
-                    </button>
-                </div>
-            </div>
-
             <!-- Drop zone overlay -->
             <div id="drop-zone">Drop image here</div>
         </main>
+    </div>
+
+    <!-- Terminal Context Menu -->
+    <div id="terminal-context-menu" class="context-menu hidden">
+        <button class="context-menu-item" data-action="snap-to-chat">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="17 11 12 6 7 11"/>
+                <polyline points="17 18 12 13 7 18"/>
+            </svg>
+            <span>Snap to Chat</span>
+        </button>
+        <button class="context-menu-item" data-action="show-fullscreen">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="15 3 21 3 21 9"/>
+                <polyline points="9 21 3 21 3 15"/>
+                <line x1="21" y1="3" x2="14" y2="10"/>
+                <line x1="3" y1="21" x2="10" y2="14"/>
+            </svg>
+            <span>Show Fullscreen</span>
+        </button>
     </div>
 
     <!-- Voice Mirror Scripts (ES modules) -->

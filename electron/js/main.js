@@ -182,9 +182,12 @@ async function sendImageWithPrompt(prompt) {
     // Capture image data before clearing
     const imageData = state.pendingImageData;
 
-    // Show user's image and prompt in chat
+    // Show user's image in chat
     addMessage('user', null, imageData.base64);
-    addMessage('user', prompt);
+    // Only add prompt message if there is one
+    if (prompt) {
+        addMessage('user', prompt);
+    }
 
     // Clear preview immediately so UI feels fast
     cancelImage();
@@ -236,12 +239,12 @@ async function captureScreen() {
 
 /**
  * Send pending image to Claude (manual send button click)
- * Uses whatever voice prompt was captured, or default
+ * Uses whatever voice prompt was captured, or empty string if none
  */
 async function sendImage() {
     if (!state.pendingImageData) return;
 
-    const prompt = state.imageVoicePrompt || "What's in this image?";
+    const prompt = state.imageVoicePrompt || '';
     sendImageWithPrompt(prompt);
 }
 
