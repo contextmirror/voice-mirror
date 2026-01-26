@@ -8,7 +8,7 @@ from providers.config import strip_provider_prefix
 
 if TYPE_CHECKING:
     from providers.inbox import InboxManager
-    from tts import TTSManager
+    from tts.base import TTSAdapter
 
 
 class NotificationWatcher:
@@ -21,7 +21,7 @@ class NotificationWatcher:
     def __init__(
         self,
         inbox: "InboxManager",
-        tts: "TTSManager",
+        tts: "TTSAdapter",
         poll_interval: float = 2.0,
         # State checkers (callbacks to check VoiceMirror state)
         is_recording: Callable[[], bool] = lambda: False,
@@ -40,7 +40,7 @@ class NotificationWatcher:
 
         Args:
             inbox: InboxManager instance
-            tts: TTSManager instance
+            tts: TTSAdapter instance
             poll_interval: How often to check for new messages (seconds)
             is_recording: Callback to check if currently recording
             is_processing: Callback to check if currently processing

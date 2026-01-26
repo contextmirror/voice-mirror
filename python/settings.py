@@ -32,7 +32,9 @@ def load_voice_settings() -> Dict[str, Any]:
         "timezone": "Europe/London",
         "units": "metric",
         "stt_adapter": "parakeet",  # parakeet, whisper, faster-whisper
-        "stt_model": None  # None = use adapter's default model
+        "stt_model": None,  # None = use adapter's default model
+        "tts_adapter": "kokoro",  # kokoro, qwen (future: piper, coqui, elevenlabs)
+        "tts_voice": "af_bella",  # Voice ID (adapter-dependent)
     }
 
     # Try to load cached settings first

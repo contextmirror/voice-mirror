@@ -39,7 +39,7 @@ from providers.config import (
 from providers.inbox import InboxManager, cleanup_inbox as _cleanup_inbox
 from audio.wake_word import WakeWordProcessor
 from audio.state import AudioState
-from tts import TTSManager
+from tts import create_tts_adapter
 from notifications import NotificationWatcher
 
 import sounddevice as sd
@@ -92,7 +92,7 @@ class VoiceMirror:
             threshold=WAKE_WORD_THRESHOLD,
             chunk_samples=CHUNK_SAMPLES
         )
-        self.tts = TTSManager(voice=TTS_VOICE)
+        self.tts = None  # TTS adapter (kokoro, qwen, etc.) - loaded in load_models()
         self.inbox = InboxManager(INBOX_PATH, lambda: self._ai_provider)
         self.audio_state = AudioState()  # Shared audio state
         self.stt_adapter = None  # STT adapter (parakeet, whisper, etc.)
@@ -122,6 +122,18 @@ class VoiceMirror:
 
         if old_provider != new_provider:
             print(f"🔄 AI Provider changed: {old_provider} -> {new_provider} ({self._ai_provider['name']})")
+
+    def refresh_tts_settings(self):
+        """
+        Re-read TTS settings from config and update the TTS adapter if voice changed.
+        Called when settings are updated from Electron.
+        """
+        settings = load_voice_settings()
+        new_voice = settings.get("tts_voice")
+
+        if self.tts and new_voice and new_voice != self.tts.voice:
+            if self.tts.set_voice(new_voice):
+                print(f"✅ TTS voice updated to: {new_voice}")
 
     def load_models(self):
         """Load OpenWakeWord and Parakeet models."""
@@ -173,7 +185,20 @@ class VoiceMirror:
             except Exception:
                 self.stt_adapter = None
 
-        # Load Kokoro TTS model via TTSManager
+        # Load TTS adapter from settings
+        tts_adapter = settings.get("tts_adapter", "kokoro")
+        tts_voice = settings.get("tts_voice", TTS_VOICE)
+
+        try:
+            print(f"Loading TTS adapter: {tts_adapter}")
+            print(f"  Voice: {tts_voice}")
+            self.tts = create_tts_adapter(tts_adapter, voice=tts_voice)
+        except ValueError as e:
+            print(f"⚠️ {e}")
+            print(f"   Falling back to kokoro")
+            self.tts = create_tts_adapter("kokoro", voice=tts_voice)
+
+        # Load TTS model
         self.tts.load()
 
     def is_call_active(self) -> bool:
@@ -446,8 +471,8 @@ class VoiceMirror:
             print(f"STT: {self.stt_adapter.name}")
         else:
             print(f"STT: Not loaded yet (will load on first use)")
-        if self.tts.is_loaded:
-            print(f"TTS: Kokoro (voice: {self.tts.voice}) - LOCAL")
+        if self.tts and self.tts.is_loaded:
+            print(f"TTS: {self.tts.name} - LOCAL")
         else:
             print(f"TTS: Not available")
         print(f"Inbox: {INBOX_PATH}")
