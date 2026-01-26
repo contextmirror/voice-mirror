@@ -4,27 +4,20 @@
 
 import { state } from './state.js';
 import { formatKeybind } from './utils.js';
-
-// DOM elements (initialized lazily)
-let settingsPanel = null;
+import { navigateTo } from './navigation.js';
 
 /**
- * Initialize settings panel reference
- */
-function getSettingsPanel() {
-    if (!settingsPanel) {
-        settingsPanel = document.getElementById('settings-panel');
-    }
-    return settingsPanel;
-}
-
-/**
- * Toggle settings panel visibility
+ * Toggle settings - navigates to settings page or back to chat
  */
 export function toggleSettings() {
-    state.settingsVisible = !state.settingsVisible;
-    getSettingsPanel().classList.toggle('visible', state.settingsVisible);
-    if (state.settingsVisible) {
+    if (state.currentPage === 'settings') {
+        // Go back to chat
+        navigateTo('chat');
+        state.settingsVisible = false;
+    } else {
+        // Navigate to settings page
+        navigateTo('settings');
+        state.settingsVisible = true;
         loadSettingsUI();
     }
 }
@@ -146,11 +139,6 @@ export async function saveSettings() {
             saveBtn.style.background = '';
         }, 1500);
 
-        // Close settings panel
-        setTimeout(() => {
-            toggleSettings();
-        }, 1000);
-
     } catch (err) {
         console.error('[Settings] Failed to save:', err);
         alert('Failed to save settings: ' + err.message);
@@ -195,28 +183,6 @@ function updateCallModeUI() {
  * Initialize settings event listeners
  */
 export function initSettings() {
-    // Close button handler - use both mousedown and click for reliability
-    const closeBtn = document.getElementById('settings-close-btn');
-    if (closeBtn) {
-        // Use mousedown as it fires before click and is more reliable
-        closeBtn.addEventListener('mousedown', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            console.log('[Settings] Close button mousedown');
-            toggleSettings();
-        });
-
-        // Also handle click as backup
-        closeBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            console.log('[Settings] Close button clicked');
-            // toggleSettings(); // mousedown already handled it
-        });
-    } else {
-        console.error('[Settings] Close button not found!');
-    }
-
     // Activation mode change handler
     document.querySelectorAll('input[name="activationMode"]').forEach(radio => {
         radio.addEventListener('change', (e) => {
@@ -320,3 +286,4 @@ export function initSettings() {
 window.toggleSettings = toggleSettings;
 window.saveSettings = saveSettings;
 window.resetSettings = resetSettings;
+window.loadSettingsUI = loadSettingsUI;

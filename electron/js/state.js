@@ -16,7 +16,10 @@ export const state = {
     // Screenshot + voice workflow
     awaitingVoiceForImage: false,  // True when we have an image waiting for voice
     imageVoiceTimeout: null,        // Timeout ID for auto-send
-    imageVoicePrompt: null          // Voice prompt to use with image
+    imageVoicePrompt: null,         // Voice prompt to use with image
+    // Navigation state
+    currentPage: 'chat',            // 'chat' | 'terminal' | 'settings'
+    sidebarCollapsed: false         // Whether sidebar is collapsed to icons
 };
 
 // Deduplication: track recent messages to prevent duplicates

@@ -8,6 +8,7 @@ import { initMarkdown } from './markdown.js';
 import { addMessage, isDuplicate, copyMessage } from './messages.js';
 import { initXterm, handleClaudeOutput, updateClaudeStatus, toggleTerminal, startClaude, stopClaude } from './terminal.js';
 import { initSettings, toggleSettings } from './settings.js';
+import { initNavigation, navigateTo, toggleSidebarCollapse } from './navigation.js';
 import { blobToBase64, formatSize } from './utils.js';
 
 // DOM elements
@@ -372,6 +373,9 @@ async function init() {
     // Load welcome message
     updateWelcomeMessage();
 
+    // Initialize navigation (sidebar + page routing)
+    initNavigation();
+
     // Initialize xterm terminal
     try {
         await initXterm();
@@ -517,6 +521,9 @@ window.startClaude = startClaude;
 window.stopClaude = stopClaude;
 // Settings (from settings.js)
 window.toggleSettings = toggleSettings;
+// Navigation (from navigation.js)
+window.navigateTo = navigateTo;
+window.toggleSidebarCollapse = toggleSidebarCollapse;
 
 // Initialize when DOM is ready
 if (document.readyState === 'loading') {

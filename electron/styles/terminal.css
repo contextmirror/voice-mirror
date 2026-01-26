@@ -148,3 +148,78 @@
 .terminal-line.error {
     color: #f87171;
 }
+
+/* ========== Fullscreen Terminal Page ========== */
+#terminal-fullscreen {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: #0a0a12;
+    overflow: hidden;
+}
+
+#terminal-fullscreen-header {
+    display: flex;
+    align-items: center;
+    padding: 12px 16px;
+    background: rgba(0, 0, 0, 0.3);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+#terminal-fullscreen-header .terminal-title {
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 14px;
+    font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+    font-weight: 500;
+}
+
+#terminal-fullscreen-header .terminal-status {
+    margin-left: 12px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    background: rgba(74, 222, 128, 0.2);
+    color: #4ade80;
+}
+
+#terminal-fullscreen-header .terminal-status.stopped {
+    background: rgba(239, 68, 68, 0.2);
+    color: #ef4444;
+}
+
+#terminal-fullscreen-header .control-btn {
+    margin-left: 12px;
+}
+
+#xterm-fullscreen-container {
+    flex: 1;
+    overflow: hidden;
+    padding: 8px;
+}
+
+#xterm-fullscreen-container .xterm {
+    height: 100%;
+}
+
+#xterm-fullscreen-container .xterm-viewport {
+    overflow-y: auto !important;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.15) #0a0a12;
+}
+
+#xterm-fullscreen-container .xterm-viewport::-webkit-scrollbar {
+    width: 8px;
+}
+
+#xterm-fullscreen-container .xterm-viewport::-webkit-scrollbar-track {
+    background: #0a0a12;
+}
+
+#xterm-fullscreen-container .xterm-viewport::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 4px;
+}
+
+#xterm-fullscreen-container .xterm-viewport::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.25);
+}

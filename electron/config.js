@@ -62,6 +62,11 @@ const DEFAULT_CONFIG = {
     advanced: {
         pythonPath: null,  // null = auto-detect sibling folder
         debugMode: false
+    },
+
+    // Sidebar settings
+    sidebar: {
+        collapsed: false  // Whether sidebar is collapsed to icons-only
     }
 };
 

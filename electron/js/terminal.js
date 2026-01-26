@@ -147,20 +147,65 @@ export function hideTerminal() {
  */
 export function updateClaudeStatus(running) {
     state.claudeRunning = running;
-    if (running) {
-        terminalStatus.textContent = 'Running';
-        terminalStatus.classList.remove('stopped');
-        claudeBadge.classList.remove('stopped');
-        terminalStartBtn.textContent = 'Stop';
-        terminalStartBtn.className = 'control-btn stop';
-        terminalStartBtn.onclick = stopClaude;
-    } else {
-        terminalStatus.textContent = 'Stopped';
-        terminalStatus.classList.add('stopped');
-        claudeBadge.classList.add('stopped');
-        terminalStartBtn.textContent = 'Start';
-        terminalStartBtn.className = 'control-btn start';
-        terminalStartBtn.onclick = startClaude;
+
+    // Update terminal panel status (if elements exist)
+    if (terminalStatus) {
+        if (running) {
+            terminalStatus.textContent = 'Running';
+            terminalStatus.classList.remove('stopped');
+        } else {
+            terminalStatus.textContent = 'Stopped';
+            terminalStatus.classList.add('stopped');
+        }
+    }
+
+    // Update status bar badge
+    if (claudeBadge) {
+        claudeBadge.classList.toggle('stopped', !running);
+    }
+
+    // Update start/stop button
+    if (terminalStartBtn) {
+        if (running) {
+            terminalStartBtn.textContent = 'Stop';
+            terminalStartBtn.className = 'control-btn stop';
+            terminalStartBtn.onclick = stopClaude;
+        } else {
+            terminalStartBtn.textContent = 'Start';
+            terminalStartBtn.className = 'control-btn start';
+            terminalStartBtn.onclick = startClaude;
+        }
+    }
+
+    // Update sidebar nav badge
+    const navClaudeBadge = document.getElementById('nav-claude-badge');
+    if (navClaudeBadge) {
+        navClaudeBadge.classList.toggle('stopped', !running);
+    }
+
+    // Update fullscreen terminal status (if it exists)
+    const fullscreenStatus = document.getElementById('terminal-fullscreen-status');
+    if (fullscreenStatus) {
+        if (running) {
+            fullscreenStatus.textContent = 'Running';
+            fullscreenStatus.classList.remove('stopped');
+        } else {
+            fullscreenStatus.textContent = 'Stopped';
+            fullscreenStatus.classList.add('stopped');
+        }
+    }
+
+    const fullscreenStartBtn = document.getElementById('terminal-fullscreen-start');
+    if (fullscreenStartBtn) {
+        if (running) {
+            fullscreenStartBtn.textContent = 'Stop';
+            fullscreenStartBtn.className = 'control-btn stop';
+            fullscreenStartBtn.onclick = stopClaude;
+        } else {
+            fullscreenStartBtn.textContent = 'Start';
+            fullscreenStartBtn.className = 'control-btn start';
+            fullscreenStartBtn.onclick = startClaude;
+        }
     }
 }
 

@@ -1,0 +1,285 @@
+/* ========== Sidebar Styles ========== */
+/* Left navigation sidebar with collapsible behavior */
+
+/* Sidebar container */
+#sidebar {
+    width: 200px;
+    min-width: 200px;
+    background: var(--bg-accent);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    transition: width var(--duration-normal) var(--ease-out),
+                min-width var(--duration-normal) var(--ease-out);
+    overflow: hidden;
+}
+
+#sidebar.collapsed {
+    width: 48px;
+    min-width: 48px;
+}
+
+/* ========== Sidebar Header ========== */
+#sidebar-header {
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border-bottom: 1px solid var(--border);
+    -webkit-app-region: drag;
+    min-height: 60px;
+}
+
+#sidebar-header .sidebar-logo {
+    width: 28px;
+    height: 28px;
+    flex-shrink: 0;
+    cursor: pointer;
+    -webkit-app-region: no-drag;
+    transition: transform var(--duration-fast) var(--ease-out);
+}
+
+#sidebar-header .sidebar-logo:hover {
+    transform: scale(1.1);
+}
+
+#sidebar-header .sidebar-title {
+    color: var(--text-strong);
+    font-size: 15px;
+    font-weight: 600;
+    white-space: nowrap;
+    opacity: 1;
+    transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+#sidebar.collapsed #sidebar-header .sidebar-title {
+    opacity: 0;
+    width: 0;
+    overflow: hidden;
+}
+
+/* ========== Navigation ========== */
+#sidebar-nav {
+    flex: 1;
+    padding: 12px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.nav-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    color: var(--muted);
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    text-align: left;
+    white-space: nowrap;
+    transition: all var(--duration-fast) var(--ease-out);
+    width: 100%;
+}
+
+.nav-item:hover {
+    background: var(--bg-hover);
+    color: var(--text);
+}
+
+.nav-item.active {
+    background: var(--accent-subtle);
+    color: var(--accent);
+}
+
+.nav-item svg {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+}
+
+.nav-item span {
+    opacity: 1;
+    transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+/* Collapsed state */
+#sidebar.collapsed .nav-item {
+    justify-content: center;
+    padding: 10px;
+}
+
+#sidebar.collapsed .nav-item span {
+    opacity: 0;
+    width: 0;
+    overflow: hidden;
+    position: absolute;
+}
+
+/* Nav item badge for status indicators */
+.nav-item .nav-badge {
+    margin-left: auto;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--ok);
+    flex-shrink: 0;
+}
+
+.nav-item .nav-badge.stopped {
+    background: var(--danger);
+}
+
+#sidebar.collapsed .nav-item .nav-badge {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    margin-left: 0;
+}
+
+/* ========== Sidebar Footer ========== */
+#sidebar-footer {
+    padding: 12px 8px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+#sidebar-collapse-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 8px 12px;
+    color: var(--muted);
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    font-size: 12px;
+    transition: all var(--duration-fast) var(--ease-out);
+    width: 100%;
+}
+
+#sidebar-collapse-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text);
+    border-color: var(--border-strong);
+}
+
+#sidebar-collapse-btn svg {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    transition: transform var(--duration-normal) var(--ease-out);
+}
+
+#sidebar.collapsed #sidebar-collapse-btn svg {
+    transform: rotate(180deg);
+}
+
+#sidebar-collapse-btn span {
+    opacity: 1;
+    transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+#sidebar.collapsed #sidebar-collapse-btn span {
+    opacity: 0;
+    width: 0;
+    overflow: hidden;
+    position: absolute;
+}
+
+/* ========== Main Content Area ========== */
+#main-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-width: 0; /* Allow flex item to shrink below content size */
+}
+
+/* ========== Page Container ========== */
+.page {
+    display: none;
+    flex: 1;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.page.active {
+    display: flex;
+}
+
+/* Chat page layout */
+#page-chat {
+    display: none;
+}
+
+#page-chat.active {
+    display: flex;
+    flex-direction: column;
+}
+
+/* Terminal page - full height terminal */
+#page-terminal {
+    display: none;
+}
+
+#page-terminal.active {
+    display: flex;
+    flex-direction: column;
+}
+
+#page-terminal #terminal-fullscreen {
+    flex: 1;
+    background: #0a0a12;
+    overflow: hidden;
+}
+
+/* Settings page */
+#page-settings {
+    display: none;
+    overflow-y: auto;
+}
+
+#page-settings.active {
+    display: flex;
+    flex-direction: column;
+}
+
+/* ========== Tooltips for collapsed sidebar ========== */
+#sidebar.collapsed .nav-item {
+    position: relative;
+}
+
+#sidebar.collapsed .nav-item::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    left: 100%;
+    top: 50%;
+    transform: translateY(-50%);
+    margin-left: 8px;
+    padding: 6px 10px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-size: 12px;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--duration-fast) var(--ease-out);
+    z-index: 1000;
+    box-shadow: var(--shadow-md);
+}
+
+#sidebar.collapsed .nav-item:hover::after {
+    opacity: 1;
+}
