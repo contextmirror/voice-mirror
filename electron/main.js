@@ -29,17 +29,45 @@ function initLogFile() {
         logFilePath = path.join(dataDir, 'vmr.log');
         // Truncate log file on startup (keep it fresh each session)
         logFile = fs.createWriteStream(logFilePath, { flags: 'w' });
-        writeLog('LOG', 'Voice Mirror Electron started');
+        writeLog('APP', 'Voice Mirror started');
     } catch (err) {
         console.error('Failed to init log file:', err);
     }
 }
 
-function writeLog(level, message) {
-    const timestamp = new Date().toISOString();
-    const logLine = `[${timestamp}] [${level}] ${message}`;
+// ANSI color codes for logs
+const Colors = {
+    RESET: '\x1b[0m',
+    DIM: '\x1b[2m',
+    RED: '\x1b[31m',
+    GREEN: '\x1b[32m',
+    YELLOW: '\x1b[33m',
+    BLUE: '\x1b[34m',
+    MAGENTA: '\x1b[35m',
+    CYAN: '\x1b[36m',
+    WHITE: '\x1b[37m',
+};
 
-    // Also write to console
+// Log level styles: [color, icon]
+const LOG_STYLES = {
+    'APP': [Colors.GREEN, '⚡'],
+    'CONFIG': [Colors.YELLOW, '⚙'],
+    'PYTHON': [Colors.MAGENTA, '🐍'],
+    'CLAUDE': [Colors.BLUE, '🤖'],
+    'EVENT': [Colors.CYAN, '→'],
+    'ERROR': [Colors.RED, '✗'],
+    'LOG': [Colors.WHITE, '•'],
+};
+
+function writeLog(level, message) {
+    const now = new Date();
+    const timestamp = now.toTimeString().slice(0, 8); // HH:MM:SS
+    const [color, icon] = LOG_STYLES[level] || [Colors.WHITE, '•'];
+
+    // Color-coded log line
+    const logLine = `${Colors.DIM}[${timestamp}]${Colors.RESET} ${color}${icon} ${message}${Colors.RESET}`;
+
+    // Write to console
     if (level === 'ERROR') {
         console.error(logLine);
     } else {
@@ -485,9 +513,7 @@ function startPythonVoiceMirror() {
     const bridgeScript = path.join(pythonPath, 'electron_bridge.py');
     const scriptToRun = fileExists(bridgeScript) ? 'electron_bridge.py' : 'voice_agent.py';
 
-    writeLog('PYTHON', `Starting backend from: ${pythonPath}`);
-    writeLog('PYTHON', `Using Python: ${venvPython}`);
-    writeLog('PYTHON', `Script: ${scriptToRun}`);
+    writeLog('PYTHON', `Starting ${scriptToRun}`);
 
     // Platform-specific spawn options
     const spawnOptions = {
@@ -515,7 +541,7 @@ function startPythonVoiceMirror() {
             try {
                 const event = JSON.parse(line);
                 if (event.event) {
-                    writeLog('EVENT', `${event.event} ${JSON.stringify(event.data || {})}`);
+                    // Don't log here - Python already logs events to the file
                     handlePythonEvent(event);
                     continue;
                 }
@@ -1134,8 +1160,9 @@ app.whenReady().then(() => {
 
     // Load configuration
     appConfig = config.loadConfig();
-    writeLog('CONFIG', `Loaded from: ${config.getConfigDir()}`);
-    writeLog('CONFIG', `Debug mode: ${appConfig.advanced?.debugMode || false}`);
+    if (appConfig.advanced?.debugMode) {
+        writeLog('CONFIG', `Debug mode enabled`);
+    }
 
     // Register IPC handlers
     ipcMain.handle('toggle-expand', () => {
@@ -1443,6 +1470,12 @@ app.whenReady().then(() => {
         console.log(`[Voice Mirror] Global shortcut registered: ${shortcut}`);
     } else {
         console.log(`[Voice Mirror] Failed to register shortcut: ${shortcut}`);
+    }
+
+    // Register PTT keybind from saved config on startup
+    if (appConfig?.behavior?.activationMode === 'pushToTalk' && appConfig?.behavior?.pttKey) {
+        console.log('[Voice Mirror] Registering PTT key from saved config:', appConfig.behavior.pttKey);
+        registerPushToTalk(appConfig.behavior.pttKey);
     }
 
     // Auto-start Voice Mirror (Python + Claude) on app launch

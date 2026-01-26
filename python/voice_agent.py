@@ -76,6 +76,31 @@ VOICE_CALL_PATH = VM_DATA_DIR / "voice_call.json"
 # Push-to-talk trigger file (written by Electron)
 PTT_TRIGGER_PATH = VM_DATA_DIR / "ptt_trigger.json"
 
+# Electron config file (for activation mode)
+ELECTRON_CONFIG_PATH = Path.home() / ".config" / "voice-mirror-electron" / "config.json"
+
+# Activation modes (from Electron config)
+class ActivationMode:
+    WAKE_WORD = "wakeWord"
+    CALL_MODE = "callMode"
+    PUSH_TO_TALK = "pushToTalk"
+
+
+def get_activation_mode() -> str:
+    """
+    Read activation mode from Electron config file.
+    Returns 'wakeWord', 'callMode', or 'pushToTalk'.
+    Defaults to 'wakeWord' if config not found.
+    """
+    try:
+        if ELECTRON_CONFIG_PATH.exists():
+            with open(ELECTRON_CONFIG_PATH, 'r') as f:
+                config = json.load(f)
+                return config.get("behavior", {}).get("activationMode", ActivationMode.WAKE_WORD)
+    except Exception as e:
+        print(f"⚠️ Could not read activation mode: {e}")
+    return ActivationMode.WAKE_WORD
+
 # Voice modes
 class VoiceMode:
     AUTO = "auto"        # Smart routing: smart home → Qwen, else → Claude
@@ -170,6 +195,19 @@ class VoiceMirror:
         self._ptt_active = False  # Push-to-talk currently held
         self._ptt_last_check = 0  # Last time we checked PTT trigger file
         self._ptt_process_pending = False  # PTT released, need to process
+        self._recording_source = None  # Track what triggered recording: 'wake_word', 'ptt', 'call', 'follow_up'
+        self._activation_mode = ActivationMode.WAKE_WORD  # Will be set in load_models
+
+    def get_listening_status(self) -> str:
+        """Get the appropriate listening status message based on activation mode."""
+        if self._activation_mode == ActivationMode.WAKE_WORD:
+            return "👂 Listening for 'Hey Claude'..."
+        elif self._activation_mode == ActivationMode.CALL_MODE:
+            return "📞 Call mode active - speak anytime..."
+        elif self._activation_mode == ActivationMode.PUSH_TO_TALK:
+            return "🎙️ Push-to-talk mode - press key to speak..."
+        else:
+            return "👂 Listening..."
 
     def load_models(self):
         """Load OpenWakeWord and Parakeet models."""
@@ -178,19 +216,25 @@ class VoiceMirror:
         if removed > 0:
             print(f"🧹 Cleaned {removed} old message(s) from inbox")
 
-        print("Loading wake word model...")
+        # Get activation mode from Electron config
+        self._activation_mode = get_activation_mode()
+        print(f"Activation mode: {self._activation_mode}")
+
+        # Only load wake word model if wake word mode is enabled
+        if self._activation_mode == ActivationMode.WAKE_WORD:
+            print("Loading wake word model...")
+            script_dir = Path(__file__).parent
+            model_path = script_dir / WAKE_WORD_MODEL
+
+            self.oww_model = OWWModel(
+                wakeword_model_paths=[str(model_path)],
+            )
+            print(f"Loaded: {WAKE_WORD_MODEL}")
+        else:
+            print(f"Skipping wake word model (mode: {self._activation_mode})")
+            self.oww_model = None
+
         script_dir = Path(__file__).parent
-        model_path = script_dir / WAKE_WORD_MODEL
-
-        # OpenWakeWord needs the preprocessor models (melspectrogram, embedding)
-        # We have them in our models/ directory, need to copy to package location or specify paths
-        melspec_path = script_dir / "models" / "melspectrogram.onnx"
-        embedding_path = script_dir / "models" / "embedding_model.onnx"
-
-        self.oww_model = OWWModel(
-            wakeword_model_paths=[str(model_path)],
-        )
-        print(f"Loaded: {WAKE_WORD_MODEL}")
 
         # Load STT adapter from settings
         settings = load_voice_settings()
@@ -610,12 +654,23 @@ Keep it concise - 1-2 sentences max.'''
             # Small delay to let audio system settle
             await asyncio.sleep(0.3)
 
-            # Enter conversation mode - listen without wake word for a few seconds
-            # Skip if call mode is active (already listening continuously)
-            if enter_conversation_mode and not self.is_call_active():
+            # Enter conversation mode only for wake word or follow-up interactions
+            # Skip for: PTT (user controls when to speak), call mode (always listening)
+            should_enter_conversation = (
+                enter_conversation_mode and
+                not self.is_call_active() and
+                self._recording_source in ('wake_word', 'follow_up')
+            )
+            if should_enter_conversation:
                 self._in_conversation = True
                 self._conversation_end_time = time.time() + CONVERSATION_WINDOW
                 print(f"💬 Conversation mode active ({CONVERSATION_WINDOW}s window - speak without wake word)")
+            elif self._recording_source == 'ptt':
+                # PTT finished - just go back to waiting for next key press
+                print("👂 PTT finished. Press key to speak again.")
+            elif self.is_call_active():
+                # Call mode - already continuously listening
+                print("📞 Call active - speak anytime...")
 
     async def transcribe(self, audio_data: np.ndarray) -> str:
         """Transcribe audio using configured STT adapter."""
@@ -640,6 +695,9 @@ Keep it concise - 1-2 sentences max.'''
 
     def process_wake_word(self, audio_chunk: np.ndarray) -> bool:
         """Check for wake word in audio chunk. Returns True if detected."""
+        if self.oww_model is None:
+            return False
+
         # Accumulate audio
         self.oww_buffer.append(audio_chunk)
         total_samples = sum(len(chunk) for chunk in self.oww_buffer)
@@ -692,9 +750,10 @@ Keep it concise - 1-2 sentences max.'''
         if ptt_action == "start" and not self.is_recording:
             # PTT pressed - start recording immediately
             self.is_recording = True
+            self._recording_source = 'ptt'
             self.audio_buffer = []
             self.last_speech_time = time.time()
-            print('🔴 Recording (PTT)... (speak now){"event": "recording_start", "data": {"type": "ptt"}}')
+            print('🔴 Recording (PTT)... (speak now)')
         elif ptt_action == "stop" and self.is_recording and not self.is_processing:
             # PTT released - process immediately (don't wait for silence)
             print('⏹️ PTT released, processing...{"event": "recording_stop", "data": {}}')
@@ -705,8 +764,12 @@ Keep it concise - 1-2 sentences max.'''
             self._ptt_process_pending = True
 
         if self.is_listening and not self.is_recording:
-            # Check if in call mode (no wake word needed, no timeout)
-            if self.is_call_active():
+            # Push-to-talk mode: only record when PTT is pressed (handled above)
+            if self._activation_mode == ActivationMode.PUSH_TO_TALK:
+                # In PTT mode, don't auto-detect speech - wait for PTT trigger
+                pass
+            # Check if in call mode (setting or file-based)
+            elif self._activation_mode == ActivationMode.CALL_MODE or self.is_call_active():
                 # In call mode - detect speech start without wake word
                 energy = np.abs(audio).mean()
                 # Debug: show energy level in call mode
@@ -714,6 +777,7 @@ Keep it concise - 1-2 sentences max.'''
                     print(f"📞 Call mode energy: {energy:.4f}", end="\r")
                 if energy > 0.008:  # Very sensitive threshold for speech detection
                     self.is_recording = True
+                    self._recording_source = 'call'
                     self.audio_buffer = []
                     self.last_speech_time = time.time()
                     print(f"\n🔴 Recording (call)... energy={energy:.4f} (speak now)")
@@ -722,24 +786,29 @@ Keep it concise - 1-2 sentences max.'''
                 # Check if conversation window expired
                 if time.time() > self._conversation_end_time:
                     self._in_conversation = False
-                    print("\n👂 Conversation window closed. Say 'Hey Claude' to continue.")
+                    if self._activation_mode == ActivationMode.WAKE_WORD:
+                        print("\n👂 Conversation window closed. Say 'Hey Claude' to continue.")
+                    else:
+                        print(f"\n{self.get_listening_status()}")
                 else:
                     # In conversation mode - detect speech start without wake word
                     energy = np.abs(audio).mean()
                     if energy > 0.03:  # Speech threshold (slightly higher to avoid noise)
                         self.is_recording = True
+                        self._recording_source = 'follow_up'
                         self.audio_buffer = []
                         self.last_speech_time = time.time()
                         self._in_conversation = False  # Exit conversation mode once recording starts
                         print("🔴 Recording follow-up... (speak now)")
-            else:
-                # Normal mode - check for wake word
+            elif self._activation_mode == ActivationMode.WAKE_WORD and self.oww_model is not None:
+                # Wake word mode - check for wake word
                 if self.process_wake_word(audio):
                     self.is_recording = True
+                    self._recording_source = 'wake_word'
                     self.audio_buffer = []
                     self.last_speech_time = time.time()
                     self.oww_model.reset()
-                    print("🔴 Recording... (speak now)")
+                    print("🔴 Recording (wake word)... (speak now)")
 
         elif self.is_recording and not self.is_processing:
             # Record audio (thread-safe)
@@ -930,7 +999,7 @@ Keep it concise - 1-2 sentences max.'''
                         self._awaiting_compact_resume = False
                         print(f"\n✅ Claude resumed after compaction!")
                         await self.speak(message, enter_conversation_mode=True)
-                        print("\n👂 Listening for 'Hey Claude'...")
+                        print(f"\n{self.get_listening_status()}")
                     continue
 
                 # Skip if currently speaking, recording, or processing
@@ -949,7 +1018,7 @@ Keep it concise - 1-2 sentences max.'''
                     print(f"\n📢 New notification from Claude!")
                     # Speak without entering conversation mode (it's a notification)
                     await self.speak(message, enter_conversation_mode=False)
-                    print("\n👂 Listening for 'Hey Claude'...")
+                    print(f"\n{self.get_listening_status()}")
 
             except Exception as e:
                 print(f"⚠️ Notification watcher error: {e}")
@@ -970,7 +1039,13 @@ Keep it concise - 1-2 sentences max.'''
         print("\n" + "=" * 50)
         print("Voice Mirror - Ready")
         print("=" * 50)
-        print(f"Wake word: Hey Claude")
+        # Show activation mode info
+        activation_display = {
+            ActivationMode.WAKE_WORD: "🎤 Wake Word (Hey Claude)",
+            ActivationMode.CALL_MODE: "📞 Call Mode (always listening)",
+            ActivationMode.PUSH_TO_TALK: "🎙️ Push-to-Talk"
+        }
+        print(f"Activation: {activation_display.get(self._activation_mode, self._activation_mode)}")
         if self.stt_adapter is not None and self.stt_adapter.is_loaded:
             print(f"STT: {self.stt_adapter.name}")
         else:
@@ -980,19 +1055,25 @@ Keep it concise - 1-2 sentences max.'''
         else:
             print(f"TTS: Not available")
         print(f"Inbox: {INBOX_PATH}")
-        print(f"Mode: {mode_display.get(mode, mode)}")
+        print(f"Routing: {mode_display.get(mode, mode)}")
         print(f"Smart Home: {len(self.smart_home.devices)} devices")
         print("=" * 50)
-        print("\n👂 Listening for 'Hey Claude'...")
-        print("   Say 'Hey Claude' then speak your command!")
-        print(f"\n   Conversation mode: {CONVERSATION_WINDOW}s follow-up window")
-        print("   (After a response, speak again without wake word)")
+
+        # Show activation mode specific instructions
+        print(f"\n{self.get_listening_status()}")
+        if self._activation_mode == ActivationMode.WAKE_WORD:
+            print("   Say 'Hey Claude' then speak your command!")
+            print(f"\n   Conversation mode: {CONVERSATION_WINDOW}s follow-up window")
+            print("   (After a response, speak again without wake word)")
+        elif self._activation_mode == ActivationMode.CALL_MODE:
+            print("   Just start speaking - no wake word needed!")
+        elif self._activation_mode == ActivationMode.PUSH_TO_TALK:
+            print("   Hold your PTT key and speak, release to process.")
+
         print("\n   Routing modes:")
         print("   - Auto: Smart home → Qwen, General → Claude Code")
         print("   - Local: Everything goes to Qwen")
         print("   - Claude: Everything goes to Claude Code")
-        print("\n   Change mode via Context Mirror status bar")
-        print("   or edit ~/.context-mirror/voice_mode.json")
         if NOTIFICATION_ENABLED:
             print("\n   📢 Notifications: ON (Claude messages will be spoken)")
         print("   (Press Ctrl+C to quit)\n")
@@ -1041,7 +1122,7 @@ Keep it concise - 1-2 sentences max.'''
                         self._ptt_process_pending = False
                         await self.process_recording()
                         self.is_processing = False
-                        print("\n👂 Listening for 'Hey Claude'...")
+                        print(f"\n{self.get_listening_status()}")
                         continue
 
                     # Check for silence timeout during recording
@@ -1060,7 +1141,7 @@ Keep it concise - 1-2 sentences max.'''
                                 remaining = max(0, self._conversation_end_time - time.time())
                                 print(f"\n💬 Conversation active ({remaining:.1f}s) - speak without wake word...")
                             else:
-                                print("\n👂 Listening for 'Hey Claude'...")
+                                print(f"\n{self.get_listening_status()}")
 
             except KeyboardInterrupt:
                 print("\n\n👋 Goodbye!")

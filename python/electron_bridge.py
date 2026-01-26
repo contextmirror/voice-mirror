@@ -45,6 +45,45 @@ _original_stdout = sys.stdout
 # File logging
 _log_file = None
 
+# ANSI color codes for terminal output
+class Colors:
+    RESET = "\033[0m"
+    BOLD = "\033[1m"
+    DIM = "\033[2m"
+    # Foreground colors
+    RED = "\033[31m"
+    GREEN = "\033[32m"
+    YELLOW = "\033[33m"
+    BLUE = "\033[34m"
+    MAGENTA = "\033[35m"
+    CYAN = "\033[36m"
+    WHITE = "\033[37m"
+    # Bright variants
+    BRIGHT_RED = "\033[91m"
+    BRIGHT_GREEN = "\033[92m"
+    BRIGHT_YELLOW = "\033[93m"
+    BRIGHT_BLUE = "\033[94m"
+    BRIGHT_MAGENTA = "\033[95m"
+    BRIGHT_CYAN = "\033[96m"
+
+# Log level colors and icons
+LOG_STYLES = {
+    'EVENT': (Colors.CYAN, '→'),
+    'VOICE': (Colors.MAGENTA, '🎤'),
+    'CLAUDE': (Colors.BLUE, '🤖'),
+    'TTS': (Colors.GREEN, '🔊'),
+    'ERROR': (Colors.RED, '✗'),
+    'WARN': (Colors.YELLOW, '⚠'),
+    'INFO': (Colors.WHITE, '•'),
+    'PYTHON': (Colors.DIM, '⚙'),
+}
+
+# Events to skip logging (too noisy)
+SKIP_EVENTS = {'listening', 'conversation_active', 'pong'}
+
+# Events to log with minimal data
+MINIMAL_DATA_EVENTS = {'recording_start', 'recording_stop', 'speaking_start'}
+
 def init_log_file():
     """Initialize the log file for Python-side logging."""
     global _log_file
@@ -54,15 +93,17 @@ def init_log_file():
         log_path = log_dir / "vmr.log"
         # Append mode so both Electron and Python can write
         _log_file = open(log_path, 'a')
-        write_log('PYTHON', 'Voice Mirror Python bridge started')
+        write_log('INFO', 'Voice Mirror started')
     except Exception as e:
         print(f"Failed to init log file: {e}", file=sys.stderr)
 
 def write_log(level: str, message: str):
-    """Write a log entry to the file."""
+    """Write a color-coded log entry to the file."""
     if _log_file:
-        timestamp = datetime.now().isoformat()
-        _log_file.write(f"[{timestamp}] [{level}] {message}\n")
+        timestamp = datetime.now().strftime('%H:%M:%S')
+        color, icon = LOG_STYLES.get(level, (Colors.WHITE, '•'))
+        # Write with color codes
+        _log_file.write(f"{Colors.DIM}[{timestamp}]{Colors.RESET} {color}{icon} {message}{Colors.RESET}\n")
         _log_file.flush()
 
 def close_log_file():
@@ -78,8 +119,47 @@ def emit_event(event: str, data: dict = None):
     payload = {"event": event, "data": data or {}}
     _original_stdout.write(json.dumps(payload) + "\n")
     _original_stdout.flush()
-    # Also log to file
-    write_log('EVENT', f"{event} {json.dumps(data or {})}")
+
+    # Log to file (skip noisy events)
+    if event in SKIP_EVENTS:
+        return
+
+    # Format the log message based on event type
+    if event == 'wake_word':
+        model = data.get('model', 'unknown') if data else 'unknown'
+        score = data.get('score', 0) if data else 0
+        write_log('VOICE', f"Wake word ({model}: {score:.0%})")
+    elif event == 'recording_start':
+        rec_type = data.get('type', 'normal') if data else 'normal'
+        write_log('VOICE', f"Recording started ({rec_type})")
+    elif event == 'recording_stop':
+        write_log('VOICE', "Recording stopped")
+    elif event == 'sent_to_inbox':
+        msg = data.get('message', '')[:40] if data else ''
+        if msg:
+            write_log('VOICE', f"Sent: {msg}...")
+        else:
+            write_log('VOICE', "Sent to Claude")
+    elif event == 'response':
+        text = data.get('text', '') if data else ''
+        # Extract just the message, not the prefix
+        if text.startswith('Claude: '):
+            text = text[8:]
+        write_log('CLAUDE', f"{text[:60]}...")
+    elif event == 'speaking_start':
+        text = data.get('text', '')[:40] if data else ''
+        write_log('TTS', f"Speaking: {text}...")
+    elif event == 'mode_change':
+        mode = data.get('mode', 'unknown') if data else 'unknown'
+        write_log('INFO', f"Mode: {mode}")
+    elif event == 'error':
+        msg = data.get('message', 'Unknown error') if data else 'Unknown error'
+        write_log('ERROR', msg)
+    elif event in ('starting', 'ready'):
+        write_log('INFO', event.capitalize())
+    else:
+        # Default: log event name only (no JSON dump)
+        write_log('EVENT', event)
 
 def emit_error(message: str):
     """Send an error event."""
@@ -88,20 +168,36 @@ def emit_error(message: str):
 class ElectronOutputCapture:
     """Capture print statements and convert to JSON events."""
 
+    # Patterns to ignore completely (noisy debug output)
+    IGNORE_PATTERNS = [
+        '🎤 Audio:',           # Audio level debug
+        '📞 Call mode energy', # Call mode energy debug
+        '🔊 █',                # Audio level bar
+        'Audio status:',       # sounddevice status
+    ]
+
     def __init__(self, original_stdout):
         self.original = original_stdout
         self.buffer = StringIO()
 
     def write(self, text):
-        # Forward to original stdout for debugging (visible in Electron terminal)
-        self.original.write(text)
-        self.original.flush()
-
         if not text.strip():
             return
 
+        stripped = text.strip()
+
+        # Skip noisy debug output BEFORE printing
+        for pattern in self.IGNORE_PATTERNS:
+            if pattern in stripped:
+                return
+
+        # Color-code the output for terminal viewing
+        colored_text = self._colorize(stripped)
+        self.original.write(colored_text + "\n")
+        self.original.flush()
+
         # Parse known patterns and emit events
-        text = text.strip()
+        text = stripped
 
         # Wake word detection
         if "Wake word detected" in text:
@@ -119,16 +215,18 @@ class ElectronOutputCapture:
             except:
                 emit_event("wake_word", {})
 
-        # Recording states
-        elif "Recording" in text and "speak now" in text:
-            emit_event("recording_start", {"type": "follow-up" if "follow-up" in text else "normal"})
+        # Recording states - differentiate by source
+        elif "Recording (PTT)" in text:
+            emit_event("recording_start", {"type": "ptt"})
+        elif "Recording (call)" in text:
+            emit_event("recording_start", {"type": "call"})
+        elif "Recording follow-up" in text:
+            emit_event("recording_start", {"type": "follow-up"})
+        elif "Recording..." in text and "speak now" in text:
+            emit_event("recording_start", {"type": "wake-word"})
 
-        elif "Silence detected" in text:
+        elif "Silence detected" in text or "PTT released" in text:
             emit_event("recording_stop", {})
-
-        # Listening state
-        elif "Listening for" in text:
-            emit_event("listening", {})
 
         # Speaking
         elif "Speaking:" in text:
@@ -136,10 +234,10 @@ class ElectronOutputCapture:
             spoken_text = text.replace("🔊 Speaking:", "").strip()
             emit_event("speaking_start", {"text": spoken_text})
 
-        # Transcription/Processing
-        elif "Asking Claude" in text or "Asking Qwen" in text:
-            source = "claude" if "Claude" in text else "qwen"
-            emit_event("processing", {"source": source})
+        # Transcription result
+        elif "You said:" in text:
+            transcript = text.replace("📝 You said:", "").strip()
+            emit_event("transcription", {"text": transcript})
 
         # Response
         elif text.startswith("💬 "):
@@ -148,7 +246,11 @@ class ElectronOutputCapture:
 
         # Sent to inbox
         elif "Sent to inbox" in text:
-            emit_event("sent_to_inbox", {})
+            # Extract the message preview if available
+            import re
+            match = re.search(r'Sent to inbox: (.+?)\.\.\.', text)
+            msg = match.group(1) if match else ""
+            emit_event("sent_to_inbox", {"message": msg})
 
         # Call mode
         elif "Call started" in text:
@@ -165,9 +267,44 @@ class ElectronOutputCapture:
         elif "Voice Mirror - Ready" in text:
             emit_event("ready", {})
 
+    def _colorize(self, text: str) -> str:
+        """Add ANSI color codes based on message content."""
+        # Wake word / listening
+        if "Wake word" in text or "👂 Listening" in text:
+            return f"{Colors.MAGENTA}{text}{Colors.RESET}"
+        # Recording
+        elif "🔴 Recording" in text or "Recording..." in text:
+            return f"{Colors.BRIGHT_RED}{text}{Colors.RESET}"
+        # Transcription
+        elif "📝 You said:" in text:
+            return f"{Colors.CYAN}{text}{Colors.RESET}"
+        # Speaking / TTS
+        elif "🔊 Speaking" in text:
+            return f"{Colors.GREEN}{text}{Colors.RESET}"
+        # Claude response
+        elif "💬 Claude:" in text or text.startswith("💬 "):
+            return f"{Colors.BLUE}{text}{Colors.RESET}"
+        # Sent to inbox
+        elif "📬 Sent to inbox" in text:
+            return f"{Colors.YELLOW}{text}{Colors.RESET}"
+        # Waiting / processing
+        elif "⏳" in text:
+            return f"{Colors.DIM}{text}{Colors.RESET}"
+        # Mode changes
+        elif "🔄" in text or "Mode:" in text:
+            return f"{Colors.BRIGHT_MAGENTA}{text}{Colors.RESET}"
+        # Errors
+        elif "Error" in text or "✗" in text:
+            return f"{Colors.BRIGHT_RED}{text}{Colors.RESET}"
+        # Ready / success
+        elif "✅" in text or "Ready" in text:
+            return f"{Colors.BRIGHT_GREEN}{text}{Colors.RESET}"
         # Conversation mode
-        elif "Conversation active" in text:
-            emit_event("conversation_active", {})
+        elif "Conversation mode" in text or "window" in text.lower():
+            return f"{Colors.DIM}{text}{Colors.RESET}"
+        # Default: dim for less important output
+        else:
+            return f"{Colors.DIM}{text}{Colors.RESET}"
 
     def flush(self):
         pass
@@ -352,10 +489,7 @@ async def process_commands(agent):
 
             elif command == "start_recording":
                 # Push-to-talk: start recording immediately
-                emit_event("recording_start", {"type": "ptt"})
-                # Notify the agent to start recording
-                # This requires hooking into VoiceMirror's recording logic
-                # For now, write a trigger file
+                # Don't emit here - ElectronOutputCapture will emit when voice_agent prints
                 ptt_path = Path.home() / ".config" / "voice-mirror-electron" / "data" / "ptt_trigger.json"
                 ptt_path.parent.mkdir(parents=True, exist_ok=True)
                 with open(ptt_path, 'w') as f:
@@ -363,7 +497,7 @@ async def process_commands(agent):
 
             elif command == "stop_recording":
                 # Push-to-talk: stop recording
-                emit_event("recording_stop", {"type": "ptt"})
+                # Don't emit here - ElectronOutputCapture will emit when voice_agent prints
                 ptt_path = Path.home() / ".config" / "voice-mirror-electron" / "data" / "ptt_trigger.json"
                 with open(ptt_path, 'w') as f:
                     json.dump({"action": "stop", "timestamp": datetime.now().isoformat()}, f)
