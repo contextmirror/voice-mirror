@@ -26,11 +26,15 @@ Commands from Electron (stdin):
 """
 
 import asyncio
+import base64
 import json
 import sys
 import threading
 import queue
+import uuid
 from io import StringIO
+from datetime import datetime
+from pathlib import Path
 
 # Command queue for stdin commands
 command_queue = queue.Queue()
@@ -38,11 +42,44 @@ command_queue = queue.Queue()
 # Keep reference to original stdout for emitting events
 _original_stdout = sys.stdout
 
+# File logging
+_log_file = None
+
+def init_log_file():
+    """Initialize the log file for Python-side logging."""
+    global _log_file
+    try:
+        log_dir = Path.home() / ".config" / "voice-mirror-electron" / "data"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_path = log_dir / "vmr.log"
+        # Append mode so both Electron and Python can write
+        _log_file = open(log_path, 'a')
+        write_log('PYTHON', 'Voice Mirror Python bridge started')
+    except Exception as e:
+        print(f"Failed to init log file: {e}", file=sys.stderr)
+
+def write_log(level: str, message: str):
+    """Write a log entry to the file."""
+    if _log_file:
+        timestamp = datetime.now().isoformat()
+        _log_file.write(f"[{timestamp}] [{level}] {message}\n")
+        _log_file.flush()
+
+def close_log_file():
+    """Close the log file."""
+    global _log_file
+    if _log_file:
+        write_log('PYTHON', 'Shutting down')
+        _log_file.close()
+        _log_file = None
+
 def emit_event(event: str, data: dict = None):
     """Send a JSON event to Electron via stdout."""
     payload = {"event": event, "data": data or {}}
     _original_stdout.write(json.dumps(payload) + "\n")
     _original_stdout.flush()
+    # Also log to file
+    write_log('EVENT', f"{event} {json.dumps(data or {})}")
 
 def emit_error(message: str):
     """Send an error event."""
@@ -165,11 +202,6 @@ async def process_commands(agent):
 
             # Handle image type (from Electron main.js sendImageToPython)
             if cmd_type == "image":
-                import base64
-                from pathlib import Path
-                from datetime import datetime
-                import uuid
-
                 image_data = cmd.get("data", "")
                 filename = cmd.get("filename", "screenshot.png")
                 prompt = cmd.get("prompt", "What's in this image?")
@@ -225,12 +257,6 @@ async def process_commands(agent):
 
                 if image:
                     # Handle image query - save to persistent location
-                    import tempfile
-                    import base64
-                    from pathlib import Path
-                    from datetime import datetime
-                    import uuid
-
                     # Save to ~/.context-mirror/images/ for persistence
                     images_dir = Path.home() / ".config" / "voice-mirror-electron" / "data" / "images"
                     images_dir.mkdir(parents=True, exist_ok=True)
@@ -286,13 +312,61 @@ async def process_commands(agent):
             elif command == "set_mode":
                 mode = cmd.get("mode", "auto")
                 # Write to voice_mode.json
-                import json
-                from pathlib import Path
                 mode_path = Path.home() / ".config" / "voice-mirror-electron" / "data" / "voice_mode.json"
                 mode_path.parent.mkdir(parents=True, exist_ok=True)
                 with open(mode_path, 'w') as f:
                     json.dump({"mode": mode}, f)
                 emit_event("mode_change", {"mode": mode})
+
+            elif command == "config_update":
+                # Handle config updates from Electron settings panel
+                cfg = cmd.get("config", {})
+
+                # Write config to file for voice_agent to read
+                config_path = Path.home() / ".config" / "voice-mirror-electron" / "data" / "voice_config.json"
+                config_path.parent.mkdir(parents=True, exist_ok=True)
+
+                # Merge with existing config
+                existing = {}
+                if config_path.exists():
+                    try:
+                        with open(config_path, 'r') as f:
+                            existing = json.load(f)
+                    except:
+                        pass
+
+                existing.update(cfg)
+
+                with open(config_path, 'w') as f:
+                    json.dump(existing, f, indent=2)
+
+                emit_event("config_updated", {"config": existing})
+
+                # Apply activation mode immediately
+                activation_mode = cfg.get("activationMode")
+                if activation_mode:
+                    call_path = Path.home() / ".config" / "voice-mirror-electron" / "data" / "voice_call.json"
+                    with open(call_path, 'w') as f:
+                        json.dump({"active": activation_mode == "callMode"}, f)
+                    emit_event("mode_change", {"mode": activation_mode})
+
+            elif command == "start_recording":
+                # Push-to-talk: start recording immediately
+                emit_event("recording_start", {"type": "ptt"})
+                # Notify the agent to start recording
+                # This requires hooking into VoiceMirror's recording logic
+                # For now, write a trigger file
+                ptt_path = Path.home() / ".config" / "voice-mirror-electron" / "data" / "ptt_trigger.json"
+                ptt_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(ptt_path, 'w') as f:
+                    json.dump({"action": "start", "timestamp": datetime.now().isoformat()}, f)
+
+            elif command == "stop_recording":
+                # Push-to-talk: stop recording
+                emit_event("recording_stop", {"type": "ptt"})
+                ptt_path = Path.home() / ".config" / "voice-mirror-electron" / "data" / "ptt_trigger.json"
+                with open(ptt_path, 'w') as f:
+                    json.dump({"action": "stop", "timestamp": datetime.now().isoformat()}, f)
 
             elif command == "stop":
                 emit_event("stopping", {})
@@ -308,6 +382,9 @@ async def process_commands(agent):
 async def main():
     """Main entry point for Electron bridge."""
     global _original_stdout
+
+    # Initialize file logging
+    init_log_file()
 
     # Emit startup event immediately
     emit_event("starting", {})
@@ -334,10 +411,14 @@ async def main():
 
     except ImportError as e:
         emit_error(f"Failed to import voice_agent: {e}")
+        close_log_file()
         sys.exit(1)
     except Exception as e:
         emit_error(f"Voice Mirror error: {e}")
+        close_log_file()
         sys.exit(1)
+    finally:
+        close_log_file()
 
 
 if __name__ == "__main__":

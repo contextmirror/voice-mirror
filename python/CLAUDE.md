@@ -29,6 +29,7 @@ When you want to enter voice conversation mode:
 - Be conversational and helpful
 - You can also receive typed input directly in this terminal
 - Use memory tools to remember user preferences
+- If transcription seems unclear or garbled, ask the user to type their message in the terminal instead. After handling terminal input, call `claude_listen` again to resume voice mode.
 
 ## Starting Voice Mode
 

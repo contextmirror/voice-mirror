@@ -16,6 +16,61 @@ const fs = require('fs');
 const config = require('./config');
 const { spawnClaude, stopClaude, sendInput, sendRawInput, sendInputWhenReady, isClaudeRunning, isClaudeReady, configureMCPServer, isClaudeAvailable, resizePty } = require('./claude-spawner');
 
+// File logging - writes to vmr.log in config data directory
+let logFile = null;
+let logFilePath = null;
+
+function initLogFile() {
+    try {
+        const dataDir = app.getPath('home') + '/.config/voice-mirror-electron/data';
+        if (!fs.existsSync(dataDir)) {
+            fs.mkdirSync(dataDir, { recursive: true });
+        }
+        logFilePath = path.join(dataDir, 'vmr.log');
+        // Truncate log file on startup (keep it fresh each session)
+        logFile = fs.createWriteStream(logFilePath, { flags: 'w' });
+        writeLog('LOG', 'Voice Mirror Electron started');
+    } catch (err) {
+        console.error('Failed to init log file:', err);
+    }
+}
+
+function writeLog(level, message) {
+    const timestamp = new Date().toISOString();
+    const logLine = `[${timestamp}] [${level}] ${message}`;
+
+    // Also write to console
+    if (level === 'ERROR') {
+        console.error(logLine);
+    } else {
+        console.log(logLine);
+    }
+
+    // Write to file
+    if (logFile) {
+        logFile.write(logLine + '\n');
+    }
+}
+
+function closeLogFile() {
+    if (logFile) {
+        logFile.end();
+        logFile = null;
+    }
+}
+
+// uiohook for global mouse/keyboard hooks (PTT support)
+let uIOhook = null;
+let UiohookKey = null;
+try {
+    const uiohookModule = require('uiohook-napi');
+    uIOhook = uiohookModule.uIOhook;
+    UiohookKey = uiohookModule.UiohookKey;
+    console.log('[Voice Mirror] uiohook-napi loaded successfully');
+} catch (err) {
+    console.warn('[Voice Mirror] uiohook-napi not available, PTT will use keyboard shortcuts only:', err.message);
+}
+
 // Handle EPIPE errors gracefully (happens when terminal pipe breaks)
 process.stdout.on('error', (err) => {
     if (err.code === 'EPIPE') return; // Ignore broken pipe
@@ -430,9 +485,9 @@ function startPythonVoiceMirror() {
     const bridgeScript = path.join(pythonPath, 'electron_bridge.py');
     const scriptToRun = fileExists(bridgeScript) ? 'electron_bridge.py' : 'voice_agent.py';
 
-    console.log('[Voice Mirror] Starting Python backend from:', pythonPath);
-    console.log('[Voice Mirror] Using Python:', venvPython);
-    console.log('[Voice Mirror] Script:', scriptToRun);
+    writeLog('PYTHON', `Starting backend from: ${pythonPath}`);
+    writeLog('PYTHON', `Using Python: ${venvPython}`);
+    writeLog('PYTHON', `Script: ${scriptToRun}`);
 
     // Platform-specific spawn options
     const spawnOptions = {
@@ -460,7 +515,7 @@ function startPythonVoiceMirror() {
             try {
                 const event = JSON.parse(line);
                 if (event.event) {
-                    console.log('[Voice Mirror Event]', event.event, event.data || '');
+                    writeLog('EVENT', `${event.event} ${JSON.stringify(event.data || {})}`);
                     handlePythonEvent(event);
                     continue;
                 }
@@ -890,6 +945,182 @@ function stopScreenCaptureWatcher() {
     }
 }
 
+// Push-to-talk state
+let pttKey = null;
+let pttActive = false;  // Currently holding PTT key
+let uiohookStarted = false;
+
+/**
+ * Map PTT key config to uiohook button/key codes.
+ * Mouse buttons: 1=left, 2=right, 3=middle, 4=side1 (back), 5=side2 (forward)
+ */
+function parsePttKey(key) {
+    const keyLower = key.toLowerCase();
+
+    // Mouse buttons
+    if (keyLower === 'mousebutton4' || keyLower === 'mouse4' || keyLower === 'xbutton1') {
+        return { type: 'mouse', button: 4 };
+    }
+    if (keyLower === 'mousebutton5' || keyLower === 'mouse5' || keyLower === 'xbutton2') {
+        return { type: 'mouse', button: 5 };
+    }
+    if (keyLower === 'mousebutton3' || keyLower === 'mouse3' || keyLower === 'middleclick') {
+        return { type: 'mouse', button: 3 };
+    }
+
+    // Keyboard keys - map common names to uiohook keycodes
+    // See: https://github.com/aspect-build/uiohook-napi/blob/main/lib/keycodes.ts
+    const keyMap = {
+        'space': 57,
+        'f13': 100,
+        'f14': 101,
+        'f15': 102,
+        'scrolllock': 70,
+        'pause': 119,
+        'insert': 110,
+        'home': 102,
+        'pageup': 104,
+        'delete': 111,
+        'end': 107,
+        'pagedown': 109,
+        'capslock': 58,
+        'numlock': 69,
+    };
+
+    if (keyMap[keyLower]) {
+        return { type: 'keyboard', keycode: keyMap[keyLower] };
+    }
+
+    // Single character keys (a-z, 0-9)
+    if (keyLower.length === 1) {
+        const char = keyLower.charCodeAt(0);
+        // a-z: keycodes 30-55 roughly (a=30, b=48, etc. - uiohook uses scan codes)
+        // This is approximate - uiohook uses hardware scan codes
+        if (char >= 97 && char <= 122) {
+            // Rough mapping - may need adjustment per keyboard layout
+            const letterMap = { a: 30, b: 48, c: 46, d: 32, e: 18, f: 33, g: 34, h: 35, i: 23, j: 36, k: 37, l: 38, m: 50, n: 49, o: 24, p: 25, q: 16, r: 19, s: 31, t: 20, u: 22, v: 47, w: 17, x: 45, y: 21, z: 44 };
+            if (letterMap[keyLower]) {
+                return { type: 'keyboard', keycode: letterMap[keyLower] };
+            }
+        }
+        // 0-9: keycodes 11, 2-10
+        if (char >= 48 && char <= 57) {
+            const numMap = { '0': 11, '1': 2, '2': 3, '3': 4, '4': 5, '5': 6, '6': 7, '7': 8, '8': 9, '9': 10 };
+            if (numMap[keyLower]) {
+                return { type: 'keyboard', keycode: numMap[keyLower] };
+            }
+        }
+    }
+
+    // Fallback: try to use globalShortcut for modifier combos
+    return { type: 'shortcut', key: key };
+}
+
+/**
+ * Register push-to-talk with uiohook (supports mouse buttons).
+ * When held, starts recording. When released, stops.
+ */
+function registerPushToTalk(key) {
+    unregisterPushToTalk();  // Clear any existing
+
+    pttKey = parsePttKey(key);
+    console.log(`[Voice Mirror] PTT key parsed:`, pttKey);
+
+    if (!uIOhook) {
+        // Fallback to globalShortcut for keyboard shortcuts only
+        if (pttKey.type === 'shortcut' || pttKey.type === 'keyboard') {
+            console.log('[Voice Mirror] uiohook not available, using globalShortcut fallback');
+            const electronKey = key.replace(/ \+ /g, '+');
+            try {
+                globalShortcut.register(electronKey, () => {
+                    if (!pttActive) {
+                        pttActive = true;
+                        console.log('[Voice Mirror] PTT: Start recording (shortcut)');
+                        sendToPython({ command: 'start_recording' });
+                        mainWindow?.webContents.send('voice-event', { type: 'recording' });
+                    }
+                });
+                console.log(`[Voice Mirror] PTT registered via globalShortcut: ${electronKey}`);
+            } catch (err) {
+                console.error('[Voice Mirror] PTT registration error:', err);
+            }
+        } else {
+            console.error('[Voice Mirror] Mouse button PTT requires uiohook-napi. Run: npm install uiohook-napi');
+        }
+        return;
+    }
+
+    // Use uiohook for proper key down/up detection
+    if (!uiohookStarted) {
+        // Set up event handlers
+        uIOhook.on('mousedown', (e) => {
+            if (pttKey?.type === 'mouse' && e.button === pttKey.button && !pttActive) {
+                pttActive = true;
+                console.log(`[Voice Mirror] PTT: Start recording (mouse button ${e.button})`);
+                sendToPython({ command: 'start_recording' });
+                mainWindow?.webContents.send('voice-event', { type: 'recording' });
+            }
+        });
+
+        uIOhook.on('mouseup', (e) => {
+            if (pttKey?.type === 'mouse' && e.button === pttKey.button && pttActive) {
+                pttActive = false;
+                console.log(`[Voice Mirror] PTT: Stop recording (mouse button ${e.button})`);
+                sendToPython({ command: 'stop_recording' });
+                mainWindow?.webContents.send('voice-event', { type: 'idle' });
+            }
+        });
+
+        uIOhook.on('keydown', (e) => {
+            if (pttKey?.type === 'keyboard' && e.keycode === pttKey.keycode && !pttActive) {
+                pttActive = true;
+                console.log(`[Voice Mirror] PTT: Start recording (keycode ${e.keycode})`);
+                sendToPython({ command: 'start_recording' });
+                mainWindow?.webContents.send('voice-event', { type: 'recording' });
+            }
+        });
+
+        uIOhook.on('keyup', (e) => {
+            if (pttKey?.type === 'keyboard' && e.keycode === pttKey.keycode && pttActive) {
+                pttActive = false;
+                console.log(`[Voice Mirror] PTT: Stop recording (keycode ${e.keycode})`);
+                sendToPython({ command: 'stop_recording' });
+                mainWindow?.webContents.send('voice-event', { type: 'idle' });
+            }
+        });
+
+        // Start the hook
+        try {
+            uIOhook.start();
+            uiohookStarted = true;
+            console.log('[Voice Mirror] uiohook started for PTT');
+        } catch (err) {
+            console.error('[Voice Mirror] Failed to start uiohook:', err);
+        }
+    }
+
+    console.log(`[Voice Mirror] PTT registered: ${key} (${pttKey.type})`);
+}
+
+/**
+ * Unregister push-to-talk.
+ */
+function unregisterPushToTalk() {
+    if (pttKey) {
+        if (pttKey.type === 'shortcut') {
+            try {
+                globalShortcut.unregister(pttKey.key);
+            } catch (err) {
+                // Ignore errors during unregister
+            }
+        }
+        console.log(`[Voice Mirror] PTT unregistered`);
+        pttKey = null;
+        pttActive = false;
+    }
+    // Note: We don't stop uiohook here as it may be reused
+}
+
 // Linux transparency workarounds
 if (isLinux) {
     app.commandLine.appendSwitch('enable-transparent-visuals');
@@ -898,10 +1129,13 @@ if (isLinux) {
 
 // App lifecycle
 app.whenReady().then(() => {
+    // Initialize file logging
+    initLogFile();
+
     // Load configuration
     appConfig = config.loadConfig();
-    console.log('[Config] Loaded from:', config.getConfigDir());
-    console.log('[Config] Debug mode:', appConfig.advanced?.debugMode || false);
+    writeLog('CONFIG', `Loaded from: ${config.getConfigDir()}`);
+    writeLog('CONFIG', `Debug mode: ${appConfig.advanced?.debugMode || false}`);
 
     // Register IPC handlers
     ipcMain.handle('toggle-expand', () => {
@@ -1004,7 +1238,45 @@ app.whenReady().then(() => {
     });
 
     ipcMain.handle('set-config', (event, updates) => {
+        const oldHotkey = appConfig?.behavior?.hotkey;
+        const oldPttKey = appConfig?.behavior?.pttKey;
+
         appConfig = config.updateConfig(updates);
+
+        // Re-register global shortcut if hotkey changed
+        if (updates.behavior?.hotkey && updates.behavior.hotkey !== oldHotkey) {
+            globalShortcut.unregister(oldHotkey);
+            const newShortcut = updates.behavior.hotkey;
+            const registered = globalShortcut.register(newShortcut, () => {
+                console.log('[Voice Mirror] Global shortcut triggered');
+                if (isExpanded) {
+                    collapseToOrb();
+                } else {
+                    expandPanel();
+                }
+            });
+            console.log(`[Voice Mirror] Re-registered shortcut: ${newShortcut} (${registered ? 'success' : 'failed'})`);
+        }
+
+        // Handle push-to-talk key registration
+        if (updates.behavior?.activationMode === 'pushToTalk') {
+            registerPushToTalk(updates.behavior?.pttKey || 'Space');
+        } else if (oldPttKey) {
+            unregisterPushToTalk();
+        }
+
+        // Notify Python backend of config changes
+        if (pythonProcess) {
+            sendToPython({
+                command: 'config_update',
+                config: {
+                    activationMode: updates.behavior?.activationMode,
+                    wakeWord: updates.wakeWord,
+                    voice: updates.voice
+                }
+            });
+        }
+
         return appConfig;
     });
 
@@ -1217,8 +1489,21 @@ app.on('activate', () => {
 });
 
 app.on('before-quit', () => {
+    writeLog('APP', 'Shutting down...');
+
     // Unregister all shortcuts
     globalShortcut.unregisterAll();
+
+    // Stop uiohook if running
+    if (uIOhook && uiohookStarted) {
+        try {
+            uIOhook.stop();
+            uiohookStarted = false;
+            writeLog('APP', 'uiohook stopped');
+        } catch (err) {
+            // Ignore errors during cleanup
+        }
+    }
 
     // Stop watchers
     stopScreenCaptureWatcher();
@@ -1230,4 +1515,7 @@ app.on('before-quit', () => {
 
     // Stop Claude PTY process
     stopClaudeCode();
+
+    // Close log file
+    closeLogFile();
 });

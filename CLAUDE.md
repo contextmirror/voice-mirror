@@ -344,6 +344,23 @@ The Python Voice Mirror runs as a child process. Make sure:
 2. All dependencies installed (see Voice Mirror requirements.txt)
 3. Models downloaded (kokoro, hey_claude_v2.onnx)
 
+### Logging
+Both Electron and Python write to a shared log file for debugging:
+
+**Log file location:** `~/.config/voice-mirror-electron/data/vmr.log`
+
+Log entries include:
+- Timestamps in ISO format
+- Level prefixes: `CONFIG`, `EVENT`, `PYTHON`, `APP`, `ERROR`
+- Events from both Electron (main process) and Python (voice backend)
+
+The log file is truncated on Electron startup to keep it fresh each session. Python appends to it.
+
+To monitor logs in real-time:
+```bash
+tail -f ~/.config/voice-mirror-electron/data/vmr.log
+```
+
 ## Integration with Claude Code
 
 Voice Mirror Electron can spawn Claude Code CLI in a hidden terminal:

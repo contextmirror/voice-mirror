@@ -73,6 +73,9 @@ VOICE_MODE_PATH = VM_DATA_DIR / "voice_mode.json"
 # Voice call state
 VOICE_CALL_PATH = VM_DATA_DIR / "voice_call.json"
 
+# Push-to-talk trigger file (written by Electron)
+PTT_TRIGGER_PATH = VM_DATA_DIR / "ptt_trigger.json"
+
 # Voice modes
 class VoiceMode:
     AUTO = "auto"        # Smart routing: smart home → Qwen, else → Claude
@@ -164,6 +167,9 @@ class VoiceMirror:
         self._last_seen_message_id = None  # Track last seen Claude message for notifications
         self._notification_queue = asyncio.Queue()  # Queue for background notifications
         self._is_speaking = False  # Prevent notification interrupts during speech
+        self._ptt_active = False  # Push-to-talk currently held
+        self._ptt_last_check = 0  # Last time we checked PTT trigger file
+        self._ptt_process_pending = False  # PTT released, need to process
 
     def load_models(self):
         """Load OpenWakeWord and Parakeet models."""
@@ -280,6 +286,45 @@ class VoiceMirror:
 
         self._call_active = False
         return False
+
+    def check_ptt_trigger(self) -> str | None:
+        """
+        Check for push-to-talk trigger from Electron.
+        Returns 'start', 'stop', or None.
+        Reads and clears the trigger file.
+        """
+        now = time.time()
+        # Check at most every 50ms to avoid excessive file reads
+        if now - self._ptt_last_check < 0.05:
+            return None
+        self._ptt_last_check = now
+
+        try:
+            if PTT_TRIGGER_PATH.exists():
+                with open(PTT_TRIGGER_PATH, 'r') as f:
+                    data = json.load(f)
+                    action = data.get("action")
+
+                # Clear the trigger file after reading
+                PTT_TRIGGER_PATH.unlink()
+
+                if action == "start" and not self._ptt_active:
+                    self._ptt_active = True
+                    return "start"
+                elif action == "stop" and self._ptt_active:
+                    self._ptt_active = False
+                    return "stop"
+        except json.JSONDecodeError:
+            # File might be partially written, try again next time
+            pass
+        except FileNotFoundError:
+            # File was already processed
+            pass
+        except Exception as e:
+            # Log other errors but don't crash
+            print(f"PTT trigger error: {e}")
+
+        return None
 
     def should_route_to_qwen(self, text: str) -> bool:
         """
@@ -642,6 +687,23 @@ Keep it concise - 1-2 sentences max.'''
 
         audio = indata[:, 0].copy()  # Mono
 
+        # Check for push-to-talk trigger (from Electron)
+        ptt_action = self.check_ptt_trigger()
+        if ptt_action == "start" and not self.is_recording:
+            # PTT pressed - start recording immediately
+            self.is_recording = True
+            self.audio_buffer = []
+            self.last_speech_time = time.time()
+            print('🔴 Recording (PTT)... (speak now){"event": "recording_start", "data": {"type": "ptt"}}')
+        elif ptt_action == "stop" and self.is_recording and not self.is_processing:
+            # PTT released - process immediately (don't wait for silence)
+            print('⏹️ PTT released, processing...{"event": "recording_stop", "data": {}}')
+            self.is_recording = False
+            self.is_processing = True
+            # Schedule processing (we're in audio callback, can't await here)
+            # Use a flag to trigger processing in main loop
+            self._ptt_process_pending = True
+
         if self.is_listening and not self.is_recording:
             # Check if in call mode (no wake word needed, no timeout)
             if self.is_call_active():
@@ -741,8 +803,7 @@ Keep it concise - 1-2 sentences max.'''
                     print(f"💬 Claude: {response}")
                     await self.speak(response)
                 else:
-                    print("⏰ No response from Claude Code. Make sure the terminal is running!")
-                    await self.speak("I didn't get a response. Make sure Claude Code is running.")
+                    print("⏰ No response from Claude Code (timeout - this is normal if Claude is thinking)")
         else:
             print("❌ No speech detected")
 
@@ -974,6 +1035,14 @@ Keep it concise - 1-2 sentences max.'''
             try:
                 while True:
                     await asyncio.sleep(0.1)
+
+                    # Check for PTT release (process immediately)
+                    if self._ptt_process_pending:
+                        self._ptt_process_pending = False
+                        await self.process_recording()
+                        self.is_processing = False
+                        print("\n👂 Listening for 'Hey Claude'...")
+                        continue
 
                     # Check for silence timeout during recording
                     if self.is_recording and not self.is_processing:
