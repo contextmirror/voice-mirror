@@ -319,6 +319,51 @@ const TOOLS = [
             type: 'object',
             properties: {}
         }
+    },
+    // Browser Tools (headless Playwright)
+    {
+        name: 'browser_search',
+        description: 'Search Google using a headless browser. Returns parsed search results. Unlimited searches (no API limits).',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                query: {
+                    type: 'string',
+                    description: 'The search query'
+                },
+                max_results: {
+                    type: 'number',
+                    description: 'Maximum results to return (default: 5, max: 10)'
+                }
+            },
+            required: ['query']
+        }
+    },
+    {
+        name: 'browser_fetch',
+        description: 'Fetch and extract text content from a URL using a headless browser. Handles JavaScript-rendered pages. Returns clean text content.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                url: {
+                    type: 'string',
+                    description: 'The URL to fetch'
+                },
+                timeout: {
+                    type: 'number',
+                    description: 'Timeout in milliseconds (default: 30000, max: 60000)'
+                },
+                max_length: {
+                    type: 'number',
+                    description: 'Maximum content length to return (default: 8000)'
+                },
+                include_links: {
+                    type: 'boolean',
+                    description: 'Include links found on the page (default: false)'
+                }
+            },
+            required: ['url']
+        }
     }
 ];
 
@@ -360,6 +405,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             return await handleClearVoiceClone(args);
         case 'list_voice_clones':
             return await handleListVoiceClones(args);
+        // Browser tools
+        case 'browser_search':
+            return await handleBrowserSearch(args);
+        case 'browser_fetch':
+            return await handleBrowserFetch(args);
         default:
             return {
                 content: [{ type: 'text', text: `Unknown tool: ${name}` }],
@@ -1455,6 +1505,162 @@ async function handleListVoiceClones(args) {
             isError: true
         };
     }
+}
+
+// ============================================================================
+// Browser Tools (headless Playwright via Electron)
+// ============================================================================
+
+/**
+ * browser_search - Search the web using headless browser
+ * Communicates with Electron main process via file-based IPC
+ */
+async function handleBrowserSearch(args) {
+    const requestPath = path.join(HOME_DATA_DIR, 'browser_request.json');
+    const responsePath = path.join(HOME_DATA_DIR, 'browser_response.json');
+
+    // Validate query
+    if (!args?.query) {
+        return {
+            content: [{ type: 'text', text: 'Search query is required' }],
+            isError: true
+        };
+    }
+
+    // Delete old response file if exists
+    if (fs.existsSync(responsePath)) {
+        fs.unlinkSync(responsePath);
+    }
+
+    // Write request
+    const requestId = `req-${Date.now()}`;
+    fs.writeFileSync(requestPath, JSON.stringify({
+        id: requestId,
+        action: 'search',
+        args: {
+            query: args.query,
+            engine: args.engine || 'duckduckgo',
+            max_results: Math.min(args.max_results || 5, 10)
+        },
+        timestamp: new Date().toISOString()
+    }, null, 2));
+
+    // Wait for Electron to process (up to 60 seconds for slow pages)
+    const startTime = Date.now();
+    const timeoutMs = 60000;
+
+    while (Date.now() - startTime < timeoutMs) {
+        await new Promise(resolve => setTimeout(resolve, 200));
+
+        if (fs.existsSync(responsePath)) {
+            try {
+                const response = JSON.parse(fs.readFileSync(responsePath, 'utf-8'));
+
+                if (response.success) {
+                    return {
+                        content: [{
+                            type: 'text',
+                            text: response.result
+                        }]
+                    };
+                } else {
+                    return {
+                        content: [{ type: 'text', text: `Search failed: ${response.error}` }],
+                        isError: true
+                    };
+                }
+            } catch (err) {
+                // JSON parse error, continue waiting
+            }
+        }
+    }
+
+    return {
+        content: [{ type: 'text', text: 'Browser search timed out. Is the Voice Mirror app running?' }],
+        isError: true
+    };
+}
+
+/**
+ * browser_fetch - Fetch and extract content from a URL using headless browser
+ * Communicates with Electron main process via file-based IPC
+ */
+async function handleBrowserFetch(args) {
+    const requestPath = path.join(HOME_DATA_DIR, 'browser_request.json');
+    const responsePath = path.join(HOME_DATA_DIR, 'browser_response.json');
+
+    // Validate URL
+    if (!args?.url) {
+        return {
+            content: [{ type: 'text', text: 'URL is required' }],
+            isError: true
+        };
+    }
+
+    // Delete old response file if exists
+    if (fs.existsSync(responsePath)) {
+        fs.unlinkSync(responsePath);
+    }
+
+    // Write request
+    const requestId = `req-${Date.now()}`;
+    fs.writeFileSync(requestPath, JSON.stringify({
+        id: requestId,
+        action: 'fetch',
+        args: {
+            url: args.url,
+            timeout: Math.min(args.timeout || 30000, 60000),
+            max_length: args.max_length || 8000,
+            include_links: args.include_links || false
+        },
+        timestamp: new Date().toISOString()
+    }, null, 2));
+
+    // Wait for Electron to process (up to 90 seconds for slow pages)
+    const startTime = Date.now();
+    const timeoutMs = 90000;
+
+    while (Date.now() - startTime < timeoutMs) {
+        await new Promise(resolve => setTimeout(resolve, 200));
+
+        if (fs.existsSync(responsePath)) {
+            try {
+                const response = JSON.parse(fs.readFileSync(responsePath, 'utf-8'));
+
+                if (response.success) {
+                    let text = response.result;
+
+                    // Add metadata
+                    if (response.title) {
+                        text = `Title: ${response.title}\nURL: ${response.url}\n\n${text}`;
+                    }
+
+                    if (response.truncated) {
+                        text += '\n\n(Content was truncated due to length)';
+                    }
+
+                    return {
+                        content: [{
+                            type: 'text',
+                            text: text
+                        }]
+                    };
+                } else {
+                    return {
+                        content: [{ type: 'text', text: `Fetch failed: ${response.error}` }],
+                        isError: true
+                    };
+                }
+            } catch (err) {
+                // JSON parse error, continue waiting
+            }
+        }
+    }
+
+    return {
+        content: [{ type: 'text', text: 'Browser fetch timed out. Is the Voice Mirror app running?' }],
+        isError: true
+    };
 }
 
 // Start server

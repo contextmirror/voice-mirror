@@ -15,7 +15,7 @@ const tools = {
 
     web_search: {
         name: 'web_search',
-        description: 'Search the web for current information',
+        description: 'Search Google using a headless browser (unlimited searches)',
         args: {
             query: {
                 type: 'string',
@@ -26,7 +26,7 @@ const tools = {
                 type: 'number',
                 required: false,
                 default: 5,
-                description: 'Maximum number of results to return'
+                description: 'Maximum number of results to return (max: 10)'
             }
         },
         example: '{"tool": "web_search", "args": {"query": "weather in Edinburgh"}}'

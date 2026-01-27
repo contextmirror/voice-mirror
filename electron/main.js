@@ -1290,13 +1290,17 @@ function extractSpeakableResponse(output) {
     const result = speakableLines.join(' ').trim();
 
     // Clean up the result
-    // Remove markdown artifacts
+    // Remove markdown artifacts and URLs (not speakable)
     let cleaned = result
         .replace(/\*\*/g, '')           // Bold markers
         .replace(/\*/g, '')              // Italic markers
         .replace(/`[^`]+`/g, '')         // Inline code
-        .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')  // Links -> just text
+        .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')  // [text](url) -> just text
+        .replace(/<(https?:\/\/[^>]+)>/g, '')     // <url> -> remove entirely
+        .replace(/https?:\/\/[^\s)>\]]+/g, '')    // Raw URLs -> remove
+        .replace(/www\.[^\s)>\]]+/g, '')          // www. URLs -> remove
         .replace(/#+\s*/g, '')           // Headers
+        .replace(/\s*-\s*(?=\s|$)/g, ' ')         // Orphaned dashes from removed URLs
         .replace(/\s+/g, ' ')            // Multiple spaces
         .trim();
 
@@ -1478,6 +1482,119 @@ function stopScreenCaptureWatcher() {
     if (screenCaptureWatcher) {
         clearInterval(screenCaptureWatcher);
         screenCaptureWatcher = null;
+    }
+}
+
+// ============================================================================
+// Browser Request Watcher (for MCP browser_search / browser_fetch tools)
+// ============================================================================
+
+let browserRequestWatcher = null;
+let browserModule = null;
+
+// Serper.dev API key for web search
+const SERPER_API_KEY = process.env.SERPER_API_KEY || '3adf77c61ddf98dff5ab2e3dd35b3eebc3409fa6';
+
+/**
+ * Lazy-load the browser module.
+ * This avoids loading Playwright until actually needed.
+ */
+function getBrowserModule() {
+    if (!browserModule) {
+        browserModule = require('./browser');
+        // Configure Serper API key for web search
+        if (SERPER_API_KEY) {
+            browserModule.setSerperApiKey(SERPER_API_KEY);
+        }
+    }
+    return browserModule;
+}
+
+/**
+ * Watch for browser requests from MCP server.
+ * When Claude calls browser_search or browser_fetch, it writes a request file.
+ * We watch that file and fulfill the request.
+ */
+function startBrowserRequestWatcher() {
+    const contextMirrorDir = path.join(app.getPath('home'), '.config', 'voice-mirror-electron', 'data');
+    const requestPath = path.join(contextMirrorDir, 'browser_request.json');
+    const responsePath = path.join(contextMirrorDir, 'browser_response.json');
+
+    // Watch for browser requests
+    browserRequestWatcher = setInterval(async () => {
+        try {
+            if (!fs.existsSync(requestPath)) return;
+
+            const request = JSON.parse(fs.readFileSync(requestPath, 'utf-8'));
+            const requestTime = new Date(request.timestamp).getTime();
+            const now = Date.now();
+
+            // Only process requests from the last 5 seconds
+            if (now - requestTime > 5000) {
+                fs.unlinkSync(requestPath);
+                return;
+            }
+
+            // Delete request immediately to prevent duplicate processing
+            fs.unlinkSync(requestPath);
+
+            console.log(`[Voice Mirror] Browser request: ${request.action}`);
+
+            let result;
+            const browser = getBrowserModule();
+
+            switch (request.action) {
+                case 'search':
+                    result = await browser.webSearch(request.args);
+                    break;
+                case 'fetch':
+                    result = await browser.fetchUrl(request.args);
+                    break;
+                default:
+                    result = { success: false, error: `Unknown browser action: ${request.action}` };
+            }
+
+            // Write response
+            fs.writeFileSync(responsePath, JSON.stringify({
+                ...result,
+                request_id: request.id,
+                timestamp: new Date().toISOString()
+            }, null, 2));
+
+            console.log(`[Voice Mirror] Browser request completed: ${request.action}`);
+
+        } catch (err) {
+            console.error('[Voice Mirror] Browser request error:', err);
+            // Write error response
+            const contextMirrorDir = path.join(app.getPath('home'), '.config', 'voice-mirror-electron', 'data');
+            const responsePath = path.join(contextMirrorDir, 'browser_response.json');
+            fs.writeFileSync(responsePath, JSON.stringify({
+                success: false,
+                error: err.message,
+                timestamp: new Date().toISOString()
+            }, null, 2));
+        }
+    }, 500);  // Check every 500ms
+}
+
+function stopBrowserRequestWatcher() {
+    if (browserRequestWatcher) {
+        clearInterval(browserRequestWatcher);
+        browserRequestWatcher = null;
+    }
+}
+
+/**
+ * Close the browser when app is quitting.
+ */
+async function closeBrowser() {
+    if (browserModule) {
+        try {
+            await browserModule.closeBrowser();
+            console.log('[Voice Mirror] Browser closed');
+        } catch (err) {
+            console.error('[Voice Mirror] Error closing browser:', err.message);
+        }
     }
 }
 
@@ -2048,6 +2165,7 @@ app.whenReady().then(() => {
     createTray();
     startScreenCaptureWatcher();
     startInboxWatcher();
+    startBrowserRequestWatcher();
 
     // Register global shortcut to toggle panel (Ctrl+Shift+V)
     const shortcut = 'CommandOrControl+Shift+V';
@@ -2107,6 +2225,10 @@ app.on('window-all-closed', () => {
     // Stop all watchers
     stopScreenCaptureWatcher();
     stopInboxWatcher();
+    stopBrowserRequestWatcher();
+
+    // Close browser
+    closeBrowser();
 
     if (process.platform !== 'darwin') {
         app.quit();
@@ -2139,6 +2261,10 @@ app.on('before-quit', () => {
     // Stop watchers
     stopScreenCaptureWatcher();
     stopInboxWatcher();
+    stopBrowserRequestWatcher();
+
+    // Close browser
+    closeBrowser();
 
     if (pythonProcess) {
         pythonProcess.kill();

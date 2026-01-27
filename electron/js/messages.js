@@ -255,11 +255,18 @@ export function addToolResultCard(data) {
     const lastCallCard = callCards[callCards.length - 1];
 
     if (lastCallCard) {
-        // Update status badge
+        // If the tool failed, hide the card entirely (the model will retry or explain)
+        // This keeps the UI clean - users only see successful tool results
+        if (!data.success) {
+            lastCallCard.style.display = 'none';
+            return lastCallCard;
+        }
+
+        // Update status badge for success
         const statusEl = lastCallCard.querySelector('.tool-status');
         if (statusEl) {
-            statusEl.className = `tool-status ${data.success ? 'success' : 'error'}`;
-            statusEl.textContent = data.success ? 'Done' : 'Failed';
+            statusEl.className = 'tool-status success';
+            statusEl.textContent = 'DONE';
         }
 
         // Add result content inline (if not already added)
