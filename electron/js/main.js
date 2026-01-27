@@ -84,6 +84,20 @@ function collapse() {
 }
 
 /**
+ * Minimize window to taskbar
+ */
+function minimizeWindow() {
+    window.voiceMirror.minimizeWindow();
+}
+
+/**
+ * Hide window to system tray
+ */
+function hideToTray() {
+    window.voiceMirror.hideToTray();
+}
+
+/**
  * Handle image blob (from paste or drop)
  * Starts voice listening based on activation mode
  */
@@ -566,6 +580,8 @@ window.sendImage = sendImage;
 window.cancelImage = cancelImage;
 window.toggleCallMode = toggleCallMode;
 window.copyMessage = copyMessage;
+window.minimizeWindow = minimizeWindow;
+window.hideToTray = hideToTray;
 window.updateWelcomeMessage = updateWelcomeMessage;
 // Terminal functions (from terminal.js)
 window.toggleTerminal = toggleTerminal;

@@ -183,9 +183,20 @@ function createInboxWatcher(options = {}) {
                                         timestamp: new Date().toISOString()
                                     });
                                 }
+                            } else {
+                                // No response captured — ensure UI transitions out of "Processing..."
+                                console.log('[InboxWatcher] No response captured, sending idle event');
+                                _devlog('BACKEND', 'no-response', { reason: 'capture returned null/empty' });
+                                if (onVoiceEvent) {
+                                    onVoiceEvent({ type: 'idle' });
+                                }
                             }
                         }).catch((err) => {
                             console.error(`[InboxWatcher] Error forwarding to ${providerName}:`, err);
+                            // Ensure UI doesn't stay stuck on error either
+                            if (onVoiceEvent) {
+                                onVoiceEvent({ type: 'idle' });
+                            }
                         });
                     }
                 }
@@ -317,6 +328,7 @@ async function captureProviderResponse(provider, message, _devlog = () => {}) {
 
         // Send the message
         provider.sendInput(message);
+        const startTime = Date.now();
 
         // Wait for response to complete (detect when output stops)
         const requiredStableChecks = 4;  // 2 seconds of stability
@@ -362,7 +374,40 @@ async function captureProviderResponse(provider, message, _devlog = () => {}) {
             const minFollowUpLength = toolCompleted ? 20 : 0;
             if (fullResponse.length === lastLength && fullResponse.length > minFollowUpLength) {
                 stableCount++;
-                const neededChecks = toolCompleted ? requiredStableChecks + 4 : requiredStableChecks;
+
+                // Determine how many stable checks we need
+                let neededChecks = toolCompleted ? requiredStableChecks + 4 : requiredStableChecks;
+
+                // Detect if response contains tool call JSON — if so, wait for
+                // the provider's tool loop to pick it up and fire onToolCall
+                const elapsed = Date.now() - startTime;
+                if (!toolCompleted && !toolInProgress && elapsed < 15000) {
+                    const raw = fullResponse.trim();
+                    const containsToolJson = raw.includes('"tool"') && raw.includes('"args"');
+                    const looksLikePreamble = fullResponse.length < 200 && (
+                        /^(sure|ok|okay|closing|searching|let me|i'll|i will|opening|stopping)/i.test(raw)
+                        || raw.includes('```')
+                    );
+
+                    if (containsToolJson) {
+                        // Output contains tool JSON — provider will parse and execute it
+                        // Wait for onToolCall to fire (up to 8 seconds)
+                        neededChecks = 16;  // 8 seconds
+                        if (stableCount === 1) {
+                            _devlog('BACKEND', 'stability-wait', { text: raw.slice(0, 100), reason: 'tool-json-detected', neededChecks });
+                        }
+                    } else if (looksLikePreamble) {
+                        // Short text that looks like preamble before a tool call
+                        neededChecks = 12;  // 6 seconds
+                        if (stableCount === 1) {
+                            _devlog('BACKEND', 'stability-wait', { text: raw.slice(0, 80), reason: 'short-preamble-detected', neededChecks });
+                        }
+                    } else if (fullResponse.length < 80) {
+                        // Very short early response — give extra time
+                        neededChecks = Math.max(neededChecks, 8);
+                    }
+                }
+
                 if (stableCount >= neededChecks) {
                     clearInterval(checkInterval);
                     cleanup();

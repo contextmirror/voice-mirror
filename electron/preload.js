@@ -142,6 +142,10 @@ contextBridge.exposeInMainWorld('voiceMirror', {
     startAll: () => ipcRenderer.invoke('start-all'),
     stopAll: () => ipcRenderer.invoke('stop-all'),
 
+    // Window controls
+    minimizeWindow: () => ipcRenderer.invoke('minimize-window'),
+    hideToTray: () => ipcRenderer.invoke('hide-to-tray'),
+
     // Dev logging — renderer → main process → vmr.log
     devlog: (category, action, data) => ipcRenderer.send('devlog', category, action, data),
 

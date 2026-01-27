@@ -128,6 +128,7 @@ function createWindowManager(options = {}) {
                 screenWidth - panelWidth - 20,
                 screenHeight - panelHeight - 50
             );
+            mainWindow.setSkipTaskbar(false);
             console.log('[Window] Expanded to panel:', panelWidth, 'x', panelHeight);
         }, 50);
     }
@@ -169,6 +170,7 @@ function createWindowManager(options = {}) {
             mainWindow.setResizable(false);
             mainWindow.setContentSize(orbSize, orbSize);
             mainWindow.setPosition(restoreX, restoreY);
+            mainWindow.setSkipTaskbar(true);
             console.log('[Window] Collapsed to orb:', orbSize, 'x', orbSize);
         }, 50);
     }

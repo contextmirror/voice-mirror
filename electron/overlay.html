@@ -42,6 +42,11 @@
             <div id="sidebar-header">
                 <img class="sidebar-logo" src="../assets/icon-32.png" alt="Voice Mirror" onclick="collapse()">
                 <span class="sidebar-title">Voice Mirror</span>
+                <div class="window-controls">
+                    <button class="win-btn win-minimize" onclick="minimizeWindow()" title="Minimize to taskbar">─</button>
+                    <button class="win-btn win-collapse" onclick="collapse()" title="Collapse to orb">◉</button>
+                    <button class="win-btn win-close" onclick="hideToTray()" title="Close to tray">×</button>
+                </div>
             </div>
             <nav id="sidebar-nav">
                 <button class="nav-item active" data-page="chat" data-tooltip="Chat">

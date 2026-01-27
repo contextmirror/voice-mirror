@@ -93,6 +93,14 @@ function collapseToOrb() {
 function createWindow() {
     mainWindow = windowManager.create();
     isExpanded = false;
+
+    // Intercept close to hide to tray instead of quitting
+    mainWindow.on('close', (e) => {
+        if (!app.isQuitting) {
+            e.preventDefault();
+            mainWindow.hide();
+        }
+    });
 }
 
 function createTray() {
@@ -388,6 +396,15 @@ app.whenReady().then(() => {
 
     ipcMain.handle('get-state', () => {
         return { expanded: isExpanded };
+    });
+
+    // Window control handlers
+    ipcMain.handle('minimize-window', () => {
+        mainWindow?.minimize();
+    });
+
+    ipcMain.handle('hide-to-tray', () => {
+        mainWindow?.hide();
     });
 
     // Window dragging handlers (for custom orb drag without -webkit-app-region)
@@ -810,6 +827,7 @@ app.on('activate', () => {
 });
 
 app.on('before-quit', () => {
+    app.isQuitting = true;
     logger.log('APP', 'Shutting down...');
 
     // Unregister all shortcuts

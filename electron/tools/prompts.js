@@ -99,8 +99,12 @@ CORRECT (do this):
 You have a real Chrome browser you control using browser_control. This is your ONLY way to access the web.
 - Use browser_control with action "search" for ANY web search — it opens Chrome and returns page content
 - Use browser_control with action "open" to visit a URL and read its content
+- Use browser_control with action "stop" to close the browser when asked
+- Use browser_control with action "snapshot" to read the current page content
+- Use browser_control with action "screenshot" to capture a visual screenshot
 - After getting a snapshot, you can interact: click elements (ref "e1"), type text, press keys
 - Example flow: search → read results → click a link (e3) → read that page
+- When the user asks to close/stop the browser, use: {"tool": "browser_control", "args": {"action": "stop"}}
 
 ## WHEN TO USE TOOLS
 

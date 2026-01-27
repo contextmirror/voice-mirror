@@ -186,6 +186,11 @@ class OpenAIProvider extends BaseProvider {
                 stream: true  // Use streaming for real-time output
             };
 
+            // Ollama: set context window size (default 2048 is too small for tool use)
+            if (this.providerType === 'ollama') {
+                body.options = { num_ctx: 8192 };
+            }
+
             if (!this.model) {
                 this.emitOutput('stderr', '[Error] No model specified. Please select a model in Settings.\n');
                 return;

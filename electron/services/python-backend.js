@@ -5,7 +5,7 @@
 
 const path = require('path');
 const fs = require('fs');
-const { spawn } = require('child_process');
+const { spawn, execSync } = require('child_process');
 
 /**
  * Get the Python executable path for the virtual environment.
@@ -34,6 +34,33 @@ function fileExists(filePath) {
     try {
         fs.accessSync(filePath, fs.constants.F_OK);
         return true;
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Check if we need to use `sg input` to get /dev/input access on Linux.
+ * Returns true if the user is in the 'input' group but the current session doesn't have it.
+ * This happens when the user was added to the group but hasn't logged out/back in.
+ */
+function _needsInputGroupEscalation() {
+    try {
+        // Check if current session already has input group
+        const sessionGroups = execSync('id -Gn', { encoding: 'utf8' }).trim().split(/\s+/);
+        if (sessionGroups.includes('input')) {
+            return false; // Session already has it
+        }
+
+        // Check if user is in input group (in /etc/group) but session doesn't have it
+        const userGroups = execSync(`groups ${process.env.USER || ''}`, { encoding: 'utf8' }).trim();
+        if (userGroups.includes('input')) {
+            // User is in group but session doesn't have it — sg will help
+            return true;
+        }
+
+        // User isn't in the input group at all — sg won't help
+        return false;
     } catch {
         return false;
     }
@@ -190,7 +217,22 @@ function createPythonBackend(options = {}) {
             shell: isWindows
         };
 
-        pythonProcess = spawn(venvPython, [scriptToRun], spawnOptions);
+        // On Linux, check if we need `sg input` for global hotkey access to /dev/input
+        // This avoids requiring the user to log out/back in after being added to the input group
+        if (!isWindows && process.platform === 'linux') {
+            const needsSg = _needsInputGroupEscalation();
+            if (needsSg) {
+                if (log) log('PYTHON', 'Using sg input for /dev/input access (session missing input group)');
+                // Spawn via: sg input -c "'path/to/python' 'script.py'"
+                // Paths must be quoted because they may contain spaces
+                const cmd = `'${venvPython}' '${scriptToRun}'`;
+                pythonProcess = spawn('sg', ['input', '-c', cmd], spawnOptions);
+            } else {
+                pythonProcess = spawn(venvPython, [scriptToRun], spawnOptions);
+            }
+        } else {
+            pythonProcess = spawn(venvPython, [scriptToRun], spawnOptions);
+        }
 
         // Buffer for incomplete JSON lines
         let stdoutBuffer = '';

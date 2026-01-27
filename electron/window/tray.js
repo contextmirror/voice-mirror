@@ -52,7 +52,13 @@ function createTrayService(options = {}) {
                 }
             },
             { type: 'separator' },
-            { label: 'Quit', click: () => app.quit() }
+            {
+                label: 'Quit',
+                click: () => {
+                    app.isQuitting = true;
+                    app.quit();
+                }
+            }
         ]);
 
         tray.setToolTip('Voice Mirror');
