@@ -28,16 +28,21 @@ Commands from Electron (stdin):
 import asyncio
 import base64
 import json
+import queue
 import sys
 import threading
-import queue
 import uuid
-from io import StringIO
 from datetime import datetime
+from io import StringIO
 from pathlib import Path
+
+from global_hotkey import GlobalHotkeyListener
 
 # Command queue for stdin commands
 command_queue = queue.Queue()
+
+# Global hotkey listener for PTT (works even when browser tab unfocused)
+_hotkey_listener = GlobalHotkeyListener()
 
 # Keep reference to original stdout for emitting events
 _original_stdout = sys.stdout
@@ -135,30 +140,46 @@ def emit_event(event: str, data: dict = None):
     elif event == 'recording_stop':
         write_log('VOICE', "Recording stopped")
     elif event == 'sent_to_inbox':
-        msg = data.get('message', '')[:40] if data else ''
-        if msg:
-            write_log('VOICE', f"Sent: {msg}...")
+        msg = data.get('message', '') if data else ''
+        preview = msg[:200] if len(msg) > 200 else msg
+        msg_id = data.get('msgId', '') if data else ''
+        suffix = f" | {msg_id}" if msg_id else ''
+        if preview:
+            write_log('VOICE', f"Sent: \"{preview}\"{suffix}")
         else:
-            write_log('VOICE', "Sent to Claude")
+            write_log('VOICE', f"Sent to provider{suffix}")
     elif event == 'response':
         text = data.get('text', '') if data else ''
+        chars = len(text)
+        msg_id = data.get('msgId', '') if data else ''
         # Extract just the message, not the prefix (supports any provider)
         import re
-        provider_match = re.match(r'^(\w+(?:\s+\(\w+\))?): (.+)', text)
+        provider_match = re.match(r'^(\w+(?:\s+\(\w+\))?): (.+)', text, re.DOTALL)
         if provider_match:
             provider, content = provider_match.groups()
-            write_log('CLAUDE', f"{content[:60]}...")
+            preview = content[:200] if len(content) > 200 else content
+            write_log('CLAUDE', f"\"{preview}\" ({chars} chars){f' | {msg_id}' if msg_id else ''}")
         else:
-            write_log('CLAUDE', f"{text[:60]}...")
+            preview = text[:200] if len(text) > 200 else text
+            write_log('CLAUDE', f"\"{preview}\" ({chars} chars){f' | {msg_id}' if msg_id else ''}")
     elif event == 'speaking_start':
-        text = data.get('text', '')[:40] if data else ''
-        write_log('TTS', f"Speaking: {text}...")
+        text = data.get('text', '') if data else ''
+        preview = text[:200] if len(text) > 200 else text
+        write_log('TTS', f"Speaking: \"{preview}\"")
     elif event == 'mode_change':
         mode = data.get('mode', 'unknown') if data else 'unknown'
         write_log('INFO', f"Mode: {mode}")
     elif event == 'error':
         msg = data.get('message', 'Unknown error') if data else 'Unknown error'
         write_log('ERROR', msg)
+    elif event == 'transcription':
+        text = data.get('text', '') if data else ''
+        preview = text[:200] if len(text) > 200 else text
+        write_log('VOICE', f"Transcribed: \"{preview}\" ({len(text)} chars)")
+    elif event == 'ptt_start':
+        write_log('PTT', "PTT start")
+    elif event == 'ptt_stop':
+        write_log('PTT', "PTT stop → transcribing")
     elif event in ('starting', 'ready'):
         write_log('INFO', event.capitalize())
     else:
@@ -216,7 +237,7 @@ class ElectronOutputCapture:
                     })
                 else:
                     emit_event("wake_word", {})
-            except:
+            except Exception:
                 emit_event("wake_word", {})
 
         # Recording states - differentiate by source
@@ -364,7 +385,7 @@ async def process_commands(agent):
 
                 if inbox_path.exists():
                     try:
-                        with open(inbox_path, 'r') as f:
+                        with open(inbox_path) as f:
                             data = json.load(f)
                         if "messages" not in data:
                             data = {"messages": []}
@@ -418,7 +439,7 @@ async def process_commands(agent):
                     # Load existing messages
                     if inbox_path.exists():
                         try:
-                            with open(inbox_path, 'r') as f:
+                            with open(inbox_path) as f:
                                 data = json.load(f)
                             if "messages" not in data:
                                 data = {"messages": []}
@@ -471,9 +492,9 @@ async def process_commands(agent):
                 existing = {}
                 if config_path.exists():
                     try:
-                        with open(config_path, 'r') as f:
+                        with open(config_path) as f:
                             existing = json.load(f)
-                    except:
+                    except Exception:
                         pass
 
                 existing.update(cfg)
@@ -485,11 +506,22 @@ async def process_commands(agent):
 
                 # Apply activation mode immediately
                 activation_mode = cfg.get("activationMode")
+                ptt_key = cfg.get("pttKey")
                 if activation_mode:
                     call_path = Path.home() / ".config" / "voice-mirror-electron" / "data" / "voice_call.json"
                     with open(call_path, 'w') as f:
                         json.dump({"active": activation_mode == "callMode"}, f)
                     emit_event("mode_change", {"mode": activation_mode})
+
+                    # Start/stop global hotkey listener based on mode
+                    if activation_mode == "pushToTalk":
+                        key = ptt_key or "MouseButton4"
+                        _hotkey_listener.update_key(key)
+                    else:
+                        _hotkey_listener.stop()
+                elif ptt_key:
+                    # PTT key changed without mode change
+                    _hotkey_listener.update_key(ptt_key)
 
                 # Apply TTS settings changes immediately
                 voice_cfg = cfg.get("voice", {})
@@ -503,7 +535,7 @@ async def process_commands(agent):
                     try:
                         voice_settings = {}
                         if settings_path.exists():
-                            with open(settings_path, 'r') as f:
+                            with open(settings_path) as f:
                                 voice_settings = json.load(f)
 
                         # Update only the fields that were provided
@@ -567,6 +599,19 @@ async def main():
     stdin_thread = threading.Thread(target=stdin_reader, daemon=True)
     stdin_thread.start()
 
+    # Start global hotkey listener if PTT mode is configured
+    try:
+        config_path = Path.home() / ".config" / "voice-mirror-electron" / "config.json"
+        if config_path.exists():
+            with open(config_path) as f:
+                app_config = json.load(f)
+            behavior = app_config.get("behavior", {})
+            if behavior.get("activationMode") == "pushToTalk":
+                ptt_key = behavior.get("pttKey", "MouseButton4")
+                _hotkey_listener.start(ptt_key)
+    except Exception as e:
+        print(f"[GlobalHotkey] Config read failed, skipping: {e}")
+
     try:
         # Import and run VoiceMirror
         from voice_agent import VoiceMirror
@@ -588,6 +633,7 @@ async def main():
         close_log_file()
         sys.exit(1)
     finally:
+        _hotkey_listener.stop()
         close_log_file()
 
 

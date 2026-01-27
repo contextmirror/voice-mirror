@@ -2,7 +2,8 @@
 
 import asyncio
 import time
-from typing import Callable, Optional, TYPE_CHECKING
+from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 from providers.config import strip_provider_prefix
 
@@ -28,12 +29,12 @@ class NotificationWatcher:
         is_processing: Callable[[], bool] = lambda: False,
         in_conversation: Callable[[], bool] = lambda: False,
         # Actions
-        provider_refresh: Optional[Callable[[], None]] = None,
+        provider_refresh: Callable[[], None] | None = None,
         get_listening_status: Callable[[], str] = lambda: "👂 Listening...",
         get_ai_provider_name: Callable[[], str] = lambda: "Claude",
         # TTS callbacks for state management
-        on_speech_start: Optional[Callable[[], None]] = None,
-        on_speech_end: Optional[Callable[[bool], None]] = None,  # arg: enter_conversation_mode
+        on_speech_start: Callable[[], None] | None = None,
+        on_speech_end: Callable[[bool], None] | None = None,  # arg: enter_conversation_mode
     ):
         """
         Initialize notification watcher.

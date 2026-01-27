@@ -23,26 +23,27 @@ import time
 from pathlib import Path
 
 import numpy as np
-
-# Settings (includes STT configuration)
-from settings import load_voice_settings
-# STT adapters
-from stt import create_stt_adapter
+import sounddevice as sd
+from audio.state import AudioState
+from audio.wake_word import WakeWordProcessor
+from notifications import NotificationWatcher
 
 # Modular components
 from providers.config import (
     ActivationMode,
-    get_ai_provider,
     get_activation_mode,
+    get_ai_provider,
     strip_provider_prefix,
 )
-from providers.inbox import InboxManager, cleanup_inbox as _cleanup_inbox
-from audio.wake_word import WakeWordProcessor
-from audio.state import AudioState
-from tts import create_tts_adapter
-from notifications import NotificationWatcher
+from providers.inbox import InboxManager
+from providers.inbox import cleanup_inbox as _cleanup_inbox
 
-import sounddevice as sd
+# Settings (includes STT configuration)
+from settings import load_voice_settings
+
+# STT adapters
+from stt import create_stt_adapter
+from tts import create_tts_adapter
 
 # Configuration
 TTS_VOICE = os.getenv("TTS_VOICE", "af_bella")  # Female voice, change to am_puck for male
@@ -173,17 +174,17 @@ class VoiceMirror:
             if model_name:
                 print(f"  Model: {model_name}")
             else:
-                print(f"  Using default model")
+                print("  Using default model")
 
             self.stt_adapter = create_stt_adapter(adapter_name, model_name)
 
             # Load the adapter (async, so we'll do it in the event loop later)
             # For now just create the instance
-            print(f"  (First run may download model, please wait...)")
+            print("  (First run may download model, please wait...)")
 
         except Exception as e:
             print(f"❌ Failed to create STT adapter: {e}")
-            print(f"   Falling back to parakeet")
+            print("   Falling back to parakeet")
             try:
                 self.stt_adapter = create_stt_adapter("parakeet")
             except Exception:
@@ -202,7 +203,7 @@ class VoiceMirror:
             self.tts = create_tts_adapter(tts_adapter, voice=tts_voice, model_size=tts_model_size)
         except ValueError as e:
             print(f"⚠️ {e}")
-            print(f"   Falling back to kokoro")
+            print("   Falling back to kokoro")
             self.tts = create_tts_adapter("kokoro", voice=tts_voice)
 
         # Load TTS model
@@ -222,14 +223,14 @@ class VoiceMirror:
 
         try:
             if VOICE_CALL_PATH.exists():
-                with open(VOICE_CALL_PATH, 'r') as f:
+                with open(VOICE_CALL_PATH) as f:
                     data = json.load(f)
                     active = data.get("active", False)
                     if active != getattr(self, '_call_active', False):
                         if active:
-                            print(f"\n📞 Call started - listening without wake word")
+                            print("\n📞 Call started - listening without wake word")
                         else:
-                            print(f"\n📞 Call ended - returning to wake word mode")
+                            print("\n📞 Call ended - returning to wake word mode")
                     self._call_active = active
                     return active
         except Exception:
@@ -252,7 +253,7 @@ class VoiceMirror:
 
         try:
             if PTT_TRIGGER_PATH.exists():
-                with open(PTT_TRIGGER_PATH, 'r') as f:
+                with open(PTT_TRIGGER_PATH) as f:
                     data = json.load(f)
                     action = data.get("action")
 
@@ -290,7 +291,7 @@ class VoiceMirror:
             if not VOICE_CLONE_REQUEST_PATH.exists():
                 return
 
-            with open(VOICE_CLONE_REQUEST_PATH, 'r') as f:
+            with open(VOICE_CLONE_REQUEST_PATH) as f:
                 request = json.load(f)
 
             # Clear request file immediately to avoid re-processing
@@ -334,7 +335,7 @@ class VoiceMirror:
 
         # Auto-transcribe if no transcript provided
         if not transcript:
-            print(f"🎤 Auto-transcribing reference audio...")
+            print("🎤 Auto-transcribing reference audio...")
             try:
                 import soundfile as sf
                 audio_data, sr = sf.read(audio_path)
@@ -603,11 +604,11 @@ class VoiceMirror:
         if self.stt_adapter is not None and self.stt_adapter.is_loaded:
             print(f"STT: {self.stt_adapter.name}")
         else:
-            print(f"STT: Not loaded yet (will load on first use)")
+            print("STT: Not loaded yet (will load on first use)")
         if self.tts and self.tts.is_loaded:
             print(f"TTS: {self.tts.name} - LOCAL")
         else:
-            print(f"TTS: Not available")
+            print("TTS: Not available")
         print(f"Inbox: {INBOX_PATH}")
         print(f"Routing: 🤖 {self._ai_provider['name']} (via MCP inbox)")
         print("=" * 50)
@@ -638,7 +639,7 @@ class VoiceMirror:
         for i, d in enumerate(sd.query_devices()):
             name = d['name'].lower()
             if d['max_input_channels'] > 0:
-                if 'seiren' in name or 'usb' in name and 'audio' in name:
+                if 'seiren' in name or ('usb' in name and 'audio' in name):
                     input_device = i
                     print(f"   ✅ Selected: {i} - {d['name']}")
                     break

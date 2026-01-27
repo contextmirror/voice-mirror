@@ -5,11 +5,9 @@ Provides voice control and status tools.
 """
 
 import json
-import asyncio
-from pathlib import Path
-from typing import Any, Dict
 from datetime import datetime
-
+from pathlib import Path
+from typing import Any
 
 # MCP inbox path for Voice Mirror
 INBOX_PATH = Path.home() / ".config" / "voice-mirror-electron" / "data" / "inbox.json"
@@ -21,7 +19,7 @@ class VoiceToolHandler:
     def __init__(self):
         pass
 
-    async def handle(self, tool_name: str, args: Dict[str, Any]) -> Dict[str, Any]:
+    async def handle(self, tool_name: str, args: dict[str, Any]) -> dict[str, Any]:
         """Route tool call to appropriate method."""
         handlers = {
             "voice_status": self._get_status,
@@ -37,7 +35,7 @@ class VoiceToolHandler:
         except Exception as e:
             return {"error": str(e)}
 
-    async def _get_status(self, args: Dict) -> Dict:
+    async def _get_status(self, args: dict) -> dict:
         """Get Voice Mirror status."""
         # Check if Voice Mirror is likely running by checking for recent messages
         status = {
@@ -56,7 +54,7 @@ class VoiceToolHandler:
         # Check inbox for recent voice messages
         if INBOX_PATH.exists():
             try:
-                with open(INBOX_PATH, 'r') as f:
+                with open(INBOX_PATH) as f:
                     data = json.load(f)
 
                 messages = data.get("messages", [])
@@ -77,7 +75,7 @@ class VoiceToolHandler:
 
         return {"success": True, **status}
 
-    async def _speak(self, args: Dict) -> Dict:
+    async def _speak(self, args: dict) -> dict:
         """Send a message to be spoken by Voice Mirror TTS."""
         message = args.get("message", "")
 
@@ -87,7 +85,7 @@ class VoiceToolHandler:
         # Write to inbox for Voice Mirror to pick up
         try:
             if INBOX_PATH.exists():
-                with open(INBOX_PATH, 'r') as f:
+                with open(INBOX_PATH) as f:
                     data = json.load(f)
             else:
                 INBOX_PATH.parent.mkdir(parents=True, exist_ok=True)

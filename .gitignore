@@ -64,5 +64,9 @@ python/.context-mirror/
 python/*_keys.json
 python/legacy/
 
+# Linting configs (local dev only)
+eslint.config.js
+ruff.toml
+
 # Internal docs (reference only, not for repo)
 docs/

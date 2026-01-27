@@ -2,12 +2,12 @@
 
 import json
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Any
 
 VOICE_SETTINGS_PATH = Path.home() / ".config" / "voice-mirror-electron" / "data" / "voice_settings.json"
 
 
-def get_location_from_ip() -> Optional[str]:
+def get_location_from_ip() -> str | None:
     """Get location from IP address using free ip-api.com service."""
     try:
         import urllib.request
@@ -25,7 +25,7 @@ def get_location_from_ip() -> Optional[str]:
         return None
 
 
-def load_voice_settings() -> Dict[str, Any]:
+def load_voice_settings() -> dict[str, Any]:
     """Load user's voice settings (location from IP, or cached)."""
     defaults = {
         "location": "United Kingdom",
@@ -55,7 +55,7 @@ def load_voice_settings() -> Dict[str, Any]:
     return defaults
 
 
-def save_voice_settings(settings: Dict[str, Any]) -> bool:
+def save_voice_settings(settings: dict[str, Any]) -> bool:
     """Save user's voice settings to disk."""
     try:
         VOICE_SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)

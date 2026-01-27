@@ -2,7 +2,6 @@
 
 import threading
 from dataclasses import dataclass, field
-from typing import List, Optional
 
 import numpy as np
 
@@ -22,10 +21,10 @@ class AudioState:
     is_listening: bool = True
     is_recording: bool = False
     is_processing: bool = False
-    recording_source: Optional[str] = None  # 'wake_word', 'ptt', 'call', 'follow_up'
+    recording_source: str | None = None  # 'wake_word', 'ptt', 'call', 'follow_up'
 
     # Audio buffer (protected by lock)
-    audio_buffer: List[np.ndarray] = field(default_factory=list)
+    audio_buffer: list[np.ndarray] = field(default_factory=list)
     last_speech_time: float = 0.0
 
     # Push-to-talk state
@@ -45,7 +44,7 @@ class AudioState:
         with self._lock:
             self.audio_buffer.append(audio)
 
-    def get_and_clear_buffer(self) -> Optional[np.ndarray]:
+    def get_and_clear_buffer(self) -> np.ndarray | None:
         """Thread-safe get and clear audio buffer."""
         with self._lock:
             if not self.audio_buffer:

@@ -1,10 +1,6 @@
 """Whisper STT adapters (OpenAI Whisper and Faster-Whisper)."""
 
 import asyncio
-import os
-import tempfile
-import struct
-from typing import Optional
 
 import numpy as np
 
@@ -21,7 +17,7 @@ class WhisperAdapter(STTAdapter):
     Available models: tiny, base, small, medium, large
     """
 
-    def __init__(self, model_name: Optional[str] = None):
+    def __init__(self, model_name: str | None = None):
         super().__init__(model_name or "base")
 
     async def load(self) -> bool:
@@ -87,7 +83,7 @@ class FasterWhisperAdapter(STTAdapter):
     Available models: tiny, base, small, medium, large-v2, large-v3
     """
 
-    def __init__(self, model_name: Optional[str] = None):
+    def __init__(self, model_name: str | None = None):
         super().__init__(model_name or "base")
         self.device = "auto"  # auto-detect CUDA or CPU
 

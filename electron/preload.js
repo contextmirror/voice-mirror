@@ -142,6 +142,9 @@ contextBridge.exposeInMainWorld('voiceMirror', {
     startAll: () => ipcRenderer.invoke('start-all'),
     stopAll: () => ipcRenderer.invoke('stop-all'),
 
+    // Dev logging — renderer → main process → vmr.log
+    devlog: (category, action, data) => ipcRenderer.send('devlog', category, action, data),
+
     // Open external URLs in default browser
     openExternal: (url) => ipcRenderer.invoke('open-external', url),
 

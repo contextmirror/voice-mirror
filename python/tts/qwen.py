@@ -1,12 +1,38 @@
 """Qwen3-TTS adapter for voice synthesis with cloning support."""
 
 import asyncio
-import subprocess
+import re
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, List, Optional, Tuple
 
 from .base import TTSAdapter
 
+
+def _chunk_text(text: str, max_chars: int = 400) -> list[str]:
+    """Split text into chunks for interruptible TTS.
+
+    Splits on sentence boundaries first, then clause boundaries.
+    """
+    if len(text) <= max_chars:
+        return [text]
+
+    chunks = []
+    sentences = re.split(r'(?<=[.!?])\s+', text)
+
+    current = ''
+    for sentence in sentences:
+        if not sentence.strip():
+            continue
+        if current and len(current) + len(sentence) + 1 > max_chars:
+            chunks.append(current.strip())
+            current = sentence
+        else:
+            current = (current + ' ' + sentence).strip() if current else sentence
+
+    if current.strip():
+        chunks.append(current.strip())
+
+    return chunks if chunks else [text]
 
 # Available preset speakers for CustomVoice model
 QWEN_SPEAKERS = [
@@ -49,11 +75,11 @@ class QwenTTSAdapter(TTSAdapter):
 
     def __init__(
         self,
-        voice: Optional[str] = None,
+        voice: str | None = None,
         model_size: str = "1.7B",
         language: str = "Auto",
-        ref_audio: Optional[str] = None,
-        ref_text: Optional[str] = None,
+        ref_audio: str | None = None,
+        ref_text: str | None = None,
     ):
         """
         Initialize Qwen3-TTS adapter.
@@ -86,9 +112,9 @@ class QwenTTSAdapter(TTSAdapter):
     def load(self) -> bool:
         """Load the Qwen3-TTS model."""
         try:
+            import soundfile as sf
             import torch
             from qwen_tts import Qwen3TTSModel
-            import soundfile as sf
 
             self._torch = torch
             self._soundfile = sf
@@ -102,12 +128,12 @@ class QwenTTSAdapter(TTSAdapter):
                 device = "cuda:0"
                 dtype = torch.bfloat16
                 attn_impl = "flash_attention_2"
-                print(f"  Using CUDA with FlashAttention2")
+                print("  Using CUDA with FlashAttention2")
             else:
                 device = "cpu"
                 dtype = torch.float32
                 attn_impl = "eager"
-                print(f"  Using CPU (slower, consider using CUDA)")
+                print("  Using CPU (slower, consider using CUDA)")
 
             # Try to load with flash attention, fall back if not available
             try:
@@ -119,7 +145,7 @@ class QwenTTSAdapter(TTSAdapter):
                 )
             except Exception as e:
                 if "flash" in str(e).lower():
-                    print(f"  FlashAttention not available, using eager attention")
+                    print("  FlashAttention not available, using eager attention")
                     self.model = Qwen3TTSModel.from_pretrained(
                         model_name,
                         device_map=device,
@@ -153,12 +179,15 @@ class QwenTTSAdapter(TTSAdapter):
     async def speak(
         self,
         text: str,
-        on_start: Optional[Callable[[], None]] = None,
-        on_end: Optional[Callable[[], None]] = None,
-        instruct: Optional[str] = None,
+        on_start: Callable[[], None] | None = None,
+        on_end: Callable[[], None] | None = None,
+        instruct: str | None = None,
     ) -> None:
         """
-        Synthesize text and play audio using Qwen3-TTS.
+        Synthesize text and play audio using Qwen3-TTS with chunked streaming.
+
+        Text is split into chunks so that interruption can happen between chunks
+        (matching Kokoro's responsive interrupt behavior).
 
         Args:
             text: Text to speak
@@ -183,26 +212,46 @@ class QwenTTSAdapter(TTSAdapter):
                 import soundfile as sf
                 self._soundfile = sf
 
-            # Run synthesis in thread pool
+            chunks = _chunk_text(text)
             loop = asyncio.get_event_loop()
-            audio_data, sample_rate = await loop.run_in_executor(
-                None,
-                lambda: self._synthesize(text, instruct)
-            )
 
-            if audio_data is None:
-                print("❌ Qwen3-TTS synthesis failed")
-                return
+            # Pipeline: pre-synthesize next chunk while current one plays
+            next_future = None
 
-            # Save to temp file
-            audio_file = Path("/tmp/voice_mirror_tts.wav")
-            self._soundfile.write(str(audio_file), audio_data, sample_rate)
+            def _synthesize_chunk(chunk_text, idx):
+                """Synthesize a chunk and write to file. Returns file path."""
+                audio_data, sample_rate = self._synthesize(chunk_text, instruct)
+                if audio_data is None:
+                    return None
+                audio_file = f"/tmp/voice_mirror_tts_{idx}.wav"
+                self._soundfile.write(audio_file, audio_data, sample_rate)
+                return audio_file
 
-            # Play using ffplay (interruptible) - run in executor to not block event loop
-            if self._interrupted:
-                return
-            loop = asyncio.get_event_loop()
-            await loop.run_in_executor(None, self._play_audio, str(audio_file))
+            for i, chunk in enumerate(chunks):
+                if self._interrupted:
+                    break
+
+                # Get audio file: either from pre-fetched future or synthesize now
+                if next_future is not None:
+                    audio_file = await next_future
+                    next_future = None
+                else:
+                    audio_file = await loop.run_in_executor(
+                        None, _synthesize_chunk, chunk, i
+                    )
+
+                if self._interrupted or audio_file is None:
+                    break
+
+                # Start pre-synthesizing the NEXT chunk while this one plays
+                if i + 1 < len(chunks):
+                    next_future = loop.run_in_executor(
+                        None, _synthesize_chunk, chunks[i + 1], i + 1
+                    )
+
+                # Play this chunk (non-blocking to event loop, interruptible via _play_audio)
+                await loop.run_in_executor(None, self._play_audio, audio_file)
+
         except Exception as e:
             print(f"❌ Qwen3-TTS error: {e}")
         finally:
@@ -215,7 +264,7 @@ class QwenTTSAdapter(TTSAdapter):
             if on_end:
                 on_end()
 
-    def _synthesize(self, text: str, instruct: Optional[str] = None) -> Tuple[any, int]:
+    def _synthesize(self, text: str, instruct: str | None = None) -> tuple[any, int]:
         """
         Synthesize speech (runs in thread pool).
 
@@ -319,7 +368,7 @@ class QwenTTSAdapter(TTSAdapter):
                 )
             except Exception as e:
                 if "flash" in str(e).lower():
-                    print(f"  FlashAttention not available, using eager attention")
+                    print("  FlashAttention not available, using eager attention")
                     self.model = Qwen3TTSModel.from_pretrained(
                         model_name,
                         device_map=device,
@@ -329,7 +378,7 @@ class QwenTTSAdapter(TTSAdapter):
                 else:
                     raise
 
-            print(f"✅ Base model loaded for voice cloning")
+            print("✅ Base model loaded for voice cloning")
             return True
 
         except Exception as e:
@@ -391,7 +440,7 @@ class QwenTTSAdapter(TTSAdapter):
                 else:
                     raise
 
-            print(f"✅ CustomVoice model loaded")
+            print("✅ CustomVoice model loaded")
 
         except Exception as e:
             print(f"❌ Failed to reload CustomVoice model: {e}")
@@ -403,11 +452,11 @@ class QwenTTSAdapter(TTSAdapter):
         return f"Qwen3-TTS {self.model_size} ({mode})"
 
     @property
-    def available_voices(self) -> List[str]:
+    def available_voices(self) -> list[str]:
         """Return available speaker names."""
         return QWEN_SPEAKERS.copy()
 
     @property
-    def available_languages(self) -> List[str]:
+    def available_languages(self) -> list[str]:
         """Return supported languages."""
         return QWEN_LANGUAGES.copy()

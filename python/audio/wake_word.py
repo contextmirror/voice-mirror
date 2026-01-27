@@ -1,7 +1,6 @@
 """Wake word detection using OpenWakeWord."""
 
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
 
@@ -24,7 +23,7 @@ class WakeWordProcessor:
         self.model = None
         self.buffer = []
 
-    def load(self, script_dir: Optional[Path] = None) -> bool:
+    def load(self, script_dir: Path | None = None) -> bool:
         """
         Load the OpenWakeWord model.
 
@@ -52,7 +51,7 @@ class WakeWordProcessor:
             self.model = None
             return False
 
-    def process(self, audio_chunk: np.ndarray) -> tuple[bool, Optional[str], float]:
+    def process(self, audio_chunk: np.ndarray) -> tuple[bool, str | None, float]:
         """
         Check for wake word in audio chunk.
 

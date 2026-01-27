@@ -1,12 +1,10 @@
 """Factory for creating TTS adapters."""
 
-from typing import Dict, List, Optional
 
 from .base import TTSAdapter
 
-
 # Registry of available adapters (populated by imports below)
-ADAPTERS: Dict[str, type] = {}
+ADAPTERS: dict[str, type] = {}
 
 
 def _register_adapters():
@@ -41,8 +39,8 @@ _register_adapters()
 
 def create_tts_adapter(
     adapter_name: str,
-    voice: Optional[str] = None,
-    model_size: Optional[str] = None,
+    voice: str | None = None,
+    model_size: str | None = None,
 ) -> TTSAdapter:
     """
     Create a TTS adapter by name.
@@ -76,7 +74,7 @@ def create_tts_adapter(
     return adapter_class(voice=voice)
 
 
-def list_available_adapters() -> List[str]:
+def list_available_adapters() -> list[str]:
     """
     List all available TTS adapter names.
 

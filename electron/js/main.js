@@ -442,12 +442,17 @@ async function init() {
     // Listen for chat messages from Python backend
     window.voiceMirror.onChatMessage((data) => {
         console.log('[Chat Message]', data);
+        window.voiceMirror.devlog('IPC', 'chat-message-received', {
+            role: data.role,
+            text: data.text?.slice(0, 200),
+            source: data.source,
+            msgId: data.id,
+        });
 
         // Check if this is a user voice transcription and we're waiting for image prompt
         if (data.role === 'user' && state.awaitingVoiceForImage) {
             const handled = handleVoiceForImage(data.text);
             if (handled) {
-                // Voice was used as image prompt - don't add as separate message
                 return;
             }
         }
@@ -461,13 +466,14 @@ async function init() {
     window.voiceMirror.claude.onOutput(handleAIOutput);
 
     // Listen for tool events (local LLM tool system)
-    // Tool calls happen silently in the backend — only the final response is shown
     window.voiceMirror.tools.onToolCall((data) => {
         console.log('[Tool Call]', data);
+        window.voiceMirror.devlog('TOOL', 'tool-call', { tool: data.tool, text: JSON.stringify(data.args)?.slice(0, 200) });
     });
 
     window.voiceMirror.tools.onToolResult((data) => {
         console.log('[Tool Result]', data);
+        window.voiceMirror.devlog('TOOL', 'tool-result', { tool: data.tool, success: data.success, text: data.result?.slice(0, 200) });
     });
 
     // Listen for open-settings command from tray menu

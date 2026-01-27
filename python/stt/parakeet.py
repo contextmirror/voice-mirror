@@ -2,9 +2,8 @@
 
 import asyncio
 import os
-import tempfile
 import struct
-from typing import Optional
+import tempfile
 
 import numpy as np
 
@@ -19,7 +18,7 @@ class ParakeetAdapter(STTAdapter):
     Default model: nemo-parakeet-tdt-0.6b-v2
     """
 
-    def __init__(self, model_name: Optional[str] = None):
+    def __init__(self, model_name: str | None = None):
         super().__init__(model_name or "nemo-parakeet-tdt-0.6b-v2")
         self.supports_gpu = False
 
@@ -37,7 +36,7 @@ class ParakeetAdapter(STTAdapter):
                 providers=["CPUExecutionProvider"]
             )
             self.supports_gpu = False
-            print(f"✅ Parakeet loaded (CPU mode)")
+            print("✅ Parakeet loaded (CPU mode)")
             return True
 
         except ImportError:

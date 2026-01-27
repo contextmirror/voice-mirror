@@ -5,9 +5,9 @@ import json
 import threading
 import time
 import uuid
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
-from typing import Callable, Optional
 
 
 def cleanup_inbox(inbox_path: Path, max_age_hours: float = 2.0) -> int:
@@ -25,7 +25,7 @@ def cleanup_inbox(inbox_path: Path, max_age_hours: float = 2.0) -> int:
         return 0
 
     try:
-        with open(inbox_path, 'r') as f:
+        with open(inbox_path) as f:
             data = json.load(f)
 
         messages = data.get("messages", [])
@@ -80,7 +80,7 @@ class InboxManager:
         self._last_message_time = 0.0
         self._last_seen_message_id = None
 
-    def send(self, message: str) -> Optional[str]:
+    def send(self, message: str) -> str | None:
         """
         Send a message to the MCP inbox.
 
@@ -106,7 +106,7 @@ class InboxManager:
             # Load existing messages
             if self.inbox_path.exists():
                 try:
-                    with open(self.inbox_path, 'r') as f:
+                    with open(self.inbox_path) as f:
                         data = json.load(f)
                     if "messages" not in data:
                         data = {"messages": []}
@@ -158,7 +158,7 @@ class InboxManager:
                     continue
 
                 try:
-                    with open(self.inbox_path, 'r') as f:
+                    with open(self.inbox_path) as f:
                         data = json.load(f)
                 except (json.JSONDecodeError, KeyError):
                     continue
@@ -201,9 +201,9 @@ class InboxManager:
         with self._lock:
             if self.inbox_path.exists():
                 try:
-                    with open(self.inbox_path, 'r') as f:
+                    with open(self.inbox_path) as f:
                         data = json.load(f)
-                except:
+                except Exception:
                     data = {"messages": []}
             else:
                 data = {"messages": []}
@@ -226,7 +226,7 @@ class InboxManager:
 
             print("📬 Response saved to inbox")
 
-    def get_latest_ai_message(self) -> tuple[Optional[str], Optional[str]]:
+    def get_latest_ai_message(self) -> tuple[str | None, str | None]:
         """
         Get the latest AI provider message from inbox.
 
@@ -238,7 +238,7 @@ class InboxManager:
                 return None, None
 
             try:
-                with open(self.inbox_path, 'r') as f:
+                with open(self.inbox_path) as f:
                     data = json.load(f)
             except (json.JSONDecodeError, KeyError):
                 return None, None
@@ -257,7 +257,7 @@ class InboxManager:
 
             return None, None
 
-    def check_compaction_event(self) -> tuple[Optional[str], Optional[dict]]:
+    def check_compaction_event(self) -> tuple[str | None, dict | None]:
         """
         Check if there's a pending compaction event in inbox.
 
@@ -269,7 +269,7 @@ class InboxManager:
                 return None, None
 
             try:
-                with open(self.inbox_path, 'r') as f:
+                with open(self.inbox_path) as f:
                     data = json.load(f)
             except (json.JSONDecodeError, KeyError):
                 return None, None
@@ -298,7 +298,7 @@ class InboxManager:
                 return
 
             try:
-                with open(self.inbox_path, 'r') as f:
+                with open(self.inbox_path) as f:
                     data = json.load(f)
 
                 messages = data if isinstance(data, list) else data.get("messages", [])
@@ -314,11 +314,11 @@ class InboxManager:
                 print(f"⚠️ Error marking compaction read: {e}")
 
     @property
-    def last_seen_message_id(self) -> Optional[str]:
+    def last_seen_message_id(self) -> str | None:
         """Get the last seen message ID."""
         return self._last_seen_message_id
 
     @last_seen_message_id.setter
-    def last_seen_message_id(self, value: Optional[str]):
+    def last_seen_message_id(self, value: str | None):
         """Set the last seen message ID."""
         self._last_seen_message_id = value

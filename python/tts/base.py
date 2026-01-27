@@ -4,7 +4,7 @@ import re
 import subprocess
 import time
 from abc import ABC, abstractmethod
-from typing import Callable, List, Optional
+from collections.abc import Callable
 
 
 class TTSAdapter(ABC):
@@ -15,7 +15,7 @@ class TTSAdapter(ABC):
     the required methods.
     """
 
-    def __init__(self, voice: Optional[str] = None):
+    def __init__(self, voice: str | None = None):
         """
         Initialize the TTS adapter.
 
@@ -43,8 +43,8 @@ class TTSAdapter(ABC):
     async def speak(
         self,
         text: str,
-        on_start: Optional[Callable[[], None]] = None,
-        on_end: Optional[Callable[[], None]] = None
+        on_start: Callable[[], None] | None = None,
+        on_end: Callable[[], None] | None = None
     ) -> None:
         """
         Synthesize text and play audio.
@@ -64,7 +64,7 @@ class TTSAdapter(ABC):
 
     @property
     @abstractmethod
-    def available_voices(self) -> List[str]:
+    def available_voices(self) -> list[str]:
         """Return list of available voice IDs for this adapter."""
         pass
 

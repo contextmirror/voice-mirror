@@ -8,21 +8,19 @@ This client is used by both:
 One implementation, two interfaces.
 """
 
-import json
-import urllib.request
-import urllib.error
 import asyncio
+import json
 import os
+import urllib.error
+import urllib.request
 from pathlib import Path
-from typing import Any, Dict, List, Optional
-
 
 # n8n API configuration
 N8N_API_URL = "http://localhost:5678"
 N8N_API_KEY_FILE = Path.home() / ".config" / "n8n" / "api_key"
 
 
-def _get_api_key() -> Optional[str]:
+def _get_api_key() -> str | None:
     """Get n8n API key from file or environment."""
     if N8N_API_KEY_FILE.exists():
         return N8N_API_KEY_FILE.read_text().strip()
@@ -47,7 +45,7 @@ class N8nClient:
         self.base_url = base_url or N8N_API_URL
 
     async def _api_request(self, endpoint: str, method: str = "GET",
-                          data: Dict = None) -> Dict:
+                          data: dict = None) -> dict:
         """Make authenticated request to n8n API."""
         if not self.api_key:
             raise Exception("n8n API key not configured. Set in ~/.config/n8n/api_key or N8N_API_KEY env var.")
@@ -253,7 +251,7 @@ class N8nClient:
         },
     }
 
-    async def search_nodes(self, query: str, limit: int = 10) -> Dict:
+    async def search_nodes(self, query: str, limit: int = 10) -> dict:
         """Search for n8n nodes by keyword."""
         query_lower = query.lower()
         results = []
@@ -275,7 +273,7 @@ class N8nClient:
             "hint": f"No common nodes match '{query}'. Try: gmail, webhook, http, slack, discord, github, code, set, if, switch, schedule"
         }
 
-    async def get_node(self, node_type: str, detail: str = "standard") -> Dict:
+    async def get_node(self, node_type: str, _detail: str = "standard") -> dict:
         """Get detailed node information."""
         config = self.NODE_CONFIGS.get(node_type)
         if config:
@@ -296,7 +294,7 @@ class N8nClient:
     # Workflow Management
     # =========================================================================
 
-    async def list_workflows(self, active_only: bool = False) -> Dict:
+    async def list_workflows(self, active_only: bool = False) -> dict:
         """List all workflows."""
         try:
             result = await self._api_request("/workflows")
@@ -324,7 +322,7 @@ class N8nClient:
         except urllib.error.URLError:
             return {"success": False, "error": "Cannot connect to n8n. Is it running?"}
 
-    async def get_workflow(self, workflow_id: str) -> Dict:
+    async def get_workflow(self, workflow_id: str) -> dict:
         """Get workflow details."""
         if not workflow_id:
             return {"error": "workflow_id required"}
@@ -347,8 +345,8 @@ class N8nClient:
                 return {"success": False, "error": "Workflow not found"}
             return {"success": False, "error": f"API error: {e.code}"}
 
-    async def create_workflow(self, name: str, nodes: List[Dict],
-                             connections: Dict = None) -> Dict:
+    async def create_workflow(self, name: str, nodes: list[dict],
+                             connections: dict = None) -> dict:
         """Create a new workflow."""
         if not name:
             return {"error": "name required"}
@@ -376,12 +374,12 @@ class N8nClient:
             error_body = ""
             try:
                 error_body = e.read().decode()
-            except:
+            except Exception:
                 pass
             return {"success": False, "error": f"API error: {e.code}", "details": error_body}
 
-    async def update_workflow(self, workflow_id: str, workflow_data: Dict = None,
-                             operations: List[Dict] = None) -> Dict:
+    async def update_workflow(self, workflow_id: str, workflow_data: dict = None,
+                             operations: list[dict] = None) -> dict:
         """
         Update workflow with operations or full workflow replacement.
 
@@ -419,7 +417,7 @@ class N8nClient:
                 error_body = ""
                 try:
                     error_body = e.read().decode()
-                except:
+                except Exception:
                     pass
                 return {"success": False, "error": f"Update failed: {e.code}", "details": error_body}
 
@@ -552,13 +550,13 @@ class N8nClient:
                 error_body = ""
                 try:
                     error_body = e.read().decode()
-                except:
+                except Exception:
                     pass
                 return {"success": False, "error": f"Update failed: {e.code}", "details": error_body}
 
         return {"success": True, "message": "No changes made"}
 
-    async def delete_workflow(self, workflow_id: str) -> Dict:
+    async def delete_workflow(self, workflow_id: str) -> dict:
         """Delete a workflow by ID."""
         if not workflow_id:
             return {"error": "workflow_id required"}
@@ -578,7 +576,7 @@ class N8nClient:
                 return {"success": False, "error": "Workflow not found"}
             return {"success": False, "error": f"Delete failed: {e.code}"}
 
-    async def activate_workflow(self, workflow_id: str) -> Dict:
+    async def activate_workflow(self, workflow_id: str) -> dict:
         """Activate a workflow."""
         try:
             result = await self._api_request(
@@ -593,7 +591,7 @@ class N8nClient:
         except urllib.error.HTTPError as e:
             return {"success": False, "error": f"Activation failed: {e.code}"}
 
-    async def deactivate_workflow(self, workflow_id: str) -> Dict:
+    async def deactivate_workflow(self, workflow_id: str) -> dict:
         """Deactivate a workflow."""
         try:
             result = await self._api_request(
@@ -609,7 +607,7 @@ class N8nClient:
             return {"success": False, "error": f"Deactivation failed: {e.code}"}
 
     async def validate_workflow(self, workflow_id: str = None,
-                               workflow_json: Dict = None) -> Dict:
+                               workflow_json: dict = None) -> dict:
         """Validate workflow configuration."""
         if workflow_id:
             workflow_result = await self.get_workflow(workflow_id)
@@ -653,7 +651,7 @@ class N8nClient:
 
     async def trigger_workflow(self, workflow_id: str = None,
                               webhook_path: str = None,
-                              data: Dict = None) -> Dict:
+                              data: dict = None) -> dict:
         """Trigger workflow via webhook."""
         if not workflow_id and not webhook_path:
             return {"error": "Either workflow_id or webhook_path required"}
@@ -708,7 +706,7 @@ class N8nClient:
     # =========================================================================
 
     async def get_executions(self, workflow_id: str = None,
-                            status: str = None, limit: int = 10) -> Dict:
+                            status: str = None, limit: int = 10) -> dict:
         """Get workflow executions."""
         params = [f"limit={limit}"]
         if workflow_id:
@@ -740,7 +738,7 @@ class N8nClient:
         except urllib.error.HTTPError as e:
             return {"success": False, "error": f"API error: {e.code}"}
 
-    async def get_execution(self, execution_id: str, include_data: bool = False) -> Dict:
+    async def get_execution(self, execution_id: str, include_data: bool = False) -> dict:
         """Get a specific execution with optional data."""
         if not execution_id:
             return {"error": "execution_id required"}
@@ -770,7 +768,7 @@ class N8nClient:
                 return {"success": False, "error": "Execution not found"}
             return {"success": False, "error": f"API error: {e.code}"}
 
-    async def delete_execution(self, execution_id: str) -> Dict:
+    async def delete_execution(self, execution_id: str) -> dict:
         """Delete an execution by ID."""
         if not execution_id:
             return {"error": "execution_id required"}
@@ -786,7 +784,7 @@ class N8nClient:
                 return {"success": False, "error": "Execution not found"}
             return {"success": False, "error": f"Delete failed: {e.code}"}
 
-    async def retry_execution(self, execution_id: str, load_workflow: bool = True) -> Dict:
+    async def retry_execution(self, execution_id: str, load_workflow: bool = True) -> dict:
         """Retry a failed execution."""
         if not execution_id:
             return {"error": "execution_id required"}
@@ -812,7 +810,7 @@ class N8nClient:
     # =========================================================================
 
     async def create_credential(self, name: str, cred_type: str,
-                               data: Dict = None) -> Dict:
+                               data: dict = None) -> dict:
         """Create a new credential."""
         if not name:
             return {"error": "name required"}
@@ -840,11 +838,11 @@ class N8nClient:
             error_body = ""
             try:
                 error_body = e.read().decode()
-            except:
+            except Exception:
                 pass
             return {"success": False, "error": f"Create failed: {e.code}", "details": error_body}
 
-    async def delete_credential(self, credential_id: str) -> Dict:
+    async def delete_credential(self, credential_id: str) -> dict:
         """Delete a credential by ID."""
         if not credential_id:
             return {"error": "credential_id required"}
@@ -860,7 +858,7 @@ class N8nClient:
                 return {"success": False, "error": "Credential not found"}
             return {"success": False, "error": f"Delete failed: {e.code}"}
 
-    async def get_credential_schema(self, credential_type: str) -> Dict:
+    async def get_credential_schema(self, credential_type: str) -> dict:
         """Get the schema for a credential type."""
         if not credential_type:
             return {"error": "credential_type required (e.g., 'gmailOAuth2', 'slackApi')"}
@@ -882,7 +880,7 @@ class N8nClient:
     # Tags Management
     # =========================================================================
 
-    async def list_tags(self) -> Dict:
+    async def list_tags(self) -> dict:
         """List all tags."""
         try:
             result = await self._api_request("/tags")
@@ -904,7 +902,7 @@ class N8nClient:
         except urllib.error.HTTPError as e:
             return {"success": False, "error": f"API error: {e.code}"}
 
-    async def create_tag(self, name: str) -> Dict:
+    async def create_tag(self, name: str) -> dict:
         """Create a new tag."""
         if not name:
             return {"error": "name required"}
@@ -924,11 +922,11 @@ class N8nClient:
             error_body = ""
             try:
                 error_body = e.read().decode()
-            except:
+            except Exception:
                 pass
             return {"success": False, "error": f"Create failed: {e.code}", "details": error_body}
 
-    async def delete_tag(self, tag_id: str) -> Dict:
+    async def delete_tag(self, tag_id: str) -> dict:
         """Delete a tag by ID."""
         if not tag_id:
             return {"error": "tag_id required"}
@@ -948,7 +946,7 @@ class N8nClient:
     # Templates
     # =========================================================================
 
-    async def deploy_template(self, template_id: int, name: str = None) -> Dict:
+    async def deploy_template(self, template_id: int, name: str = None) -> dict:
         """Deploy a template from n8n.io."""
         if not template_id:
             return {"error": "template_id required"}

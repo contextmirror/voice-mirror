@@ -1,13 +1,12 @@
 """Factory for creating STT adapters."""
 
-from typing import Optional, List, Dict
+
 from .base import STTAdapter
 from .parakeet import ParakeetAdapter
-from .whisper import WhisperAdapter, FasterWhisperAdapter
-
+from .whisper import FasterWhisperAdapter, WhisperAdapter
 
 # Registry of available adapters
-ADAPTERS: Dict[str, type] = {
+ADAPTERS: dict[str, type] = {
     "parakeet": ParakeetAdapter,
     "whisper": WhisperAdapter,
     "faster-whisper": FasterWhisperAdapter,
@@ -16,7 +15,7 @@ ADAPTERS: Dict[str, type] = {
 
 def create_stt_adapter(
     adapter_name: str,
-    model_name: Optional[str] = None
+    model_name: str | None = None
 ) -> STTAdapter:
     """
     Create an STT adapter by name.
@@ -44,7 +43,7 @@ def create_stt_adapter(
     return adapter_class(model_name=model_name)
 
 
-def list_available_adapters() -> List[str]:
+def list_available_adapters() -> list[str]:
     """
     List all available STT adapter names.
 

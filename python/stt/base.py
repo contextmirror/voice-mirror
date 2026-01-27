@@ -1,7 +1,7 @@
 """Base STT adapter interface."""
 
 from abc import ABC, abstractmethod
-from typing import Optional
+
 import numpy as np
 
 
@@ -13,7 +13,7 @@ class STTAdapter(ABC):
     the transcribe method.
     """
 
-    def __init__(self, model_name: Optional[str] = None):
+    def __init__(self, model_name: str | None = None):
         """
         Initialize the STT adapter.
 

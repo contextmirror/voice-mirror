@@ -2,14 +2,12 @@
 
 import asyncio
 import re
-import subprocess
-from pathlib import Path
-from typing import Callable, List, Optional
+from collections.abc import Callable
 
 from .base import TTSAdapter
 
 
-def _chunk_text(text: str, max_chars: int = 400) -> List[str]:
+def _chunk_text(text: str, max_chars: int = 400) -> list[str]:
     """
     Split text into chunks for streaming TTS.
     Splits on sentence boundaries (. ! ?) first, then falls back to
@@ -57,7 +55,7 @@ KOKORO_VOICES = [
 class KokoroAdapter(TTSAdapter):
     """TTS adapter using Kokoro ONNX for local synthesis."""
 
-    def __init__(self, voice: Optional[str] = None):
+    def __init__(self, voice: str | None = None):
         """
         Initialize Kokoro adapter.
 
@@ -70,11 +68,11 @@ class KokoroAdapter(TTSAdapter):
     def load(self) -> bool:
         """Load the Kokoro TTS model."""
         try:
-            from kokoro_onnx import Kokoro
             import soundfile as sf
+            from kokoro_onnx import Kokoro
             self._soundfile = sf
 
-            print(f"Loading Kokoro TTS model...")
+            print("Loading Kokoro TTS model...")
             print("  (First run downloads model, please wait...)")
             self.model = Kokoro("kokoro-v1.0.onnx", "voices-v1.0.bin")
             print(f"✅ Kokoro TTS loaded (voice: {self.voice})")
@@ -91,8 +89,8 @@ class KokoroAdapter(TTSAdapter):
     async def speak(
         self,
         text: str,
-        on_start: Optional[Callable[[], None]] = None,
-        on_end: Optional[Callable[[], None]] = None
+        on_start: Callable[[], None] | None = None,
+        on_end: Callable[[], None] | None = None
     ) -> None:
         """Synthesize text and play audio using Kokoro with chunked streaming."""
         # Strip markdown before speaking
@@ -169,6 +167,6 @@ class KokoroAdapter(TTSAdapter):
         return f"Kokoro ({self.voice})"
 
     @property
-    def available_voices(self) -> List[str]:
+    def available_voices(self) -> list[str]:
         """Return available Kokoro voice IDs."""
         return KOKORO_VOICES.copy()

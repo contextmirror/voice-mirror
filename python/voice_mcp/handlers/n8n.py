@@ -5,11 +5,11 @@ Wraps the shared N8nClient for MCP protocol access.
 Claude Code uses this via MCP tools.
 """
 
-from typing import Any, Dict
-
 # Import the shared client
 import sys
 from pathlib import Path
+from typing import Any
+
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from shared.n8n_client import N8nClient
 
@@ -24,7 +24,7 @@ class N8nToolHandler:
     def __init__(self):
         self.client = N8nClient()
 
-    async def handle(self, tool_name: str, args: Dict[str, Any]) -> Dict[str, Any]:
+    async def handle(self, tool_name: str, args: dict[str, Any]) -> dict[str, Any]:
         """Route tool call to appropriate method."""
         handlers = {
             # Node discovery
@@ -71,13 +71,13 @@ class N8nToolHandler:
     # Node Discovery
     # =========================================================================
 
-    async def _search_nodes(self, args: Dict) -> Dict:
+    async def _search_nodes(self, args: dict) -> dict:
         return await self.client.search_nodes(
             query=args.get("query", ""),
             limit=args.get("limit", 10)
         )
 
-    async def _get_node(self, args: Dict) -> Dict:
+    async def _get_node(self, args: dict) -> dict:
         return await self.client.get_node(
             node_type=args.get("node_type", ""),
             detail=args.get("detail", "standard")
@@ -87,42 +87,42 @@ class N8nToolHandler:
     # Workflow Management
     # =========================================================================
 
-    async def _list_workflows(self, args: Dict) -> Dict:
+    async def _list_workflows(self, args: dict) -> dict:
         return await self.client.list_workflows(
             active_only=args.get("active_only", False)
         )
 
-    async def _get_workflow(self, args: Dict) -> Dict:
+    async def _get_workflow(self, args: dict) -> dict:
         return await self.client.get_workflow(
             workflow_id=args.get("workflow_id")
         )
 
-    async def _create_workflow(self, args: Dict) -> Dict:
+    async def _create_workflow(self, args: dict) -> dict:
         return await self.client.create_workflow(
             name=args.get("name"),
             nodes=args.get("nodes", []),
             connections=args.get("connections", {})
         )
 
-    async def _update_workflow(self, args: Dict) -> Dict:
+    async def _update_workflow(self, args: dict) -> dict:
         return await self.client.update_workflow(
             workflow_id=args.get("workflow_id"),
             workflow_data=args.get("workflow_data"),
             operations=args.get("operations", [])
         )
 
-    async def _delete_workflow(self, args: Dict) -> Dict:
+    async def _delete_workflow(self, args: dict) -> dict:
         return await self.client.delete_workflow(
             workflow_id=args.get("workflow_id")
         )
 
-    async def _validate_workflow(self, args: Dict) -> Dict:
+    async def _validate_workflow(self, args: dict) -> dict:
         return await self.client.validate_workflow(
             workflow_id=args.get("workflow_id"),
             workflow_json=args.get("workflow_json")
         )
 
-    async def _trigger_workflow(self, args: Dict) -> Dict:
+    async def _trigger_workflow(self, args: dict) -> dict:
         return await self.client.trigger_workflow(
             workflow_id=args.get("workflow_id"),
             webhook_path=args.get("webhook_path"),
@@ -133,25 +133,25 @@ class N8nToolHandler:
     # Execution Management
     # =========================================================================
 
-    async def _get_executions(self, args: Dict) -> Dict:
+    async def _get_executions(self, args: dict) -> dict:
         return await self.client.get_executions(
             workflow_id=args.get("workflow_id"),
             status=args.get("status"),
             limit=args.get("limit", 10)
         )
 
-    async def _get_execution(self, args: Dict) -> Dict:
+    async def _get_execution(self, args: dict) -> dict:
         return await self.client.get_execution(
             execution_id=args.get("execution_id"),
             include_data=args.get("include_data", False)
         )
 
-    async def _delete_execution(self, args: Dict) -> Dict:
+    async def _delete_execution(self, args: dict) -> dict:
         return await self.client.delete_execution(
             execution_id=args.get("execution_id")
         )
 
-    async def _retry_execution(self, args: Dict) -> Dict:
+    async def _retry_execution(self, args: dict) -> dict:
         return await self.client.retry_execution(
             execution_id=args.get("execution_id"),
             load_workflow=args.get("load_workflow", True)
@@ -161,7 +161,7 @@ class N8nToolHandler:
     # Credentials Management
     # =========================================================================
 
-    async def _list_credentials(self, args: Dict) -> Dict:
+    async def _list_credentials(self, args: dict) -> dict:
         """n8n public API does not support listing credentials."""
         return {
             "success": False,
@@ -174,19 +174,19 @@ class N8nToolHandler:
             ]
         }
 
-    async def _create_credential(self, args: Dict) -> Dict:
+    async def _create_credential(self, args: dict) -> dict:
         return await self.client.create_credential(
             name=args.get("name"),
             cred_type=args.get("type"),
             data=args.get("data", {})
         )
 
-    async def _delete_credential(self, args: Dict) -> Dict:
+    async def _delete_credential(self, args: dict) -> dict:
         return await self.client.delete_credential(
             credential_id=args.get("credential_id")
         )
 
-    async def _get_credential_schema(self, args: Dict) -> Dict:
+    async def _get_credential_schema(self, args: dict) -> dict:
         return await self.client.get_credential_schema(
             credential_type=args.get("credential_type")
         )
@@ -195,15 +195,15 @@ class N8nToolHandler:
     # Tags Management
     # =========================================================================
 
-    async def _list_tags(self, args: Dict) -> Dict:
+    async def _list_tags(self, args: dict) -> dict:
         return await self.client.list_tags()
 
-    async def _create_tag(self, args: Dict) -> Dict:
+    async def _create_tag(self, args: dict) -> dict:
         return await self.client.create_tag(
             name=args.get("name")
         )
 
-    async def _delete_tag(self, args: Dict) -> Dict:
+    async def _delete_tag(self, args: dict) -> dict:
         return await self.client.delete_tag(
             tag_id=args.get("tag_id")
         )
@@ -212,7 +212,7 @@ class N8nToolHandler:
     # Variables
     # =========================================================================
 
-    async def _list_variables(self, args: Dict) -> Dict:
+    async def _list_variables(self, args: dict) -> dict:
         """Variables require n8n Enterprise license."""
         return {
             "success": False,
@@ -224,7 +224,7 @@ class N8nToolHandler:
     # Templates
     # =========================================================================
 
-    async def _deploy_template(self, args: Dict) -> Dict:
+    async def _deploy_template(self, args: dict) -> dict:
         return await self.client.deploy_template(
             template_id=args.get("template_id"),
             name=args.get("name")

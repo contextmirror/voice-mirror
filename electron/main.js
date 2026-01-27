@@ -355,7 +355,13 @@ app.whenReady().then(() => {
         },
         onVoiceEvent: (event) => {
             mainWindow?.webContents.send('voice-event', event);
-        }
+        },
+        log: logger
+    });
+
+    // Dev logging from renderer → vmr.log
+    ipcMain.on('devlog', (_event, category, action, data) => {
+        logger.devlog(category, action, data || {});
     });
 
     // Register IPC handlers

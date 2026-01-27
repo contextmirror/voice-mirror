@@ -76,6 +76,7 @@ export function isDuplicate(text) {
     // Check if we've seen this recently
     if (recentMessages.has(normalized)) {
         console.log('[Chat] Duplicate message suppressed:', text.slice(0, 50));
+        window.voiceMirror?.devlog('UI', 'card-dedup', { text: text.slice(0, 200), reason: 'duplicate within 5s window' });
         return true;
     }
 
@@ -132,7 +133,8 @@ export function addMessage(role, text, imageBase64 = null) {
 
             // If the message was just a tool call with no real content, don't show it
             if (isToolCallOnly(text)) {
-                return; // Don't add empty message bubble
+                window.voiceMirror?.devlog('UI', 'card-skipped', { text: text?.slice(0, 200), reason: 'tool-call-only content' });
+                return;
             }
         }
 
@@ -172,6 +174,13 @@ export function addMessage(role, text, imageBase64 = null) {
 
     chatContainer.appendChild(group);
     chatContainer.scrollTop = chatContainer.scrollHeight;
+
+    // Dev log: card rendered
+    window.voiceMirror?.devlog('UI', 'card-rendered', {
+        role,
+        text: text?.slice(0, 200),
+        source: role === 'assistant' ? state.currentProviderName : 'voice',
+    });
 }
 
 /**
@@ -234,6 +243,8 @@ export function addToolCallCard(data) {
     chatContainer.appendChild(card);
     chatContainer.scrollTop = chatContainer.scrollHeight;
 
+    window.voiceMirror?.devlog('TOOL', 'card-call', { tool: data.tool, text: argsStr.slice(0, 200) });
+
     return card;
 }
 
@@ -259,6 +270,7 @@ export function addToolResultCard(data) {
         // This keeps the UI clean - users only see successful tool results
         if (!data.success) {
             lastCallCard.style.display = 'none';
+            window.voiceMirror?.devlog('TOOL', 'card-hidden', { tool: data.tool, success: false, text: data.result?.slice(0, 200) });
             return lastCallCard;
         }
 
@@ -278,10 +290,18 @@ export function addToolResultCard(data) {
         }
 
         chatContainer.scrollTop = chatContainer.scrollHeight;
+
+        window.voiceMirror?.devlog('TOOL', 'card-result', {
+            tool: data.tool,
+            success: data.success,
+            text: data.result?.slice(0, 200),
+        });
+
         return lastCallCard;
     }
 
     // Fallback: no matching card found (shouldn't happen normally)
+    window.voiceMirror?.devlog('TOOL', 'card-result-orphan', { tool: data.tool, reason: 'no matching call card' });
     return null;
 }
 
