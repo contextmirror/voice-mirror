@@ -198,16 +198,20 @@ class QwenTTSAdapter(TTSAdapter):
             audio_file = Path("/tmp/voice_mirror_tts.wav")
             self._soundfile.write(str(audio_file), audio_data, sample_rate)
 
-            # Play using ffplay
-            subprocess.run(
-                ["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet", str(audio_file)],
-                timeout=60
-            )
+            # Play using ffplay (interruptible) - run in executor to not block event loop
+            if self._interrupted:
+                return
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, self._play_audio, str(audio_file))
         except Exception as e:
             print(f"❌ Qwen3-TTS error: {e}")
         finally:
+            self._playback_process = None
             self._is_speaking = False
-            await asyncio.sleep(0.3)
+            was_interrupted = self._interrupted
+            self._interrupted = False
+            if not was_interrupted:
+                await asyncio.sleep(0.3)
             if on_end:
                 on_end()
 

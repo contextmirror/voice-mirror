@@ -490,7 +490,10 @@ class VoiceMirror:
         # Check for push-to-talk trigger (from Electron)
         ptt_action = self.check_ptt_trigger()
         if ptt_action == "start" and not self.audio_state.is_recording:
-            # PTT pressed - start recording immediately
+            # Interrupt TTS if speaking
+            if self.tts.is_speaking:
+                self.tts.stop_speaking()
+                print("🔇 TTS interrupted by PTT")
             self.audio_state.start_recording('ptt')
             print('🔴 Recording (PTT)... (speak now)')
         elif ptt_action == "stop" and self.audio_state.is_recording and not self.audio_state.is_processing:

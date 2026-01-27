@@ -7,7 +7,7 @@
  *
  * Core tools (always loaded): claude_send, claude_inbox, claude_listen, claude_status
  * Meta tools (always loaded): load_tools, unload_tools, list_tool_groups
- * Dynamic groups: screen, memory, voice-clone, browser
+ * Dynamic groups: screen, memory, voice-clone, browser, n8n
  */
 
 const { Server } = require('@modelcontextprotocol/sdk/server/index.js');
@@ -27,6 +27,7 @@ const { handleCaptureScreen } = require('./handlers/screen');
 const { handleMemorySearch, handleMemoryGet, handleMemoryRemember, handleMemoryForget, handleMemoryStats } = require('./handlers/memory');
 const { handleCloneVoice, handleClearVoiceClone, handleListVoiceClones } = require('./handlers/voice-clone');
 const { handleBrowserControl, handleBrowserSearch, handleBrowserFetch } = require('./handlers/browser');
+const n8n = require('./handlers/n8n');
 
 // Ensure directory exists
 if (!fs.existsSync(HOME_DATA_DIR)) {
@@ -363,6 +364,138 @@ const TOOL_GROUPS = {
                 inputSchema: { type: 'object', properties: { url: { type: 'string', description: 'The URL to fetch' }, timeout: { type: 'number', description: 'Timeout in milliseconds (default: 30000, max: 60000)' }, max_length: { type: 'number', description: 'Maximum content length to return (default: 8000)' }, include_links: { type: 'boolean', description: 'Include links found on the page (default: false)' } }, required: ['url'] }
             }
         ]
+    },
+    n8n: {
+        description: 'n8n workflow automation (22 tools: workflows, executions, credentials, tags, templates)',
+        keywords: ['n8n', 'workflow', 'automation', 'trigger', 'webhook', 'execution', 'credential', 'template'],
+        tools: [
+            {
+                name: 'n8n_search_nodes',
+                description: 'Search for n8n nodes by keyword (e.g., \'gmail\', \'webhook\', \'slack\'). Returns node types and descriptions.',
+                inputSchema: { type: 'object', properties: { query: { type: 'string', description: 'Search keyword (e.g., \'gmail\', \'webhook\', \'http\')' }, limit: { type: 'number', description: 'Max results (default: 10)' } }, required: ['query'] }
+            },
+            {
+                name: 'n8n_get_node',
+                description: 'Get detailed node info including operations, parameters, and config examples. Use after search_nodes.',
+                inputSchema: { type: 'object', properties: { node_type: { type: 'string', description: 'Node type (e.g., \'nodes-base.gmail\')' }, detail: { type: 'string', enum: ['minimal', 'standard', 'full'], description: 'Detail level (default: standard)' } }, required: ['node_type'] }
+            },
+            {
+                name: 'n8n_list_workflows',
+                description: 'List all workflows in the n8n instance. Shows name, active status, and ID.',
+                inputSchema: { type: 'object', properties: { active_only: { type: 'boolean', description: 'Only show active workflows' } } }
+            },
+            {
+                name: 'n8n_get_workflow',
+                description: 'Get details of a specific workflow by ID. Returns nodes, connections, and settings.',
+                inputSchema: { type: 'object', properties: { workflow_id: { type: 'string', description: 'Workflow ID' } }, required: ['workflow_id'] }
+            },
+            {
+                name: 'n8n_create_workflow',
+                description: 'Create a new n8n workflow. Use \'n8n-nodes-base.xxx\' for node types. Connections use node NAMES not IDs.',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        name: { type: 'string', description: 'Workflow name' },
+                        nodes: { type: 'array', description: 'Array of node configurations', items: { type: 'object' } },
+                        connections: { type: 'object', description: 'Node connections (source name -> targets)' }
+                    },
+                    required: ['name', 'nodes', 'connections']
+                }
+            },
+            {
+                name: 'n8n_update_workflow',
+                description: 'Update workflow via operations (addNode, removeNode, updateNode, updateNodeCode, addConnection, removeConnection, activateWorkflow, deactivateWorkflow) or full replacement via workflow_data.',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        workflow_id: { type: 'string', description: 'Workflow ID' },
+                        operations: { type: 'array', description: 'List of operations', items: { type: 'object', properties: { type: { type: 'string' }, nodeName: { type: 'string' }, node: { type: 'object' }, parameters: { type: 'object' }, jsCode: { type: 'string' }, fromNode: { type: 'string' }, toNode: { type: 'string' }, fromIndex: { type: 'number' }, toIndex: { type: 'number' } }, required: ['type'] } },
+                        workflow_data: { type: 'object', description: 'Full workflow data for replacement' }
+                    },
+                    required: ['workflow_id']
+                }
+            },
+            {
+                name: 'n8n_delete_workflow',
+                description: 'Delete a workflow by ID. This action is permanent.',
+                inputSchema: { type: 'object', properties: { workflow_id: { type: 'string', description: 'Workflow ID' } }, required: ['workflow_id'] }
+            },
+            {
+                name: 'n8n_validate_workflow',
+                description: 'Validate a workflow configuration. Checks for errors and warnings.',
+                inputSchema: { type: 'object', properties: { workflow_id: { type: 'string', description: 'Existing workflow ID' }, workflow_json: { type: 'object', description: 'Or provide workflow JSON directly' } } }
+            },
+            {
+                name: 'n8n_trigger_workflow',
+                description: 'Trigger a workflow execution via webhook.',
+                inputSchema: { type: 'object', properties: { workflow_id: { type: 'string', description: 'Workflow ID' }, webhook_path: { type: 'string', description: 'Webhook path (if known)' }, data: { type: 'object', description: 'Data to send' } }, required: ['workflow_id'] }
+            },
+            {
+                name: 'n8n_deploy_template',
+                description: 'Deploy a template from n8n.io to the local instance.',
+                inputSchema: { type: 'object', properties: { template_id: { type: 'number', description: 'Template ID from n8n.io' }, name: { type: 'string', description: 'Custom name (optional)' } }, required: ['template_id'] }
+            },
+            {
+                name: 'n8n_get_executions',
+                description: 'Get recent executions for a workflow. Check if workflows ran successfully.',
+                inputSchema: { type: 'object', properties: { workflow_id: { type: 'string', description: 'Workflow ID (optional)' }, status: { type: 'string', enum: ['success', 'error', 'waiting'], description: 'Filter by status' }, limit: { type: 'number', description: 'Max results (default: 10)' } } }
+            },
+            {
+                name: 'n8n_get_execution',
+                description: 'Get details of a specific execution. Use include_data=true for debugging.',
+                inputSchema: { type: 'object', properties: { execution_id: { type: 'string', description: 'Execution ID' }, include_data: { type: 'boolean', description: 'Include full execution data' } }, required: ['execution_id'] }
+            },
+            {
+                name: 'n8n_delete_execution',
+                description: 'Delete an execution by ID.',
+                inputSchema: { type: 'object', properties: { execution_id: { type: 'string', description: 'Execution ID' } }, required: ['execution_id'] }
+            },
+            {
+                name: 'n8n_retry_execution',
+                description: 'Retry a failed execution. By default uses latest workflow version.',
+                inputSchema: { type: 'object', properties: { execution_id: { type: 'string', description: 'Execution ID' }, load_workflow: { type: 'boolean', description: 'Use latest workflow version (default: true)' } }, required: ['execution_id'] }
+            },
+            {
+                name: 'n8n_list_credentials',
+                description: 'List credentials. NOTE: Not supported by n8n public API - shows available operations instead.',
+                inputSchema: { type: 'object', properties: {} }
+            },
+            {
+                name: 'n8n_create_credential',
+                description: 'Create a new credential. OAuth credentials may need manual browser auth.',
+                inputSchema: { type: 'object', properties: { name: { type: 'string', description: 'Credential name' }, type: { type: 'string', description: 'Credential type (e.g., \'slackApi\', \'gmailOAuth2\')' }, data: { type: 'object', description: 'Credential data' } }, required: ['name', 'type'] }
+            },
+            {
+                name: 'n8n_delete_credential',
+                description: 'Delete a credential by ID.',
+                inputSchema: { type: 'object', properties: { credential_id: { type: 'string', description: 'Credential ID' } }, required: ['credential_id'] }
+            },
+            {
+                name: 'n8n_get_credential_schema',
+                description: 'Get schema for a credential type. Shows required fields.',
+                inputSchema: { type: 'object', properties: { credential_type: { type: 'string', description: 'Credential type (e.g., \'gmailOAuth2\', \'slackApi\')' } }, required: ['credential_type'] }
+            },
+            {
+                name: 'n8n_list_tags',
+                description: 'List all tags used for organizing workflows.',
+                inputSchema: { type: 'object', properties: {} }
+            },
+            {
+                name: 'n8n_create_tag',
+                description: 'Create a new tag for workflow organization.',
+                inputSchema: { type: 'object', properties: { name: { type: 'string', description: 'Tag name' } }, required: ['name'] }
+            },
+            {
+                name: 'n8n_delete_tag',
+                description: 'Delete a tag by ID.',
+                inputSchema: { type: 'object', properties: { tag_id: { type: 'string', description: 'Tag ID' } }, required: ['tag_id'] }
+            },
+            {
+                name: 'n8n_list_variables',
+                description: 'List global variables. NOTE: Requires n8n Enterprise license.',
+                inputSchema: { type: 'object', properties: {} }
+            }
+        ]
     }
 };
 
@@ -643,6 +776,51 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             return await handleBrowserSearch(args);
         case 'browser_fetch':
             return await handleBrowserFetch(args);
+        // n8n workflow tools
+        case 'n8n_search_nodes':
+            return await n8n.handleN8nSearchNodes(args);
+        case 'n8n_get_node':
+            return await n8n.handleN8nGetNode(args);
+        case 'n8n_list_workflows':
+            return await n8n.handleN8nListWorkflows(args);
+        case 'n8n_get_workflow':
+            return await n8n.handleN8nGetWorkflow(args);
+        case 'n8n_create_workflow':
+            return await n8n.handleN8nCreateWorkflow(args);
+        case 'n8n_update_workflow':
+            return await n8n.handleN8nUpdateWorkflow(args);
+        case 'n8n_delete_workflow':
+            return await n8n.handleN8nDeleteWorkflow(args);
+        case 'n8n_validate_workflow':
+            return await n8n.handleN8nValidateWorkflow(args);
+        case 'n8n_trigger_workflow':
+            return await n8n.handleN8nTriggerWorkflow(args);
+        case 'n8n_deploy_template':
+            return await n8n.handleN8nDeployTemplate(args);
+        case 'n8n_get_executions':
+            return await n8n.handleN8nGetExecutions(args);
+        case 'n8n_get_execution':
+            return await n8n.handleN8nGetExecution(args);
+        case 'n8n_delete_execution':
+            return await n8n.handleN8nDeleteExecution(args);
+        case 'n8n_retry_execution':
+            return await n8n.handleN8nRetryExecution(args);
+        case 'n8n_list_credentials':
+            return await n8n.handleN8nListCredentials(args);
+        case 'n8n_create_credential':
+            return await n8n.handleN8nCreateCredential(args);
+        case 'n8n_delete_credential':
+            return await n8n.handleN8nDeleteCredential(args);
+        case 'n8n_get_credential_schema':
+            return await n8n.handleN8nGetCredentialSchema(args);
+        case 'n8n_list_tags':
+            return await n8n.handleN8nListTags(args);
+        case 'n8n_create_tag':
+            return await n8n.handleN8nCreateTag(args);
+        case 'n8n_delete_tag':
+            return await n8n.handleN8nDeleteTag(args);
+        case 'n8n_list_variables':
+            return await n8n.handleN8nListVariables(args);
         default:
             return {
                 content: [{ type: 'text', text: `Unknown tool: ${name}` }],

@@ -1,6 +1,8 @@
 """Base TTS adapter interface."""
 
 import re
+import subprocess
+import time
 from abc import ABC, abstractmethod
 from typing import Callable, List, Optional
 
@@ -23,6 +25,8 @@ class TTSAdapter(ABC):
         self.voice = voice
         self.model = None
         self._is_speaking = False
+        self._playback_process = None
+        self._interrupted = False
 
     @abstractmethod
     def load(self) -> bool:
@@ -73,6 +77,37 @@ class TTSAdapter(ABC):
     def is_speaking(self) -> bool:
         """Check if currently speaking."""
         return self._is_speaking
+
+    def stop_speaking(self) -> bool:
+        """Interrupt current speech. Returns True if interrupted."""
+        if not self._is_speaking:
+            return False
+        self._interrupted = True
+        proc = self._playback_process
+        if proc and proc.poll() is None:
+            proc.kill()
+            proc.wait(timeout=2)
+        return True
+
+    def _play_audio(self, audio_file: str) -> None:
+        """Play audio via ffplay, interruptible via _interrupted flag."""
+        self._playback_process = subprocess.Popen(
+            ["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet", audio_file]
+        )
+        # Poll instead of blocking .wait() so stop_speaking() can interrupt
+        deadline = time.monotonic() + 60
+        while time.monotonic() < deadline:
+            if self._playback_process.poll() is not None:
+                break  # Process finished naturally
+            if self._interrupted:
+                self._playback_process.kill()
+                self._playback_process.wait(timeout=2)
+                break
+            time.sleep(0.05)  # 50ms poll interval
+        else:
+            # Timed out after 60s
+            self._playback_process.kill()
+            self._playback_process.wait(timeout=2)
 
     def unload(self) -> None:
         """Unload the model to free memory."""

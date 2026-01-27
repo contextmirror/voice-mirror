@@ -1,11 +1,42 @@
 """Kokoro TTS adapter."""
 
 import asyncio
+import re
 import subprocess
 from pathlib import Path
 from typing import Callable, List, Optional
 
 from .base import TTSAdapter
+
+
+def _chunk_text(text: str, max_chars: int = 400) -> List[str]:
+    """
+    Split text into chunks for streaming TTS.
+    Splits on sentence boundaries (. ! ?) first, then falls back to
+    clause boundaries (, ; :) if sentences are too long.
+    """
+    if len(text) <= max_chars:
+        return [text]
+
+    chunks = []
+    # Split on sentence-ending punctuation followed by space
+    sentences = re.split(r'(?<=[.!?])\s+', text)
+
+    current = ''
+    for sentence in sentences:
+        if not sentence.strip():
+            continue
+        # If adding this sentence exceeds max, flush current
+        if current and len(current) + len(sentence) + 1 > max_chars:
+            chunks.append(current.strip())
+            current = sentence
+        else:
+            current = (current + ' ' + sentence).strip() if current else sentence
+
+    if current.strip():
+        chunks.append(current.strip())
+
+    return chunks if chunks else [text]
 
 
 # Available Kokoro voices
@@ -63,7 +94,7 @@ class KokoroAdapter(TTSAdapter):
         on_start: Optional[Callable[[], None]] = None,
         on_end: Optional[Callable[[], None]] = None
     ) -> None:
-        """Synthesize text and play audio using Kokoro."""
+        """Synthesize text and play audio using Kokoro with chunked streaming."""
         # Strip markdown before speaking
         text = self.strip_markdown(text)
         print(f"🔊 Speaking: {text[:50]}...")
@@ -82,27 +113,53 @@ class KokoroAdapter(TTSAdapter):
                 import soundfile as sf
                 self._soundfile = sf
 
-            # Run Kokoro in thread pool to not block async loop
+            chunks = _chunk_text(text)
             loop = asyncio.get_event_loop()
-            audio_data, sample_rate = await loop.run_in_executor(
-                None,
-                lambda: self.model.create(text, voice=self.voice)
-            )
 
-            # Save to temp file
-            audio_file = Path("/tmp/voice_mirror_tts.wav")
-            self._soundfile.write(str(audio_file), audio_data, sample_rate)
+            # Pipeline: pre-synthesize next chunk while current one plays
+            next_future = None
 
-            # Play using ffplay
-            subprocess.run(
-                ["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet", str(audio_file)],
-                timeout=60
-            )
+            def _synthesize(chunk_text, idx):
+                """Synthesize a chunk and write to file. Returns the file path."""
+                audio_data, sample_rate = self.model.create(chunk_text, voice=self.voice)
+                audio_file = f"/tmp/voice_mirror_tts_{idx}.wav"
+                self._soundfile.write(audio_file, audio_data, sample_rate)
+                return audio_file
+
+            for i, chunk in enumerate(chunks):
+                if self._interrupted:
+                    break
+
+                # Get audio file: either from pre-fetched future or synthesize now
+                if next_future is not None:
+                    audio_file = await next_future
+                    next_future = None
+                else:
+                    audio_file = await loop.run_in_executor(
+                        None, _synthesize, chunk, i
+                    )
+
+                if self._interrupted:
+                    break
+
+                # Start pre-synthesizing the NEXT chunk while this one plays
+                if i + 1 < len(chunks):
+                    next_future = loop.run_in_executor(
+                        None, _synthesize, chunks[i + 1], i + 1
+                    )
+
+                # Play this chunk (non-blocking to event loop)
+                await loop.run_in_executor(None, self._play_audio, audio_file)
+
         except Exception as e:
             print(f"❌ Kokoro TTS error: {e}")
         finally:
+            self._playback_process = None
             self._is_speaking = False
-            await asyncio.sleep(0.3)
+            was_interrupted = self._interrupted
+            self._interrupted = False
+            if not was_interrupted:
+                await asyncio.sleep(0.3)
             if on_end:
                 on_end()
 
