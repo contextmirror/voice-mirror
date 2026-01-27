@@ -59,6 +59,12 @@ const {
     truncateText,
 } = require('./browser-utils');
 
+// Browser control system (CDP + Playwright + snapshots + actions)
+const browserController = require('./browser-controller');
+const config = require('./config');
+const snapshot = require('./snapshot');
+const actions = require('./actions');
+
 module.exports = {
     // Main API
     webSearch,
@@ -69,7 +75,7 @@ module.exports = {
     getSerperApiKey,
     searchSerper,
 
-    // Session management
+    // Session management (headless search/fetch)
     getBrowser,
     getPage,
     closeBrowser,
@@ -92,4 +98,10 @@ module.exports = {
     waitForRateLimit,
     resetRateLimit,
     truncateText,
+
+    // Browser control (CDP agent browser)
+    browserController,
+    browserConfig: config,
+    browserSnapshot: snapshot,
+    browserActions: actions,
 };

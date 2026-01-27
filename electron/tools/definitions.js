@@ -13,25 +13,6 @@ const tools = {
         example: '{"tool": "capture_screen", "args": {}}'
     },
 
-    web_search: {
-        name: 'web_search',
-        description: 'Search Google using a headless browser (unlimited searches)',
-        args: {
-            query: {
-                type: 'string',
-                required: true,
-                description: 'The search query'
-            },
-            max_results: {
-                type: 'number',
-                required: false,
-                default: 5,
-                description: 'Maximum number of results to return (max: 10)'
-            }
-        },
-        example: '{"tool": "web_search", "args": {"query": "weather in Edinburgh"}}'
-    },
-
     memory_search: {
         name: 'memory_search',
         description: 'Search past conversations and stored memories',
@@ -62,6 +43,44 @@ const tools = {
             }
         },
         example: '{"tool": "memory_remember", "args": {"content": "User prefers dark mode", "tier": "core"}}'
+    },
+
+    browser_control: {
+        name: 'browser_control',
+        description: 'Control a visible Chrome browser — search the web, open pages, read content, click elements, type text. Use this for detailed web research that needs a real browser.',
+        args: {
+            action: {
+                type: 'string',
+                required: true,
+                description: 'Action: search, open, snapshot, click, type, fill, press, navigate, screenshot, tabs, close, console, status, stop'
+            },
+            query: {
+                type: 'string',
+                required: false,
+                description: 'Search query (for action: search)'
+            },
+            url: {
+                type: 'string',
+                required: false,
+                description: 'URL (for action: open, navigate)'
+            },
+            ref: {
+                type: 'string',
+                required: false,
+                description: 'Element ref from snapshot, e.g. "e1" (for action: click, type, fill)'
+            },
+            text: {
+                type: 'string',
+                required: false,
+                description: 'Text to type/fill (for action: type, fill)'
+            },
+            key: {
+                type: 'string',
+                required: false,
+                description: 'Key name (for action: press, e.g. "Enter", "Tab")'
+            }
+        },
+        example: '{"tool": "browser_control", "args": {"action": "search", "query": "latest tech news"}}'
     },
 
     n8n_list_workflows: {

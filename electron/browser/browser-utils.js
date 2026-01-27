@@ -89,6 +89,27 @@ function toAIFriendlyError(error, context) {
         );
     }
 
+    // CDP connection errors
+    if (message.includes('WebSocket') || message.includes('CDP') || message.includes('disconnected')) {
+        return new Error(
+            `Browser connection lost for "${context}". The browser may have closed. Try browser_start to reconnect.`
+        );
+    }
+
+    // Ref resolution errors
+    if (/e\d+/.test(message) && (message.includes('ref') || message.includes('not found'))) {
+        return new Error(
+            `Element ref not found for "${context}". The page may have changed. Run browser_snapshot to get fresh refs.`
+        );
+    }
+
+    // Extension relay errors
+    if (message.includes('relay') || message.includes('extension')) {
+        return new Error(
+            `Extension relay error for "${context}". Ensure the Chrome extension is installed and a tab is attached.`
+        );
+    }
+
     // Return original error if no special handling
     return error instanceof Error ? error : new Error(message);
 }

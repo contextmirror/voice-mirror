@@ -312,10 +312,13 @@ async function captureProviderResponse(provider, message) {
                 return;
             }
 
-            if (fullResponse.length === lastLength && fullResponse.length > 0) {
+            // After tool completion, wait for meaningful follow-up content before
+            // counting stability (the LLM needs time to start generating the response)
+            const minFollowUpLength = toolCompleted ? 20 : 0;
+            if (fullResponse.length === lastLength && fullResponse.length > minFollowUpLength) {
                 stableCount++;
                 // After tool completion, need a bit more time for follow-up response
-                const neededChecks = toolCompleted ? requiredStableChecks + 2 : requiredStableChecks;
+                const neededChecks = toolCompleted ? requiredStableChecks + 4 : requiredStableChecks;
                 if (stableCount >= neededChecks) {
                     clearInterval(checkInterval);
                     cleanup();

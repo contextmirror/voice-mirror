@@ -146,12 +146,39 @@ create_tts_adapter(adapter_name, voice) → TTSAdapter
 - Fast CPU inference via ONNX
 - Good for everyday use
 
-**Qwen3-TTS adapter (~3.4GB for 1.7B model):**
+**Qwen3-TTS adapter:**
+- Model sizes: 0.6B (~2GB VRAM) or 1.7B (~4GB VRAM)
 - 9 preset speakers + voice cloning
 - `set_voice_clone(ref_audio, ref_text)` - Clone any voice from 3s sample
-- 10 languages supported
-- Requires GPU (CUDA) for good performance
-- Supports emotion/style instructions
+- 11 languages supported (English, Chinese, Japanese, Korean, German, French, Russian, Portuguese, Spanish, Italian, auto)
+- GPU recommended (auto-switches to CUDA with FlashAttention2 if available)
+- Supports emotion/style instructions via instruct parameter
+
+### Voice Cloning Workflow
+
+1. **Via MCP Tool** (recommended):
+   ```
+   User: "Clone my voice from this YouTube video"
+   Claude uses clone_voice tool with URL
+   ```
+
+2. **File-Based IPC**:
+   - MCP server writes to `voice_clone_request.json`
+   - Python detects request, downloads/processes audio
+   - Auto-transcribes if transcript not provided
+   - Creates voice clone with Qwen3-TTS Base model
+   - Writes result to `voice_clone_response.json`
+
+3. **Audio Processing Pipeline**:
+   - Download from URL (yt-dlp for YouTube, curl for direct)
+   - Convert to WAV (16kHz mono)
+   - Trim to ~5 seconds
+   - Remove silence, normalize loudness (ffmpeg)
+
+4. **Persistence**:
+   - Voice metadata saved to `~/.config/voice-mirror-electron/data/voices/`
+   - Includes transcript and creation timestamp
+   - Use `list_voice_clones` to see saved voices
 
 ### audio/wake_word.py
 OpenWakeWord detection wrapper.
@@ -203,24 +230,41 @@ InboxManager:
 
 ## MCP Tools (via voice_mcp/)
 
-- **n8n**: 20+ workflow automation tools
+The Python MCP server exposes tools for n8n and voice control:
+- **n8n**: Workflow automation (search, get, create, execute workflows)
 - **voice_status**: Get Voice Mirror status
 - **voice_speak**: Send text to TTS
+
+Note: Most MCP tools are in the Node.js MCP server (`mcp-server/`). The Python MCP server is for n8n integration.
 
 ---
 
 ## Dependencies
 
+### Core (requirements.txt)
 ```
 openwakeword>=0.6.0          # Wake word detection
 sounddevice>=0.4.6           # Audio capture
 numpy>=1.24.0                # Audio processing
-onnx-asr>=0.10.0             # Parakeet STT
-kokoro-onnx>=0.4.0           # TTS
+onnx-asr>=0.10.0             # Parakeet STT (default)
+kokoro-onnx>=0.4.0           # Kokoro TTS (default)
 soundfile>=0.13.0            # WAV file I/O
 anthropic>=0.40.0            # Claude API (optional)
 psutil                       # Process management
 ```
+
+### Optional (for advanced features)
+```
+openai-whisper               # Whisper STT adapter
+faster-whisper               # Faster-Whisper STT adapter
+qwen-tts                     # Qwen3-TTS with voice cloning
+torch                        # GPU support for Qwen3-TTS
+scipy                        # Audio resampling for voice cloning
+```
+
+### External Tools
+- `ffmpeg` - Required for voice cloning audio processing
+- `yt-dlp` - Required for downloading audio from URLs
 
 ---
 

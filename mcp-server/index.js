@@ -320,7 +320,164 @@ const TOOLS = [
             properties: {}
         }
     },
-    // Browser Tools (headless Playwright)
+    // Browser Control Tools (CDP agent browser)
+    {
+        name: 'browser_start',
+        description: 'Launch a managed Chrome browser instance with CDP debugging enabled. Call this before using other browser control tools.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                profile: { type: 'string', description: 'Browser profile name (default: "default")' }
+            }
+        }
+    },
+    {
+        name: 'browser_stop',
+        description: 'Stop the managed Chrome browser instance.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                profile: { type: 'string', description: 'Browser profile name' }
+            }
+        }
+    },
+    {
+        name: 'browser_status',
+        description: 'Get the status of the browser (running, CDP ready, tab count).',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                profile: { type: 'string', description: 'Browser profile name' }
+            }
+        }
+    },
+    {
+        name: 'browser_tabs',
+        description: 'List all open browser tabs with their targetId, title, and URL.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                profile: { type: 'string', description: 'Browser profile name' }
+            }
+        }
+    },
+    {
+        name: 'browser_open',
+        description: 'Open a new browser tab with the given URL.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                url: { type: 'string', description: 'URL to open' },
+                profile: { type: 'string', description: 'Browser profile name' }
+            },
+            required: ['url']
+        }
+    },
+    {
+        name: 'browser_close_tab',
+        description: 'Close a browser tab by its targetId.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                targetId: { type: 'string', description: 'Target ID of the tab to close' },
+                profile: { type: 'string', description: 'Browser profile name' }
+            },
+            required: ['targetId']
+        }
+    },
+    {
+        name: 'browser_focus',
+        description: 'Focus/activate a browser tab by its targetId.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                targetId: { type: 'string', description: 'Target ID of the tab to focus' },
+                profile: { type: 'string', description: 'Browser profile name' }
+            },
+            required: ['targetId']
+        }
+    },
+    {
+        name: 'browser_navigate',
+        description: 'Navigate a browser tab to a new URL.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                url: { type: 'string', description: 'URL to navigate to' },
+                targetId: { type: 'string', description: 'Target ID (uses active tab if omitted)' },
+                profile: { type: 'string', description: 'Browser profile name' }
+            },
+            required: ['url']
+        }
+    },
+    {
+        name: 'browser_screenshot',
+        description: 'Take a screenshot of a browser tab. Returns the screenshot as a base64 image.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                targetId: { type: 'string', description: 'Target ID (uses active tab if omitted)' },
+                fullPage: { type: 'boolean', description: 'Capture full page (default: false)' },
+                ref: { type: 'string', description: 'Element ref (e1, e2...) to screenshot' },
+                profile: { type: 'string', description: 'Browser profile name' }
+            }
+        }
+    },
+    {
+        name: 'browser_snapshot',
+        description: 'Take an accessibility snapshot of a browser tab. Returns the page structure with element refs (e1, e2...) that can be used with browser_act.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                targetId: { type: 'string', description: 'Target ID (uses active tab if omitted)' },
+                format: { type: 'string', enum: ['role', 'aria', 'ai'], description: 'Snapshot format (default: role)' },
+                interactive: { type: 'boolean', description: 'Only show interactive elements' },
+                compact: { type: 'boolean', description: 'Remove unnamed structural elements' },
+                selector: { type: 'string', description: 'CSS selector to scope snapshot' },
+                profile: { type: 'string', description: 'Browser profile name' }
+            }
+        }
+    },
+    {
+        name: 'browser_act',
+        description: 'Execute an action on a browser page element. Use refs from browser_snapshot (e.g. e1, e2). Actions: click, type, fill, hover, press, select, drag, evaluate, wait, upload, resize.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                request: {
+                    type: 'object',
+                    description: 'Action request: {kind: "click"|"type"|"fill"|"hover"|"press"|"select"|"drag"|"evaluate"|"wait"|"upload"|"resize", ref?: "e1", text?: "...", ...}',
+                    properties: {
+                        kind: { type: 'string', description: 'Action type' },
+                        ref: { type: 'string', description: 'Element ref from snapshot' },
+                        text: { type: 'string', description: 'Text to type/fill' },
+                        key: { type: 'string', description: 'Key to press (e.g. "Enter")' },
+                        expression: { type: 'string', description: 'JS expression for evaluate' },
+                        selector: { type: 'string', description: 'CSS selector (alternative to ref)' },
+                        value: { type: 'string', description: 'Value for select' },
+                        startRef: { type: 'string', description: 'Drag start ref' },
+                        endRef: { type: 'string', description: 'Drag end ref' }
+                    },
+                    required: ['kind']
+                },
+                targetId: { type: 'string', description: 'Target ID (uses active tab if omitted)' },
+                profile: { type: 'string', description: 'Browser profile name' }
+            },
+            required: ['request']
+        }
+    },
+    {
+        name: 'browser_console',
+        description: 'Get console logs and errors from a browser tab.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                targetId: { type: 'string', description: 'Target ID (uses active tab if omitted)' },
+                profile: { type: 'string', description: 'Browser profile name' }
+            }
+        }
+    },
+    // Browser Tools (headless Playwright — search/fetch)
     {
         name: 'browser_search',
         description: 'Search Google using a headless browser. Returns parsed search results. Unlimited searches (no API limits).',
@@ -405,7 +562,32 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             return await handleClearVoiceClone(args);
         case 'list_voice_clones':
             return await handleListVoiceClones(args);
-        // Browser tools
+        // Browser control tools (CDP agent browser)
+        case 'browser_start':
+            return await handleBrowserControl('start', args);
+        case 'browser_stop':
+            return await handleBrowserControl('stop', args);
+        case 'browser_status':
+            return await handleBrowserControl('status', args);
+        case 'browser_tabs':
+            return await handleBrowserControl('tabs', args);
+        case 'browser_open':
+            return await handleBrowserControl('open', args);
+        case 'browser_close_tab':
+            return await handleBrowserControl('close_tab', args);
+        case 'browser_focus':
+            return await handleBrowserControl('focus', args);
+        case 'browser_navigate':
+            return await handleBrowserControl('navigate', args);
+        case 'browser_screenshot':
+            return await handleBrowserControl('screenshot', args);
+        case 'browser_snapshot':
+            return await handleBrowserControl('snapshot', args);
+        case 'browser_act':
+            return await handleBrowserControl('act', args);
+        case 'browser_console':
+            return await handleBrowserControl('console', args);
+        // Browser search/fetch tools (headless Playwright)
         case 'browser_search':
             return await handleBrowserSearch(args);
         case 'browser_fetch':
@@ -1510,6 +1692,68 @@ async function handleListVoiceClones(args) {
 // ============================================================================
 // Browser Tools (headless Playwright via Electron)
 // ============================================================================
+
+/**
+ * Generic handler for browser control tools (CDP agent browser).
+ * Uses file-based IPC to communicate with Electron's browser-watcher.
+ */
+async function handleBrowserControl(action, args) {
+    const requestPath = path.join(HOME_DATA_DIR, 'browser_request.json');
+    const responsePath = path.join(HOME_DATA_DIR, 'browser_response.json');
+
+    // Delete old response
+    if (fs.existsSync(responsePath)) {
+        fs.unlinkSync(responsePath);
+    }
+
+    // Write request
+    const requestId = `req-${Date.now()}`;
+    fs.writeFileSync(requestPath, JSON.stringify({
+        id: requestId,
+        action,
+        args: args || {},
+        timestamp: new Date().toISOString()
+    }, null, 2));
+
+    // Wait for response (up to 30s for most actions, 60s for screenshot/snapshot)
+    const longActions = new Set(['screenshot', 'snapshot', 'act', 'start']);
+    const timeoutMs = longActions.has(action) ? 60000 : 30000;
+    const startTime = Date.now();
+
+    while (Date.now() - startTime < timeoutMs) {
+        await new Promise(resolve => setTimeout(resolve, 200));
+
+        if (fs.existsSync(responsePath)) {
+            try {
+                const response = JSON.parse(fs.readFileSync(responsePath, 'utf-8'));
+
+                // Screenshot returns base64 image
+                if (action === 'screenshot' && response.base64) {
+                    return {
+                        content: [
+                            { type: 'image', data: response.base64, mimeType: response.contentType || 'image/png' },
+                            { type: 'text', text: `Screenshot captured.` }
+                        ]
+                    };
+                }
+
+                // Format result as text
+                const text = typeof response === 'string' ? response : JSON.stringify(response, null, 2);
+                return {
+                    content: [{ type: 'text', text }],
+                    isError: !!response.error
+                };
+            } catch {
+                // JSON parse error, continue waiting
+            }
+        }
+    }
+
+    return {
+        content: [{ type: 'text', text: `Browser ${action} timed out. Is the Voice Mirror app running?` }],
+        isError: true
+    };
+}
 
 /**
  * browser_search - Search the web using headless browser

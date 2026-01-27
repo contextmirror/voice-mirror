@@ -1,6 +1,7 @@
 /**
  * Browser request watcher service for Voice Mirror Electron.
- * Watches for browser requests from Claude via MCP (browser_search, browser_fetch).
+ * Watches for browser requests from Claude via MCP.
+ * Supports: search, fetch, and full browser control (start, stop, tabs, snapshot, act, etc.)
  */
 
 const fs = require('fs');
@@ -18,20 +19,29 @@ function createBrowserWatcher(options = {}) {
 
     let watcher = null;
     let browserModule = null;
+    let controllerModule = null;
 
     /**
-     * Lazy-load the browser module.
-     * This avoids loading Playwright until actually needed.
+     * Lazy-load the browser module (search/fetch).
      */
     function getBrowserModule() {
         if (!browserModule) {
             browserModule = require('../browser');
-            // Configure Serper API key for web search
             if (serperApiKey) {
                 browserModule.setSerperApiKey(serperApiKey);
             }
         }
         return browserModule;
+    }
+
+    /**
+     * Lazy-load the browser controller (CDP agent browser).
+     */
+    function getController() {
+        if (!controllerModule) {
+            controllerModule = require('../browser/browser-controller');
+        }
+        return controllerModule;
     }
 
     /**
@@ -68,15 +78,59 @@ function createBrowserWatcher(options = {}) {
                 console.log(`[BrowserWatcher] Request: ${request.action}`);
 
                 let result;
-                const browser = getBrowserModule();
+                const args = request.args || {};
+                const profile = args.profile;
 
                 switch (request.action) {
+                    // --- Existing search/fetch ---
                     case 'search':
-                        result = await browser.webSearch(request.args);
+                        result = await getBrowserModule().webSearch(args);
                         break;
                     case 'fetch':
-                        result = await browser.fetchUrl(request.args);
+                        result = await getBrowserModule().fetchUrl(args);
                         break;
+
+                    // --- Browser control ---
+                    case 'start':
+                        result = await getController().ensureBrowserAvailable(profile);
+                        break;
+                    case 'stop':
+                        result = await getController().stopBrowser(profile);
+                        break;
+                    case 'status':
+                        result = await getController().getStatus(profile);
+                        break;
+                    case 'tabs':
+                        result = { ok: true, tabs: await getController().listTabs(profile) };
+                        break;
+                    case 'open':
+                        result = await getController().openTab(args.url, profile);
+                        break;
+                    case 'close_tab':
+                        result = await getController().closeTab(args.targetId, profile);
+                        break;
+                    case 'focus':
+                        result = await getController().focusTab(args.targetId, profile);
+                        break;
+                    case 'navigate':
+                        result = await getController().navigateTab(args.url, args.targetId, profile);
+                        break;
+                    case 'screenshot':
+                        result = await getController().screenshotTab(args, profile);
+                        break;
+                    case 'snapshot':
+                        result = await getController().snapshotTab(args, profile);
+                        break;
+                    case 'act':
+                        result = await getController().actOnTab(args.request || args, args.targetId, profile);
+                        break;
+                    case 'console':
+                        result = await getController().getConsoleLog(args.targetId, profile);
+                        break;
+                    case 'profiles':
+                        result = { ok: true, profiles: await getController().listProfiles() };
+                        break;
+
                     default:
                         result = { success: false, error: `Unknown browser action: ${request.action}` };
                 }

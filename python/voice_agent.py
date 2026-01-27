@@ -572,7 +572,7 @@ class VoiceMirror:
             msg_id = self.send_to_inbox(text)
 
             # Wait for AI provider to respond via inbox
-            response = await self.wait_for_claude_response(msg_id, timeout=30.0)
+            response = await self.wait_for_claude_response(msg_id, timeout=90.0)
             if response:
                 print(f"💬 {self._ai_provider['name']}: {response}")
                 # Strip provider prefix before speaking (e.g., "Claude: " -> "")

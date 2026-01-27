@@ -160,7 +160,11 @@ class ToolExecutor {
      * @param {number} timeoutMs - Timeout in milliseconds (default 30s)
      * @returns {Promise<Object>} Execution result
      */
-    async execute(toolName, args = {}, timeoutMs = TOOL_TIMEOUT_MS) {
+    async execute(toolName, args = {}, timeoutMs) {
+        // Browser control needs more time (launches Chrome, waits for pages)
+        if (!timeoutMs) {
+            timeoutMs = toolName === 'browser_control' ? 60000 : TOOL_TIMEOUT_MS;
+        }
         console.log(`[ToolExecutor] Executing: ${toolName}`, args);
 
         // Validate arguments
@@ -194,8 +198,6 @@ class ToolExecutor {
         switch (toolName) {
             case 'capture_screen':
                 return await handlers.captureScreen(args);
-            case 'web_search':
-                return await handlers.webSearch(args);
             case 'memory_search':
                 return await handlers.memorySearch(args);
             case 'memory_remember':
@@ -204,6 +206,8 @@ class ToolExecutor {
                 return await handlers.n8nListWorkflows(args);
             case 'n8n_trigger_workflow':
                 return await handlers.n8nTriggerWorkflow(args);
+            case 'browser_control':
+                return await handlers.browserControl(args);
             default:
                 return { success: false, error: `No handler for tool: ${toolName}` };
         }

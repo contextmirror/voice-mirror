@@ -461,14 +461,13 @@ async function init() {
     window.voiceMirror.claude.onOutput(handleAIOutput);
 
     // Listen for tool events (local LLM tool system)
+    // Tool calls happen silently in the backend — only the final response is shown
     window.voiceMirror.tools.onToolCall((data) => {
         console.log('[Tool Call]', data);
-        addToolCallCard(data);
     });
 
     window.voiceMirror.tools.onToolResult((data) => {
         console.log('[Tool Result]', data);
-        addToolResultCard(data);
     });
 
     // Listen for open-settings command from tray menu

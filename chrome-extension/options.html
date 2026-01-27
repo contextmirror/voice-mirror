@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Voice Mirror Browser Relay — Options</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 600px;
+            margin: 40px auto;
+            padding: 0 20px;
+            color: #1a1a2e;
+            background: #f8f9fa;
+        }
+        h1 {
+            color: #7C3AED;
+            font-size: 1.5em;
+            margin-bottom: 0.5em;
+        }
+        .section {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 16px 0;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        label { font-weight: 600; display: block; margin-bottom: 6px; }
+        input[type="number"] {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            width: 120px;
+        }
+        button {
+            background: #7C3AED;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-top: 8px;
+        }
+        button:hover { background: #6D28D9; }
+        .status { margin-top: 8px; font-size: 13px; color: #666; }
+        .success { color: #059669; }
+        .steps { padding-left: 20px; }
+        .steps li { margin: 8px 0; }
+        code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-size: 13px; }
+    </style>
+</head>
+<body>
+    <h1>Voice Mirror Browser Relay</h1>
+    <p>This extension connects your browser tabs to Voice Mirror via a local CDP relay server.</p>
+
+    <div class="section">
+        <h2>Setup</h2>
+        <ol class="steps">
+            <li>Start Voice Mirror Electron app</li>
+            <li>Use <code>browser_start</code> with an extension profile, or ensure the relay server is running</li>
+            <li>Click the extension icon on any tab to attach it</li>
+            <li>The badge shows <strong style="color:#7C3AED">ON</strong> when attached</li>
+            <li>Click again to detach</li>
+        </ol>
+    </div>
+
+    <div class="section">
+        <label for="port">Relay Server Port</label>
+        <input type="number" id="port" min="1" max="65535" value="19202">
+        <br>
+        <button id="save">Save</button>
+        <div class="status" id="status"></div>
+    </div>
+
+    <script>
+        const portInput = document.getElementById('port');
+        const saveBtn = document.getElementById('save');
+        const statusEl = document.getElementById('status');
+
+        chrome.storage.local.get(['relayPort'], (stored) => {
+            if (stored.relayPort) portInput.value = stored.relayPort;
+        });
+
+        saveBtn.addEventListener('click', () => {
+            const port = parseInt(portInput.value, 10);
+            if (!port || port < 1 || port > 65535) {
+                statusEl.textContent = 'Invalid port number.';
+                statusEl.className = 'status';
+                return;
+            }
+            chrome.storage.local.set({ relayPort: port }, () => {
+                statusEl.textContent = `Saved. Relay port set to ${port}.`;
+                statusEl.className = 'status success';
+            });
+        });
+    </script>
+</body>
+</html>
