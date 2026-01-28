@@ -242,10 +242,30 @@ function createInboxWatcher(options = {}) {
     }
 
     /**
-     * Clear processed user message IDs (for provider switch).
+     * Re-seed processed user message IDs from the current inbox file.
+     * Called on provider switch so that old messages aren't re-forwarded
+     * to the new provider, but new messages arriving after the switch are.
      */
     function clearProcessedUserMessageIds() {
         processedUserMessageIds.clear();
+
+        // Re-seed from current inbox to mark all existing messages as already processed
+        const contextMirrorDir = dataDir || path.join(process.env.HOME || process.env.USERPROFILE, '.config', 'voice-mirror-electron', 'data');
+        const inboxPath = path.join(contextMirrorDir, 'inbox.json');
+        try {
+            if (fs.existsSync(inboxPath)) {
+                const data = JSON.parse(fs.readFileSync(inboxPath, 'utf-8'));
+                const messages = data.messages || [];
+                for (const msg of messages) {
+                    if (msg.id && msg.from === 'nathan') {
+                        processedUserMessageIds.add(msg.id);
+                    }
+                }
+                console.log(`[InboxWatcher] Re-seeded ${processedUserMessageIds.size} user message IDs for provider switch`);
+            }
+        } catch (err) {
+            console.error('[InboxWatcher] Failed to re-seed message IDs:', err);
+        }
     }
 
     /**
@@ -280,6 +300,8 @@ async function captureProviderResponse(provider, message, _devlog = () => {}) {
         let allOutput = '';  // Never reset — keeps everything for fallback extraction
         let toolInProgress = false;
         let finalResponse = '';
+        let resolved = false;  // Guard: prevent double-resolve from timeout + stability race
+        let timeoutHandle = null;
         const originalEmit = provider.emitOutput.bind(provider);
 
         // Track tool execution state via callbacks
@@ -293,7 +315,17 @@ async function captureProviderResponse(provider, message, _devlog = () => {}) {
         let maxIterationsReached = false;
         let emptyAfterToolChecks = 0;
 
+        function finish(response, reason) {
+            if (resolved) return;
+            resolved = true;
+            clearInterval(checkInterval);
+            if (timeoutHandle) clearTimeout(timeoutHandle);
+            cleanup();
+            resolve(response || null);
+        }
+
         provider.onToolCall = (data) => {
+            if (resolved) return;
             toolInProgress = true;
             toolCount++;
             console.log(`[InboxWatcher] Tool call in progress: ${data.tool} (call #${toolCount})`);
@@ -302,6 +334,7 @@ async function captureProviderResponse(provider, message, _devlog = () => {}) {
         };
 
         provider.onToolResult = (data) => {
+            if (resolved) return;
             console.log(`[InboxWatcher] Tool result received: ${data.tool} (success: ${data.success})`);
             _devlog('TOOL', 'call-result', { tool: data.tool, success: data.success, text: `call #${toolCount}` });
             fullResponse = '';
@@ -316,6 +349,7 @@ async function captureProviderResponse(provider, message, _devlog = () => {}) {
         // Intercept output to capture the response
         provider.emitOutput = (type, text) => {
             originalEmit(type, text);
+            if (resolved) return;
             if (type === 'stdout' && text) {
                 fullResponse += text;
                 allOutput += text;
@@ -333,6 +367,8 @@ async function captureProviderResponse(provider, message, _devlog = () => {}) {
         // Wait for response to complete (detect when output stops)
         const requiredStableChecks = 4;  // 2 seconds of stability
         const checkInterval = setInterval(() => {
+            if (resolved) return;
+
             // Don't count stability while tool is executing (waiting for result)
             if (toolInProgress && !toolCompleted) {
                 stableCount = 0;
@@ -344,13 +380,11 @@ async function captureProviderResponse(provider, message, _devlog = () => {}) {
             if (maxIterationsReached) {
                 stableCount++;
                 if (stableCount >= 2) {  // 1 second grace period
-                    clearInterval(checkInterval);
-                    cleanup();
                     // Use allOutput since fullResponse may have been reset
                     finalResponse = extractSpeakableResponse(allOutput);
                     console.log(`[InboxWatcher] Max iterations reached, captured (${allOutput.length} chars) -> speakable: "${finalResponse?.slice(0, 100)}..."`);
                     _devlog('BACKEND', 'response-captured', { text: finalResponse, chars: allOutput.length, reason: 'max-iterations' });
-                    resolve(finalResponse || null);
+                    finish(finalResponse, 'max-iterations');
                     return;
                 }
             }
@@ -361,22 +395,21 @@ async function captureProviderResponse(provider, message, _devlog = () => {}) {
                 emptyAfterToolChecks++;
                 // After 5 seconds of nothing post-tool, extract from allOutput
                 if (emptyAfterToolChecks >= 10) {
-                    clearInterval(checkInterval);
-                    cleanup();
                     finalResponse = extractSpeakableResponse(allOutput);
                     console.log(`[InboxWatcher] No follow-up after tool, using full output (${allOutput.length} chars) -> speakable: "${finalResponse?.slice(0, 100)}..."`);
                     _devlog('BACKEND', 'response-captured', { text: finalResponse, chars: allOutput.length, reason: 'no-followup-after-tool' });
-                    resolve(finalResponse || null);
+                    finish(finalResponse, 'no-followup-after-tool');
                     return;
                 }
             }
 
-            const minFollowUpLength = toolCompleted ? 20 : 0;
+            const minFollowUpLength = toolCompleted ? 10 : 0;
             if (fullResponse.length === lastLength && fullResponse.length > minFollowUpLength) {
                 stableCount++;
 
                 // Determine how many stable checks we need
-                let neededChecks = toolCompleted ? requiredStableChecks + 4 : requiredStableChecks;
+                // Post-tool: 3 seconds stability (was 4s — too long for slower models)
+                let neededChecks = toolCompleted ? requiredStableChecks + 2 : requiredStableChecks;
 
                 // Detect if response contains tool call JSON — if so, wait for
                 // the provider's tool loop to pick it up and fire onToolCall
@@ -409,13 +442,10 @@ async function captureProviderResponse(provider, message, _devlog = () => {}) {
                 }
 
                 if (stableCount >= neededChecks) {
-                    clearInterval(checkInterval);
-                    cleanup();
-
                     finalResponse = extractSpeakableResponse(fullResponse);
                     console.log(`[InboxWatcher] Captured response (${fullResponse.length} chars) -> speakable: "${finalResponse?.slice(0, 100)}..."`);
                     _devlog('BACKEND', 'response-captured', { text: finalResponse, chars: fullResponse.length, reason: 'stable' });
-                    resolve(finalResponse || null);
+                    finish(finalResponse, 'stable');
                 }
             } else {
                 stableCount = 0;
@@ -430,13 +460,18 @@ async function captureProviderResponse(provider, message, _devlog = () => {}) {
         }
 
         // Timeout after 60 seconds (longer to allow for tool execution)
-        setTimeout(() => {
-            clearInterval(checkInterval);
-            cleanup();
+        timeoutHandle = setTimeout(() => {
+            if (resolved) return;
             // Use allOutput as fallback if fullResponse was reset and stayed empty
             const source = fullResponse.length > 0 ? fullResponse : allOutput;
             finalResponse = extractSpeakableResponse(source);
-            resolve(finalResponse || null);
+            if (finalResponse) {
+                console.log(`[InboxWatcher] Timeout captured (${source.length} chars) -> speakable: "${finalResponse?.slice(0, 100)}..."`);
+                _devlog('BACKEND', 'response-captured', { text: finalResponse, chars: source.length, reason: 'timeout-fallback' });
+            } else {
+                console.log(`[InboxWatcher] Timeout with no speakable content. fullResponse=${fullResponse.length} chars, allOutput=${allOutput.length} chars, toolCompleted=${toolCompleted}`);
+            }
+            finish(finalResponse, 'timeout');
         }, 60000);
     });
 }
