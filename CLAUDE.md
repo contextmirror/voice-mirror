@@ -99,14 +99,19 @@ Voice Mirror Electron/
 │   ├── config.js            # Cross-platform config
 │   ├── claude-spawner.js    # Claude Code PTY (node-pty)
 │   ├── overlay.html         # Main HTML with 3 pages
-│   ├── providers/           # Multi-AI provider system
-│   ├── services/            # Provider auto-detection
+│   ├── window/              # Window manager + system tray
+│   ├── providers/           # Multi-AI provider system (claude, openai-compat)
+│   ├── services/            # 9 service modules (ai-manager, python-backend, etc.)
+│   ├── browser/             # Chrome/Chromium automation (16 modules, CDP + Playwright)
+│   ├── tools/               # Tool system for local LLMs
 │   ├── js/                  # Renderer modules (9 files)
 │   └── styles/              # CSS modules (9 files)
 ├── python/                  # Voice backend (STT, TTS, wake word)
-├── mcp-server/              # MCP server (10 tools)
-├── docs/                    # Documentation (this folder)
-├── assets/                  # Icons
+├── mcp-server/              # MCP server (48 tools across 7 dynamic groups)
+├── wayland-orb/             # Rust native layer-shell overlay (Linux/Wayland)
+├── chrome-extension/        # Browser relay extension (MV3, CDP relay)
+├── docs/                    # Documentation
+├── assets/                  # Icons (16-256px)
 ├── launch.sh                # Linux/macOS launcher
 ├── launch.bat               # Windows launcher
 └── package.json
@@ -122,9 +127,12 @@ Voice Mirror Electron/
 | **Ollama** | Local API | Auto-detect, vision (llava) |
 | **LM Studio** | Local API | Auto-detect |
 | **Jan** | Local API | Auto-detect |
-| **OpenAI/Gemini/Groq** | Cloud API | Vision, fast inference |
+| **OpenAI** | Cloud API | Vision (GPT-4o) |
+| **Gemini** | Cloud API | Vision |
+| **Groq/Grok/Mistral** | Cloud API | Fast inference |
+| **OpenRouter/DeepSeek** | Cloud API | Multi-model |
 
-See [CONFIGURATION.md](docs/CONFIGURATION.md) for full provider list.
+See [CONFIGURATION.md](docs/CONFIGURATION.md) for full provider list (11 total).
 
 ---
 
@@ -144,6 +152,20 @@ See [CONFIGURATION.md](docs/CONFIGURATION.md) for full provider list.
 
 ---
 
+## MCP Tool Groups (48 tools, dynamically loaded)
+
+| Group | Tools | Key Capabilities |
+|-------|-------|-----------------|
+| **core** (4) | claude_send, claude_inbox, claude_listen, claude_status | Voice I/O, presence |
+| **meta** (3) | load_tools, unload_tools, list_tool_groups | Dynamic tool loading |
+| **screen** (1) | capture_screen | Desktop screenshots |
+| **memory** (5) | search, get, remember, forget, stats | Hybrid vector+keyword search, 3 tiers |
+| **voice-clone** (3) | clone_voice, clear_voice_clone, list_voice_clones | Voice cloning from audio |
+| **browser** (14) | start/stop, navigate, screenshot, snapshot, act, search, fetch... | Full browser automation via CDP |
+| **n8n** (22) | workflows CRUD, executions, credentials, nodes, tags, variables | n8n workflow automation |
+
+---
+
 ## Key Technical Highlights
 
 - **Standalone:** Spawns Claude Code CLI internally - no external session needed
@@ -151,6 +173,10 @@ See [CONFIGURATION.md](docs/CONFIGURATION.md) for full provider list.
 - **Multi-Provider:** Switch between Claude, Ollama, OpenAI without restart
 - **Memory System:** Persistent memory via MCP (core/stable/notes tiers)
 - **Screen Capture:** desktopCapturer + cosmic-screenshot fallback
+- **Browser Automation:** Full CDP control (click, type, screenshot, snapshot, navigate)
+- **Wayland Orb:** Native Rust layer-shell overlay for Linux/Wayland
+- **n8n Integration:** 22 tools for workflow automation
+- **Voice Cloning:** Clone any voice from 3s audio sample (Qwen3-TTS)
 
 ---
 

@@ -82,6 +82,14 @@ const DEFAULT_CONFIG = {
         provider: 'claude',           // 'claude' | 'ollama' | 'lmstudio' | 'jan' | 'openai' | etc.
         model: null,                  // Specific model ID (auto-detected for local providers)
         autoDetect: true,             // Auto-detect local LLM servers on startup
+        toolProfile: 'voice-assistant',  // Active tool profile name (Claude Code only)
+        toolProfiles: {                  // Saved tool profiles (which MCP groups to pre-load)
+            'voice-assistant': { groups: ['core', 'meta', 'screen', 'memory'] },
+            'n8n-workflows':   { groups: ['core', 'meta', 'n8n'] },
+            'web-browser':     { groups: ['core', 'meta', 'screen', 'browser'] },
+            'full-toolbox':    { groups: ['core', 'meta', 'screen', 'memory', 'voice-clone', 'browser', 'n8n'] },
+            'minimal':         { groups: ['core', 'meta'] }
+        },
         endpoints: {
             ollama: 'http://127.0.0.1:11434',
             lmstudio: 'http://127.0.0.1:1234',

@@ -149,6 +149,9 @@ export async function loadSettingsUI() {
         // Overlay display (monitor selection)
         await loadOverlayOutputs();
 
+        // Tool profiles (Claude Code only)
+        loadToolProfileUI();
+
     } catch (err) {
         console.error('[Settings] Failed to load config:', err);
     }
@@ -181,6 +184,17 @@ export function updateAIProviderUI(provider) {
 
     // Model row: show for local providers (populated from detection), hide for Claude (uses CLI)
     modelRow.style.display = provider === 'claude' ? 'none' : 'flex';
+
+    // Tool profiles: only show for Claude Code
+    const toolProfileSection = document.getElementById('tool-profile-section');
+    if (toolProfileSection) {
+        toolProfileSection.style.display = provider === 'claude' ? 'block' : 'none';
+    }
+
+    // Update terminal profile badge
+    updateTerminalProfileBadge(
+        provider === 'claude' ? (PROFILE_DISPLAY_NAMES[state.activeToolProfile] || 'Voice Assistant') : ''
+    );
 
     // Set default endpoint for local providers
     if (LOCAL_PROVIDERS.includes(provider)) {
@@ -334,6 +348,10 @@ export async function saveSettings() {
         }
     }
 
+    // Tool profile updates (Claude Code only)
+    const toolProfileUpdates = getToolProfileUpdates();
+    Object.assign(aiUpdates, toolProfileUpdates);
+
     const updates = {
         behavior: {
             activationMode: activationMode,
@@ -371,16 +389,9 @@ export async function saveSettings() {
         const newConfig = await window.voiceMirror.config.set(updates);
         console.log('[Settings] Saved config:', newConfig);
 
-        // Apply activation mode immediately
-        if (activationMode === 'callMode') {
-            await window.voiceMirror.python.setCallMode(true);
-            state.callModeActive = true;
-            updateCallModeUI();
-        } else {
-            await window.voiceMirror.python.setCallMode(false);
-            state.callModeActive = false;
-            updateCallModeUI();
-        }
+        // Update call mode UI state (actual mode change is handled by set-config in main process)
+        state.callModeActive = (activationMode === 'callMode');
+        updateCallModeUI();
 
         // Update welcome message with new mode
         window.updateWelcomeMessage();
@@ -596,6 +607,9 @@ export function initSettings() {
     // Initialize custom provider selector
     initProviderSelector();
 
+    // Initialize tool profile selector
+    initToolProfiles();
+
     // Activation mode change handler
     document.querySelectorAll('input[name="activationMode"]').forEach(radio => {
         radio.addEventListener('change', (e) => {
@@ -671,23 +685,25 @@ export function initSettings() {
         const isPttKeybind = state.recordingKeybind.id === 'keybind-ptt';
         if (!isPttKeybind) return;
 
-        let rawKey = null;
-        if (e.button === 3) {
-            rawKey = 'MouseButton4';
-        } else if (e.button === 4) {
-            rawKey = 'MouseButton5';
-        } else if (e.button === 1) {
-            rawKey = 'MouseButton3';
-        }
+        // Skip left (0) and right (2) click — those are for UI interaction
+        if (e.button === 0 || e.button === 2) return;
 
-        if (rawKey) {
-            e.preventDefault();
-            e.stopPropagation();
-            state.recordingKeybind.textContent = formatKeybind(rawKey);
-            state.recordingKeybind.dataset.rawKey = rawKey;
-            state.recordingKeybind.classList.remove('recording');
-            state.recordingKeybind = null;
-        }
+        // Map DOM button numbers to MouseButton names
+        // DOM: 1=middle, 3=back, 4=forward, 5+=extra side buttons
+        const buttonMap = {
+            1: 'MouseButton3',
+            3: 'MouseButton4',
+            4: 'MouseButton5',
+        };
+        // Support extra mouse buttons (DOM button 5+ → MouseButton6+)
+        const rawKey = buttonMap[e.button] || `MouseButton${e.button + 1}`;
+
+        e.preventDefault();
+        e.stopPropagation();
+        state.recordingKeybind.textContent = formatKeybind(rawKey);
+        state.recordingKeybind.dataset.rawKey = rawKey;
+        state.recordingKeybind.classList.remove('recording');
+        state.recordingKeybind = null;
     });
 
     // Click outside to cancel keybind recording
@@ -699,6 +715,314 @@ export function initSettings() {
         }
     });
 }
+
+// ============================================
+// Tool Profiles
+// ============================================
+
+const BUILTIN_PROFILES = ['voice-assistant', 'n8n-workflows', 'web-browser', 'full-toolbox', 'minimal'];
+
+const PROFILE_DISPLAY_NAMES = {
+    'voice-assistant': 'Voice Assistant',
+    'n8n-workflows': 'n8n Workflows',
+    'web-browser': 'Web Browser',
+    'full-toolbox': 'Full Toolbox',
+    'minimal': 'Minimal'
+};
+
+const TOOL_GROUP_COUNTS = {
+    core: 4, meta: 3, screen: 1, memory: 5, 'voice-clone': 3, browser: 14, n8n: 22
+};
+
+/**
+ * Initialize tool profile UI: dropdown toggle, checkbox handlers
+ */
+function initToolProfiles() {
+    const selector = document.getElementById('profile-selector');
+    const btn = document.getElementById('profile-selector-btn');
+    const dropdown = document.getElementById('profile-dropdown');
+
+    if (!btn || !dropdown) return;
+
+    // Toggle dropdown
+    btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        selector.classList.toggle('open');
+    });
+
+    // Close on outside click
+    document.addEventListener('click', (e) => {
+        if (!selector.contains(e.target)) {
+            selector.classList.remove('open');
+        }
+    });
+
+    // Close on escape
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') selector.classList.remove('open');
+    });
+
+    // Profile option selection
+    dropdown.addEventListener('click', (e) => {
+        const option = e.target.closest('.profile-option');
+        if (!option) return;
+
+        // Check if it's a delete button click
+        if (e.target.classList.contains('delete-custom-profile')) {
+            const profileName = e.target.dataset.profile;
+            deleteProfile(profileName);
+            e.stopPropagation();
+            return;
+        }
+
+        const profileName = option.dataset.profile;
+        if (profileName) {
+            selectToolProfile(profileName);
+            selector.classList.remove('open');
+        }
+    });
+
+    // Checkbox change → switch to custom or update profile
+    document.querySelectorAll('#tool-group-list input[data-group]').forEach(cb => {
+        cb.addEventListener('change', () => {
+            updateToolCountDisplay();
+            // If checkboxes no longer match any preset, show as "Custom"
+            checkIfCustomProfile();
+        });
+    });
+}
+
+/**
+ * Select a tool profile by name, update checkboxes and dropdown
+ */
+function selectToolProfile(profileName) {
+    const config = state.currentConfig || {};
+    const profiles = config.ai?.toolProfiles || {};
+    const profile = profiles[profileName];
+
+    if (!profile) return;
+
+    // Update dropdown display
+    const displayName = PROFILE_DISPLAY_NAMES[profileName] || profileName;
+    document.getElementById('profile-name').textContent = displayName;
+
+    // Update selected state in dropdown
+    document.querySelectorAll('.profile-option').forEach(opt => {
+        opt.classList.toggle('selected', opt.dataset.profile === profileName);
+    });
+
+    // Update checkboxes
+    const groups = profile.groups || [];
+    document.querySelectorAll('#tool-group-list input[data-group]').forEach(cb => {
+        cb.checked = groups.includes(cb.value);
+    });
+
+    // Show/hide delete button (only for custom profiles)
+    const deleteBtn = document.getElementById('delete-profile-btn');
+    if (deleteBtn) {
+        deleteBtn.style.display = BUILTIN_PROFILES.includes(profileName) ? 'none' : 'inline-block';
+    }
+
+    // Store active profile name
+    state.activeToolProfile = profileName;
+    updateToolCountDisplay();
+    updateTerminalProfileBadge(displayName);
+}
+
+/**
+ * Get currently selected groups from checkboxes
+ */
+function getSelectedGroups() {
+    const groups = ['core', 'meta']; // always included
+    document.querySelectorAll('#tool-group-list input[data-group]').forEach(cb => {
+        if (cb.checked) groups.push(cb.value);
+    });
+    return groups;
+}
+
+/**
+ * Update the tool count display
+ */
+function updateToolCountDisplay() {
+    const groups = getSelectedGroups();
+    const total = groups.reduce((sum, g) => sum + (TOOL_GROUP_COUNTS[g] || 0), 0);
+    const el = document.getElementById('tool-count');
+    if (el) el.textContent = `${total} of 48 tools`;
+}
+
+/**
+ * Check if current checkboxes match a preset, else mark as custom
+ */
+function checkIfCustomProfile() {
+    const groups = getSelectedGroups();
+    const config = state.currentConfig || {};
+    const profiles = config.ai?.toolProfiles || {};
+
+    for (const [name, profile] of Object.entries(profiles)) {
+        const pGroups = profile.groups || [];
+        if (pGroups.length === groups.length && pGroups.every(g => groups.includes(g))) {
+            selectToolProfile(name);
+            return;
+        }
+    }
+
+    // No match — show as custom (unsaved)
+    document.getElementById('profile-name').textContent = 'Custom (unsaved)';
+    state.activeToolProfile = null;
+    document.querySelectorAll('.profile-option').forEach(opt => opt.classList.remove('selected'));
+}
+
+/**
+ * Save current checkbox selection as a new custom profile
+ */
+export async function saveCustomProfile() {
+    const name = prompt('Profile name:');
+    if (!name || !name.trim()) return;
+
+    const key = name.trim().toLowerCase().replace(/\s+/g, '-');
+    const groups = getSelectedGroups();
+
+    // Save to config
+    const updates = {
+        ai: {
+            toolProfile: key,
+            toolProfiles: {
+                [key]: { groups }
+            }
+        }
+    };
+
+    const newConfig = await window.voiceMirror.config.set(updates);
+    state.currentConfig = newConfig;
+
+    // Add the display name
+    PROFILE_DISPLAY_NAMES[key] = name.trim();
+
+    // Add to dropdown UI
+    addCustomProfileToDropdown(key, name.trim(), groups);
+    selectToolProfile(key);
+}
+
+/**
+ * Add a custom profile option to the dropdown
+ */
+function addCustomProfileToDropdown(key, displayName, groups) {
+    const container = document.getElementById('custom-profiles-container');
+    const label = document.getElementById('custom-profiles-label');
+    if (!container) return;
+
+    // Show the custom section label
+    if (label) label.style.display = 'block';
+
+    // Don't duplicate
+    if (container.querySelector(`[data-profile="${key}"]`)) return;
+
+    const toolCount = groups.reduce((sum, g) => sum + (TOOL_GROUP_COUNTS[g] || 0), 0);
+    const option = document.createElement('div');
+    option.className = 'profile-option';
+    option.dataset.profile = key;
+    option.innerHTML = `
+        <span class="profile-option-name">${displayName}</span>
+        <span class="profile-option-desc">${toolCount} tools</span>
+        <button class="delete-custom-profile" data-profile="${key}">✕</button>
+    `;
+    container.appendChild(option);
+}
+
+/**
+ * Delete a custom profile
+ */
+async function deleteProfile(profileName) {
+    if (BUILTIN_PROFILES.includes(profileName)) return;
+    if (!confirm(`Delete profile "${PROFILE_DISPLAY_NAMES[profileName] || profileName}"?`)) return;
+
+    // Remove from config
+    const config = state.currentConfig || {};
+    const profiles = config.ai?.toolProfiles || {};
+    delete profiles[profileName];
+
+    await window.voiceMirror.config.set({ ai: { toolProfiles: profiles, toolProfile: 'voice-assistant' } });
+    state.currentConfig = await window.voiceMirror.config.get();
+
+    // Remove from dropdown
+    const el = document.querySelector(`#custom-profiles-container [data-profile="${profileName}"]`);
+    if (el) el.remove();
+
+    // Check if any custom profiles remain
+    const container = document.getElementById('custom-profiles-container');
+    if (container && container.children.length === 0) {
+        const label = document.getElementById('custom-profiles-label');
+        if (label) label.style.display = 'none';
+    }
+
+    selectToolProfile('voice-assistant');
+}
+
+window.deleteCurrentProfile = function() {
+    if (state.activeToolProfile) deleteProfile(state.activeToolProfile);
+};
+
+/**
+ * Load tool profile state into UI
+ */
+function loadToolProfileUI() {
+    const config = state.currentConfig || {};
+    const profileName = config.ai?.toolProfile || 'voice-assistant';
+    const profiles = config.ai?.toolProfiles || {};
+
+    // Add any custom profiles to dropdown
+    for (const [key, profile] of Object.entries(profiles)) {
+        if (!BUILTIN_PROFILES.includes(key)) {
+            PROFILE_DISPLAY_NAMES[key] = key.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+            addCustomProfileToDropdown(key, PROFILE_DISPLAY_NAMES[key], profile.groups || []);
+        }
+    }
+
+    selectToolProfile(profileName);
+}
+
+/**
+ * Get tool profile updates for saveSettings
+ */
+function getToolProfileUpdates() {
+    const groups = getSelectedGroups();
+    const profileName = state.activeToolProfile || 'voice-assistant';
+
+    const updates = { toolProfile: profileName };
+
+    // If it's an existing profile, update its groups too (in case user modified checkboxes)
+    if (profileName && !BUILTIN_PROFILES.includes(profileName)) {
+        updates.toolProfiles = {
+            [profileName]: { groups }
+        };
+    }
+
+    return updates;
+}
+
+/**
+ * Update terminal header profile badge
+ */
+function updateTerminalProfileBadge(displayName) {
+    const badges = document.querySelectorAll('.terminal-profile-badge');
+    const provider = state.currentConfig?.ai?.provider || 'claude';
+    badges.forEach(badge => {
+        badge.textContent = provider === 'claude' ? displayName : '';
+    });
+}
+
+/**
+ * Navigate to settings and scroll to tool profiles
+ */
+window.openToolProfileSettings = function() {
+    navigateTo('settings');
+    setTimeout(() => {
+        const section = document.getElementById('tool-profile-section');
+        if (section) section.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 100);
+};
+
+window.saveCustomProfile = saveCustomProfile;
 
 // Expose functions globally for onclick handlers
 window.toggleSettings = toggleSettings;

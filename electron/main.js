@@ -542,7 +542,10 @@ app.whenReady().then(() => {
     ipcMain.handle('set-config', (event, updates) => {
         const oldHotkey = appConfig?.behavior?.hotkey;
         const oldPttKey = appConfig?.behavior?.pttKey;
+        const oldActivationMode = appConfig?.behavior?.activationMode;
         const oldOutputName = appConfig?.overlay?.outputName || null;
+        const oldVoice = appConfig?.voice;
+        const oldWakeWord = appConfig?.wakeWord;
 
         appConfig = config.updateConfig(updates);
 
@@ -561,11 +564,15 @@ app.whenReady().then(() => {
             console.log(`[Voice Mirror] Re-registered shortcut: ${newShortcut} (${registered ? 'success' : 'failed'})`);
         }
 
-        // Handle push-to-talk key registration
-        if (updates.behavior?.activationMode === 'pushToTalk') {
-            registerPushToTalk(updates.behavior?.pttKey || 'Space');
-        } else if (oldPttKey) {
-            unregisterPushToTalk();
+        // Handle push-to-talk key registration (only if activation mode or PTT key actually changed)
+        const modeChanged = updates.behavior?.activationMode !== undefined && updates.behavior.activationMode !== oldActivationMode;
+        const pttKeyChanged = updates.behavior?.pttKey !== undefined && updates.behavior.pttKey !== oldPttKey;
+        if (modeChanged || pttKeyChanged) {
+            if (appConfig.behavior?.activationMode === 'pushToTalk') {
+                registerPushToTalk(appConfig.behavior?.pttKey || 'Space');
+            } else {
+                unregisterPushToTalk();
+            }
         }
 
         // Forward overlay output change to wayland orb (only if actually changed)
@@ -577,14 +584,17 @@ app.whenReady().then(() => {
             }
         }
 
-        // Notify Python backend of config changes
-        if (pythonBackend?.isRunning()) {
+        // Notify Python backend of config changes (only if voice-related settings changed)
+        const voiceSettingsChanged = modeChanged ||
+            (updates.wakeWord && JSON.stringify(updates.wakeWord) !== JSON.stringify(oldWakeWord)) ||
+            (updates.voice && JSON.stringify(updates.voice) !== JSON.stringify(oldVoice));
+        if (voiceSettingsChanged && pythonBackend?.isRunning()) {
             sendToPython({
                 command: 'config_update',
                 config: {
-                    activationMode: updates.behavior?.activationMode,
-                    wakeWord: updates.wakeWord,
-                    voice: updates.voice
+                    activationMode: appConfig.behavior?.activationMode,
+                    wakeWord: appConfig.wakeWord,
+                    voice: appConfig.voice
                 }
             });
         }

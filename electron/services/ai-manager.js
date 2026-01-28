@@ -68,7 +68,8 @@ function createAIManager(options = {}) {
             return;
         }
 
-        // Spawn Claude in a real PTY terminal
+        // Spawn Claude in a real PTY terminal (pass config for tool profile)
+        const appConfig = getConfig ? getConfig() : {};
         const pty = spawnClaude({
             onOutput: (data) => {
                 // Forward PTY output to the UI terminal
@@ -80,7 +81,8 @@ function createAIManager(options = {}) {
                 sendVoiceEvent({ type: 'claude_disconnected' });
             },
             cols: 120,
-            rows: 30
+            rows: 30,
+            appConfig
         });
 
         if (pty) {

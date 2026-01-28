@@ -51,6 +51,11 @@ function createPushToTalk(options = {}) {
         if (keyLower === 'mousebutton3' || keyLower === 'mouse3' || keyLower === 'middleclick') {
             return { type: 'mouse', button: 3 };
         }
+        // Generic mouse button (MouseButton6, MouseButton7, etc.)
+        const mouseMatch = keyLower.match(/^mousebutton(\d+)$/);
+        if (mouseMatch) {
+            return { type: 'mouse', button: parseInt(mouseMatch[1]) };
+        }
 
         // Keyboard keys - map common names to uiohook keycodes
         // See: https://github.com/aspect-build/uiohook-napi/blob/main/lib/keycodes.ts

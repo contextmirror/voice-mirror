@@ -147,6 +147,7 @@
                 <div id="terminal-container" class="hidden">
                     <div id="terminal-header">
                         <span id="terminal-title" class="terminal-title">⌘ Claude Code</span>
+                        <span id="terminal-profile-badge" class="terminal-profile-badge" onclick="openToolProfileSettings()" title="Tool Profile — click to change"></span>
                         <span id="terminal-status" class="terminal-status stopped">Stopped</span>
                         <button id="terminal-start" class="control-btn start" onclick="startAI()">Start</button>
                         <button id="terminal-clear" class="control-btn clear" onclick="clearTerminal()" title="Clear terminal">Clear</button>
@@ -164,6 +165,7 @@
                 <div id="terminal-fullscreen">
                     <div id="terminal-fullscreen-header">
                         <span id="terminal-fullscreen-title" class="terminal-title">⌘ Claude Code</span>
+                        <span id="terminal-fullscreen-profile-badge" class="terminal-profile-badge" onclick="openToolProfileSettings()" title="Tool Profile — click to change"></span>
                         <span id="terminal-fullscreen-status" class="terminal-status stopped">Stopped</span>
                         <button id="terminal-fullscreen-start" class="control-btn start" onclick="startAI()">Start</button>
                         <button id="terminal-fullscreen-clear" class="control-btn clear" onclick="clearTerminal()" title="Clear terminal">Clear</button>
@@ -273,6 +275,95 @@
                                 <button class="settings-btn secondary" id="ai-scan-btn" onclick="scanProviders()">
                                     Scan Now
                                 </button>
+                            </div>
+                        </div>
+
+                        <!-- Tool Profiles (Claude Code only) -->
+                        <div class="settings-section" id="tool-profile-section" style="display: none;">
+                            <h3>Tool Profiles</h3>
+                            <div class="settings-group">
+                                <div class="setting-row">
+                                    <label>Active Profile</label>
+                                    <div class="profile-selector" id="profile-selector">
+                                        <button class="profile-selector-btn" id="profile-selector-btn">
+                                            <span class="profile-name" id="profile-name">Voice Assistant</span>
+                                            <span class="profile-arrow">▾</span>
+                                        </button>
+                                        <div class="profile-dropdown" id="profile-dropdown">
+                                            <div class="profile-group-label">Presets</div>
+                                            <div class="profile-option" data-profile="voice-assistant">
+                                                <span class="profile-option-name">Voice Assistant</span>
+                                                <span class="profile-option-desc">screen, memory</span>
+                                            </div>
+                                            <div class="profile-option" data-profile="n8n-workflows">
+                                                <span class="profile-option-name">n8n Workflows</span>
+                                                <span class="profile-option-desc">n8n automation</span>
+                                            </div>
+                                            <div class="profile-option" data-profile="web-browser">
+                                                <span class="profile-option-name">Web Browser</span>
+                                                <span class="profile-option-desc">screen, browser</span>
+                                            </div>
+                                            <div class="profile-option" data-profile="full-toolbox">
+                                                <span class="profile-option-name">Full Toolbox</span>
+                                                <span class="profile-option-desc">all 48 tools</span>
+                                            </div>
+                                            <div class="profile-option" data-profile="minimal">
+                                                <span class="profile-option-name">Minimal</span>
+                                                <span class="profile-option-desc">voice I/O only</span>
+                                            </div>
+                                            <div class="profile-group-label" id="custom-profiles-label" style="display: none;">Custom</div>
+                                            <div id="custom-profiles-container"></div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="tool-group-list" id="tool-group-list">
+                                    <label class="tool-group-item">
+                                        <input type="checkbox" value="core" checked disabled>
+                                        <span class="tool-group-name">core <span class="tool-group-count">(4)</span></span>
+                                        <span class="tool-group-desc">Voice I/O</span>
+                                        <span class="tool-group-badge">always on</span>
+                                    </label>
+                                    <label class="tool-group-item">
+                                        <input type="checkbox" value="meta" checked disabled>
+                                        <span class="tool-group-name">meta <span class="tool-group-count">(3)</span></span>
+                                        <span class="tool-group-desc">Dynamic loading</span>
+                                        <span class="tool-group-badge">always on</span>
+                                    </label>
+                                    <label class="tool-group-item">
+                                        <input type="checkbox" value="screen" data-group="screen">
+                                        <span class="tool-group-name">screen <span class="tool-group-count">(1)</span></span>
+                                        <span class="tool-group-desc">Screenshots</span>
+                                    </label>
+                                    <label class="tool-group-item">
+                                        <input type="checkbox" value="memory" data-group="memory">
+                                        <span class="tool-group-name">memory <span class="tool-group-count">(5)</span></span>
+                                        <span class="tool-group-desc">Persistent memory</span>
+                                    </label>
+                                    <label class="tool-group-item">
+                                        <input type="checkbox" value="voice-clone" data-group="voice-clone">
+                                        <span class="tool-group-name">voice-clone <span class="tool-group-count">(3)</span></span>
+                                        <span class="tool-group-desc">Voice cloning</span>
+                                    </label>
+                                    <label class="tool-group-item">
+                                        <input type="checkbox" value="browser" data-group="browser">
+                                        <span class="tool-group-name">browser <span class="tool-group-count">(14)</span></span>
+                                        <span class="tool-group-desc">Browser automation</span>
+                                    </label>
+                                    <label class="tool-group-item">
+                                        <input type="checkbox" value="n8n" data-group="n8n">
+                                        <span class="tool-group-name">n8n <span class="tool-group-count">(22)</span></span>
+                                        <span class="tool-group-desc">Workflow automation</span>
+                                    </label>
+                                </div>
+
+                                <div class="tool-profile-footer">
+                                    <span class="tool-count" id="tool-count">7 of 48 tools</span>
+                                    <div class="tool-profile-actions">
+                                        <button class="settings-btn secondary small" id="save-profile-btn" onclick="saveCustomProfile()">Save as Profile</button>
+                                        <button class="settings-btn danger small" id="delete-profile-btn" style="display: none;" onclick="deleteCurrentProfile()">Delete</button>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 

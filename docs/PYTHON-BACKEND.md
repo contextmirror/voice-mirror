@@ -42,6 +42,8 @@ python/
 ├── voice_mcp/           # MCP server for Claude
 │   ├── server.py        # n8n + voice tools
 │   └── handlers/        # Tool handlers
+├── global_hotkey.py     # System-wide hotkey handling
+├── models/              # ONNX models (wake word, embeddings, melspec)
 └── requirements.txt     # Python dependencies
 ```
 

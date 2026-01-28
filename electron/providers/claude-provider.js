@@ -30,10 +30,10 @@ class ClaudeProvider extends BaseProvider {
     }
 
     /**
-     * Configure MCP server for Claude
+     * Configure MCP server for Claude with tool profile from config
      */
-    configureMCP() {
-        claudeSpawner.configureMCPServer();
+    configureMCP(appConfig) {
+        claudeSpawner.configureMCPServer(appConfig);
     }
 
     isPTY() {

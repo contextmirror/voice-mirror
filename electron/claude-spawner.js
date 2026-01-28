@@ -12,10 +12,15 @@ const os = require('os');
 // Path to MCP server
 const MCP_SERVER_PATH = path.join(__dirname, '..', 'mcp-server', 'index.js');
 
-// Claude settings directory (Claude Code uses ~/.config/claude-code on Linux)
-const CLAUDE_CONFIG_DIR = process.platform === 'linux'
-    ? path.join(os.homedir(), '.config', 'claude-code')
-    : path.join(os.homedir(), '.claude');
+// Claude settings directories (write to all for compatibility across Claude Code versions)
+// Project-level .claude/ takes priority in Claude Code, so we must include it
+const PROJECT_CLAUDE_DIR = path.join(__dirname, '..', '.claude');
+const CLAUDE_CONFIG_DIRS = [
+    PROJECT_CLAUDE_DIR,
+    path.join(os.homedir(), '.claude'),
+    ...(process.platform === 'linux' ? [path.join(os.homedir(), '.config', 'claude-code')] : [])
+];
+const CLAUDE_CONFIG_DIR = CLAUDE_CONFIG_DIRS[0];
 const MCP_SETTINGS_PATH = path.join(CLAUDE_CONFIG_DIR, 'mcp_settings.json');
 
 // Voice Mirror working directory
@@ -47,33 +52,64 @@ function debugLog(msg) {
 }
 
 /**
- * Configure MCP server for Claude Code
+ * Configure MCP server for Claude Code.
+ * Reads the active tool profile from config and passes ENABLED_GROUPS
+ * to the MCP server so it only registers the selected tool groups.
  */
-function configureMCPServer() {
-    // Ensure config directory exists
-    if (!fs.existsSync(CLAUDE_CONFIG_DIR)) {
-        fs.mkdirSync(CLAUDE_CONFIG_DIR, { recursive: true });
-    }
+function configureMCPServer(appConfig) {
+    // Resolve enabled groups from active tool profile
+    const profileName = appConfig?.ai?.toolProfile || 'voice-assistant';
+    const profiles = appConfig?.ai?.toolProfiles || {};
+    const groups = profiles[profileName]?.groups || ['core', 'meta', 'screen', 'memory'];
+    const enabledGroups = groups.join(',');
 
-    // Load existing settings or create new
-    let settings = { mcpServers: {} };
-    if (fs.existsSync(MCP_SETTINGS_PATH)) {
-        try {
-            settings = JSON.parse(fs.readFileSync(MCP_SETTINGS_PATH, 'utf-8'));
-        } catch {}
-    }
+    console.log(`[Claude Spawner] Tool profile: "${profileName}" → groups: ${enabledGroups}`);
 
-    // Add/update voice-mirror-electron server
-    settings.mcpServers = settings.mcpServers || {};
-    settings.mcpServers['voice-mirror-electron'] = {
+    const serverEntry = {
         command: 'node',
-        args: [MCP_SERVER_PATH],
-        env: {},
+        args: [MCP_SERVER_PATH, '--enabled-groups', enabledGroups],
+        env: {
+            ENABLED_GROUPS: enabledGroups
+        },
         disabled: false
     };
 
-    fs.writeFileSync(MCP_SETTINGS_PATH, JSON.stringify(settings, null, 2), 'utf-8');
-    console.log('[Claude Spawner] MCP settings configured');
+    // Write to all config directories for cross-version compatibility
+    for (const configDir of CLAUDE_CONFIG_DIRS) {
+        if (!fs.existsSync(configDir)) {
+            fs.mkdirSync(configDir, { recursive: true });
+        }
+
+        // Write both mcp_settings.json (legacy) and .mcp.json (current Claude Code format)
+        for (const filename of ['mcp_settings.json', '.mcp.json']) {
+            const settingsPath = path.join(configDir, filename);
+            let settings = { mcpServers: {} };
+            if (fs.existsSync(settingsPath)) {
+                try {
+                    settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
+                } catch {}
+            }
+
+            settings.mcpServers = settings.mcpServers || {};
+            settings.mcpServers['voice-mirror-electron'] = serverEntry;
+
+            fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), 'utf-8');
+            console.log(`[Claude Spawner] MCP settings written to: ${settingsPath}`);
+        }
+    }
+
+    // Also write .mcp.json to the project root (Voice Mirror working directory)
+    const projectMcpPath = path.join(VOICE_MIRROR_DIR, '.mcp.json');
+    const projectSettings = { mcpServers: { 'voice-mirror-electron': serverEntry } };
+    // Preserve existing entries in project .mcp.json
+    if (fs.existsSync(projectMcpPath)) {
+        try {
+            const existing = JSON.parse(fs.readFileSync(projectMcpPath, 'utf-8'));
+            projectSettings.mcpServers = { ...existing.mcpServers, 'voice-mirror-electron': serverEntry };
+        } catch {}
+    }
+    fs.writeFileSync(projectMcpPath, JSON.stringify(projectSettings, null, 2), 'utf-8');
+    console.log(`[Claude Spawner] MCP settings written to: ${projectMcpPath}`);
 }
 
 /**
@@ -108,8 +144,8 @@ function spawnClaude(options = {}) {
         return ptyProcess;
     }
 
-    // Configure MCP server
-    configureMCPServer();
+    // Configure MCP server with tool profile from config
+    configureMCPServer(options.appConfig);
 
     if (!isClaudeAvailable()) {
         onOutput('[Error] Claude CLI not found. Install with: npm install -g @anthropic-ai/claude-code\n');

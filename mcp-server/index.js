@@ -500,7 +500,42 @@ const TOOL_GROUPS = {
 };
 
 // Track which groups are currently loaded
-const loadedGroups = new Set(['core', 'meta']);
+// Check CLI args first (--enabled-groups core,meta,n8n), then env var as fallback
+const enabledGroupsArg = (() => {
+    // 1. CLI args (highest priority)
+    const idx = process.argv.indexOf('--enabled-groups');
+    if (idx !== -1 && process.argv[idx + 1]) return process.argv[idx + 1];
+    // 2. Environment variable
+    if (process.env.ENABLED_GROUPS) return process.env.ENABLED_GROUPS;
+    // 3. Read from app config file (fallback when Claude Code strips args/env)
+    try {
+        const os = require('os');
+        const configPath = require('path').join(os.homedir(), '.config', 'voice-mirror-electron', 'config.json');
+        const appConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+        const profileName = appConfig?.ai?.toolProfile || 'voice-assistant';
+        const profiles = appConfig?.ai?.toolProfiles || {};
+        const groups = profiles[profileName]?.groups;
+        if (groups && groups.length > 0) {
+            console.error(`[MCP] Loaded tool profile "${profileName}" from config.json: ${groups.join(',')}`);
+            return groups.join(',');
+        }
+    } catch (err) {
+        console.error(`[MCP] Could not read app config for tool profile: ${err.message}`);
+    }
+    return null;
+})();
+const loadedGroups = enabledGroupsArg
+    ? new Set(enabledGroupsArg.split(',').filter(g => TOOL_GROUPS[g]))
+    : new Set(['core', 'meta']);
+
+// When enabled groups are set, restrict auto-load to only those groups
+const allowedGroups = enabledGroupsArg
+    ? new Set(enabledGroupsArg.split(',').filter(g => TOOL_GROUPS[g]))
+    : null; // null = all groups allowed (backward compat)
+
+if (enabledGroupsArg) {
+    console.error(`[MCP] Tool profile active — enabled groups: ${[...loadedGroups].join(', ')}`);
+}
 
 // Reverse lookup: tool name → group name (built once at startup)
 const toolNameToGroup = {};
@@ -530,6 +565,8 @@ async function autoLoadByIntent(text) {
     for (const [groupName, group] of Object.entries(TOOL_GROUPS)) {
         if (group.alwaysLoaded || loadedGroups.has(groupName)) continue;
         if (!group.keywords) continue;
+        // If a tool profile restricts groups, skip groups not in the allowed set
+        if (allowedGroups && !allowedGroups.has(groupName)) continue;
 
         const matched = group.keywords.some(kw => lower.includes(kw));
         if (!matched) continue;
@@ -567,6 +604,8 @@ async function autoUnloadIdle() {
     for (const groupName of loadedGroups) {
         const group = TOOL_GROUPS[groupName];
         if (!group || group.alwaysLoaded) continue;
+        // Don't auto-unload groups pinned by tool profile
+        if (allowedGroups && allowedGroups.has(groupName)) continue;
         const lastUsed = groupLastUsed[groupName] || 0;
         if (totalCallCount - lastUsed > IDLE_CALLS_THRESHOLD) {
             toUnload.push(groupName);
