@@ -50,6 +50,11 @@ contextBridge.exposeInMainWorld('voiceMirror', {
         getPlatformInfo: () => ipcRenderer.invoke('get-platform-info')
     },
 
+    // Overlay (Wayland orb) controls
+    overlay: {
+        listOutputs: () => ipcRenderer.invoke('list-overlay-outputs'),
+    },
+
     // Send image to Python backend for Claude vision
     sendImageToBackend: (imageData) => ipcRenderer.invoke('send-image', imageData),
 

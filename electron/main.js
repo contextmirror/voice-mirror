@@ -14,8 +14,9 @@ const path = require('path');
 const fs = require('fs');
 
 // Note: --ozone-platform=x11 is passed via CLI (package.json/launch.sh)
-// to force XWayland on Linux for proper alwaysOnTop overlay support.
-// Wayland protocol doesn't allow apps to control stacking order.
+// to force XWayland on Linux. The Electron window is used for the expanded
+// panel; the collapsed orb is rendered by wayland-orb (native layer-shell)
+// when available, falling back to the Electron window on X11/non-Wayland.
 const config = require('./config');
 // Note: claude-spawner and providers are now used via ai-manager service
 const { createLogger } = require('./services/logger');
@@ -27,6 +28,7 @@ const { createAIManager } = require('./services/ai-manager');
 const { createInboxWatcher } = require('./services/inbox-watcher');
 const { createTrayService } = require('./window/tray');
 const { createWindowManager } = require('./window');
+const { createWaylandOrb } = require('./services/wayland-orb');
 
 // File logging - uses logger service
 const logger = createLogger();
@@ -39,6 +41,9 @@ const trayService = createTrayService();
 
 // Window manager (initialized after config is loaded)
 let windowManager = null;
+
+// Wayland overlay orb (native layer-shell, Linux/Wayland only)
+let waylandOrb = null;
 
 // Python backend service (initialized after config is loaded)
 let pythonBackend = null;
@@ -81,6 +86,12 @@ function getOrbSize() {
 
 function expandPanel() {
     if (windowManager) {
+        // Hide wayland orb when expanding to panel
+        if (waylandOrb?.isReady()) {
+            waylandOrb.hide();
+        }
+        // Ensure Electron window is visible before expanding
+        mainWindow?.show();
         windowManager.expand();
         isExpanded = windowManager.getIsExpanded();
     }
@@ -90,6 +101,33 @@ function collapseToOrb() {
     if (windowManager) {
         windowManager.collapse();
         isExpanded = windowManager.getIsExpanded();
+    }
+    // When wayland orb is available, always hide the Electron window and
+    // let the Rust binary be the only collapsed orb (no fallback).
+    if (waylandOrb?.isAvailable()) {
+        if (waylandOrb.isReady()) {
+            waylandOrb.show();
+        }
+        mainWindow?.hide();
+    }
+}
+
+/**
+ * Map voice-event types to wayland-orb state names.
+ */
+function forwardVoiceEventToOrb(event) {
+    if (!waylandOrb?.isReady()) return;
+    const stateMap = {
+        'idle': 'Idle',
+        'recording': 'Recording',
+        'speaking': 'Speaking',
+        'thinking': 'Thinking',
+        'processing': 'Thinking',
+        'call_active': 'Recording'
+    };
+    const orbState = stateMap[event.type];
+    if (orbState) {
+        waylandOrb.setState(orbState);
     }
 }
 
@@ -250,10 +288,12 @@ function registerPushToTalk(key) {
         onStart: () => {
             sendToPython({ command: 'start_recording' });
             mainWindow?.webContents.send('voice-event', { type: 'recording' });
+            forwardVoiceEventToOrb({ type: 'recording' });
         },
         onStop: () => {
             sendToPython({ command: 'stop_recording' });
             mainWindow?.webContents.send('voice-event', { type: 'idle' });
+            forwardVoiceEventToOrb({ type: 'idle' });
         }
     });
 }
@@ -303,6 +343,7 @@ app.whenReady().then(() => {
     pythonBackend.onEvent((event) => {
         // Send voice events to renderer
         mainWindow?.webContents.send('voice-event', event);
+        forwardVoiceEventToOrb(event);
 
         // Handle chat messages from transcription/response events
         if (event.chatMessage) {
@@ -499,6 +540,7 @@ app.whenReady().then(() => {
     ipcMain.handle('set-config', (event, updates) => {
         const oldHotkey = appConfig?.behavior?.hotkey;
         const oldPttKey = appConfig?.behavior?.pttKey;
+        const oldOutputName = appConfig?.overlay?.outputName || null;
 
         appConfig = config.updateConfig(updates);
 
@@ -524,6 +566,15 @@ app.whenReady().then(() => {
             unregisterPushToTalk();
         }
 
+        // Forward overlay output change to wayland orb (only if actually changed)
+        if (updates.overlay?.outputName !== undefined && waylandOrb?.isReady()) {
+            const newOutput = updates.overlay.outputName || null;
+            const oldOutput = oldOutputName;
+            if (newOutput !== oldOutput) {
+                waylandOrb.setOutput(newOutput);
+            }
+        }
+
         // Notify Python backend of config changes
         if (pythonBackend?.isRunning()) {
             sendToPython({
@@ -537,6 +588,14 @@ app.whenReady().then(() => {
         }
 
         return appConfig;
+    });
+
+    // Overlay output list
+    ipcMain.handle('list-overlay-outputs', async () => {
+        if (waylandOrb?.isReady()) {
+            return await waylandOrb.listOutputs();
+        }
+        return [];
     });
 
     ipcMain.handle('reset-config', () => {
@@ -752,6 +811,34 @@ app.whenReady().then(() => {
     });
 
     createWindow();
+
+    // Start native Wayland overlay orb (if available)
+    if (isLinux) {
+        waylandOrb = createWaylandOrb({
+            onExpandRequested: () => {
+                if (isExpanded) {
+                    collapseToOrb();
+                } else {
+                    expandPanel();
+                }
+            },
+            onReady: () => {
+                console.log('[Voice Mirror] Wayland overlay orb active — hiding Electron orb');
+                // Hide the Electron orb window; the Rust binary now owns the collapsed orb
+                if (!isExpanded && mainWindow) {
+                    mainWindow.hide();
+                }
+            },
+            onExit: (code) => {
+                console.log('[Voice Mirror] Wayland orb exited (code:', code, ')');
+            }
+        });
+        if (waylandOrb.isAvailable()) {
+            const savedOutput = appConfig?.overlay?.outputName || null;
+            waylandOrb.start(savedOutput);
+        }
+    }
+
     createTray();
     startScreenCaptureWatcher();
     startInboxWatcher();
@@ -836,6 +923,11 @@ app.on('before-quit', () => {
 
     // Unregister all shortcuts
     globalShortcut.unregisterAll();
+
+    // Stop wayland orb
+    if (waylandOrb) {
+        waylandOrb.stop();
+    }
 
     // Stop push-to-talk service
     if (pttService && pttService.stop()) {

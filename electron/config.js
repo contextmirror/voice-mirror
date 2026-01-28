@@ -61,6 +61,11 @@ const DEFAULT_CONFIG = {
         orbY: null
     },
 
+    // Overlay display settings (Wayland orb)
+    overlay: {
+        outputName: null  // null = default output, or monitor name like 'DP-1', 'HDMI-A-1'
+    },
+
     // Advanced
     advanced: {
         pythonPath: null,  // null = auto-detect sibling folder

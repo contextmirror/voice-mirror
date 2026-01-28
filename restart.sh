@@ -8,6 +8,9 @@ echo "Stopping Voice Mirror..."
 pkill -9 -f "electron.*Voice Mirror" 2>/dev/null
 pkill -9 -f "electron \\." 2>/dev/null
 
+# Kill Wayland orb helper
+pkill -9 -f "wayland-orb" 2>/dev/null
+
 # Kill Python voice processes
 pkill -9 -f "electron_bridge.py" 2>/dev/null
 pkill -9 -f "voice_agent.py" 2>/dev/null

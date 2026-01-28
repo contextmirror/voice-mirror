@@ -146,6 +146,9 @@ export async function loadSettingsUI() {
             scanProviders();
         }
 
+        // Overlay display (monitor selection)
+        await loadOverlayOutputs();
+
     } catch (err) {
         console.error('[Settings] Failed to load config:', err);
     }
@@ -358,7 +361,10 @@ export async function saveSettings() {
             orbSize: parseInt(document.getElementById('orb-size').value),
             theme: document.getElementById('theme-select').value
         },
-        ai: aiUpdates
+        ai: aiUpdates,
+        overlay: {
+            outputName: document.getElementById('overlay-output')?.value || null
+        }
     };
 
     try {
@@ -421,6 +427,46 @@ export async function saveSettings() {
     } catch (err) {
         console.error('[Settings] Failed to save:', err);
         alert('Failed to save settings: ' + err.message);
+    }
+}
+
+/**
+ * Load available overlay outputs (monitors) from wayland orb
+ */
+async function loadOverlayOutputs() {
+    const section = document.getElementById('overlay-display-section');
+    const select = document.getElementById('overlay-output');
+    if (!section || !select) return;
+
+    try {
+        const outputs = await window.voiceMirror.overlay.listOutputs();
+        if (!outputs || outputs.length <= 1) {
+            // Hide section if only one or no monitors
+            section.style.display = 'none';
+            return;
+        }
+
+        // Show section and populate dropdown
+        section.style.display = 'block';
+        select.innerHTML = '<option value="">Default</option>';
+        for (const output of outputs) {
+            const option = document.createElement('option');
+            option.value = output.name;
+            option.textContent = output.description || output.name;
+            if (output.active) {
+                option.selected = true;
+            }
+            select.appendChild(option);
+        }
+
+        // Set from config if not already active
+        const savedOutput = state.currentConfig?.overlay?.outputName;
+        if (savedOutput && !outputs.some(o => o.active && o.name === savedOutput)) {
+            select.value = savedOutput;
+        }
+    } catch (err) {
+        console.log('[Settings] Could not load overlay outputs:', err);
+        section.style.display = 'none';
     }
 }
 

@@ -1,0 +1,9 @@
+(function() {
+    var implementors = Object.fromEntries([["rustix",[]],["smithay_client_toolkit",[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.93.0/std/os/fd/raw/trait.FromRawFd.html\" title=\"trait std::os::fd::raw::FromRawFd\">FromRawFd</a> for <a class=\"struct\" href=\"smithay_client_toolkit/data_device_manager/struct.ReadPipe.html\" title=\"struct smithay_client_toolkit::data_device_manager::ReadPipe\">ReadPipe</a>"],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.93.0/std/os/fd/raw/trait.FromRawFd.html\" title=\"trait std::os::fd::raw::FromRawFd\">FromRawFd</a> for <a class=\"struct\" href=\"smithay_client_toolkit/data_device_manager/struct.WritePipe.html\" title=\"struct smithay_client_toolkit::data_device_manager::WritePipe\">WritePipe</a>"]]]]);
+    if (window.register_implementors) {
+        window.register_implementors(implementors);
+    } else {
+        window.pending_implementors = implementors;
+    }
+})()
+//{"start":57,"fragment_lengths":[13,720]}
