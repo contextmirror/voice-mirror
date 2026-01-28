@@ -65,6 +65,7 @@ python/.context-mirror/
 *.onnx
 *.bin
 python/*_keys.json
+python/devices.json
 python/legacy/
 
 # Linting configs (local dev only)
