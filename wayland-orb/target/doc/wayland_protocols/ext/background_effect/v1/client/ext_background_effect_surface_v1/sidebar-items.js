@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["REQ_DESTROY_OPCODE","REQ_DESTROY_SINCE","REQ_SET_BLUR_REGION_OPCODE","REQ_SET_BLUR_REGION_SINCE"],"enum":["Error","Event","Request"],"struct":["ExtBackgroundEffectSurfaceV1"]};

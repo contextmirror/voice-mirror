@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["EVT_CONFIGURE_OPCODE","EVT_CONFIGURE_SINCE","REQ_ACK_CONFIGURE_OPCODE","REQ_ACK_CONFIGURE_SINCE","REQ_DESTROY_OPCODE","REQ_DESTROY_SINCE"],"enum":["Error","Event","Request"],"struct":["ExtSessionLockSurfaceV1"]};

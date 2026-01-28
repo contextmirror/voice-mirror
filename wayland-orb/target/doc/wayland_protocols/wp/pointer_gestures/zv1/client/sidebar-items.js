@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"mod":["__interfaces","zwp_pointer_gesture_hold_v1","zwp_pointer_gesture_pinch_v1","zwp_pointer_gesture_swipe_v1","zwp_pointer_gestures_v1"]};

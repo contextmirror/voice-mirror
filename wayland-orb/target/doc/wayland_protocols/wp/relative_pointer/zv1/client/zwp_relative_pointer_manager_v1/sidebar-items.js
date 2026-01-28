@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["REQ_DESTROY_OPCODE","REQ_DESTROY_SINCE","REQ_GET_RELATIVE_POINTER_OPCODE","REQ_GET_RELATIVE_POINTER_SINCE"],"enum":["Event","Request"],"struct":["ZwpRelativePointerManagerV1"]};

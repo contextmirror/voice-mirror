@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"mod":["__interfaces","wp_fractional_scale_manager_v1","wp_fractional_scale_v1"]};

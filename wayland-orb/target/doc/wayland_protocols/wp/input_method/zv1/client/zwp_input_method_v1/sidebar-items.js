@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["EVT_ACTIVATE_OPCODE","EVT_ACTIVATE_SINCE","EVT_DEACTIVATE_OPCODE","EVT_DEACTIVATE_SINCE"],"enum":["Event","Request"],"struct":["ZwpInputMethodV1"]};

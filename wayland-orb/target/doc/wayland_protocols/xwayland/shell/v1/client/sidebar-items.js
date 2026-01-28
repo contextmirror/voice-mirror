@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"mod":["__interfaces","xwayland_shell_v1","xwayland_surface_v1"]};

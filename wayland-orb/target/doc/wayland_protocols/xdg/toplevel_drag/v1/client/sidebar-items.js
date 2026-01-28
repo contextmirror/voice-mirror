@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"mod":["__interfaces","xdg_toplevel_drag_manager_v1","xdg_toplevel_drag_v1"]};

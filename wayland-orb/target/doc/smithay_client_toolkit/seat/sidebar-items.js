@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["Capability","SeatError"],"mod":["keyboard","pointer","pointer_constraints","relative_pointer","touch"],"struct":["SeatData","SeatInfo","SeatState"],"trait":["SeatHandler"]};

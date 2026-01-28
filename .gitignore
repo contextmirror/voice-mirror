@@ -54,6 +54,9 @@ coverage/
 *.temp
 /tmp/
 
+# Rust
+wayland-orb/target/
+
 # Python
 python/.venv
 **/__pycache__/

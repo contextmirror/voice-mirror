@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["EVT_FENCED_RELEASE_OPCODE","EVT_FENCED_RELEASE_SINCE","EVT_IMMEDIATE_RELEASE_OPCODE","EVT_IMMEDIATE_RELEASE_SINCE"],"enum":["Event","Request"],"struct":["ZwpLinuxBufferReleaseV1"]};

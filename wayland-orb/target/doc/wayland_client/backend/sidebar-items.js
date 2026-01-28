@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["WaylandError"],"mod":["protocol"],"struct":["Backend","InvalidId","NoWaylandLib","ObjectId","ReadEventsGuard","WeakBackend"],"trait":["ObjectData"]};

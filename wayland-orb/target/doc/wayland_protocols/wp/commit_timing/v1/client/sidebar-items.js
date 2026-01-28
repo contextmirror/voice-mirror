@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"mod":["__interfaces","wp_commit_timer_v1","wp_commit_timing_manager_v1"]};

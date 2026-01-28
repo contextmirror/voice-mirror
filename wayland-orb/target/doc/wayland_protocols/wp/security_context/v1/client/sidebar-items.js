@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"mod":["__interfaces","wp_security_context_manager_v1","wp_security_context_v1"]};

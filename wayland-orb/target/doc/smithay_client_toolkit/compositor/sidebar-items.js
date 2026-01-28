@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"struct":["CompositorState","Region","Surface","SurfaceData"],"trait":["CompositorHandler","SurfaceDataExt"]};

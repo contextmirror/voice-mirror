@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"static":["ZWP_INPUT_TIMESTAMPS_MANAGER_V1_INTERFACE","ZWP_INPUT_TIMESTAMPS_V1_INTERFACE","zwp_input_timestamps_manager_v1_interface","zwp_input_timestamps_v1_interface"]};

@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["DEFAULT_MARGIN_BOTTOM","DEFAULT_MARGIN_RIGHT","DEFAULT_SIZE"],"fn":["handle_ipc_message","main","send_message"],"mod":["ipc","renderer"],"struct":["OrbApp"]};

@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"mod":["__interfaces","wp_linux_drm_syncobj_manager_v1","wp_linux_drm_syncobj_surface_v1","wp_linux_drm_syncobj_timeline_v1"]};

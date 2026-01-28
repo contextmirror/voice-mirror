@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"mod":["wlr_layer","xdg"],"struct":["Unsupported"],"trait":["WaylandSurface"]};

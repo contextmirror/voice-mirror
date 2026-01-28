@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["REQ_DESTROY_OPCODE","REQ_DESTROY_SINCE","REQ_LOCK_OPCODE","REQ_LOCK_SINCE"],"enum":["Event","Request"],"struct":["ExtSessionLockManagerV1"]};

@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["REQ_DESTROY_OPCODE","REQ_DESTROY_SINCE","REQ_INHIBIT_SHORTCUTS_OPCODE","REQ_INHIBIT_SHORTCUTS_SINCE"],"enum":["Error","Event","Request"],"struct":["ZwpKeyboardShortcutsInhibitManagerV1"]};

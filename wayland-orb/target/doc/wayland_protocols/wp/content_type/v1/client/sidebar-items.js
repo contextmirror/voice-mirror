@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"mod":["__interfaces","wp_content_type_manager_v1","wp_content_type_v1"]};
