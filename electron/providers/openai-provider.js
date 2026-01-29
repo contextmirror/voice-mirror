@@ -187,8 +187,9 @@ class OpenAIProvider extends BaseProvider {
             };
 
             // Ollama: set context window size (default 2048 is too small for tool use)
+            // Browser tool results can be 10K+ chars, need room for system prompt + history
             if (this.providerType === 'ollama') {
-                body.options = { num_ctx: 8192 };
+                body.options = { num_ctx: 16384 };
             }
 
             if (!this.model) {

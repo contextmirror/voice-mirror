@@ -1,41 +1,30 @@
 /**
- * Voice Mirror Headless Browser Module
+ * Voice Mirror Browser Module
  *
- * Provides web search and URL fetching capabilities.
- * Uses Serper.dev API for search (if configured), with browser fallback.
+ * Embedded webview-based browser with CDP control.
+ * Provides web search, URL fetching, and full browser automation.
  *
  * Usage:
  *   const browser = require('./browser');
  *
- *   // Configure Serper API key (optional, enables fast API search)
- *   browser.setSerperApiKey('your-api-key');
- *
- *   // Web search (uses Serper if configured, otherwise browser)
+ *   // Web search (Serper API primary, webview fallback)
  *   const results = await browser.webSearch({ query: 'weather today' });
  *
  *   // Fetch URL content
  *   const content = await browser.fetchUrl({ url: 'https://example.com' });
  *
- *   // Cleanup on exit
- *   await browser.closeBrowser();
+ *   // Browser control (snapshots, actions, screenshots)
+ *   await browser.browserController.navigateTab('https://example.com');
+ *   const snap = await browser.browserController.snapshotTab({ format: 'role' });
  */
 
-// Session management
-const {
-    getBrowser,
-    getPage,
-    closeBrowser,
-    isBrowserRunning,
-    isHealthy,
-    restartBrowser,
-} = require('./browser-session');
+// CDP adapter (webview debugger bridge)
+const webviewCdp = require('./webview-cdp');
 
 // Web search
 const {
     webSearch,
     browserSearch,
-    searchBing,
-    searchGoogle,
     setSerperApiKey,
     getSerperApiKey,
 } = require('./browser-search');
@@ -44,26 +33,20 @@ const {
 const { searchSerper } = require('./serper-search');
 
 // URL fetching
-const {
-    fetchUrl,
-    fetchHtml,
-} = require('./browser-fetch');
+const { fetchUrl } = require('./browser-fetch');
 
-// Utilities
-const {
-    normalizeTimeoutMs,
-    toAIFriendlyError,
-    setupAntiDetect,
-    waitForRateLimit,
-    resetRateLimit,
-    truncateText,
-} = require('./browser-utils');
-
-// Browser control system (CDP + Playwright + snapshots + actions)
+// Browser control (webview-based)
 const browserController = require('./browser-controller');
+
+// Webview actions & snapshots
+const webviewActions = require('./webview-actions');
+const webviewSnapshot = require('./webview-snapshot');
+
+// Role refs (accessibility tree parsing)
+const roleRefs = require('./role-refs');
+
+// Config
 const config = require('./config');
-const snapshot = require('./snapshot');
-const actions = require('./actions');
 
 module.exports = {
     // Main API
@@ -75,33 +58,16 @@ module.exports = {
     getSerperApiKey,
     searchSerper,
 
-    // Session management (headless search/fetch)
-    getBrowser,
-    getPage,
-    closeBrowser,
-    isBrowserRunning,
-    isHealthy,
-    restartBrowser,
-
-    // Additional search functions
+    // Search
     browserSearch,
-    searchBing,
-    searchGoogle,
 
-    // Additional fetch functions
-    fetchHtml,
+    // CDP adapter
+    webviewCdp,
 
-    // Utilities (for advanced use)
-    normalizeTimeoutMs,
-    toAIFriendlyError,
-    setupAntiDetect,
-    waitForRateLimit,
-    resetRateLimit,
-    truncateText,
-
-    // Browser control (CDP agent browser)
+    // Browser control
     browserController,
     browserConfig: config,
-    browserSnapshot: snapshot,
-    browserActions: actions,
+    browserActions: webviewActions,
+    browserSnapshot: webviewSnapshot,
+    roleRefs,
 };

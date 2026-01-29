@@ -1,7 +1,7 @@
 /**
  * Browser request watcher service for Voice Mirror Electron.
  * Watches for browser requests from Claude via MCP.
- * Supports: search, fetch, and full browser control (start, stop, tabs, snapshot, act, etc.)
+ * Supports: search, fetch, and embedded webview browser control.
  */
 
 const fs = require('fs');
@@ -21,9 +21,6 @@ function createBrowserWatcher(options = {}) {
     let browserModule = null;
     let controllerModule = null;
 
-    /**
-     * Lazy-load the browser module (search/fetch).
-     */
     function getBrowserModule() {
         if (!browserModule) {
             browserModule = require('../browser');
@@ -34,9 +31,6 @@ function createBrowserWatcher(options = {}) {
         return browserModule;
     }
 
-    /**
-     * Lazy-load the browser controller (CDP agent browser).
-     */
     function getController() {
         if (!controllerModule) {
             controllerModule = require('../browser/browser-controller');
@@ -44,9 +38,6 @@ function createBrowserWatcher(options = {}) {
         return controllerModule;
     }
 
-    /**
-     * Start watching for browser requests.
-     */
     function start() {
         if (watcher) {
             console.log('[BrowserWatcher] Already running');
@@ -57,7 +48,6 @@ function createBrowserWatcher(options = {}) {
         const requestPath = path.join(contextMirrorDir, 'browser_request.json');
         const responsePath = path.join(contextMirrorDir, 'browser_response.json');
 
-        // Watch for browser requests
         watcher = setInterval(async () => {
             try {
                 if (!fs.existsSync(requestPath)) return;
@@ -66,76 +56,53 @@ function createBrowserWatcher(options = {}) {
                 const requestTime = new Date(request.timestamp).getTime();
                 const now = Date.now();
 
-                // Only process requests from the last 5 seconds
                 if (now - requestTime > 5000) {
                     fs.unlinkSync(requestPath);
                     return;
                 }
 
-                // Delete request immediately to prevent duplicate processing
                 fs.unlinkSync(requestPath);
 
                 console.log(`[BrowserWatcher] Request: ${request.action}`);
 
                 let result;
                 const args = request.args || {};
-                const profile = args.profile;
 
                 switch (request.action) {
-                    // --- Existing search/fetch ---
                     case 'search':
                         result = await getBrowserModule().webSearch(args);
                         break;
                     case 'fetch':
                         result = await getBrowserModule().fetchUrl(args);
                         break;
-
-                    // --- Browser control ---
                     case 'start':
-                        result = await getController().ensureBrowserAvailable(profile);
+                        result = await getController().ensureBrowserAvailable();
                         break;
                     case 'stop':
-                        result = await getController().stopBrowser(profile);
+                        result = await getController().stopBrowser();
                         break;
                     case 'status':
-                        result = await getController().getStatus(profile);
-                        break;
-                    case 'tabs':
-                        result = { ok: true, tabs: await getController().listTabs(profile) };
-                        break;
-                    case 'open':
-                        result = await getController().openTab(args.url, profile);
-                        break;
-                    case 'close_tab':
-                        result = await getController().closeTab(args.targetId, profile);
-                        break;
-                    case 'focus':
-                        result = await getController().focusTab(args.targetId, profile);
+                        result = await getController().getStatus();
                         break;
                     case 'navigate':
-                        result = await getController().navigateTab(args.url, args.targetId, profile);
+                        result = await getController().navigateTab(args.url);
                         break;
                     case 'screenshot':
-                        result = await getController().screenshotTab(args, profile);
+                        result = await getController().screenshotTab(args);
                         break;
                     case 'snapshot':
-                        result = await getController().snapshotTab(args, profile);
+                        result = await getController().snapshotTab(args);
                         break;
                     case 'act':
-                        result = await getController().actOnTab(args.request || args, args.targetId, profile);
+                        result = await getController().actOnTab(args.request || args);
                         break;
                     case 'console':
-                        result = await getController().getConsoleLog(args.targetId, profile);
+                        result = await getController().getConsoleLog();
                         break;
-                    case 'profiles':
-                        result = { ok: true, profiles: await getController().listProfiles() };
-                        break;
-
                     default:
                         result = { success: false, error: `Unknown browser action: ${request.action}` };
                 }
 
-                // Write response
                 fs.writeFileSync(responsePath, JSON.stringify({
                     ...result,
                     request_id: request.id,
@@ -147,14 +114,11 @@ function createBrowserWatcher(options = {}) {
             } catch (err) {
                 console.error('[BrowserWatcher] Error:', err);
             }
-        }, 500);  // Check every 500ms
+        }, 500);
 
         console.log('[BrowserWatcher] Started');
     }
 
-    /**
-     * Stop watching for browser requests.
-     */
     function stop() {
         if (watcher) {
             clearInterval(watcher);
@@ -163,24 +127,16 @@ function createBrowserWatcher(options = {}) {
         }
     }
 
-    /**
-     * Close the browser instance (for cleanup).
-     */
     async function closeBrowser() {
-        if (browserModule) {
-            try {
-                await browserModule.closeBrowser();
-                console.log('[BrowserWatcher] Browser closed');
-            } catch (err) {
-                console.error('[BrowserWatcher] Error closing browser:', err.message);
-            }
+        try {
+            const ctrl = getController();
+            await ctrl.stopBrowser();
+            console.log('[BrowserWatcher] Browser stopped');
+        } catch (err) {
+            console.error('[BrowserWatcher] Error closing browser:', err.message);
         }
     }
 
-    /**
-     * Check if watcher is running.
-     * @returns {boolean} True if running
-     */
     function isRunning() {
         return watcher !== null;
     }

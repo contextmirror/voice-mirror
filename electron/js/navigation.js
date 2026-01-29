@@ -63,7 +63,7 @@ export function initNavigation() {
  */
 export function navigateTo(page) {
     // Validate page
-    const validPages = ['chat', 'terminal', 'settings'];
+    const validPages = ['chat', 'terminal', 'browser', 'settings'];
     if (!validPages.includes(page)) {
         console.warn('[Navigation] Invalid page:', page);
         return;

@@ -47,12 +47,12 @@ const tools = {
 
     browser_control: {
         name: 'browser_control',
-        description: 'Control a visible Chrome browser — search the web, open pages, read content, click elements, type text. Use this for detailed web research that needs a real browser.',
+        description: 'Control the embedded browser — search the web, open pages, read content, click elements, type text. The browser is embedded in the Voice Mirror panel.',
         args: {
             action: {
                 type: 'string',
                 required: true,
-                description: 'Action: search, open, snapshot, click, type, fill, press, navigate, screenshot, tabs, close, console, status, stop'
+                description: 'Action: search, open, snapshot, click, type, fill, press, navigate, screenshot, console, status, stop'
             },
             query: {
                 type: 'string',

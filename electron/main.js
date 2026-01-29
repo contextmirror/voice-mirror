@@ -862,6 +862,52 @@ app.whenReady().then(() => {
 
     createWindow();
 
+    // Webview bridge: attach CDP debugger when <webview> connects
+    const webviewCdp = require('./browser/webview-cdp');
+    const browserController = require('./browser/browser-controller');
+
+    mainWindow.webContents.on('did-attach-webview', (event, guestWebContents) => {
+        console.log('[Voice Mirror] Webview attached, setting up CDP debugger');
+        try {
+            webviewCdp.attachDebugger(guestWebContents);
+
+            // Track console messages from the webview
+            guestWebContents.on('console-message', (e, level, message) => {
+                browserController.trackConsoleMessage({ level, message, timestamp: Date.now() });
+            });
+
+            // Notify renderer of URL changes
+            guestWebContents.on('did-navigate', (e, url) => {
+                mainWindow?.webContents.send('browser-status', { url });
+            });
+            guestWebContents.on('did-navigate-in-page', (e, url, isMainFrame) => {
+                if (isMainFrame) {
+                    mainWindow?.webContents.send('browser-status', { url });
+                }
+            });
+        } catch (err) {
+            console.error('[Voice Mirror] Failed to attach webview debugger:', err.message);
+        }
+    });
+
+    // Browser IPC handlers
+    ipcMain.handle('browser-get-status', async () => {
+        return browserController.getStatus();
+    });
+
+    ipcMain.handle('browser-pop-out', async () => {
+        try {
+            const status = await browserController.getStatus();
+            if (status.url && status.url !== 'about:blank') {
+                await shell.openExternal(status.url);
+                return { ok: true, url: status.url };
+            }
+            return { ok: false, reason: 'no URL to open' };
+        } catch (err) {
+            return { ok: false, error: err.message };
+        }
+    });
+
     // Start the Wayland orb after window is created (needs to exist for expand)
     if (waylandOrb?.isAvailable()) {
         const savedOutput = appConfig?.overlay?.outputName || null;

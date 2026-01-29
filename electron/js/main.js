@@ -9,6 +9,7 @@ import { addMessage, isDuplicate, copyMessage, addToolCallCard, addToolResultCar
 import { initXterm, handleAIOutput, updateAIStatus, toggleTerminal, startAI, stopAI, updateProviderDisplay } from './terminal.js';
 import { initSettings, toggleSettings } from './settings.js';
 import { initNavigation, navigateTo, toggleSidebarCollapse } from './navigation.js';
+import { initBrowserPanel, navigateToBrowserPage } from './browser-panel.js';
 import { blobToBase64, formatSize } from './utils.js';
 
 // DOM elements
@@ -433,6 +434,9 @@ async function init() {
         console.error('[xterm] Failed to initialize:', err);
     }
 
+    // Initialize browser panel
+    initBrowserPanel();
+
     // Initialize settings
     initSettings();
 
@@ -593,6 +597,8 @@ window.toggleSettings = toggleSettings;
 // Navigation (from navigation.js)
 window.navigateTo = navigateTo;
 window.toggleSidebarCollapse = toggleSidebarCollapse;
+// Browser panel (from browser-panel.js)
+window.navigateToBrowserPage = navigateToBrowserPage;
 
 // Tertiary hotkey fallback: detect Ctrl+Shift+V (or Cmd+Shift+V on Mac) via DOM keydown.
 // This only works when the Electron window has focus, but provides a safety net

@@ -17,6 +17,7 @@ Combined = Full AI agent for your entire computer
 | [CONFIGURATION.md](docs/CONFIGURATION.md) | Config schema, settings, providers |
 | [DEVELOPMENT.md](docs/DEVELOPMENT.md) | Setup, building, debugging |
 | [ROADMAP.md](docs/ROADMAP.md) | Progress, known issues, future plans |
+| [BROWSER-BENCHMARK.md](docs/BROWSER-BENCHMARK.md) | Browser tool benchmark (102 tests, model comparison) |
 
 ---
 
@@ -110,6 +111,7 @@ Voice Mirror Electron/
 ├── mcp-server/              # MCP server (48 tools across 7 dynamic groups)
 ├── wayland-orb/             # Rust native layer-shell overlay (Linux/Wayland)
 ├── chrome-extension/        # Browser relay extension (MV3, CDP relay)
+├── test/                    # Browser benchmark (102 tests, fixture replay)
 ├── docs/                    # Documentation
 ├── assets/                  # Icons (16-256px)
 ├── launch.sh                # Linux/macOS launcher
@@ -177,6 +179,7 @@ See [CONFIGURATION.md](docs/CONFIGURATION.md) for full provider list (11 total).
 - **Wayland Orb:** Native Rust layer-shell overlay for Linux/Wayland
 - **n8n Integration:** 22 tools for workflow automation
 - **Voice Cloning:** Clone any voice from 3s audio sample (Qwen3-TTS)
+- **Browser Benchmark:** 102-test suite evaluating LLM browser tool usage (llama3.1:8b recommended — 98% pass, 9.6/10 avg)
 
 ---
 

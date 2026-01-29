@@ -1,346 +1,163 @@
 /**
- * Browser controller — profile-scoped operations.
- * Manages browser lifecycle, tab CRUD, and coordinates between
- * chrome-launcher, pw-session, and extension-relay.
+ * Browser controller — webview-based operations.
+ * Manages embedded webview lifecycle, snapshots, and actions
+ * using CDP via webContents.debugger (no external Chrome).
  */
 
-const { loadConfig, resolveProfile, listProfileNames } = require('./config');
-const { launchManagedChrome, stopManagedChrome, isCdpReady, isCdpHttpReachable } = require('./chrome-launcher');
-const { getPageForTargetId, ensurePageState, getPageState, listPagesViaPlaywright, disconnectBrowser } = require('./pw-session');
-const { createTargetViaCdp } = require('./cdp-client');
-const { fetchJson, appendCdpPath, normalizeCdpWsUrl } = require('./cdp-helpers');
-const { takeSnapshot } = require('./snapshot');
-const { executeAction } = require('./actions');
+const cdp = require('./webview-cdp');
+const { takeSnapshot } = require('./webview-snapshot');
+const { executeAction, screenshotAction } = require('./webview-actions');
 
-/** @type {Map<string, import('./chrome-launcher').RunningChrome>} */
-const runningBrowsers = new Map();
+/** @type {{ console: Array, errors: Array }} */
+const consoleState = { console: [], errors: [] };
 
-/** @type {Map<string, string>} */
-const lastTargetIds = new Map();
+/** @type {boolean} */
+let browserActive = false;
 
 /**
- * Get or create a profile context for browser operations.
- * @param {string} [profileName]
- * @returns {{profile: import('./config').ResolvedProfile, config: import('./config').BrowserConfig}}
+ * Ensure the browser (webview) is ready.
+ * The webview must be attached via main process before tools can use it.
+ * @returns {{ ok: boolean, driver: string }}
  */
-function resolveProfileContext(profileName) {
-    const config = loadConfig();
-    const profile = resolveProfile(config, profileName);
-    if (!profile) {
-        const available = listProfileNames(config).join(', ');
-        throw new Error(`Profile "${profileName || config.defaultProfile}" not found. Available: ${available || '(none)'}`);
+async function ensureBrowserAvailable() {
+    if (!cdp.isAttached()) {
+        throw new Error('Browser not available. The embedded webview is not connected. Open the Voice Mirror panel to activate the browser.');
     }
-    return { profile, config };
+    browserActive = true;
+    return { ok: true, driver: 'webview' };
 }
 
 /**
- * Ensure the browser is running and reachable.
+ * Stop the browser — navigate to about:blank.
  */
-async function ensureBrowserAvailable(profileName) {
-    const { profile, config } = resolveProfileContext(profileName);
-
-    if (profile.driver === 'extension') {
-        // Extension mode: check if relay + extension are connected
-        let relayModule;
-        try { relayModule = require('./extension-relay'); } catch { /* not available yet */ }
-
-        const httpReachable = await isCdpHttpReachable(profile.cdpUrl, 500);
-        if (!httpReachable && relayModule) {
-            await relayModule.ensureExtensionRelayServer({ cdpUrl: profile.cdpUrl });
-            if (!(await isCdpHttpReachable(profile.cdpUrl, 1200))) {
-                throw new Error(`Extension relay for profile "${profile.name}" is not reachable at ${profile.cdpUrl}.`);
-            }
-        }
-        if (!(await isCdpReady(profile.cdpUrl, 600, 800))) {
-            throw new Error(
-                `Extension relay is running, but no tab is connected. ` +
-                `Click the Voice Mirror Browser Relay extension icon on a tab to attach it.`
-            );
-        }
-        return { ok: true, profile: profile.name, driver: 'extension' };
+async function stopBrowser() {
+    if (!cdp.isAttached()) {
+        return { ok: true, stopped: false, reason: 'not attached' };
     }
 
-    // Managed mode
-    const httpReachable = await isCdpHttpReachable(profile.cdpUrl, 500);
-    if (httpReachable) {
-        if (await isCdpReady(profile.cdpUrl, 500, 800)) {
-            return { ok: true, profile: profile.name, driver: 'managed', alreadyRunning: true };
+    try {
+        const wc = cdp.getWebContents();
+        if (wc) {
+            wc.loadURL('about:blank');
         }
-        // HTTP up but WS down — restart
-        const existing = runningBrowsers.get(profile.name);
-        if (existing) {
-            await stopManagedChrome(existing);
-            runningBrowsers.delete(profile.name);
-        }
-    }
+    } catch { /* ignore */ }
 
-    if (!runningBrowsers.has(profile.name)) {
-        const running = await launchManagedChrome({ profile, config });
-        runningBrowsers.set(profile.name, running);
-        running.proc.on('exit', () => {
-            if (runningBrowsers.get(profile.name) === running) {
-                runningBrowsers.delete(profile.name);
-            }
-        });
-    }
+    browserActive = false;
+    consoleState.console = [];
+    consoleState.errors = [];
 
-    return { ok: true, profile: profile.name, driver: 'managed' };
-}
-
-/**
- * Stop the browser for a profile.
- */
-async function stopBrowser(profileName) {
-    const { profile } = resolveProfileContext(profileName);
-
-    if (profile.driver === 'extension') {
-        try {
-            const relayModule = require('./extension-relay');
-            await relayModule.stopExtensionRelayServer({ cdpUrl: profile.cdpUrl });
-        } catch { /* ignore */ }
-        return { ok: true, stopped: true };
-    }
-
-    const running = runningBrowsers.get(profile.name);
-    if (!running) return { ok: true, stopped: false, reason: 'not running' };
-
-    await disconnectBrowser();
-    await stopManagedChrome(running);
-    runningBrowsers.delete(profile.name);
     return { ok: true, stopped: true };
 }
 
 /**
  * Get browser status.
  */
-async function getStatus(profileName) {
-    const { profile, config } = resolveProfileContext(profileName);
-    const httpReachable = await isCdpHttpReachable(profile.cdpUrl, 300);
-    const cdpReady = httpReachable ? await isCdpReady(profile.cdpUrl, 300, 500) : false;
-    const running = runningBrowsers.has(profile.name);
+async function getStatus() {
+    const attached = cdp.isAttached();
+    let url = '';
+    let title = '';
 
-    let tabCount = 0;
-    if (cdpReady) {
+    if (attached) {
         try {
-            const tabs = await listTabs(profileName);
-            tabCount = tabs.length;
+            url = await cdp.getUrl();
+            title = await cdp.getTitle();
         } catch { /* ignore */ }
     }
 
     return {
         ok: true,
-        profile: profile.name,
-        driver: profile.driver,
-        running: running || httpReachable,
-        cdpReady,
-        cdpUrl: profile.cdpUrl,
-        tabCount
+        driver: 'webview',
+        running: attached && browserActive,
+        attached,
+        url,
+        title
     };
 }
 
 /**
- * List all open tabs.
+ * Navigate the webview to a URL.
+ * @param {string} url
  */
-async function listTabs(profileName) {
-    const { profile } = resolveProfileContext(profileName);
-    await ensureBrowserAvailable(profileName);
-
-    // Try Playwright persistent connection
-    try {
-        const pages = await listPagesViaPlaywright({ cdpUrl: profile.cdpUrl });
-        if (pages.length > 0) return pages;
-    } catch { /* fallback to CDP REST */ }
-
-    // CDP REST fallback
-    try {
-        const raw = await fetchJson(appendCdpPath(profile.cdpUrl, '/json/list'), 1500);
-        return (raw || [])
-            .filter(t => t.type === 'page' || !t.type)
-            .map(t => ({
-                targetId: t.id || '',
-                title: t.title || '',
-                url: t.url || '',
-                type: t.type || 'page'
-            }))
-            .filter(t => t.targetId);
-    } catch (err) {
-        throw new Error(`Failed to list tabs: ${err.message}`);
-    }
+async function navigateTab(url) {
+    await ensureBrowserAvailable();
+    await cdp.navigate(url);
+    const currentUrl = await cdp.getUrl();
+    return { ok: true, action: 'navigate', url: currentUrl };
 }
 
 /**
- * Open a new tab with URL.
+ * Get console logs (from tracked state).
  */
-async function openTab(url, profileName) {
-    const { profile } = resolveProfileContext(profileName);
-    await ensureBrowserAvailable(profileName);
-
-    let result = null;
-
-    // Try CDP createTarget first
-    try {
-        const { targetId } = await createTargetViaCdp({ cdpUrl: profile.cdpUrl, url });
-        lastTargetIds.set(profile.name, targetId);
-
-        // Wait for tab to appear
-        const deadline = Date.now() + 2000;
-        while (Date.now() < deadline) {
-            const tabs = await listTabs(profileName).catch(() => []);
-            const found = tabs.find(t => t.targetId === targetId);
-            if (found) { result = found; break; }
-            await new Promise(r => setTimeout(r, 100));
-        }
-        if (!result) result = { targetId, title: '', url, type: 'page' };
-    } catch { /* fallback */ }
-
-    // Fallback: /json/new
-    if (!result) {
-        try {
-            const endpoint = appendCdpPath(profile.cdpUrl, `/json/new?${encodeURIComponent(url)}`);
-            const created = await fetchJson(endpoint, 1500);
-            if (created?.id) {
-                lastTargetIds.set(profile.name, created.id);
-                result = {
-                    targetId: created.id,
-                    title: created.title || '',
-                    url: created.url || url,
-                    type: created.type || 'page'
-                };
-            }
-        } catch { /* ignore */ }
-    }
-
-    if (!result) {
-        throw new Error('Failed to open tab. Browser may not be responding.');
-    }
-
-    // Clean up about:blank tabs left over from Chrome launch
-    try {
-        const tabs = await listTabs(profileName).catch(() => []);
-        for (const tab of tabs) {
-            if (tab.url === 'about:blank' && tab.targetId !== result.targetId) {
-                await closeTab(tab.targetId, profileName).catch(() => {});
-            }
-        }
-    } catch { /* non-critical cleanup */ }
-
-    return result;
-}
-
-/**
- * Close a tab by targetId.
- */
-async function closeTab(targetId, profileName) {
-    const { profile } = resolveProfileContext(profileName);
-    if (!targetId) throw new Error('targetId is required');
-
-    try {
-        await fetchJson(appendCdpPath(profile.cdpUrl, `/json/close/${targetId}`), 1500);
-        return { ok: true, closed: targetId };
-    } catch {
-        throw new Error(`Failed to close tab ${targetId}`);
-    }
-}
-
-/**
- * Focus/activate a tab.
- */
-async function focusTab(targetId, profileName) {
-    const { profile } = resolveProfileContext(profileName);
-    if (!targetId) throw new Error('targetId is required');
-
-    lastTargetIds.set(profile.name, targetId);
-    try {
-        await fetchJson(appendCdpPath(profile.cdpUrl, `/json/activate/${targetId}`), 1500);
-        return { ok: true, focused: targetId };
-    } catch {
-        throw new Error(`Failed to focus tab ${targetId}`);
-    }
-}
-
-/**
- * Navigate a tab to a URL.
- */
-async function navigateTab(url, targetId, profileName) {
-    const { profile } = resolveProfileContext(profileName);
-    await ensureBrowserAvailable(profileName);
-    const { navigateAction } = require('./actions');
-    return await navigateAction({ cdpUrl: profile.cdpUrl, targetId, url });
-}
-
-/**
- * Get console logs for a tab.
- */
-async function getConsoleLog(targetId, profileName) {
-    const { profile } = resolveProfileContext(profileName);
-    await ensureBrowserAvailable(profileName);
-    const page = await getPageForTargetId({ cdpUrl: profile.cdpUrl, targetId });
-    const state = getPageState(page);
-    if (!state) return { ok: true, console: [], errors: [] };
+async function getConsoleLog() {
     return {
         ok: true,
-        console: state.console.slice(-50),
-        errors: state.errors.slice(-20)
+        console: consoleState.console.slice(-50),
+        errors: consoleState.errors.slice(-20)
     };
 }
 
 /**
  * Take a page snapshot.
  */
-async function snapshotTab(opts, profileName) {
-    const { profile } = resolveProfileContext(profileName);
-    await ensureBrowserAvailable(profileName);
-    return await takeSnapshot({ ...opts, cdpUrl: profile.cdpUrl });
+async function snapshotTab(opts = {}) {
+    await ensureBrowserAvailable();
+    return await takeSnapshot(opts);
 }
 
 /**
- * Execute a browser action on a tab.
+ * Execute a browser action.
  */
-async function actOnTab(request, targetId, profileName) {
-    const { profile } = resolveProfileContext(profileName);
-    await ensureBrowserAvailable(profileName);
-    return await executeAction(request, { cdpUrl: profile.cdpUrl, targetId });
+async function actOnTab(request) {
+    await ensureBrowserAvailable();
+    return await executeAction(request);
 }
 
 /**
- * Take a screenshot of a tab.
+ * Take a screenshot.
  */
-async function screenshotTab(opts, profileName) {
-    const { profile } = resolveProfileContext(profileName);
-    await ensureBrowserAvailable(profileName);
-    const { screenshotAction } = require('./actions');
-    return await screenshotAction({ ...opts, cdpUrl: profile.cdpUrl });
+async function screenshotTab(opts = {}) {
+    await ensureBrowserAvailable();
+    return await screenshotAction(opts);
 }
 
 /**
- * List all profiles with their status.
+ * Add a console message to tracked state.
+ * Called from main process when webview emits console messages.
  */
-async function listProfiles() {
-    const config = loadConfig();
-    const results = [];
-    for (const name of listProfileNames(config)) {
-        try {
-            const status = await getStatus(name);
-            results.push(status);
-        } catch {
-            results.push({ profile: name, running: false, cdpReady: false });
-        }
+function trackConsoleMessage(msg) {
+    consoleState.console.push(msg);
+    if (consoleState.console.length > 500) {
+        consoleState.console = consoleState.console.slice(-500);
     }
-    return results;
+}
+
+/**
+ * Add an error to tracked state.
+ */
+function trackError(err) {
+    consoleState.errors.push(err);
+    if (consoleState.errors.length > 200) {
+        consoleState.errors = consoleState.errors.slice(-200);
+    }
+}
+
+/**
+ * Check if browser is currently active.
+ */
+function isActive() {
+    return browserActive && cdp.isAttached();
 }
 
 module.exports = {
     ensureBrowserAvailable,
     stopBrowser,
     getStatus,
-    listTabs,
-    openTab,
-    closeTab,
-    focusTab,
     navigateTab,
     getConsoleLog,
     snapshotTab,
     actOnTab,
     screenshotTab,
-    listProfiles
+    trackConsoleMessage,
+    trackError,
+    isActive
 };

@@ -1,10 +1,10 @@
 /**
  * Role reference system for agent-browser interaction.
- * Generates e1, e2, ... refs from accessibility snapshots and resolves them
- * back to Playwright locators for action execution.
+ * Generates e1, e2, ... refs from accessibility snapshots.
+ *
+ * Ref resolution for the webview backend is in webview-actions.js (resolveRef).
+ * This module only handles snapshot text parsing and ref generation.
  */
-
-const { ensurePageState, restoreRoleRefsForTarget } = require('./pw-session');
 
 // Interactive ARIA roles that get assigned refs
 const INTERACTIVE_ROLES = new Set([
@@ -61,18 +61,28 @@ function buildRoleSnapshotFromAriaSnapshot(ariaSnapshot, options = {}) {
             const ref = nextRef();
             const nth = tracker.getNextIndex(role, name);
             tracker.trackRef(role, name, ref);
-            refs[ref] = { role, name, nth };
+            const refData = { role, name, nth };
+
+            // Extract vmref from DOM snapshot if present
+            const vmrefMatch = suffix.match(/\[vmref=(vm\d+)\]/);
+            if (vmrefMatch) {
+                refData.vmref = vmrefMatch[1];
+            }
+
+            refs[ref] = refData;
+
+            const cleanSuffix = suffix.replace(/\s*\[vmref=vm\d+\]/, '');
 
             let enhanced = `- ${roleRaw}`;
             if (name) enhanced += ` "${name}"`;
             enhanced += ` [ref=${ref}]`;
             if (nth > 0) enhanced += ` [nth=${nth}]`;
-            if (suffix.includes('[')) enhanced += suffix;
+            if (cleanSuffix.includes('[')) enhanced += cleanSuffix;
             result.push(enhanced);
         }
 
         removeNthFromNonDuplicates(refs, tracker);
-        return { snapshot: result.join('\n') || '(no interactive elements)', refs };
+        return { snapshot: result.join('\n').replace(/\s*\[vmref=vm\d+\]/g, '') || '(no interactive elements)', refs };
     }
 
     // Full tree with refs on interactive + named content elements
@@ -83,55 +93,14 @@ function buildRoleSnapshotFromAriaSnapshot(ariaSnapshot, options = {}) {
     }
 
     removeNthFromNonDuplicates(refs, tracker);
-    const tree = result.join('\n') || '(empty)';
+    const tree = result.join('\n').replace(/\s*\[vmref=vm\d+\]/g, '') || '(empty)';
     return {
         snapshot: options.compact ? compactTree(tree) : tree,
         refs
     };
 }
 
-/**
- * Resolve a ref string (e.g. "e1", "@e1", "ref=e1") to a Playwright locator.
- * @param {import('playwright-core').Page} page
- * @param {string} ref
- * @returns {import('playwright-core').Locator}
- */
-function refLocator(page, ref) {
-    const normalized = ref.startsWith('@') ? ref.slice(1)
-        : ref.startsWith('ref=') ? ref.slice(4)
-        : ref;
-
-    if (/^e\d+$/.test(normalized)) {
-        const state = ensurePageState(page);
-
-        // Mode "aria": use Playwright's built-in aria-ref
-        if (state?.roleRefsMode === 'aria') {
-            const scope = state.roleRefsFrameSelector
-                ? page.frameLocator(state.roleRefsFrameSelector)
-                : page;
-            return scope.locator(`aria-ref=${normalized}`);
-        }
-
-        // Mode "role": use getByRole with cached role+name
-        const info = state?.roleRefs?.[normalized];
-        if (!info) {
-            throw new Error(`Unknown ref "${normalized}". Run a new snapshot and use a ref from that snapshot.`);
-        }
-
-        const scope = state?.roleRefsFrameSelector
-            ? page.frameLocator(state.roleRefsFrameSelector)
-            : page;
-
-        const locator = info.name
-            ? scope.getByRole(info.role, { name: info.name, exact: true })
-            : scope.getByRole(info.role);
-
-        return info.nth !== undefined ? locator.nth(info.nth) : locator;
-    }
-
-    // Fallback: raw aria-ref
-    return page.locator(`aria-ref=${normalized}`);
-}
+// refLocator() removed — ref resolution now handled by webview-actions.js resolveRef()
 
 /**
  * Get snapshot stats.
@@ -215,13 +184,24 @@ function processLine(line, refs, options, tracker, nextRef) {
     const ref = nextRef();
     const nth = tracker.getNextIndex(role, name);
     tracker.trackRef(role, name, ref);
-    refs[ref] = { role, name, nth };
+    const refData = { role, name, nth };
+
+    // Extract vmref from DOM snapshot if present (e.g. [vmref=vm42])
+    const vmrefMatch = suffix.match(/\[vmref=(vm\d+)\]/);
+    if (vmrefMatch) {
+        refData.vmref = vmrefMatch[1];
+    }
+
+    refs[ref] = refData;
+
+    // Strip vmref from output (internal use only)
+    const cleanSuffix = suffix.replace(/\s*\[vmref=vm\d+\]/, '');
 
     let enhanced = `${prefix}${roleRaw}`;
     if (name) enhanced += ` "${name}"`;
     enhanced += ` [ref=${ref}]`;
     if (nth > 0) enhanced += ` [nth=${nth}]`;
-    if (suffix) enhanced += suffix;
+    if (cleanSuffix) enhanced += cleanSuffix;
     return enhanced;
 }
 
@@ -249,6 +229,5 @@ module.exports = {
     CONTENT_ROLES,
     STRUCTURAL_ROLES,
     buildRoleSnapshotFromAriaSnapshot,
-    refLocator,
     getRoleSnapshotStats
 };

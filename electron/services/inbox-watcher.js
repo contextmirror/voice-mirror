@@ -560,7 +560,8 @@ function extractSpeakableResponse(output) {
         .trim();
 
     // If the result is still mostly JSON or system output, return empty
-    if (cleaned.startsWith('{') || cleaned.startsWith('[')) {
+    // But don't discard responses that just happen to start with [ for lists/tables
+    if (cleaned.startsWith('{') && cleaned.includes('"tool"')) {
         return '';
     }
 

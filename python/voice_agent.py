@@ -497,6 +497,7 @@ class VoiceMirror:
                 self.tts.stop_speaking()
                 print("🔇 TTS interrupted by PTT")
             self.audio_state.start_recording('ptt')
+            self.audio_state._ptt_start_time = time.time()
             print('🔴 Recording (PTT)... (speak now)')
         elif ptt_action == "stop" and self.audio_state.is_recording and not self.audio_state.is_processing:
             # PTT released - process immediately (don't wait for silence)
@@ -506,6 +507,15 @@ class VoiceMirror:
             # Schedule processing (we're in audio callback, can't await here)
             # Use a flag to trigger processing in main loop
             self.audio_state.ptt_process_pending = True
+
+        # Safety: force-stop PTT recording if it exceeds 30 seconds (missed stop trigger)
+        if self.audio_state.is_recording and hasattr(self.audio_state, '_ptt_start_time'):
+            if time.time() - self.audio_state._ptt_start_time > 30:
+                print('⚠️ PTT recording timeout (30s), force-stopping')
+                self.audio_state.is_recording = False
+                self.audio_state.ptt_active = False
+                self.audio_state.is_processing = True
+                self.audio_state.ptt_process_pending = True
 
         if self.audio_state.is_listening and not self.audio_state.is_recording:
             # Push-to-talk mode: only record when PTT is pressed (handled above)
@@ -559,6 +569,15 @@ class VoiceMirror:
         # Atomically grab the buffer and clear it (thread-safe via AudioState)
         audio_data = self.audio_state.get_and_clear_buffer()
         if audio_data is None:
+            return
+
+        # Minimum duration check — discard very short recordings (accidental PTT taps, noise)
+        # At 16kHz sample rate, 0.4s = 6400 samples
+        min_samples = int(0.4 * 16000)
+        if len(audio_data) < min_samples:
+            duration_ms = int(len(audio_data) / 16000 * 1000)
+            print(f"🗑️ Recording too short ({duration_ms}ms), discarding")
+            self.audio_state.is_processing = False
             return
 
         print("⏳ Transcribing...")

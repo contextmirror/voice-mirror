@@ -50,6 +50,9 @@ yarn-error.log*
 coverage/
 .nyc_output/
 
+# Benchmark (local testing only)
+test/browser-benchmark/
+
 # Temporary files
 *.tmp
 *.temp

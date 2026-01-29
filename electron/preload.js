@@ -115,6 +115,15 @@ contextBridge.exposeInMainWorld('voiceMirror', {
         resize: (cols, rows) => ipcRenderer.invoke('claude-pty-resize', cols, rows)
     },
 
+    // Browser panel control
+    browser: {
+        getStatus: () => ipcRenderer.invoke('browser-get-status'),
+        popOut: () => ipcRenderer.invoke('browser-pop-out'),
+        onStatusChange: (callback) => {
+            ipcRenderer.on('browser-status', (event, data) => callback(data));
+        }
+    },
+
     // AI Provider control (model-agnostic)
     ai: {
         // Scan for available local providers (Ollama, LM Studio, Jan)

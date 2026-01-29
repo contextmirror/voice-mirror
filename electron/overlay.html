@@ -22,6 +22,7 @@
     <link rel="stylesheet" href="styles/sidebar.css">
     <link rel="stylesheet" href="styles/chat.css">
     <link rel="stylesheet" href="styles/terminal.css">
+    <link rel="stylesheet" href="styles/browser.css">
     <link rel="stylesheet" href="styles/settings.css">
     <link rel="stylesheet" href="styles/notifications.css">
 </head>
@@ -62,6 +63,14 @@
                     </svg>
                     <span id="nav-terminal-label">Claude Code</span>
                     <span id="nav-ai-badge" class="nav-badge stopped"></span>
+                </button>
+                <button class="nav-item" data-page="browser" data-tooltip="Browser" id="nav-browser">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <line x1="2" y1="12" x2="22" y2="12"/>
+                        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                    </svg>
+                    <span>Browser</span>
                 </button>
                 <button class="nav-item" data-page="settings" data-tooltip="Settings">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -171,6 +180,44 @@
                         <button id="terminal-fullscreen-clear" class="control-btn clear" onclick="clearTerminal()" title="Clear terminal">Clear</button>
                     </div>
                     <div id="xterm-fullscreen-container"></div>
+                </div>
+            </div>
+
+            <!-- Browser Page -->
+            <div id="page-browser" class="page">
+                <div id="browser-toolbar">
+                    <button id="browser-back" class="browser-nav-btn" title="Back">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+                    </button>
+                    <button id="browser-forward" class="browser-nav-btn" title="Forward">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                    </button>
+                    <button id="browser-refresh" class="browser-nav-btn" title="Refresh">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                    </button>
+                    <div id="browser-url-bar">
+                        <span id="browser-url">about:blank</span>
+                    </div>
+                    <button id="browser-popout" class="browser-nav-btn" title="Open in external browser">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                    </button>
+                </div>
+                <div id="browser-container">
+                    <webview id="browser-webview"
+                        src="about:blank"
+                        partition="persist:voicemirror-browser"
+                        webpreferences="contextIsolation=yes"
+                        style="width:100%; height:100%; display:none;">
+                    </webview>
+                    <div id="browser-idle-state">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="48" height="48" style="opacity:0.3;">
+                            <circle cx="12" cy="12" r="10"/>
+                            <line x1="2" y1="12" x2="22" y2="12"/>
+                            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                        </svg>
+                        <p>No browser active</p>
+                        <p class="browser-idle-hint">Ask the assistant to search or open a website</p>
+                    </div>
                 </div>
             </div>
 
