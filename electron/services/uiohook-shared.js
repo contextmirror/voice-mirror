@@ -23,7 +23,7 @@ let healthInterval = null;
 let canaryAttached = false;
 
 const HEALTH_INTERVAL_MS = 10000;   // Check every 10s
-const STALE_THRESHOLD_MS = 30000;   // 30s with no events = likely dead
+const STALE_THRESHOLD_MS = 120000;  // 120s with no events = likely dead (avoid false restarts)
 
 // Try to load uiohook-napi once
 try {

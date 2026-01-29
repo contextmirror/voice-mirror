@@ -49,7 +49,7 @@ from tts import create_tts_adapter
 TTS_VOICE = os.getenv("TTS_VOICE", "af_bella")  # Female voice, change to am_puck for male
 WAKE_WORD_MODEL = "models/hey_claude_v2.onnx"
 WAKE_WORD_THRESHOLD = 0.98  # Strict but usable
-SILENCE_TIMEOUT = 3.0  # seconds of silence before stopping recording
+SILENCE_TIMEOUT = 10.0  # seconds of silence before stopping recording
 CONVERSATION_WINDOW = 5.0  # seconds to wait for follow-up without wake word
 
 # Voice Mirror data directory (standalone - NOT Context Mirror)
@@ -510,8 +510,8 @@ class VoiceMirror:
 
         # Safety: force-stop PTT recording if it exceeds 30 seconds (missed stop trigger)
         if self.audio_state.is_recording and hasattr(self.audio_state, '_ptt_start_time'):
-            if time.time() - self.audio_state._ptt_start_time > 30:
-                print('⚠️ PTT recording timeout (30s), force-stopping')
+            if time.time() - self.audio_state._ptt_start_time > 120:
+                print('⚠️ PTT recording timeout (120s), force-stopping')
                 self.audio_state.is_recording = False
                 self.audio_state.ptt_active = False
                 self.audio_state.is_processing = True

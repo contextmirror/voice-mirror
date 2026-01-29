@@ -158,7 +158,7 @@ class KokoroAdapter(TTSAdapter):
             self._interrupted = False
             if not was_interrupted:
                 await asyncio.sleep(0.3)
-            if on_end:
+            if on_end and not was_interrupted:
                 on_end()
 
     @property

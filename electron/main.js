@@ -286,29 +286,6 @@ async function closeBrowser() {
     }
 }
 
-// Push-to-talk helper functions that use the pttService
-function registerPushToTalk(key) {
-    if (!pttService) return;
-    pttService.register(key, {
-        onStart: () => {
-            sendToPython({ command: 'start_recording' });
-            mainWindow?.webContents.send('voice-event', { type: 'recording' });
-            forwardVoiceEventToOrb({ type: 'recording' });
-        },
-        onStop: () => {
-            sendToPython({ command: 'stop_recording' });
-            mainWindow?.webContents.send('voice-event', { type: 'idle' });
-            forwardVoiceEventToOrb({ type: 'idle' });
-        }
-    });
-}
-
-function unregisterPushToTalk() {
-    if (pttService) {
-        pttService.unregister();
-    }
-}
-
 // Linux transparency workarounds
 if (isLinux) {
     app.commandLine.appendSwitch('enable-transparent-visuals');
@@ -337,6 +314,12 @@ app.whenReady().then(() => {
         startHidden: () => waylandOrb?.isAvailable() || false,
         onWindowStateChanged: () => {
             if (hotkeyManager) hotkeyManager.reRegisterAll();
+            // Ensure uiohook is alive after window state change (for toggle hotkey)
+            const uiohookShared = require('./services/uiohook-shared');
+            if (uiohookShared.isAvailable() && !uiohookShared.isStarted()) {
+                console.log('[Voice Mirror] uiohook not running after window state change, restarting');
+                uiohookShared.restart();
+            }
         }
     });
 
@@ -605,8 +588,8 @@ app.whenReady().then(() => {
             console.log(`[Config] AI update: provider=${oldProvider}->${updates.ai.provider}, model=${oldModel}->${updates.ai.model}`);
         }
         const oldHotkey = appConfig?.behavior?.hotkey;
-        const oldPttKey = appConfig?.behavior?.pttKey;
         const oldActivationMode = appConfig?.behavior?.activationMode;
+        const oldPttKey = appConfig?.behavior?.pttKey;
         const oldOutputName = appConfig?.overlay?.outputName || null;
         const oldVoice = appConfig?.voice;
         const oldWakeWord = appConfig?.wakeWord;
@@ -644,16 +627,9 @@ app.whenReady().then(() => {
             }
         }
 
-        // Handle push-to-talk key registration (only if activation mode or PTT key actually changed)
-        const modeChanged = updates.behavior?.activationMode !== undefined && updates.behavior.activationMode !== oldActivationMode;
-        const pttKeyChanged = updates.behavior?.pttKey !== undefined && updates.behavior.pttKey !== oldPttKey;
-        if (modeChanged || pttKeyChanged) {
-            if (appConfig.behavior?.activationMode === 'pushToTalk') {
-                registerPushToTalk(appConfig.behavior?.pttKey || 'Space');
-            } else {
-                unregisterPushToTalk();
-            }
-        }
+        // PTT key registration is handled by Python's GlobalHotkeyListener.
+        // Config changes are forwarded to Python via stdin (config_update command),
+        // which updates the evdev/pynput listener directly.
 
         // Forward overlay output change to wayland orb (only if actually changed)
         if (updates.overlay?.outputName !== undefined && waylandOrb?.isReady()) {
@@ -665,7 +641,9 @@ app.whenReady().then(() => {
         }
 
         // Notify Python backend of config changes (only if voice-related settings changed)
-        const voiceSettingsChanged = modeChanged ||
+        const activationModeChanged = updates.behavior?.activationMode !== undefined && updates.behavior.activationMode !== oldActivationMode;
+        const pttKeyChanged = updates.behavior?.pttKey !== undefined && updates.behavior.pttKey !== oldPttKey;
+        const voiceSettingsChanged = activationModeChanged || pttKeyChanged ||
             (updates.wakeWord && JSON.stringify(updates.wakeWord) !== JSON.stringify(oldWakeWord)) ||
             (updates.voice && JSON.stringify(updates.voice) !== JSON.stringify(oldVoice));
         if (voiceSettingsChanged && pythonBackend?.isRunning()) {
@@ -673,6 +651,7 @@ app.whenReady().then(() => {
                 command: 'config_update',
                 config: {
                     activationMode: appConfig.behavior?.activationMode,
+                    pttKey: appConfig.behavior?.pttKey,
                     wakeWord: appConfig.wakeWord,
                     voice: appConfig.voice
                 }
@@ -1006,11 +985,10 @@ app.whenReady().then(() => {
         }
     });
 
-    // Register PTT keybind from saved config on startup
-    if (appConfig?.behavior?.activationMode === 'pushToTalk' && appConfig?.behavior?.pttKey) {
-        console.log('[Voice Mirror] Registering PTT key from saved config:', appConfig.behavior.pttKey);
-        registerPushToTalk(appConfig.behavior.pttKey);
-    }
+    // PTT capture is handled entirely by Python's GlobalHotkeyListener (evdev/pynput).
+    // Python captures key press/release globally regardless of window state and writes
+    // ptt_trigger.json directly. Electron's uiohook PTT was unreliable when collapsed to orb.
+    // Electron's uiohook is still used for the toggle hotkey (Ctrl+Shift+V) via hotkey-manager.
 
     // Start Docker services (SearXNG, n8n) if available
     startDockerServices();
