@@ -139,7 +139,7 @@ function createAIManager(options = {}) {
     function start() {
         const config = getConfig();
         const providerType = config?.ai?.provider || 'claude';
-        const model = config?.ai?.model || null;
+        const model = config?.ai?.model || config?.ai?.localModel || null;
 
         console.log(`[AIManager] Starting AI provider: ${providerType}${model ? ' (' + model + ')' : ''}`);
         const isSwitch = hasStartedOnce;

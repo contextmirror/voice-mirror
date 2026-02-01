@@ -410,7 +410,7 @@ async function init() {
     try {
         const config = await window.voiceMirror.config.get();
         const provider = config.ai?.provider || 'claude';
-        const model = config.ai?.model || null;
+        const model = config.ai?.model || config.ai?.localModel || null;
         // Get display name based on provider
         const providerNames = {
             claude: 'Claude Code',
