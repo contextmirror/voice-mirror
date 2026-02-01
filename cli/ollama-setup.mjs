@@ -156,6 +156,12 @@ export async function installOllama(spinner, installDir) {
                     stdio: 'pipe',
                     timeout: 180000,
                 });
+                // Persist OLLAMA_MODELS so models go to the chosen drive
+                if (installDir) {
+                    const modelsDir = join(installDir, 'models');
+                    process.env.OLLAMA_MODELS = modelsDir;
+                    try { execSync(`setx OLLAMA_MODELS "${modelsDir}"`, { stdio: 'pipe' }); } catch {}
+                }
                 return true;
             } catch { /* fall through to direct download */ }
         }

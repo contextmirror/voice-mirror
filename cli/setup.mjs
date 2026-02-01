@@ -397,7 +397,7 @@ export async function runSetup(opts = {}) {
     const features = nonInteractive
         ? []
         : guard(await p.multiselect({
-            message: 'Optional features',
+            message: 'Optional features (Space to toggle, Enter to confirm)',
             options: [
                 { value: 'browser', label: 'Browser automation', hint: 'Installs Chromium (~200MB)' },
                 { value: 'voiceClone', label: 'Voice cloning', hint: 'Requires ffmpeg' },
