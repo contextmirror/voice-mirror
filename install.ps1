@@ -8,7 +8,7 @@
 #   $env:VM_SKIP_SETUP = "1"
 #   $env:VM_NON_INTERACTIVE = "1"
 
-$ErrorActionPreference = "SilentlyContinue"
+$ErrorActionPreference = "Continue"
 
 # ─── Config ──────────────────────────────────────────────────────────
 $InstallMethod = if ($env:VM_INSTALL_METHOD) { $env:VM_INSTALL_METHOD } else { "git" }
@@ -39,35 +39,94 @@ function Test-Command($cmd) {
     catch { return $false }
 }
 
+# ─── Find Winget ─────────────────────────────────────────────────────
+# winget lives in WindowsApps which may not be on PATH in iex sessions
+function Find-Winget {
+    if (Test-Command "winget") { return "winget" }
+    $wingetPath = "$env:LOCALAPPDATA\Microsoft\WindowsApps\winget.exe"
+    if (Test-Path $wingetPath) { return $wingetPath }
+    return $null
+}
+
+# ─── Refresh PATH ───────────────────────────────────────────────────
+function Refresh-Path {
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+}
+
+# ─── Download Helper ─────────────────────────────────────────────────
+function Download-File($url, $dest) {
+    Write-Info "Downloading from $url..."
+    try {
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        Invoke-WebRequest -Uri $url -OutFile $dest -UseBasicParsing -ErrorAction Stop
+        return $true
+    } catch {
+        Write-Fail "Download failed: $_"
+        return $false
+    }
+}
+
+# ─── Run Installer with Elevation ────────────────────────────────────
+function Run-Installer($path, $args, $description) {
+    Write-Info "Running $description installer..."
+    try {
+        $proc = Start-Process -FilePath $path -ArgumentList $args -Wait -PassThru
+        if ($proc.ExitCode -eq 0 -or $proc.ExitCode -eq 3010) {
+            Refresh-Path
+            return $true
+        }
+        Write-Warn "$description installer exited with code $($proc.ExitCode)"
+        return $false
+    } catch {
+        Write-Fail "$description installer failed: $_"
+        return $false
+    }
+}
+
 # ─── Ensure Git ──────────────────────────────────────────────────────
 function Ensure-Git {
     if (Test-Command "git") {
-        $v = (git --version) -replace '[^0-9.]', ''
+        $v = (git --version 2>&1) -replace '[^0-9.]', ''
         Write-Ok "git $v"
         return
     }
 
     Write-Step "Installing git..."
-    if (Test-Command "winget") {
-        winget install --id Git.Git --accept-source-agreements --accept-package-agreements
-    } elseif (Test-Command "choco") {
-        choco install git -y
-    } elseif (Test-Command "scoop") {
-        scoop install git
-    } else {
-        Write-Fail "Git not found. Install from https://git-scm.com/download/win"
-        exit 1
+
+    $winget = Find-Winget
+    if ($winget) {
+        Write-Info "Using winget..."
+        $out = & $winget install --id Git.Git --accept-source-agreements --accept-package-agreements 2>&1
+        Refresh-Path
+        if (Test-Command "git") { Write-Ok "git installed"; return }
     }
 
-    # Refresh PATH
-    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
-
-    if (Test-Command "git") {
-        Write-Ok "git installed"
-    } else {
-        Write-Fail "Git install failed. Restart your terminal and try again."
-        exit 1
+    if (Test-Command "choco") {
+        $out = choco install git -y 2>&1
+        Refresh-Path
+        if (Test-Command "git") { Write-Ok "git installed via Chocolatey"; return }
     }
+
+    if (Test-Command "scoop") {
+        $out = scoop install git 2>&1
+        Refresh-Path
+        if (Test-Command "git") { Write-Ok "git installed via Scoop"; return }
+    }
+
+    # Direct download fallback
+    Write-Info "No package manager found, downloading Git installer..."
+    $gitInstaller = Join-Path $env:TEMP "Git-installer.exe"
+    $gitUrl = "https://github.com/git-for-windows/git/releases/download/v2.47.1.windows.2/Git-2.47.1.2-64-bit.exe"
+    if (Download-File $gitUrl $gitInstaller) {
+        if (Run-Installer $gitInstaller "/VERYSILENT /NORESTART /NOCANCEL /SP- /CLOSEAPPLICATIONS /RESTARTAPPLICATIONS /COMPONENTS=`"icons,ext\reg\shellhere,assoc,assoc_sh`"" "Git") {
+            Remove-Item $gitInstaller -ErrorAction SilentlyContinue
+            if (Test-Command "git") { Write-Ok "git installed"; return }
+        }
+        Remove-Item $gitInstaller -ErrorAction SilentlyContinue
+    }
+
+    Write-Fail "Could not install Git. Install manually from https://git-scm.com/download/win"
+    exit 1
 }
 
 # ─── Ensure Node.js ─────────────────────────────────────────────────
@@ -75,7 +134,7 @@ function Ensure-Node {
     Write-Step "Checking Node.js..."
 
     if (Test-Command "node") {
-        $v = (node -v) -replace 'v', ''
+        $v = (node -v 2>&1) -replace 'v', ''
         $major = [int]($v.Split('.')[0])
         if ($major -ge 18) {
             Write-Ok "Node.js $v"
@@ -87,31 +146,60 @@ function Ensure-Node {
     }
 
     Write-Info "Installing Node.js..."
-    if (Test-Command "winget") {
+
+    $winget = Find-Winget
+    if ($winget) {
         Write-Info "Using winget..."
-        winget install --id OpenJS.NodeJS.LTS --accept-source-agreements --accept-package-agreements
-    } elseif (Test-Command "choco") {
+        $out = & $winget install --id OpenJS.NodeJS.LTS --accept-source-agreements --accept-package-agreements 2>&1
+        Refresh-Path
+        if (Test-Command "node") {
+            $v = (node -v 2>&1) -replace 'v', ''
+            Write-Ok "Node.js $v installed"
+            return
+        }
+    }
+
+    if (Test-Command "choco") {
         Write-Info "Using Chocolatey..."
-        choco install nodejs-lts -y
-    } elseif (Test-Command "scoop") {
+        $out = choco install nodejs-lts -y 2>&1
+        Refresh-Path
+        if (Test-Command "node") {
+            $v = (node -v 2>&1) -replace 'v', ''
+            Write-Ok "Node.js $v installed via Chocolatey"
+            return
+        }
+    }
+
+    if (Test-Command "scoop") {
         Write-Info "Using Scoop..."
-        scoop install nodejs-lts
-    } else {
-        Write-Fail "No package manager found. Install Node.js from https://nodejs.org"
-        Write-Fail "Or install winget (built-in on Windows 11) / Chocolatey / Scoop first."
-        exit 1
+        $out = scoop install nodejs-lts 2>&1
+        Refresh-Path
+        if (Test-Command "node") {
+            $v = (node -v 2>&1) -replace 'v', ''
+            Write-Ok "Node.js $v installed via Scoop"
+            return
+        }
     }
 
-    # Refresh PATH
-    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
-
-    if (Test-Command "node") {
-        $v = (node -v) -replace 'v', ''
-        Write-Ok "Node.js $v installed"
-    } else {
-        Write-Fail "Could not install Node.js. Restart your terminal and try again."
-        exit 1
+    # Direct download fallback — Node.js LTS MSI
+    Write-Info "No package manager worked, downloading Node.js installer..."
+    $nodeInstaller = Join-Path $env:TEMP "node-lts-installer.msi"
+    $nodeUrl = "https://nodejs.org/dist/v22.13.1/node-v22.13.1-x64.msi"
+    if (Download-File $nodeUrl $nodeInstaller) {
+        if (Run-Installer "msiexec.exe" "/i `"$nodeInstaller`" /quiet /norestart" "Node.js") {
+            Remove-Item $nodeInstaller -ErrorAction SilentlyContinue
+            Refresh-Path
+            if (Test-Command "node") {
+                $v = (node -v 2>&1) -replace 'v', ''
+                Write-Ok "Node.js $v installed"
+                return
+            }
+        }
+        Remove-Item $nodeInstaller -ErrorAction SilentlyContinue
     }
+
+    Write-Fail "Could not install Node.js. Install manually from https://nodejs.org"
+    exit 1
 }
 
 # ─── Ensure Python ──────────────────────────────────────────────────
@@ -132,46 +220,74 @@ function Ensure-Python {
     }
 
     Write-Info "Python 3.9+ not found, installing..."
-    if (Test-Command "winget") {
+
+    $winget = Find-Winget
+    if ($winget) {
         Write-Info "Using winget..."
-        winget install --id Python.Python.3.12 --accept-source-agreements --accept-package-agreements
-    } elseif (Test-Command "choco") {
+        $out = & $winget install --id Python.Python.3.12 --accept-source-agreements --accept-package-agreements 2>&1
+        Refresh-Path
+        if (Test-Command "python") {
+            $v = (python --version 2>&1) -replace '[^0-9.]', ''
+            Write-Ok "Python $v installed"
+            return
+        }
+    }
+
+    if (Test-Command "choco") {
         Write-Info "Using Chocolatey..."
-        choco install python3 -y
-    } elseif (Test-Command "scoop") {
+        $out = choco install python3 -y 2>&1
+        Refresh-Path
+        if (Test-Command "python") {
+            $v = (python --version 2>&1) -replace '[^0-9.]', ''
+            Write-Ok "Python $v installed via Chocolatey"
+            return
+        }
+    }
+
+    if (Test-Command "scoop") {
         Write-Info "Using Scoop..."
-        scoop install python
-    } else {
-        Write-Fail "Install Python from https://python.org"
-        exit 1
+        $out = scoop install python 2>&1
+        Refresh-Path
+        if (Test-Command "python") {
+            $v = (python --version 2>&1) -replace '[^0-9.]', ''
+            Write-Ok "Python $v installed via Scoop"
+            return
+        }
     }
 
-    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
-
-    if (Test-Command "python") {
-        $v = (python --version 2>&1) -replace '[^0-9.]', ''
-        Write-Ok "Python $v installed"
-    } else {
-        Write-Fail "Could not install Python. Restart your terminal and try again."
-        exit 1
+    # Direct download fallback
+    Write-Info "No package manager worked, downloading Python installer..."
+    $pyInstaller = Join-Path $env:TEMP "python-installer.exe"
+    $pyUrl = "https://www.python.org/ftp/python/3.12.8/python-3.12.8-amd64.exe"
+    if (Download-File $pyUrl $pyInstaller) {
+        if (Run-Installer $pyInstaller "/quiet InstallAllUsers=0 PrependPath=1 Include_test=0" "Python") {
+            Remove-Item $pyInstaller -ErrorAction SilentlyContinue
+            Refresh-Path
+            if (Test-Command "python") {
+                $v = (python --version 2>&1) -replace '[^0-9.]', ''
+                Write-Ok "Python $v installed"
+                return
+            }
+        }
+        Remove-Item $pyInstaller -ErrorAction SilentlyContinue
     }
+
+    Write-Fail "Could not install Python. Install manually from https://python.org"
+    exit 1
 }
 
 # ─── Ensure Build Tools ─────────────────────────────────────────────
 function Ensure-BuildTools {
     Write-Step "Checking C++ Build Tools..."
 
-    # Check if cl.exe is available (VS Build Tools installed)
+    # Check via vswhere
     $vsWhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-    $hasVS = $false
     if (Test-Path $vsWhere) {
         $vsPath = & $vsWhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath 2>&1
-        if ($vsPath) { $hasVS = $true }
-    }
-
-    if ($hasVS) {
-        Write-Ok "Visual Studio Build Tools found"
-        return
+        if ($vsPath) {
+            Write-Ok "Visual Studio Build Tools found"
+            return
+        }
     }
 
     Write-Warn "C++ Build Tools not found (needed for native modules like better-sqlite3)"
@@ -180,54 +296,53 @@ function Ensure-BuildTools {
         return
     }
 
-    $reply = Read-Host "  Install Visual Studio Build Tools? (Highly recommended) [Y/n]"
-    if ($reply -match '^[Nn]') {
-        Write-Warn "Skipping — MCP server memory features may not work"
+    $reply = Read-Host "  Install Visual Studio Build Tools? (Highly recommended) (Y/n)"
+    if ($reply -match '^(N|n)') {
+        Write-Warn "Skipping - MCP server memory features may not work"
         return
     }
 
     Write-Info "Installing Visual Studio Build Tools..."
 
-    # Find winget — it may not be on PATH but exists in WindowsApps
-    $winget = $null
-    if (Test-Command "winget") {
-        $winget = "winget"
-    } else {
-        $wingetPath = "$env:LOCALAPPDATA\Microsoft\WindowsApps\winget.exe"
-        if (Test-Path $wingetPath) { $winget = $wingetPath }
-    }
-
+    # Try winget first
+    $winget = Find-Winget
     if ($winget) {
         Write-Info "Using winget..."
         $btOut = & $winget install Microsoft.VisualStudio.2022.BuildTools --override "--quiet --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended" --accept-source-agreements --accept-package-agreements 2>&1
-        if ($LASTEXITCODE -eq 0) {
-            Write-Ok "Visual Studio Build Tools installed"
-            $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
-        } else {
-            Write-Warn "Build Tools install may have failed. You can install manually from:"
-            Write-Info "https://visualstudio.microsoft.com/visual-cpp-build-tools/"
-        }
-    } else {
-        # Download installer directly
-        Write-Info "Downloading Build Tools installer..."
-        $installerUrl = "https://aka.ms/vs/17/release/vs_BuildTools.exe"
-        $installerPath = Join-Path $env:TEMP "vs_BuildTools.exe"
-        try {
-            Invoke-WebRequest -Uri $installerUrl -OutFile $installerPath -UseBasicParsing
-            Write-Info "Running installer (this may take several minutes)..."
-            $proc = Start-Process -FilePath $installerPath -ArgumentList "--quiet --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --wait" -Wait -PassThru
-            if ($proc.ExitCode -eq 0 -or $proc.ExitCode -eq 3010) {
+        Refresh-Path
+        # Check if it worked
+        if (Test-Path $vsWhere) {
+            $vsPath = & $vsWhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath 2>&1
+            if ($vsPath) {
                 Write-Ok "Visual Studio Build Tools installed"
-                $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+                return
+            }
+        }
+        Write-Warn "winget install may need admin privileges or a reboot"
+    }
+
+    # Direct download fallback with UAC elevation
+    Write-Info "Downloading Build Tools installer (this is ~1.5GB, please be patient)..."
+    $installerUrl = "https://aka.ms/vs/17/release/vs_BuildTools.exe"
+    $installerPath = Join-Path $env:TEMP "vs_BuildTools.exe"
+    if (Download-File $installerUrl $installerPath) {
+        Write-Info "Running installer with admin privileges (UAC prompt may appear)..."
+        try {
+            $proc = Start-Process -FilePath $installerPath -ArgumentList "--quiet --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --wait" -Verb RunAs -Wait -PassThru
+            if ($proc.ExitCode -eq 0 -or $proc.ExitCode -eq 3010) {
+                Write-Ok "Visual Studio Build Tools installed (may need reboot for full effect)"
+                Refresh-Path
             } else {
                 Write-Warn "Installer exited with code $($proc.ExitCode)"
-                Write-Info "Install manually from: https://visualstudio.microsoft.com/visual-cpp-build-tools/"
             }
-            Remove-Item $installerPath -ErrorAction SilentlyContinue
         } catch {
-            Write-Warn "Download failed. Install manually from:"
-            Write-Info "https://visualstudio.microsoft.com/visual-cpp-build-tools/"
+            Write-Warn "Installation cancelled or failed (admin privileges may be required)"
         }
+        Remove-Item $installerPath -ErrorAction SilentlyContinue
+    } else {
+        Write-Warn "Could not download Build Tools. Install manually from:"
+        Write-Info "https://visualstudio.microsoft.com/visual-cpp-build-tools/"
+        Write-Info "Select 'Desktop development with C++' workload"
     }
 }
 
@@ -252,9 +367,9 @@ function Install-Repo {
         Write-Info "Existing installation found at $InstallDir"
         Write-Info "Updating..."
         Push-Location $InstallDir
-        git fetch origin
-        git checkout $Branch
-        git pull origin $Branch
+        $out = git fetch origin 2>&1
+        $out = git checkout $Branch 2>&1
+        $out = git pull origin $Branch 2>&1
         Pop-Location
         Write-Ok "Updated to latest"
     } elseif (Test-Path $InstallDir) {
@@ -291,9 +406,8 @@ function Install-Deps {
         $npmOut = npm install 2>&1
         if ($LASTEXITCODE -ne 0) {
             Pop-Location
-            Write-Warn "MCP server dependencies partially failed (native modules need build tools)"
-            Write-Info "To fix: npm install -g windows-build-tools  (run as Administrator)"
-            Write-Info "Or install Visual Studio Build Tools from https://visualstudio.microsoft.com/visual-cpp-build-tools/"
+            Write-Warn "MCP server native modules failed (build tools may need a reboot to take effect)"
+            Write-Info "After reboot, run: cd $mcpDir && npm install"
         } else {
             Pop-Location
             Write-Ok "MCP server dependencies installed"
@@ -307,21 +421,35 @@ function Link-CLI {
     Write-Step "Setting up CLI..."
 
     Push-Location $InstallDir
-    try {
-        npm link 2>&1 | Select-Object -Last 1
-        Write-Ok "voice-mirror command linked globally"
-    } catch {
-        Write-Warn "npm link failed. You may need to run as Administrator."
-        Write-Info "Or run directly: node $InstallDir\cli\index.mjs"
-    }
+    $linkOut = npm link 2>&1
     Pop-Location
 
     if (Test-Command "voice-mirror") {
-        Write-Ok "Run 'voice-mirror' from anywhere"
+        Write-Ok "voice-mirror command available globally"
+        return
+    }
+
+    # npm link may need admin — try setting user-level npm prefix instead
+    Write-Info "Setting up user-level npm prefix..."
+    $npmPrefix = Join-Path $env:APPDATA "npm"
+    $npmOut = npm config set prefix $npmPrefix 2>&1
+
+    Push-Location $InstallDir
+    $linkOut = npm link 2>&1
+    Pop-Location
+
+    # Add npm prefix to user PATH if not already there
+    $userPath = [System.Environment]::GetEnvironmentVariable("Path", "User")
+    if ($userPath -notlike "*$npmPrefix*") {
+        [System.Environment]::SetEnvironmentVariable("Path", "$userPath;$npmPrefix", "User")
+        $env:Path = "$env:Path;$npmPrefix"
+    }
+
+    if (Test-Command "voice-mirror") {
+        Write-Ok "voice-mirror command available globally"
     } else {
-        Write-Warn "voice-mirror not on PATH. Add npm global bin to PATH:"
-        $npmBin = (npm config get prefix) + "\node_modules\.bin"
-        Write-Info "  $npmBin"
+        Write-Warn "voice-mirror not on PATH in this session"
+        Write-Info "Restart your terminal, then run: voice-mirror"
         Write-Info "Or run directly: node $InstallDir\cli\index.mjs"
     }
 }
@@ -330,6 +458,12 @@ function Link-CLI {
 function Run-Setup {
     if ($SkipSetup) {
         Write-Info "Skipping setup wizard"
+        return
+    }
+
+    $setupFile = Join-Path $InstallDir "cli\index.mjs"
+    if (-not (Test-Path $setupFile)) {
+        Write-Warn "Setup wizard not found at $setupFile"
         return
     }
 
