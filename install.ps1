@@ -58,7 +58,8 @@ function Download-File($url, $dest) {
     Write-Info "Downloading from $url..."
     try {
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-        Invoke-WebRequest -Uri $url -OutFile $dest -UseBasicParsing -ErrorAction Stop
+        # WebClient is much faster than Invoke-WebRequest for large files
+        (New-Object System.Net.WebClient).DownloadFile($url, $dest)
         return $true
     } catch {
         Write-Fail "Download failed: $_"
@@ -381,9 +382,9 @@ function Ensure-FFmpeg {
         }
     }
 
-    # Direct download fallback
-    Write-Info "Downloading FFmpeg essentials (~90 MB)..."
-    $zipUrl = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
+    # Direct download fallback (GitHub CDN — fast)
+    Write-Info "Downloading FFmpeg (~80 MB)..."
+    $zipUrl = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
     $zipPath = Join-Path $env:TEMP "ffmpeg.zip"
     $extractDir = Join-Path $env:TEMP "ffmpeg-extract"
 
