@@ -311,11 +311,11 @@ export async function runSetup(opts = {}) {
                     spin5.start('Installing Ollama...');
                     const ok = await installOllama({ update: (m) => spin5.message(m) }, ollamaDir);
                     spin5.stop(ok ? 'Ollama installed' : chalk.red('Ollama install failed'));
-                    if (ok) ollamaReady = true;
+                    if (ok) ollama.installed = true;
                 }
             }
 
-            if (!ollamaReady && ollama.installed) {
+            if (ollama.installed && !ollamaReady) {
                 const spin6 = p.spinner();
                 spin6.start('Starting Ollama...');
                 ollamaReady = await ensureOllamaRunning({ update: (m) => spin6.message(m) }, ollamaDir);
