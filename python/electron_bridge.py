@@ -628,18 +628,8 @@ async def main():
     stdin_thread = threading.Thread(target=stdin_reader, daemon=True)
     stdin_thread.start()
 
-    # Start global hotkey listener if PTT mode is configured
-    try:
-        config_path = get_config_base() / "voice-mirror-electron" / "config.json"
-        if config_path.exists():
-            with open(config_path, encoding='utf-8') as f:
-                app_config = json.load(f)
-            behavior = app_config.get("behavior", {})
-            if behavior.get("activationMode") == "pushToTalk":
-                ptt_key = behavior.get("pttKey", "MouseButton4")
-                _hotkey_listener.start(ptt_key)
-    except Exception as e:
-        print(f"[GlobalHotkey] Config read failed, skipping: {e}")
+    # GlobalHotkey listener is started by voice_agent.run() AFTER the audio
+    # stream is active, so PTT triggers aren't lost during model loading.
 
     try:
         # Import and run VoiceMirror

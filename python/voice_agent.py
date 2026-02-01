@@ -721,6 +721,23 @@ class VoiceMirror:
         )
 
         with stream:
+            # Start GlobalHotkey listener NOW that the audio stream is active
+            # (must be after stream start so PTT triggers aren't lost during model loading)
+            try:
+                from electron_bridge import _hotkey_listener
+                if self._activation_mode == ActivationMode.PUSH_TO_TALK and not _hotkey_listener._running:
+                    ptt_key = self._voice_config.get("pttKey") or \
+                              self._voice_config.get("activationMode") and "MouseButton4"
+                    # Read PTT key from main config
+                    from providers.config import ELECTRON_CONFIG_PATH
+                    if ELECTRON_CONFIG_PATH.exists():
+                        with open(ELECTRON_CONFIG_PATH, encoding='utf-8') as f:
+                            behavior = json.load(f).get("behavior", {})
+                            ptt_key = behavior.get("pttKey", "MouseButton4")
+                    _hotkey_listener.start(ptt_key or "MouseButton4")
+            except Exception as e:
+                print(f"[GlobalHotkey] Failed to start from voice_agent: {e}")
+
             # Start notification watcher in background
             notification_task = None
             if NOTIFICATION_ENABLED:
