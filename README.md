@@ -114,7 +114,7 @@ Voice Mirror Electron/
 │   ├── stt/            # Speech-to-text adapters
 │   ├── tts/            # Text-to-speech adapters
 │   └── audio/          # Wake word, VAD
-├── mcp-server/         # MCP server (14 tools)
+├── mcp-server/         # MCP server (51 tools across 7 dynamic groups)
 │   └── lib/memory/     # Memory system
 ├── docs/               # Documentation
 └── assets/             # Icons
@@ -199,6 +199,6 @@ Config stored at:
 
 Private repository.
 
-## Author
+## About
 
-Nathan + Claude | January 2026
+Created January 2026

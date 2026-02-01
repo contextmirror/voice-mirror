@@ -8,7 +8,7 @@
     "dev": "env -u ELECTRON_RUN_AS_NODE electron . --ozone-platform=x11 --disable-gpu --no-sandbox --dev",
     "build": "electron-builder"
   },
-  "author": "Nathan + Claude",
+  "author": "",
   "license": "MIT",
   "devDependencies": {
     "electron": "^28.3.3",

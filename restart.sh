@@ -26,7 +26,7 @@ pkill -9 -f "voice-mirror-electron.*mcp" 2>/dev/null
 sleep 1
 
 echo "Starting Voice Mirror Electron..."
-cd "/home/nayballs/Project/context-mirror-ecosystem/Voice Mirror Electron"
+cd "$(dirname "$0")"
 npm start &
 
 echo "Done!"

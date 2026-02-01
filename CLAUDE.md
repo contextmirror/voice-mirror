@@ -108,7 +108,7 @@ Voice Mirror Electron/
 │   ├── js/                  # Renderer modules (9 files)
 │   └── styles/              # CSS modules (9 files)
 ├── python/                  # Voice backend (STT, TTS, wake word)
-├── mcp-server/              # MCP server (48 tools across 7 dynamic groups)
+├── mcp-server/              # MCP server (51 tools across 7 dynamic groups)
 ├── wayland-orb/             # Rust native layer-shell overlay (Linux/Wayland)
 ├── chrome-extension/        # Browser relay extension (MV3, CDP relay)
 ├── test/                    # Browser benchmark (102 tests, fixture replay)
@@ -154,7 +154,7 @@ See [CONFIGURATION.md](docs/CONFIGURATION.md) for full provider list (11 total).
 
 ---
 
-## MCP Tool Groups (48 tools, dynamically loaded)
+## MCP Tool Groups (51 tools, dynamically loaded)
 
 | Group | Tools | Key Capabilities |
 |-------|-------|-----------------|
@@ -183,10 +183,6 @@ See [CONFIGURATION.md](docs/CONFIGURATION.md) for full provider list (11 total).
 
 ---
 
-## Repository
-
-**GitHub:** https://github.com/nayballs/voice-mirror-electron (private)
-
 ---
 
 ## Development Rules
@@ -203,4 +199,4 @@ No change is considered done until it has passing tests. This applies to all par
 
 ---
 
-*Created: January 2026 | Author: Nathan + Claude*
+*Created: January 2026*

@@ -58,6 +58,7 @@ def get_ai_provider() -> dict:
     except Exception as e:
         print(f"⚠️ Could not read AI provider: {e}")
 
+    print("⚠️ No AI provider configured, defaulting to Claude")
     return {"provider": "claude", "name": "Claude", "model": None}
 
 

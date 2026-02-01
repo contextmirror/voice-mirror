@@ -1,6 +1,6 @@
 # Voice Mirror MCP Server
 
-Model Context Protocol (MCP) server providing 14 tools for Claude Code integration with Voice Mirror Electron.
+Model Context Protocol (MCP) server providing 51 tools across 7 dynamic groups for Claude Code integration with Voice Mirror Electron.
 
 ## Quick Start
 
@@ -58,7 +58,7 @@ The MCP server is configured in Claude Code's settings to run automatically:
 
 ```
 mcp-server/
-├── index.js                # Main server (14 tools, ~1700 lines)
+├── index.js                # Main server (51 tools, ~1700 lines)
 ├── package.json            # Dependencies
 ├── scripts/
 │   └── download-model.js   # Embedding model downloader

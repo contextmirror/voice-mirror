@@ -18,6 +18,8 @@ const fs = require('fs');
 // panel; the collapsed orb is rendered by wayland-orb (native layer-shell)
 // when available, falling back to the Electron window on X11/non-Wayland.
 const config = require('./config');
+// CLI agent providers that use PTY mode (terminal-based)
+const CLI_PROVIDERS = ['claude', 'codex', 'gemini-cli'];
 // Note: claude-spawner and providers are now used via ai-manager service
 const { createLogger } = require('./services/logger');
 const { createPushToTalk } = require('./services/push-to-talk');
@@ -253,7 +255,8 @@ function addDisplayedMessageId(id) {
 }
 
 // Serper.dev API key for web search
-const SERPER_API_KEY = process.env.SERPER_API_KEY || '3adf77c61ddf98dff5ab2e3dd35b3eebc3409fa6';
+const SERPER_API_KEY = process.env.SERPER_API_KEY || '';
+if (!SERPER_API_KEY) console.warn('[Main] SERPER_API_KEY not set - web search will be unavailable');
 
 // Screen capture and browser watcher helper functions
 function startScreenCaptureWatcher() {
@@ -787,7 +790,7 @@ app.whenReady().then(() => {
         const providerType = appConfig?.ai?.provider || 'claude';
         return {
             running: isAIProviderRunning(),
-            mode: providerType === 'claude' ? 'pty' : 'api',
+            mode: CLI_PROVIDERS.includes(providerType) ? 'pty' : 'api',
             provider: providerType
         };
     });
@@ -797,8 +800,8 @@ app.whenReady().then(() => {
     ipcMain.handle('claude-pty-input', (event, data) => {
         const providerType = appConfig?.ai?.provider || 'claude';
 
-        if (providerType === 'claude') {
-            // Claude uses PTY - send raw input via aiManager
+        if (CLI_PROVIDERS.includes(providerType)) {
+            // CLI providers use PTY - send raw input via aiManager
             if (aiManager && aiManager.sendRawInputData(data)) {
                 return { sent: true };
             }
@@ -841,12 +844,12 @@ app.whenReady().then(() => {
     ipcMain.handle('claude-pty-resize', (event, cols, rows) => {
         const providerType = appConfig?.ai?.provider || 'claude';
 
-        if (providerType === 'claude' && aiManager) {
+        if (CLI_PROVIDERS.includes(providerType) && aiManager) {
             aiManager.resize(cols, rows);
             return { resized: true };
         }
         // Non-PTY providers don't need resize handling
-        return { resized: false, reason: providerType === 'claude' ? 'not running' : 'not PTY' };
+        return { resized: false, reason: CLI_PROVIDERS.includes(providerType) ? 'not running' : 'not PTY' };
     });
 
     // AI Provider IPC handlers

@@ -108,7 +108,8 @@ class VoiceMirror:
     def get_listening_status(self) -> str:
         """Get the appropriate listening status message based on activation mode."""
         if self._activation_mode == ActivationMode.WAKE_WORD:
-            return "👂 Listening for 'Hey Claude'..."
+            wake_phrase = self._ai_provider.get('wakePhrase', 'Hey Claude')
+            return f"👂 Listening for '{wake_phrase}'..."
         elif self._activation_mode == ActivationMode.CALL_MODE:
             return "📞 Call mode active - speak anytime..."
         elif self._activation_mode == ActivationMode.PUSH_TO_TALK:
@@ -538,7 +539,8 @@ class VoiceMirror:
                 if time.time() > self.audio_state.conversation_end_time:
                     self.audio_state.in_conversation = False
                     if self._activation_mode == ActivationMode.WAKE_WORD:
-                        print("\n👂 Conversation window closed. Say 'Hey Claude' to continue.")
+                        wake_phrase = self._ai_provider.get('wakePhrase', 'Hey Claude')
+                        print(f"\n👂 Conversation window closed. Say '{wake_phrase}' to continue.")
                     else:
                         print(f"\n{self.get_listening_status()}")
                 else:
@@ -636,7 +638,8 @@ class VoiceMirror:
         # Show activation mode specific instructions
         print(f"\n{self.get_listening_status()}")
         if self._activation_mode == ActivationMode.WAKE_WORD:
-            print("   Say 'Hey Claude' then speak your command!")
+            wake_phrase = self._ai_provider.get('wakePhrase', 'Hey Claude')
+            print(f"   Say '{wake_phrase}' then speak your command!")
             print(f"\n   Conversation mode: {CONVERSATION_WINDOW}s follow-up window")
             print("   (After a response, speak again without wake word)")
         elif self._activation_mode == ActivationMode.CALL_MODE:

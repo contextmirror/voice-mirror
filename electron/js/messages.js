@@ -119,10 +119,14 @@ export function addMessage(role, text, imageBase64 = null) {
     header.className = 'message-header';
     // Use dynamic provider name from state for assistant messages
     const senderName = role === 'user' ? 'You' : state.currentProviderName;
-    header.innerHTML = `
-        <span class="message-sender">${senderName}</span>
-        <span class="message-time">${formatTime()}</span>
-    `;
+    const senderSpan = document.createElement('span');
+    senderSpan.className = 'message-sender';
+    senderSpan.textContent = senderName;
+    const timeSpan = document.createElement('span');
+    timeSpan.className = 'message-time';
+    timeSpan.textContent = formatTime();
+    header.appendChild(senderSpan);
+    header.appendChild(timeSpan);
 
     const bubble = document.createElement('div');
     bubble.className = 'message-bubble';

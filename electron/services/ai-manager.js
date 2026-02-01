@@ -13,6 +13,9 @@ const {
     isClaudeAvailable,
     resizePty
 } = require('../claude-spawner');
+
+// CLI agent providers that use PTY mode
+const CLI_PROVIDERS = ['claude', 'codex', 'gemini-cli'];
 const { createProvider } = require('../providers');
 
 /**
@@ -143,8 +146,8 @@ function createAIManager(options = {}) {
         hasStartedOnce = true;
 
         // Check if already running
-        if (providerType === 'claude') {
-            // Claude uses the existing PTY-based system
+        if (CLI_PROVIDERS.includes(providerType)) {
+            // CLI providers use PTY-based system (currently only Claude Code implemented)
             if (isClaudeRunning()) {
                 console.log('[AIManager] Claude already running');
                 return false;
@@ -319,8 +322,8 @@ function createAIManager(options = {}) {
         const config = getConfig();
         const providerType = config?.ai?.provider || 'claude';
 
-        if (providerType === 'claude') {
-            // Claude uses PTY input
+        if (CLI_PROVIDERS.includes(providerType)) {
+            // CLI providers use PTY input
             if (isClaudeRunning()) {
                 sendInput(text);
                 return true;
@@ -346,7 +349,7 @@ function createAIManager(options = {}) {
         const config = getConfig();
         const providerType = config?.ai?.provider || 'claude';
 
-        if (providerType === 'claude' && isClaudeRunning()) {
+        if (CLI_PROVIDERS.includes(providerType) && isClaudeRunning()) {
             sendRawInput(data);
             return true;
         }
@@ -370,7 +373,7 @@ function createAIManager(options = {}) {
         const config = getConfig();
         const providerType = config?.ai?.provider || 'claude';
 
-        if (providerType === 'claude' && isClaudeRunning()) {
+        if (CLI_PROVIDERS.includes(providerType) && isClaudeRunning()) {
             resizePty(cols, rows);
         }
     }

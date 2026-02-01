@@ -10,7 +10,7 @@ const cdp = require('./webview-cdp');
 const { searchSerper } = require('./serper-search');
 
 // Serper API key
-let serperApiKey = process.env.SERPER_API_KEY || '3adf77c61ddf98dff5ab2e3dd35b3eebc3409fa6';
+let serperApiKey = process.env.SERPER_API_KEY || '';
 
 /**
  * Set the Serper API key.

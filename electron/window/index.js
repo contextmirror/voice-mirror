@@ -4,7 +4,7 @@
  */
 
 const { BrowserWindow, screen } = require('electron');
-const { execSync } = require('child_process');
+const { execSync, execFileSync } = require('child_process');
 const path = require('path');
 
 /**
@@ -81,6 +81,7 @@ function createWindowManager(options = {}) {
             webPreferences: {
                 nodeIntegration: false,
                 contextIsolation: true,
+                webSecurity: true,
                 webviewTag: true,
                 preload: path.join(__dirname, '..', 'preload.js')
             }
@@ -137,17 +138,16 @@ function createWindowManager(options = {}) {
     function setupX11Overlay() {
         try {
             const title = mainWindow.getTitle() || 'Voice Mirror';
-            const windowId = execSync(
-                `xdotool search --name "${title}" 2>/dev/null | head -1`,
-                { encoding: 'utf8', timeout: 3000 }
-            ).trim();
-            if (windowId) {
+            const windowId = execFileSync('xdotool', ['search', '--name', title], {
+                encoding: 'utf8', timeout: 3000
+            }).trim().split('\n')[0];
+            if (windowId && /^\d+$/.test(windowId)) {
                 x11WindowId = windowId;
                 // Set ABOVE state hint (works on X11 DEs like GNOME/KDE)
-                execSync(
-                    `xprop -id ${windowId} -f _NET_WM_STATE 32a -set _NET_WM_STATE _NET_WM_STATE_ABOVE`,
-                    { timeout: 3000 }
-                );
+                execFileSync('xprop', [
+                    '-id', windowId, '-f', '_NET_WM_STATE', '32a',
+                    '-set', '_NET_WM_STATE', '_NET_WM_STATE_ABOVE'
+                ], { timeout: 3000 });
                 console.log('[Window] X11 overlay configured (id:', windowId, ')');
             }
         } catch (e) {
@@ -161,7 +161,7 @@ function createWindowManager(options = {}) {
     function raiseWindow() {
         if (x11WindowId) {
             try {
-                execSync(`xdotool windowraise ${x11WindowId}`, { timeout: 1000, stdio: 'ignore' });
+                execFileSync('xdotool', ['windowraise', x11WindowId], { timeout: 1000, stdio: 'ignore' });
             } catch (e) {
                 // Silently fail — window may have been recreated
             }

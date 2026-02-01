@@ -47,9 +47,9 @@ const CLI_CONFIGS = {
  */
 function isCLIAvailable(command) {
     try {
-        const { execSync } = require('child_process');
+        const { execFileSync } = require('child_process');
         const which = process.platform === 'win32' ? 'where' : 'which';
-        execSync(`${which} ${command}`, { stdio: 'ignore' });
+        execFileSync(which, [command], { stdio: 'ignore' });
         return true;
     } catch {
         return false;
