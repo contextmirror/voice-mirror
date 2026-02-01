@@ -215,7 +215,7 @@ function createPythonBackend(options = {}) {
         // Platform-specific spawn options
         const spawnOptions = {
             cwd: pythonPath,
-            env: { ...process.env },
+            env: { ...process.env, PYTHONUNBUFFERED: '1' },
             shell: isWindows
         };
 
@@ -237,8 +237,8 @@ function createPythonBackend(options = {}) {
             // issues with paths containing spaces. spawn() handles spaces fine when
             // executable and args are passed separately without shell wrapping.
             spawnOptions.shell = false;
-            if (log) log('PYTHON', `Spawn: ${venvPython} ${scriptToRun} (cwd: ${spawnOptions.cwd})`);
-            pythonProcess = spawn(venvPython, [scriptToRun], spawnOptions);
+            if (log) log('PYTHON', `Spawn: ${venvPython} -u ${scriptToRun} (cwd: ${spawnOptions.cwd})`);
+            pythonProcess = spawn(venvPython, ['-u', scriptToRun], spawnOptions);
         }
 
         // Buffer for incomplete JSON lines
