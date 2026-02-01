@@ -80,3 +80,4 @@ ruff.toml
 
 # Internal docs (reference only, not for repo)
 docs/
+cleanup-test.ps1

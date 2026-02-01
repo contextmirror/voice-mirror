@@ -197,11 +197,12 @@ export async function runSetup(opts = {}) {
 
             if (installIt) {
                 if (!nonInteractive && platform() === 'win32') {
-                    ollamaDir = guard(await p.text({
-                        message: 'Where should Ollama be installed?',
-                        placeholder: process.env.LOCALAPPDATA + '\\Programs\\Ollama',
+                    const baseDir = guard(await p.text({
+                        message: 'Where should Ollama be installed? (an "Ollama" folder will be created)',
+                        placeholder: 'E:\\Hobby Project',
                         defaultValue: '',
                     })) || undefined;
+                    if (baseDir) ollamaDir = join(baseDir, 'Ollama');
                 }
                 const spin2 = p.spinner();
                 spin2.start('Installing Ollama...');
@@ -291,11 +292,12 @@ export async function runSetup(opts = {}) {
 
                 if (doInstall) {
                     if (!ollamaDir && !nonInteractive && platform() === 'win32') {
-                        ollamaDir = guard(await p.text({
-                            message: 'Where should Ollama be installed?',
-                            placeholder: process.env.LOCALAPPDATA + '\\Programs\\Ollama',
+                        const baseDir = guard(await p.text({
+                            message: 'Where should Ollama be installed? (an "Ollama" folder will be created)',
+                            placeholder: 'E:\\Hobby Project',
                             defaultValue: '',
                         })) || undefined;
+                        if (baseDir) ollamaDir = join(baseDir, 'Ollama');
                     }
                     const spin5 = p.spinner();
                     spin5.start('Installing Ollama...');

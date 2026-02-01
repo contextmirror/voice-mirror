@@ -200,11 +200,28 @@ export async function installOllama(spinner, installDir) {
 }
 
 /**
- * Start Ollama server if not running.
+ * Start Ollama server if not running (or restart it with correct env).
+ * If installDir is set and Ollama is already running (e.g. auto-started by installer),
+ * we must restart it so OLLAMA_MODELS points to the custom dir.
  */
 export async function ensureOllamaRunning(spinner, installDir) {
     const status = await detectOllama();
-    if (status.running) return true;
+
+    // If Ollama is running but we need a custom models dir, restart it
+    if (status.running && installDir) {
+        spinner.update('Restarting Ollama with custom models directory...');
+        try {
+            if (platform() === 'win32') {
+                execSync('taskkill /F /IM ollama.exe', { stdio: 'ignore' });
+                execSync('taskkill /F /IM "ollama app.exe"', { stdio: 'ignore' });
+            } else {
+                execSync('pkill -f ollama', { stdio: 'ignore' });
+            }
+        } catch { /* may not be running */ }
+        await new Promise(r => setTimeout(r, 2000));
+    } else if (status.running) {
+        return true;
+    }
 
     if (!status.installed) return false;
 
