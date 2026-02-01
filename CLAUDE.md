@@ -189,4 +189,18 @@ See [CONFIGURATION.md](docs/CONFIGURATION.md) for full provider list (11 total).
 
 ---
 
+## Development Rules
+
+### Test-Driven Verification
+
+Every feature, bug fix, or code change MUST include tests that verify the implementation works correctly. When building something:
+
+1. Implement the feature or fix
+2. Write tests that exercise the new/changed code
+3. Run the tests and confirm they pass before considering the work complete
+
+No change is considered done until it has passing tests. This applies to all parts of the codebase: Electron, Python backend, MCP server, and browser automation.
+
+---
+
 *Created: January 2026 | Author: Nathan + Claude*
