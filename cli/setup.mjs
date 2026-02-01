@@ -6,9 +6,10 @@
 import * as p from '@clack/prompts';
 import chalk from 'chalk';
 import { existsSync, mkdirSync, writeFileSync, readFileSync } from 'fs';
+import { execSync } from 'child_process';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { platform } from 'os';
+import { platform, homedir } from 'os';
 import { emitBanner } from './banner.mjs';
 import {
     detectPython,
@@ -431,6 +432,22 @@ export async function runSetup(opts = {}) {
     const config = buildConfig(providerConfig, activationMode, features, existingConfig);
     writeConfig(config);
 
+    // --- Desktop shortcut ---
+    if (!nonInteractive) {
+        const wantShortcut = guard(await p.confirm({
+            message: 'Create a desktop shortcut?',
+            initialValue: true,
+        }));
+        if (wantShortcut) {
+            const ok = createDesktopShortcut(PROJECT_DIR);
+            if (ok) {
+                p.log.success('Desktop shortcut created');
+            } else {
+                p.log.warn('Could not create desktop shortcut');
+            }
+        }
+    }
+
     // --- Summary ---
     printSummary(config);
     p.outro(chalk.green('Setup complete! Run: voice-mirror start'));
@@ -456,6 +473,59 @@ async function runDependencySetup(config) {
         spin.start('Installing MCP server dependencies...');
         installMCPDeps(PROJECT_DIR, { update: (m) => spin.message(m) });
         spin.stop('MCP server ready');
+    }
+}
+
+/**
+ * Create a desktop shortcut for Voice Mirror.
+ */
+function createDesktopShortcut(projectDir) {
+    const os = platform();
+    const desktop = join(homedir(), 'Desktop');
+
+    if (!existsSync(desktop)) return false;
+
+    try {
+        if (os === 'win32') {
+            const iconPath = join(projectDir, 'assets', 'icon-256.png');
+            const lnkPath = join(desktop, 'Voice Mirror.lnk');
+            // Use PowerShell to create .lnk shortcut
+            const ps = `
+$ws = New-Object -ComObject WScript.Shell;
+$s = $ws.CreateShortcut('${lnkPath.replace(/'/g, "''")}');
+$s.TargetPath = 'voice-mirror';
+$s.Arguments = 'start';
+$s.WorkingDirectory = '${projectDir.replace(/'/g, "''")}';
+$s.Description = 'Voice Mirror - Voice-controlled AI agent overlay';
+$s.Save()`;
+            execSync(`powershell -Command "${ps.replace(/"/g, '\\"')}"`, { stdio: 'pipe' });
+            return true;
+        }
+
+        if (os === 'darwin') {
+            const cmdPath = join(desktop, 'Voice Mirror.command');
+            writeFileSync(cmdPath, `#!/bin/bash\ncd "${projectDir}"\nvoice-mirror start\n`, { mode: 0o755 });
+            return true;
+        }
+
+        if (os === 'linux') {
+            const iconPath = join(projectDir, 'assets', 'icon-256.png');
+            const desktopEntry = `[Desktop Entry]
+Name=Voice Mirror
+Comment=Voice-controlled AI agent overlay
+Exec=voice-mirror start
+Icon=${iconPath}
+Terminal=false
+Type=Application
+Categories=Utility;
+`;
+            writeFileSync(join(desktop, 'voice-mirror.desktop'), desktopEntry, { mode: 0o755 });
+            return true;
+        }
+
+        return false;
+    } catch {
+        return false;
     }
 }
 
