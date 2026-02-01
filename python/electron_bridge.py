@@ -46,13 +46,11 @@ if sys.platform == 'win32':
     if hasattr(sys.stderr, 'reconfigure'):
         sys.stderr.reconfigure(encoding='utf-8', errors='replace')
 
-from global_hotkey import GlobalHotkeyListener
 
 # Command queue for stdin commands
 command_queue = queue.Queue()
 
-# Global hotkey listener for PTT (works even when browser tab unfocused)
-_hotkey_listener = GlobalHotkeyListener()
+# GlobalHotkey listener is now owned by VoiceMirror agent (started after audio stream opens)
 
 # Keep reference to original stdout for emitting events
 _original_stdout = sys.stdout
@@ -535,14 +533,19 @@ async def process_commands(agent):
                     emit_event("mode_change", {"mode": activation_mode})
 
                     # Start/stop global hotkey listener based on mode
+                    hotkey = getattr(agent, '_hotkey_listener', None)
                     if activation_mode == "pushToTalk":
                         key = ptt_key or "MouseButton4"
-                        _hotkey_listener.update_key(key)
+                        if hotkey:
+                            hotkey.update_key(key)
                     else:
-                        _hotkey_listener.stop()
+                        if hotkey:
+                            hotkey.stop()
                 elif ptt_key:
                     # PTT key changed without mode change
-                    _hotkey_listener.update_key(ptt_key)
+                    hotkey = getattr(agent, '_hotkey_listener', None)
+                    if hotkey:
+                        hotkey.update_key(ptt_key)
 
                 # Apply TTS settings changes immediately
                 voice_cfg = cfg.get("voice", {})
@@ -652,7 +655,6 @@ async def main():
         close_log_file()
         sys.exit(1)
     finally:
-        _hotkey_listener.stop()
         close_log_file()
 
 
