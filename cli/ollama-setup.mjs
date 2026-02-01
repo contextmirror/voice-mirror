@@ -258,11 +258,11 @@ export async function ensureOllamaRunning(spinner, installDir) {
 }
 
 /**
- * Pull a model — tries HuggingFace CDN first (faster), falls back to ollama pull.
+ * Pull a model — uses HuggingFace CDN for known models, ollama pull for others.
  * Returns true if successful.
  */
 export async function pullModel(modelName, spinner, installDir) {
-    // Try HuggingFace download first for known models
+    // Use HuggingFace download for known models (faster CDN)
     const hfInfo = HF_MODEL_MAP[modelName];
     if (hfInfo) {
         spinner.update(`Downloading ${modelName} from HuggingFace...`);
@@ -282,14 +282,14 @@ export async function pullModel(modelName, spinner, installDir) {
             });
 
             // Create Modelfile and import into Ollama
-            spinner.update(`Importing ${modelName} into Ollama...`);
+            spinner.update(`Importing ${modelName} into Ollama (this may take a few minutes)...`);
             const modelfilePath = join(tmpDir, 'Modelfile');
             const modelfileContent = hfInfo.modelfile.replace('{path}', ggufPath);
             writeFileSync(modelfilePath, modelfileContent);
 
             execSync(`ollama create ${modelName} -f "${modelfilePath}"`, {
                 stdio: 'pipe',
-                timeout: 120000,
+                timeout: 600000,
                 env: ollamaEnv(installDir),
             });
 
@@ -301,11 +301,12 @@ export async function pullModel(modelName, spinner, installDir) {
         } catch (err) {
             // Cleanup on failure
             try { unlinkSync(ggufPath); } catch {}
-            spinner.update(`HuggingFace download failed, falling back to ollama pull...`);
+            try { unlinkSync(join(tmpDir, 'Modelfile')); } catch {}
+            return false;
         }
     }
 
-    // Fallback: standard ollama pull
+    // For models without HuggingFace source (e.g. nomic-embed-text): use ollama pull
     spinner.update(`Pulling ${modelName} via Ollama...`);
 
     return new Promise((resolve) => {
