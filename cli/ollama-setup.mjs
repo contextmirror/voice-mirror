@@ -20,6 +20,21 @@ function ollamaEnv(installDir) {
 }
 
 /**
+ * Kill all Ollama processes (server + tray app).
+ * Called after install to prevent the auto-started instance from using default paths.
+ */
+function killOllama() {
+    try {
+        if (platform() === 'win32') {
+            execSync('taskkill /F /IM ollama.exe', { stdio: 'ignore' });
+            execSync('taskkill /F /IM "ollama app.exe"', { stdio: 'ignore' });
+        } else {
+            execSync('pkill -f ollama', { stdio: 'ignore' });
+        }
+    } catch { /* may not be running */ }
+}
+
+/**
  * Find winget on Windows — it may not be on PATH in child processes.
  */
 function findWinget() {
@@ -162,6 +177,8 @@ export async function installOllama(spinner, installDir) {
                     process.env.OLLAMA_MODELS = modelsDir;
                     try { execSync(`setx OLLAMA_MODELS "${modelsDir}"`, { stdio: 'pipe' }); } catch {}
                 }
+                // Kill auto-started Ollama so ensureOllamaRunning can restart with correct env
+                killOllama();
                 return true;
             } catch { /* fall through to direct download */ }
         }
@@ -189,6 +206,8 @@ export async function installOllama(spinner, installDir) {
                 process.env.OLLAMA_MODELS = modelsDir;
                 try { execSync(`setx OLLAMA_MODELS "${modelsDir}"`, { stdio: 'pipe' }); } catch {}
             }
+            // Kill auto-started Ollama so ensureOllamaRunning can restart with correct env
+            killOllama();
             return commandExists('ollama');
         } catch {
             try { unlinkSync(installerPath); } catch {}
@@ -210,14 +229,7 @@ export async function ensureOllamaRunning(spinner, installDir) {
     // If Ollama is running but we need a custom models dir, restart it
     if (status.running && installDir) {
         spinner.update('Restarting Ollama with custom models directory...');
-        try {
-            if (platform() === 'win32') {
-                execSync('taskkill /F /IM ollama.exe', { stdio: 'ignore' });
-                execSync('taskkill /F /IM "ollama app.exe"', { stdio: 'ignore' });
-            } else {
-                execSync('pkill -f ollama', { stdio: 'ignore' });
-            }
-        } catch { /* may not be running */ }
+        killOllama();
         await new Promise(r => setTimeout(r, 2000));
     } else if (status.running) {
         return true;

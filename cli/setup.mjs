@@ -489,18 +489,25 @@ function createDesktopShortcut(projectDir) {
 
     try {
         if (os === 'win32') {
-            const iconPath = join(projectDir, 'assets', 'icon-256.png');
             const lnkPath = join(desktop, 'Voice Mirror.lnk');
-            // Use PowerShell to create .lnk shortcut
-            const ps = `
-$ws = New-Object -ComObject WScript.Shell;
-$s = $ws.CreateShortcut('${lnkPath.replace(/'/g, "''")}');
-$s.TargetPath = 'voice-mirror';
-$s.Arguments = 'start';
-$s.WorkingDirectory = '${projectDir.replace(/'/g, "''")}';
-$s.Description = 'Voice Mirror - Voice-controlled AI agent overlay';
-$s.Save()`;
-            execSync(`powershell -Command "${ps.replace(/"/g, '\\"')}"`, { stdio: 'pipe' });
+            // Find the global voice-mirror.cmd installed by npm link
+            const npmGlobal = join(process.env.APPDATA || '', 'npm');
+            const vmCmd = join(npmGlobal, 'voice-mirror.cmd');
+            const target = existsSync(vmCmd) ? vmCmd : 'cmd.exe';
+            const args = existsSync(vmCmd) ? 'start' : '/c voice-mirror start';
+            const icoPath = join(projectDir, 'assets', 'icon-256.ico');
+            // Use PowerShell to create .lnk shortcut via COM
+            const psScript = [
+                '$ws = New-Object -ComObject WScript.Shell',
+                `$s = $ws.CreateShortcut("${lnkPath.replace(/\\/g, '\\\\')}")`,
+                `$s.TargetPath = "${target.replace(/\\/g, '\\\\')}"`,
+                `$s.Arguments = "${args}"`,
+                `$s.WorkingDirectory = "${projectDir.replace(/\\/g, '\\\\')}"`,
+                '$s.Description = "Voice Mirror - Voice-controlled AI agent overlay"',
+                existsSync(icoPath) ? `$s.IconLocation = "${icoPath.replace(/\\/g, '\\\\')}"` : '',
+                '$s.Save()',
+            ].filter(Boolean).join('; ');
+            execSync(`powershell -NoProfile -Command "${psScript}"`, { stdio: 'pipe' });
             return true;
         }
 
