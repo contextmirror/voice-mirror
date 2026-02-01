@@ -215,9 +215,15 @@ function Install-Deps {
     if (Test-Path $mcpDir) {
         Push-Location $mcpDir
         $npmOut = npm install 2>&1
-        if ($LASTEXITCODE -ne 0) { Write-Fail "MCP npm install failed"; Pop-Location; Pop-Location; exit 1 }
-        Pop-Location
-        Write-Ok "MCP server dependencies installed"
+        if ($LASTEXITCODE -ne 0) {
+            Pop-Location
+            Write-Warn "MCP server dependencies partially failed (native modules need build tools)"
+            Write-Info "To fix: npm install -g windows-build-tools  (run as Administrator)"
+            Write-Info "Or install Visual Studio Build Tools from https://visualstudio.microsoft.com/visual-cpp-build-tools/"
+        } else {
+            Pop-Location
+            Write-Ok "MCP server dependencies installed"
+        }
     }
     Pop-Location
 }
