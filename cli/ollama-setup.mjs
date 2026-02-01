@@ -3,9 +3,9 @@
  */
 
 import { execSync, spawn } from 'child_process';
-import { platform, homedir } from 'os';
+import { platform, homedir, tmpdir } from 'os';
 import { join } from 'path';
-import { existsSync, createWriteStream, unlinkSync } from 'fs';
+import { existsSync, createWriteStream, unlinkSync, writeFileSync, mkdirSync } from 'fs';
 import { get as httpsGet } from 'https';
 import { detectOllama, commandExists } from './checks.mjs';
 
@@ -35,6 +35,56 @@ function downloadFile(url, dest) {
                     return;
                 }
                 const file = createWriteStream(dest);
+                res.pipe(file);
+                file.on('finish', () => { file.close(); resolve(); });
+                file.on('error', reject);
+            }).on('error', reject);
+        };
+        follow(url);
+    });
+}
+
+/**
+ * HuggingFace GGUF download URLs — much faster CDN than Ollama's registry.
+ * Used as primary download source, with ollama pull as fallback.
+ */
+const HF_MODEL_MAP = {
+    'llama3.1:8b': {
+        url: 'https://huggingface.co/ggml-org/Meta-Llama-3.1-8B-Instruct-Q4_0-GGUF/resolve/main/meta-llama-3.1-8b-instruct-q4_0.gguf',
+        filename: 'meta-llama-3.1-8b-instruct-q4_0.gguf',
+        modelfile: 'FROM {path}\nPARAMETER temperature 0.7\nPARAMETER stop "<|eot_id|>"\nPARAMETER stop "<|start_header_id|>"\nTEMPLATE """<|start_header_id|>system<|end_header_id|>\n\n{{.System}}<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n{{.Prompt}}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n"""',
+    },
+    'qwen3:8b': {
+        url: 'https://huggingface.co/Qwen/Qwen3-8B-GGUF/resolve/main/qwen3-8b-q4_k_m.gguf',
+        filename: 'qwen3-8b-q4_k_m.gguf',
+        modelfile: 'FROM {path}',
+    },
+};
+
+/**
+ * Download a file with progress reporting via content-length.
+ */
+function downloadFileWithProgress(url, dest, onProgress) {
+    return new Promise((resolve, reject) => {
+        const follow = (url) => {
+            httpsGet(url, (res) => {
+                if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+                    follow(res.headers.location);
+                    return;
+                }
+                if (res.statusCode !== 200) {
+                    reject(new Error(`Download failed: HTTP ${res.statusCode}`));
+                    return;
+                }
+                const totalBytes = parseInt(res.headers['content-length'] || '0', 10);
+                let downloadedBytes = 0;
+                const file = createWriteStream(dest);
+                res.on('data', (chunk) => {
+                    downloadedBytes += chunk.length;
+                    if (totalBytes > 0 && onProgress) {
+                        onProgress(Math.round((downloadedBytes / totalBytes) * 100), downloadedBytes, totalBytes);
+                    }
+                });
                 res.pipe(file);
                 file.on('finish', () => { file.close(); resolve(); });
                 file.on('error', reject);
@@ -153,11 +203,54 @@ export async function ensureOllamaRunning(spinner) {
 }
 
 /**
- * Pull a model with progress tracking.
+ * Pull a model — tries HuggingFace CDN first (faster), falls back to ollama pull.
  * Returns true if successful.
  */
 export async function pullModel(modelName, spinner) {
-    spinner.update(`Pulling ${modelName}...`);
+    // Try HuggingFace download first for known models
+    const hfInfo = HF_MODEL_MAP[modelName];
+    if (hfInfo) {
+        spinner.update(`Downloading ${modelName} from HuggingFace...`);
+        const tmpDir = join(tmpdir(), 'voice-mirror-models');
+        try { mkdirSync(tmpDir, { recursive: true }); } catch {}
+        const ggufPath = join(tmpDir, hfInfo.filename);
+
+        try {
+            let lastPct = -1;
+            await downloadFileWithProgress(hfInfo.url, ggufPath, (pct, downloaded, total) => {
+                if (pct !== lastPct) {
+                    const dlMB = (downloaded / 1024 / 1024).toFixed(0);
+                    const totalMB = (total / 1024 / 1024).toFixed(0);
+                    spinner.update(`Downloading ${modelName}... ${pct}% (${dlMB}/${totalMB} MB)`);
+                    lastPct = pct;
+                }
+            });
+
+            // Create Modelfile and import into Ollama
+            spinner.update(`Importing ${modelName} into Ollama...`);
+            const modelfilePath = join(tmpDir, 'Modelfile');
+            const modelfileContent = hfInfo.modelfile.replace('{path}', ggufPath);
+            writeFileSync(modelfilePath, modelfileContent);
+
+            execSync(`ollama create ${modelName} -f "${modelfilePath}"`, {
+                stdio: 'pipe',
+                timeout: 120000,
+            });
+
+            // Cleanup
+            try { unlinkSync(ggufPath); } catch {}
+            try { unlinkSync(modelfilePath); } catch {}
+
+            return true;
+        } catch (err) {
+            // Cleanup on failure
+            try { unlinkSync(ggufPath); } catch {}
+            spinner.update(`HuggingFace download failed, falling back to ollama pull...`);
+        }
+    }
+
+    // Fallback: standard ollama pull
+    spinner.update(`Pulling ${modelName} via Ollama...`);
 
     return new Promise((resolve) => {
         const proc = spawn('ollama', ['pull', modelName], {
@@ -165,20 +258,7 @@ export async function pullModel(modelName, spinner) {
         });
 
         let lastUpdate = 0;
-        proc.stderr.on('data', (data) => {
-            const line = data.toString().trim();
-            // Ollama outputs progress like "pulling abc123... 45% ▕████░░░░░░░░░░░░▏ 2.1 GB/4.9 GB"
-            const now = Date.now();
-            if (now - lastUpdate > 500) { // throttle updates
-                const match = line.match(/(\d+)%/);
-                if (match) {
-                    spinner.update(`Pulling ${modelName}... ${match[1]}%`);
-                }
-                lastUpdate = now;
-            }
-        });
-
-        proc.stdout.on('data', (data) => {
+        const handleData = (data) => {
             const line = data.toString().trim();
             const now = Date.now();
             if (now - lastUpdate > 500) {
@@ -188,7 +268,10 @@ export async function pullModel(modelName, spinner) {
                 }
                 lastUpdate = now;
             }
-        });
+        };
+
+        proc.stderr.on('data', handleData);
+        proc.stdout.on('data', handleData);
 
         proc.on('close', (code) => {
             resolve(code === 0);
