@@ -183,9 +183,17 @@ function Install-Repo {
         git pull origin $Branch
         Pop-Location
         Write-Ok "Updated to latest"
+    } elseif (Test-Path $InstallDir) {
+        Write-Fail "Directory already exists and is not a git repo: $InstallDir"
+        Write-Info "Choose a different path or delete the existing directory."
+        exit 1
     } else {
         Write-Info "Cloning repository..."
-        git clone --branch $Branch --depth 1 $RepoUrl $InstallDir
+        $cloneOut = git clone --branch $Branch --depth 1 $RepoUrl $InstallDir 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-Fail "Clone failed: $cloneOut"
+            exit 1
+        }
         Write-Ok "Cloned to $InstallDir"
     }
 }
@@ -195,14 +203,18 @@ function Install-Deps {
     Write-Step "Installing dependencies..."
 
     Push-Location $InstallDir
+    $prevEAP = $ErrorActionPreference; $ErrorActionPreference = "Continue"
     $npmOut = npm install 2>&1
+    $ErrorActionPreference = $prevEAP
     if ($LASTEXITCODE -ne 0) { Write-Fail "npm install failed"; Pop-Location; exit 1 }
     Write-Ok "npm dependencies installed"
 
     $mcpDir = Join-Path $InstallDir "mcp-server"
     if (Test-Path $mcpDir) {
         Push-Location $mcpDir
+        $ErrorActionPreference = "Continue"
         $npmOut = npm install 2>&1
+        $ErrorActionPreference = $prevEAP
         if ($LASTEXITCODE -ne 0) { Write-Fail "MCP npm install failed"; Pop-Location; Pop-Location; exit 1 }
         Pop-Location
         Write-Ok "MCP server dependencies installed"
