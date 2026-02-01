@@ -194,9 +194,17 @@ export async function runSetup(opts = {}) {
             }));
 
             if (installIt) {
+                let ollamaDir;
+                if (!nonInteractive && platform() === 'win32') {
+                    ollamaDir = guard(await p.text({
+                        message: 'Where should Ollama be installed?',
+                        placeholder: process.env.LOCALAPPDATA + '\\Programs\\Ollama',
+                        defaultValue: '',
+                    })) || undefined;
+                }
                 const spin2 = p.spinner();
                 spin2.start('Installing Ollama...');
-                const ok = await installOllama({ update: (m) => spin2.message(m) });
+                const ok = await installOllama({ update: (m) => spin2.message(m) }, ollamaDir);
                 if (ok) {
                     spin2.stop('Ollama installed');
                 } else {
@@ -281,9 +289,17 @@ export async function runSetup(opts = {}) {
                 }));
 
                 if (doInstall) {
+                    let ollamaDir;
+                    if (!nonInteractive && platform() === 'win32') {
+                        ollamaDir = guard(await p.text({
+                            message: 'Where should Ollama be installed?',
+                            placeholder: process.env.LOCALAPPDATA + '\\Programs\\Ollama',
+                            defaultValue: '',
+                        })) || undefined;
+                    }
                     const spin5 = p.spinner();
                     spin5.start('Installing Ollama...');
-                    const ok = await installOllama({ update: (m) => spin5.message(m) });
+                    const ok = await installOllama({ update: (m) => spin5.message(m) }, ollamaDir);
                     spin5.stop(ok ? 'Ollama installed' : chalk.red('Ollama install failed'));
                     if (ok) ollamaReady = true;
                 }

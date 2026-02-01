@@ -106,7 +106,7 @@ const EMBEDDING_MODEL = 'nomic-embed-text';
  * Install Ollama on the system.
  * Returns true if successful.
  */
-export async function installOllama(spinner) {
+export async function installOllama(spinner, installDir) {
     const os = platform();
 
     if (os === 'linux') {
@@ -135,12 +135,14 @@ export async function installOllama(spinner) {
     }
 
     if (os === 'win32') {
+        const dirFlag = installDir ? ` --location "${installDir}"` : '';
+
         // Try winget first (with full path detection)
         const winget = findWinget();
         if (winget) {
             spinner.update('Installing Ollama via winget...');
             try {
-                execSync(`"${winget}" install --id Ollama.Ollama --accept-source-agreements --accept-package-agreements`, {
+                execSync(`"${winget}" install --id Ollama.Ollama --accept-source-agreements --accept-package-agreements${dirFlag}`, {
                     stdio: 'pipe',
                     timeout: 180000,
                 });
@@ -151,16 +153,17 @@ export async function installOllama(spinner) {
         // Direct download fallback
         spinner.update('Downloading Ollama installer...');
         const installerPath = join(process.env.TEMP || homedir(), 'OllamaSetup.exe');
+        const innoDir = installDir ? ` /DIR="${installDir}"` : '';
         try {
             await downloadFile('https://ollama.com/download/OllamaSetup.exe', installerPath);
             spinner.update('Running Ollama installer...');
-            execSync(`"${installerPath}" /VERYSILENT /NORESTART`, {
+            execSync(`"${installerPath}" /VERYSILENT /NORESTART${innoDir}`, {
                 stdio: 'pipe',
                 timeout: 180000,
             });
             try { unlinkSync(installerPath); } catch {}
             // Refresh PATH for this process
-            const newPath = process.env.LOCALAPPDATA + '\\Programs\\Ollama';
+            const newPath = installDir || (process.env.LOCALAPPDATA + '\\Programs\\Ollama');
             if (!process.env.PATH.includes(newPath)) {
                 process.env.PATH = newPath + ';' + process.env.PATH;
             }
