@@ -235,10 +235,38 @@ async function handleMemoryStats(args) {
     }
 }
 
+/**
+ * memory_flush - Flush context to persistent memory before compaction
+ */
+async function handleMemoryFlush(args) {
+    try {
+        const manager = getMemoryManager();
+        const result = await manager.flushBeforeCompaction({
+            topics: args?.topics,
+            decisions: args?.decisions,
+            actionItems: args?.action_items,
+            summary: args?.summary
+        });
+
+        return {
+            content: [{
+                type: 'text',
+                text: `Flushed ${result.flushed} item(s) to persistent memory before compaction.`
+            }]
+        };
+    } catch (err) {
+        return {
+            content: [{ type: 'text', text: `Error: ${err.message}` }],
+            isError: true
+        };
+    }
+}
+
 module.exports = {
     handleMemorySearch,
     handleMemoryGet,
     handleMemoryRemember,
     handleMemoryForget,
-    handleMemoryStats
+    handleMemoryStats,
+    handleMemoryFlush
 };

@@ -9,6 +9,21 @@ import { renderMarkdown } from './markdown.js';
 import { formatTime } from './utils.js';
 
 /**
+ * Smart auto-scroll: only scrolls if user is near the bottom.
+ * Uses smooth scrolling for a polished feel.
+ */
+function autoScroll(container) {
+    // If user has scrolled up more than 150px from bottom, don't force scroll
+    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+    if (distanceFromBottom > 150) return;
+
+    container.scrollTo({
+        top: container.scrollHeight,
+        behavior: 'smooth'
+    });
+}
+
+/**
  * Strip provider prefix from message text.
  * Handles patterns like "Claude: ", "Ollama: ", "Claude (model): ", etc.
  */
@@ -173,7 +188,7 @@ export function addMessage(role, text, imageBase64 = null) {
     group.appendChild(content);
 
     chatContainer.appendChild(group);
-    chatContainer.scrollTop = chatContainer.scrollHeight;
+    autoScroll(chatContainer);
 
     // Dev log: card rendered
     window.voiceMirror?.devlog('UI', 'card-rendered', {
@@ -241,7 +256,7 @@ export function addToolCallCard(data) {
     `;
 
     chatContainer.appendChild(card);
-    chatContainer.scrollTop = chatContainer.scrollHeight;
+    autoScroll(chatContainer);
 
     window.voiceMirror?.devlog('TOOL', 'card-call', { tool: data.tool, text: argsStr.slice(0, 200) });
 
@@ -289,7 +304,7 @@ export function addToolResultCard(data) {
             lastCallCard.appendChild(resultDiv);
         }
 
-        chatContainer.scrollTop = chatContainer.scrollHeight;
+        autoScroll(chatContainer);
 
         window.voiceMirror?.devlog('TOOL', 'card-result', {
             tool: data.tool,

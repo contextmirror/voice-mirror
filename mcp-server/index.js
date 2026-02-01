@@ -25,7 +25,7 @@ const { HOME_DATA_DIR, LISTENER_LOCK_PATH } = require('./paths');
 const core = require('./handlers/core');
 const { handleCaptureScreen } = require('./handlers/screen');
 const { handlePipelineTrace } = require('./handlers/diagnostic');
-const { handleMemorySearch, handleMemoryGet, handleMemoryRemember, handleMemoryForget, handleMemoryStats } = require('./handlers/memory');
+const { handleMemorySearch, handleMemoryGet, handleMemoryRemember, handleMemoryForget, handleMemoryStats, handleMemoryFlush } = require('./handlers/memory');
 const { handleCloneVoice, handleClearVoiceClone, handleListVoiceClones } = require('./handlers/voice-clone');
 const { handleBrowserControl, handleBrowserSearch, handleBrowserFetch } = require('./handlers/browser');
 const n8n = require('./handlers/n8n');
@@ -183,7 +183,7 @@ const TOOL_GROUPS = {
         tools: [
             {
                 name: 'memory_search',
-                description: 'Search Voice Mirror memories using hybrid semantic + keyword search. Use this before answering questions about past conversations, user preferences, or previous decisions.',
+                description: 'Mandatory recall step: search Voice Mirror memories using hybrid semantic + keyword search. You MUST call this before answering any question about prior work, decisions, dates, people, user preferences, todos, or previous conversations. If results are empty, say you checked but found nothing.',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -196,7 +196,7 @@ const TOOL_GROUPS = {
             },
             {
                 name: 'memory_get',
-                description: 'Get full content of a memory chunk or file. Use after memory_search to read complete context.',
+                description: 'Read full content of a memory chunk or file. Use after memory_search to pull only the needed lines and keep context small.',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -209,7 +209,7 @@ const TOOL_GROUPS = {
             },
             {
                 name: 'memory_remember',
-                description: 'Store a persistent memory. Use to save important information about the user, preferences, or decisions.',
+                description: 'Store a persistent memory. You MUST proactively use this when the user shares preferences, makes decisions, states facts about themselves, or says "remember this". Also use it to save important outcomes of tasks you complete. Do NOT use for casual chat (greetings, thanks, acknowledgments) or vague observations. Only store concrete facts, preferences, or decisions. Tier guide: core=permanent facts, stable=decisions and context (7-day TTL), notes=temporary reminders (24h TTL).',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -234,6 +234,19 @@ const TOOL_GROUPS = {
                 name: 'memory_stats',
                 description: 'Get memory system statistics including storage, index, and embedding info.',
                 inputSchema: { type: 'object', properties: {} }
+            },
+            {
+                name: 'memory_flush',
+                description: 'Flush important context to persistent memory before context compaction. Call this before your context window is about to be compacted to preserve key decisions, topics, and action items.',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        topics: { type: 'array', items: { type: 'string' }, description: 'Key topics discussed in this session' },
+                        decisions: { type: 'array', items: { type: 'string' }, description: 'Important decisions made' },
+                        action_items: { type: 'array', items: { type: 'string' }, description: 'Action items or TODOs' },
+                        summary: { type: 'string', description: 'Brief summary of the session' }
+                    }
+                }
             }
         ]
     },
@@ -804,6 +817,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             return await handleMemoryForget(args);
         case 'memory_stats':
             return await handleMemoryStats(args);
+        case 'memory_flush':
+            return await handleMemoryFlush(args);
         // Voice cloning tools
         case 'clone_voice':
             return await handleCloneVoice(args);
@@ -907,6 +922,19 @@ async function main() {
     const transport = new StdioServerTransport();
     await server.connect(transport);
     console.error('Voice Mirror MCP server running');
+
+    // Eager-load embedding model in background so memory search is instant
+    try {
+        const { getMemoryManager } = require('./lib/memory/MemoryManager');
+        const manager = getMemoryManager();
+        manager.init().then(() => {
+            console.error('[Memory] Embedding model pre-loaded and ready');
+        }).catch((err) => {
+            console.error(`[Memory] Background init failed (will retry on first use): ${err.message}`);
+        });
+    } catch (err) {
+        console.error(`[Memory] Could not start background init: ${err.message}`);
+    }
 }
 
 main().catch(console.error);

@@ -15,7 +15,7 @@ const tools = {
 
     memory_search: {
         name: 'memory_search',
-        description: 'Search past conversations and stored memories',
+        description: 'MANDATORY recall step: search past conversations and stored memories. You MUST call this before answering questions about prior work, decisions, preferences, people, dates, or todos',
         args: {
             query: {
                 type: 'string',
@@ -28,7 +28,7 @@ const tools = {
 
     memory_remember: {
         name: 'memory_remember',
-        description: 'Store important information for later recall',
+        description: 'Store important information for later recall. PROACTIVELY use this when the user shares preferences, makes decisions, states facts about themselves, or says "remember this". Do NOT use for casual chat like greetings, thanks, acknowledgments, or vague observations.',
         args: {
             content: {
                 type: 'string',
@@ -39,7 +39,7 @@ const tools = {
                 type: 'string',
                 required: false,
                 default: 'stable',
-                description: 'Memory tier: core (permanent), stable (7 days), notes (temporary)'
+                description: 'Memory tier: core (permanent facts), stable (7 days), notes (temporary 24h)'
             }
         },
         example: '{"tool": "memory_remember", "args": {"content": "User prefers dark mode", "tier": "core"}}'

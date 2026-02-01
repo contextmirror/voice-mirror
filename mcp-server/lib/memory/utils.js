@@ -144,6 +144,96 @@ function truncate(text, maxLength = 200) {
     return text.slice(0, maxLength - 3) + '...';
 }
 
+/**
+ * Race a promise against a timeout
+ * @param {Promise} promise - Promise to race
+ * @param {number} ms - Timeout in milliseconds
+ * @param {string} [label] - Description for error message
+ * @returns {Promise} Result of the promise
+ */
+function withTimeout(promise, ms, label = 'operation') {
+    let timer;
+    const timeout = new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+    });
+    return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+/**
+ * Retry pattern for retryable errors
+ */
+const RETRYABLE_PATTERN = /rate[_ ]limit|too many requests|429|resource has been exhausted|5\d\d|cloudflare|ECONNRESET|ETIMEDOUT|socket hang up/i;
+
+/**
+ * Retry a function with exponential backoff
+ * @param {Function} fn - Async function to retry
+ * @param {Object} [options]
+ * @param {number} [options.maxAttempts=3]
+ * @param {number} [options.baseDelay=500]
+ * @param {number} [options.maxDelay=8000]
+ * @param {RegExp} [options.retryablePattern]
+ * @returns {Promise} Result of the function
+ */
+async function withRetry(fn, options = {}) {
+    const {
+        maxAttempts = 3,
+        baseDelay = 500,
+        maxDelay = 8000,
+        retryablePattern = RETRYABLE_PATTERN
+    } = options;
+
+    let lastError;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+            return await fn();
+        } catch (err) {
+            lastError = err;
+            if (attempt >= maxAttempts || !retryablePattern.test(err.message)) {
+                throw err;
+            }
+            // Exponential backoff with 20% jitter
+            const delay = Math.min(baseDelay * Math.pow(2, attempt - 1), maxDelay);
+            const jitter = delay * 0.2 * (Math.random() - 0.5);
+            await new Promise(r => setTimeout(r, delay + jitter));
+        }
+    }
+    throw lastError;
+}
+
+/**
+ * Run async tasks with a concurrency limit
+ * @param {Array<Function>} tasks - Array of async functions to execute
+ * @param {number} concurrency - Max concurrent tasks
+ * @returns {Promise<Array>} Results in order
+ */
+async function runWithConcurrency(tasks, concurrency = 4) {
+    const results = new Array(tasks.length);
+    let nextIndex = 0;
+    let hasError = false;
+    let firstError = null;
+
+    async function worker() {
+        while (!hasError) {
+            const index = nextIndex++;
+            if (index >= tasks.length) break;
+            try {
+                results[index] = await tasks[index]();
+            } catch (err) {
+                if (!hasError) {
+                    hasError = true;
+                    firstError = err;
+                }
+                break;
+            }
+        }
+    }
+
+    const workers = Array.from({ length: Math.min(concurrency, tasks.length) }, () => worker());
+    await Promise.all(workers);
+    if (hasError) throw firstError;
+    return results;
+}
+
 module.exports = {
     getMemoryDir,
     getDataDir,
@@ -155,5 +245,9 @@ module.exports = {
     estimateTokens,
     debounce,
     normalizeText,
-    truncate
+    truncate,
+    withTimeout,
+    withRetry,
+    RETRYABLE_PATTERN,
+    runWithConcurrency
 };

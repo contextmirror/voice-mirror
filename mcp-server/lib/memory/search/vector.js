@@ -49,14 +49,32 @@ function cosineSimilarity(a, b) {
  * @returns {VectorSearchResult[]}
  */
 function searchVector(index, queryVector, model, limit = 10) {
-    // Get all chunks for this model
+    // Try native sqlite-vec search first
+    const nativeResults = index.searchVectorsNative(queryVector, limit);
+    if (nativeResults && nativeResults.length > 0) {
+        // Native returns {id, distance}; convert distance to similarity score and hydrate chunks
+        return nativeResults.map(r => {
+            const chunk = index.getChunk(r.id);
+            if (!chunk) return null;
+            return {
+                id: chunk.id,
+                path: chunk.path,
+                startLine: chunk.startLine,
+                endLine: chunk.endLine,
+                text: chunk.text,
+                tier: chunk.tier,
+                score: 1 / (1 + r.distance) // Convert L2 distance to 0-1 similarity
+            };
+        }).filter(Boolean);
+    }
+
+    // Fallback: CPU cosine similarity over all chunks
     const chunks = index.getChunksByModel(model);
 
     if (chunks.length === 0) {
         return [];
     }
 
-    // Calculate similarity for each chunk
     const scored = chunks.map(chunk => ({
         id: chunk.id,
         path: chunk.path,
@@ -67,7 +85,6 @@ function searchVector(index, queryVector, model, limit = 10) {
         score: cosineSimilarity(queryVector, chunk.embedding)
     }));
 
-    // Sort by score descending and return top results
     return scored
         .sort((a, b) => b.score - a.score)
         .slice(0, limit);

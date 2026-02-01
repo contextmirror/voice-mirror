@@ -7,7 +7,7 @@
 
 const path = require('path');
 const fs = require('fs');
-const { getModelCacheDir } = require('../utils');
+const { getModelCacheDir, withTimeout } = require('../utils');
 
 const DEFAULT_MODEL = 'embeddinggemma-300M-Q8_0.gguf';
 const DEFAULT_DIMENSIONS = 256;
@@ -28,20 +28,22 @@ class LocalProvider {
     async init() {
         if (this._initialized) return;
 
-        // Check if model exists
         if (!fs.existsSync(this.modelPath)) {
             throw new Error(`Local embedding model not found at ${this.modelPath}. Run 'voice-mirror download-model' or set up the model manually.`);
         }
 
-        // Lazy load node-llama-cpp to avoid startup overhead
         try {
-            const { getLlama } = require('node-llama-cpp');
-            this._llama = await getLlama();
-            this._model = await this._llama.loadModel({ modelPath: this.modelPath });
-            this._context = await this._model.createEmbeddingContext();
+            await withTimeout((async () => {
+                const { getLlama } = await import('node-llama-cpp');
+                this._llama = await getLlama();
+                this._model = await this._llama.loadModel({ modelPath: this.modelPath });
+                this._context = await this._model.createEmbeddingContext();
+            })(), 30000, 'Local embedding init');
             this._initialized = true;
         } catch (err) {
-            // Try to provide helpful error message
+            this._context = null;
+            this._model = null;
+            this._llama = null;
             if (err.code === 'MODULE_NOT_FOUND') {
                 throw new Error('node-llama-cpp not installed. Run: npm install node-llama-cpp');
             }
@@ -59,7 +61,11 @@ class LocalProvider {
             await this.init();
         }
 
-        const embedding = await this._context.getEmbeddingFor(text);
+        const embedding = await withTimeout(
+            this._context.getEmbeddingFor(text),
+            300000,
+            'Local embedding query'
+        );
         return Array.from(embedding.vector);
     }
 

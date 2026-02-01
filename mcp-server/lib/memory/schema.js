@@ -43,10 +43,23 @@ function ensureSchema(db) {
         );
     `);
 
+    // Add source column if not present (migration)
+    try {
+        db.exec(`ALTER TABLE chunks ADD COLUMN source TEXT DEFAULT 'memory'`);
+    } catch {
+        // Column already exists
+    }
+    try {
+        db.exec(`ALTER TABLE files ADD COLUMN source TEXT DEFAULT 'memory'`);
+    } catch {
+        // Column already exists
+    }
+
     // Indexes for chunks
     db.exec(`CREATE INDEX IF NOT EXISTS idx_chunks_path ON chunks(path);`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_chunks_tier ON chunks(tier);`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_chunks_model ON chunks(model);`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_chunks_source ON chunks(source);`);
 
     // Embedding cache table
     db.exec(`

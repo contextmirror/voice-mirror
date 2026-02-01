@@ -15,11 +15,12 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
     "better-sqlite3": "^11.0.0",
-    "chokidar": "^3.6.0"
+    "chokidar": "^3.6.0",
+    "sqlite-vec": "^0.1.7-alpha.2"
   },
   "optionalDependencies": {
+    "@google/generative-ai": "^0.1.0",
     "node-llama-cpp": "^3.0.0",
-    "openai": "^4.0.0",
-    "@google/generative-ai": "^0.1.0"
+    "openai": "^4.0.0"
   }
 }

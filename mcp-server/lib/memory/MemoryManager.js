@@ -13,10 +13,11 @@ const path = require('path');
 const MarkdownStore = require('./MarkdownStore');
 const SQLiteIndex = require('./SQLiteIndex');
 const Chunker = require('./Chunker');
-const { createEmbeddingProvider } = require('./embeddings');
+const { createEmbeddingProvider, isLocalModelAvailable, LocalProvider } = require('./embeddings');
 const { hybridSearch, searchWithFallback } = require('./search/hybrid');
 const { searchKeyword } = require('./search/keyword');
-const { getMemoryDir, generateId } = require('./utils');
+const { getMemoryDir, generateId, runWithConcurrency, sha256 } = require('./utils');
+const { findProjectTranscriptDir, listTranscriptFiles, extractTranscriptText } = require('./session-sync');
 
 /**
  * @typedef {Object} MemoryManagerConfig
@@ -42,8 +43,10 @@ class MemoryManager {
         this.config = {
             memoryDir: config.memoryDir || getMemoryDir(),
             embeddingProvider: config.embeddingProvider || 'auto',
+            embeddingFallback: config.embeddingFallback || 'openai',
             openaiApiKey: config.openaiApiKey || process.env.OPENAI_API_KEY,
             geminiApiKey: config.geminiApiKey || process.env.GOOGLE_API_KEY,
+            extraPaths: config.extraPaths || [],
             chunking: {
                 tokens: config.chunking?.tokens || 400,
                 overlap: config.chunking?.overlap || 80
@@ -76,7 +79,9 @@ class MemoryManager {
 
         this._initializing = (async () => {
             // Initialize markdown store
-            this.store = new MarkdownStore(this.config.memoryDir);
+            this.store = new MarkdownStore(this.config.memoryDir, {
+                extraPaths: this.config.extraPaths
+            });
             await this.store.init();
 
             // Initialize SQLite index
@@ -84,18 +89,70 @@ class MemoryManager {
             this.index = new SQLiteIndex(dbPath);
             await this.index.init();
 
-            // Initialize embedding provider
+            // Auto-download local embedding model if not present
+            if (!isLocalModelAvailable()) {
+                console.error('[Memory] Local embedding model not found. Downloading embeddinggemma-300M (~300MB)...');
+                try {
+                    await LocalProvider.downloadModel((progress) => {
+                        if (progress % 10 === 0) {
+                            console.error(`[Memory] Download progress: ${progress}%`);
+                        }
+                    });
+                    console.error('[Memory] Embedding model downloaded successfully');
+                } catch (dlErr) {
+                    console.error(`[Memory] Failed to download embedding model: ${dlErr.message}`);
+                }
+            }
+
+            // Initialize embedding provider (local.js has 30s timeout to prevent hangs)
             try {
-                this.embedder = await createEmbeddingProvider({
+                const result = await createEmbeddingProvider({
                     provider: this.config.embeddingProvider,
+                    fallback: this.config.embeddingFallback,
                     openaiApiKey: this.config.openaiApiKey,
                     geminiApiKey: this.config.geminiApiKey
                 });
-                console.error(`[Memory] Using embedding provider: ${this.embedder.id}/${this.embedder.model}`);
+                this.embedder = result.provider || result;
+                const id = this.embedder.id || 'unknown';
+                const model = this.embedder.model || 'unknown';
+                console.error(`[Memory] Using embedding provider: ${id}/${model}`);
             } catch (err) {
                 console.error(`[Memory] Warning: No embedding provider available: ${err.message}`);
                 console.error('[Memory] Falling back to keyword-only search');
                 this.embedder = null;
+            }
+
+            // Cleanup expired memories before indexing
+            try {
+                const removed = await this.store.cleanupExpiredMemories(this.config.ttl);
+                if (removed > 0) {
+                    console.error(`[Memory] Cleaned up ${removed} expired memories`);
+                }
+            } catch (err) {
+                console.error(`[Memory] TTL cleanup error: ${err.message}`);
+            }
+
+            // Initialize vector table if sqlite-vec available
+            if (this.embedder && this.index.vectorReady) {
+                this.index.initVectorTable(this.embedder.dimensions);
+            }
+
+            // Check if full reindex needed (provider/model/chunking changed)
+            if (this.embedder) {
+                const currentMeta = {
+                    provider: this.embedder.id,
+                    model: this.embedder.model,
+                    chunkTokens: this.config.chunking.tokens,
+                    chunkOverlap: this.config.chunking.overlap
+                };
+                if (this.index.needsFullReindex(currentMeta)) {
+                    console.error('[Memory] Config changed, triggering full reindex');
+                    this.index.clearAll();
+                    if (this.index.vectorReady) {
+                        this.index.initVectorTable(this.embedder.dimensions);
+                    }
+                }
+                this.index.updateIndexMeta(currentMeta);
             }
 
             // Index all files on first load
@@ -111,35 +168,163 @@ class MemoryManager {
      * Sync all markdown files to the index
      */
     async syncAllFiles() {
-        await this.init();
+        // Skip if called during init (avoid deadlock - init() calls syncAllFiles())
+        // External callers should call init() first
+        if (!this.store || !this.index) return;
 
         const files = await this.store.listMemoryFiles();
         let indexed = 0;
         let skipped = 0;
 
+        // Collect all chunks that need indexing
+        const pendingChunks = [];
+
         for (const file of files) {
             const fileMeta = await this.store.readFileWithMeta(file.path);
 
-            // Check if file needs reindexing
             if (!this.index.needsReindex(file.path, fileMeta.hash)) {
                 skipped++;
                 continue;
             }
 
-            // Chunk the file
             const chunks = Chunker.smartChunk(fileMeta.content, file.path, this.config.chunking);
+            const tier = file.type === 'memory' ? 'stable' : 'volatile';
 
-            // Index each chunk
             for (const chunk of chunks) {
-                await this.indexChunk(file.path, chunk, file.type === 'memory' ? 'stable' : 'volatile');
+                pendingChunks.push({ filePath: file.path, chunk, tier });
             }
 
-            // Update file metadata
+            // Update file metadata (tracking only, chunks indexed below)
             this.index.upsertFile(file.path, fileMeta.hash, fileMeta.mtime, fileMeta.size);
             indexed++;
         }
 
-        console.error(`[Memory] Indexed ${indexed} files, skipped ${skipped} unchanged`);
+        // Batch embed and index chunks
+        if (pendingChunks.length > 0 && this.embedder) {
+            // Check cache first, collect uncached texts
+            const uncachedIndices = [];
+            const embeddings = new Array(pendingChunks.length).fill(null);
+
+            for (let i = 0; i < pendingChunks.length; i++) {
+                const { chunk } = pendingChunks[i];
+                const cached = this.index.getCachedEmbedding(
+                    this.embedder.id, this.embedder.model, chunk.hash
+                );
+                if (cached) {
+                    embeddings[i] = cached;
+                } else {
+                    uncachedIndices.push(i);
+                }
+            }
+
+            // Batch embed uncached chunks (groups of 32)
+            if (uncachedIndices.length > 0 && this.embedder.embedBatch) {
+                const batchSize = 32;
+                const batchTasks = [];
+                for (let b = 0; b < uncachedIndices.length; b += batchSize) {
+                    const batchIndices = uncachedIndices.slice(b, b + batchSize);
+                    batchTasks.push(async () => {
+                        const texts = batchIndices.map(i => pendingChunks[i].chunk.text);
+                        try {
+                            const batchResults = await this.embedder.embedBatch(texts);
+                            for (let j = 0; j < batchIndices.length; j++) {
+                                const idx = batchIndices[j];
+                                embeddings[idx] = batchResults[j];
+                                // Cache it
+                                this.index.cacheEmbedding(
+                                    this.embedder.id, this.embedder.model,
+                                    pendingChunks[idx].chunk.hash, batchResults[j]
+                                );
+                            }
+                        } catch (err) {
+                            console.error(`[Memory] Batch embedding error: ${err.message}`);
+                        }
+                    });
+                }
+                try {
+                    await runWithConcurrency(batchTasks, 4);
+                } catch (err) {
+                    console.error(`[Memory] Concurrent batch embedding error: ${err.message}`);
+                }
+            }
+
+            // Store all chunks (with or without embeddings)
+            const model = this.embedder ? `${this.embedder.id}/${this.embedder.model}` : 'none';
+            for (let i = 0; i < pendingChunks.length; i++) {
+                const { filePath, chunk, tier } = pendingChunks[i];
+                this.index.upsertChunk({
+                    id: generateId('chunk'),
+                    path: filePath,
+                    startLine: chunk.startLine,
+                    endLine: chunk.endLine,
+                    hash: chunk.hash,
+                    model,
+                    text: chunk.text,
+                    embedding: embeddings[i],
+                    tier
+                });
+            }
+        } else if (pendingChunks.length > 0) {
+            // No embedder — store chunks without embeddings
+            for (const { filePath, chunk, tier } of pendingChunks) {
+                this.index.upsertChunk({
+                    id: generateId('chunk'),
+                    path: filePath,
+                    startLine: chunk.startLine,
+                    endLine: chunk.endLine,
+                    hash: chunk.hash,
+                    model: 'none',
+                    text: chunk.text,
+                    embedding: null,
+                    tier
+                });
+            }
+        }
+
+        console.error(`[Memory] Indexed ${indexed} files (${pendingChunks.length} chunks), skipped ${skipped} unchanged`);
+    }
+
+    /**
+     * Sync Claude Code session transcripts into the index
+     * @param {string} [cwd] - Working directory to find project transcripts
+     */
+    async syncSessions(cwd) {
+        if (!this.store || !this.index) return;
+
+        const projectDir = cwd ? findProjectTranscriptDir(cwd) : null;
+        if (!projectDir) return;
+
+        const transcripts = await listTranscriptFiles(projectDir);
+        let indexed = 0;
+
+        for (const file of transcripts) {
+            const fileHash = `${file.size}-${file.mtime}`;
+            if (!this.index.needsReindex(file.path, fileHash)) continue;
+
+            try {
+                const { text } = await extractTranscriptText(file.path);
+                if (!text.trim()) continue;
+
+                // Chunk the transcript text
+                const chunks = Chunker.smartChunk(text, file.path, this.config.chunking);
+
+                // Delete old chunks for this file
+                this.index.deleteChunksForFile(file.path);
+
+                for (const chunk of chunks) {
+                    await this.indexChunk(file.path, chunk, 'volatile');
+                }
+
+                this.index.upsertFile(file.path, fileHash, file.mtime, file.size);
+                indexed++;
+            } catch (err) {
+                console.error(`[Memory] Session index error for ${path.basename(file.path)}: ${err.message}`);
+            }
+        }
+
+        if (indexed > 0) {
+            console.error(`[Memory] Indexed ${indexed} session transcripts`);
+        }
     }
 
     /**
@@ -207,9 +392,10 @@ class MemoryManager {
 
         const searchOpts = {
             maxResults: options.maxResults || this.config.search.maxResults,
-            minScore: options.minScore || this.config.search.minScore,
-            vectorWeight: this.config.search.vectorWeight,
-            textWeight: this.config.search.textWeight
+            minScore: options.minScore ?? this.config.search.minScore,
+            vectorWeight: options.vectorWeight ?? this.config.search.vectorWeight,
+            textWeight: options.textWeight ?? this.config.search.textWeight,
+            candidateMultiplier: options.candidateMultiplier ?? 5
         };
 
         let queryEmbedding = null;
@@ -393,6 +579,64 @@ class MemoryManager {
                 search: this.config.search
             }
         };
+    }
+
+    /**
+     * Flush important context to MEMORY.md before compaction
+     * Called by Claude Code before context window compaction
+     * @param {Object} context - Session context to preserve
+     * @param {string[]} [context.topics] - Key topics discussed
+     * @param {string[]} [context.decisions] - Decisions made
+     * @param {string[]} [context.actionItems] - Action items / TODOs
+     * @param {string} [context.summary] - Overall session summary
+     * @returns {Promise<{flushed: number}>}
+     */
+    async flushBeforeCompaction(context = {}) {
+        await this.init();
+
+        let flushed = 0;
+
+        // Write decisions as core memories (they're important long-term)
+        if (context.decisions?.length > 0) {
+            for (const decision of context.decisions) {
+                await this.store.appendMemory(`Decision: ${decision}`, 'core');
+                flushed++;
+            }
+        }
+
+        // Write summary and topics as stable memories
+        if (context.summary) {
+            await this.store.appendMemory(`Session summary: ${context.summary}`, 'stable');
+            flushed++;
+        }
+
+        if (context.topics?.length > 0) {
+            await this.store.appendMemory(`Topics discussed: ${context.topics.join(', ')}`, 'stable');
+            flushed++;
+        }
+
+        // Write action items as notes (short-lived reminders)
+        if (context.actionItems?.length > 0) {
+            for (const item of context.actionItems) {
+                await this.store.appendMemory(`TODO: ${item}`, 'notes');
+                flushed++;
+            }
+        }
+
+        // Re-index MEMORY.md after flush
+        if (flushed > 0) {
+            const memoryFile = this.store.memoryFile;
+            const fileMeta = await this.store.readFileWithMeta(memoryFile);
+            const chunks = Chunker.chunkMarkdown(fileMeta.content, this.config.chunking);
+
+            this.index.deleteChunksForFile(memoryFile);
+            for (const chunk of chunks) {
+                await this.indexChunk(memoryFile, chunk, 'stable');
+            }
+            this.index.upsertFile(memoryFile, fileMeta.hash, fileMeta.mtime, fileMeta.size);
+        }
+
+        return { flushed };
     }
 
     /**

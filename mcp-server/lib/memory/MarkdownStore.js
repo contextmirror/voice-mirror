@@ -23,10 +23,11 @@ const MEMORY_TEMPLATE = `# Voice Mirror Memory
 `;
 
 class MarkdownStore {
-    constructor(memoryDir = null) {
+    constructor(memoryDir = null, options = {}) {
         this.memoryDir = memoryDir || getMemoryDir();
         this.dailyDir = path.join(this.memoryDir, 'daily');
         this.memoryFile = path.join(this.memoryDir, 'MEMORY.md');
+        this.extraPaths = options.extraPaths || [];
         this._initialized = false;
     }
 
@@ -239,6 +240,30 @@ class MarkdownStore {
             // Daily dir doesn't exist yet
         }
 
+        // Add extra paths (skip symlinks for safety)
+        for (const extraPath of this.extraPaths) {
+            try {
+                const stat = await fs.lstat(extraPath);
+                if (stat.isSymbolicLink()) continue;
+                if (stat.isFile() && extraPath.endsWith('.md')) {
+                    files.push({ path: extraPath, type: 'extra' });
+                } else if (stat.isDirectory()) {
+                    const dirFiles = await fs.readdir(extraPath);
+                    for (const file of dirFiles) {
+                        if (!file.endsWith('.md')) continue;
+                        const filePath = path.join(extraPath, file);
+                        const fileStat = await fs.lstat(filePath);
+                        if (fileStat.isSymbolicLink()) continue;
+                        if (fileStat.isFile()) {
+                            files.push({ path: filePath, type: 'extra' });
+                        }
+                    }
+                }
+            } catch {
+                // Extra path doesn't exist or not accessible
+            }
+        }
+
         return files;
     }
 
@@ -313,6 +338,77 @@ class MarkdownStore {
         }
 
         return tiers;
+    }
+
+    /**
+     * Parse MEMORY.md to extract memories with their timestamps
+     * @returns {Promise<{core: Array, stable: Array, notes: Array}>}
+     */
+    async parseMemoryTiersWithDates() {
+        const { content } = await this.readMemory();
+        const lines = content.split('\n');
+
+        const tiers = { core: [], stable: [], notes: [] };
+        let currentTier = null;
+
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            if (line.startsWith('## Core')) {
+                currentTier = 'core';
+            } else if (line.startsWith('## Stable')) {
+                currentTier = 'stable';
+            } else if (line.startsWith('## Notes')) {
+                currentTier = 'notes';
+            } else if (line.startsWith('## ')) {
+                currentTier = null;
+            } else if (currentTier && line.startsWith('- ')) {
+                const timestampMatch = line.match(/<!--\s*(\d{4}-\d{2}-\d{2}T[\d:.]+Z?)\s*-->/);
+                const savedAt = timestampMatch ? new Date(timestampMatch[1]) : null;
+                const text = line.slice(2).replace(/\s*<!--.*-->/, '').trim();
+                if (text) {
+                    tiers[currentTier].push({ text, savedAt, lineIndex: i });
+                }
+            }
+        }
+
+        return tiers;
+    }
+
+    /**
+     * Remove expired memories from MEMORY.md
+     * @param {Object} [ttl] - TTL config in milliseconds
+     * @param {number} [ttl.stable=604800000] - Stable tier TTL (default 7 days)
+     * @param {number} [ttl.notes=86400000] - Notes tier TTL (default 24 hours)
+     * @returns {Promise<number>} Number of memories removed
+     */
+    async cleanupExpiredMemories(ttl = {}) {
+        const stableTtl = ttl.stable ?? 7 * 24 * 60 * 60 * 1000;  // 7 days
+        const notesTtl = ttl.notes ?? 24 * 60 * 60 * 1000;         // 24 hours
+        const now = Date.now();
+
+        const tiers = await this.parseMemoryTiersWithDates();
+        const expiredLines = new Set();
+
+        for (const entry of tiers.stable) {
+            if (entry.savedAt && (now - entry.savedAt.getTime()) > stableTtl) {
+                expiredLines.add(entry.lineIndex);
+            }
+        }
+
+        for (const entry of tiers.notes) {
+            if (entry.savedAt && (now - entry.savedAt.getTime()) > notesTtl) {
+                expiredLines.add(entry.lineIndex);
+            }
+        }
+
+        if (expiredLines.size === 0) return 0;
+
+        const { content } = await this.readMemory();
+        const lines = content.split('\n');
+        const newLines = lines.filter((_, i) => !expiredLines.has(i));
+        await this.writeMemory(newLines.join('\n'));
+
+        return expiredLines.size;
     }
 
     /**

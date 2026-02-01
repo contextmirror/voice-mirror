@@ -4,6 +4,7 @@
  */
 
 const https = require('https');
+const { withRetry } = require('../utils');
 
 const DEFAULT_MODEL = 'text-embedding-004';
 const DEFAULT_DIMENSIONS = 768;
@@ -17,6 +18,8 @@ class GeminiProvider {
         this.apiKey = options.apiKey || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
         this.baseUrl = options.baseUrl || DEFAULT_BASE_URL;
         this._initialized = false;
+        this._batchFailures = 0;
+        this._batchDisabled = false;
     }
 
     async init() {
@@ -35,12 +38,12 @@ class GeminiProvider {
      * @returns {Promise<number[]>}
      */
     async embedQuery(text) {
-        const response = await this._request(`/models/${this.model}:embedContent`, {
+        const response = await withRetry(() => this._request(`/models/${this.model}:embedContent`, {
             content: {
                 parts: [{ text }]
             },
             taskType: 'RETRIEVAL_QUERY'
-        });
+        }));
 
         return response.embedding.values;
     }
@@ -53,20 +56,38 @@ class GeminiProvider {
     async embedBatch(texts) {
         if (texts.length === 0) return [];
 
-        // Gemini supports batch embedding
-        const requests = texts.map(text => ({
-            model: `models/${this.model}`,
-            content: {
-                parts: [{ text }]
-            },
-            taskType: 'RETRIEVAL_DOCUMENT'
-        }));
+        // Fall back to sequential if batch mode disabled
+        if (this._batchDisabled) {
+            const results = [];
+            for (const text of texts) {
+                results.push(await this.embedQuery(text));
+            }
+            return results;
+        }
 
-        const response = await this._request(`/models/${this.model}:batchEmbedContents`, {
-            requests
-        });
+        try {
+            const requests = texts.map(text => ({
+                model: `models/${this.model}`,
+                content: {
+                    parts: [{ text }]
+                },
+                taskType: 'RETRIEVAL_DOCUMENT'
+            }));
 
-        return response.embeddings.map(e => e.values);
+            const response = await withRetry(() => this._request(`/models/${this.model}:batchEmbedContents`, {
+                requests
+            }));
+
+            this._batchFailures = 0;
+            return response.embeddings.map(e => e.values);
+        } catch (err) {
+            this._batchFailures++;
+            if (this._batchFailures >= 2) {
+                this._batchDisabled = true;
+                console.error('[Gemini] Batch embedding disabled after 2 consecutive failures, falling back to sequential');
+            }
+            throw err;
+        }
     }
 
     /**

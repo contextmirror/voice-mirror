@@ -5,6 +5,7 @@
 
 const https = require('https');
 const http = require('http');
+const { withRetry } = require('../utils');
 
 const DEFAULT_MODEL = 'text-embedding-3-small';
 const DEFAULT_DIMENSIONS = 1536;
@@ -18,6 +19,8 @@ class OpenAIProvider {
         this.apiKey = options.apiKey || process.env.OPENAI_API_KEY;
         this.baseUrl = options.baseUrl || DEFAULT_BASE_URL;
         this._initialized = false;
+        this._batchFailures = 0;
+        this._batchDisabled = false;
     }
 
     async init() {
@@ -49,14 +52,32 @@ class OpenAIProvider {
     async embedBatch(texts) {
         if (texts.length === 0) return [];
 
-        const response = await this._request('/embeddings', {
-            model: this.model,
-            input: texts
-        });
+        // Fall back to sequential if batch mode disabled
+        if (this._batchDisabled) {
+            const results = [];
+            for (const text of texts) {
+                results.push(await this.embedQuery(text));
+            }
+            return results;
+        }
 
-        // Sort by index to ensure correct order
-        const sorted = response.data.sort((a, b) => a.index - b.index);
-        return sorted.map(item => item.embedding);
+        try {
+            const response = await withRetry(() => this._request('/embeddings', {
+                model: this.model,
+                input: texts
+            }));
+
+            const sorted = response.data.sort((a, b) => a.index - b.index);
+            this._batchFailures = 0;
+            return sorted.map(item => item.embedding);
+        } catch (err) {
+            this._batchFailures++;
+            if (this._batchFailures >= 2) {
+                this._batchDisabled = true;
+                console.error('[OpenAI] Batch embedding disabled after 2 consecutive failures, falling back to sequential');
+            }
+            throw err;
+        }
     }
 
     /**

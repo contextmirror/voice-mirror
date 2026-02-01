@@ -7,6 +7,7 @@ const path = require('path');
 const fs = require('fs');
 const { getMemoryDir, sha256 } = require('./utils');
 const { ensureSchema, getIndexMeta, setIndexMeta, dropAllData } = require('./schema');
+const { loadSqliteVecExtension, ensureVectorTable, getVectorTableDimensions, upsertVector, deleteVector, searchVectors } = require('./sqlite-vec');
 
 class SQLiteIndex {
     /**
@@ -16,6 +17,7 @@ class SQLiteIndex {
         this.dbPath = dbPath || path.join(getMemoryDir(), 'index.db');
         this.db = null;
         this.ftsAvailable = false;
+        this.vectorReady = false;
         this._initialized = false;
     }
 
@@ -43,7 +45,26 @@ class SQLiteIndex {
         const { ftsAvailable } = ensureSchema(this.db);
         this.ftsAvailable = ftsAvailable;
 
+        // Try loading sqlite-vec for native vector search
+        const vecResult = loadSqliteVecExtension({ db: this.db });
+        if (vecResult.ok) {
+            this.vectorReady = true;
+        }
+
         this._initialized = true;
+    }
+
+    /**
+     * Initialize the vector table for a given dimension
+     * @param {number} dimensions - Embedding vector dimensions
+     */
+    initVectorTable(dimensions) {
+        if (!this.vectorReady) return;
+
+        const currentDims = getVectorTableDimensions(this.db);
+        if (currentDims !== dimensions) {
+            ensureVectorTable(this.db, dimensions);
+        }
     }
 
     /**
@@ -69,14 +90,13 @@ class SQLiteIndex {
     }
 
     /**
-     * Update file tracking record
-     * @param {Object} file
-     * @param {string} file.path
-     * @param {string} file.hash
-     * @param {number} file.mtime
-     * @param {number} file.size
+     * Upsert file tracking record
+     * @param {string} filePath
+     * @param {string} hash
+     * @param {number} mtime
+     * @param {number} size
      */
-    updateFile(file) {
+    upsertFile(filePath, hash, mtime, size) {
         this.db.prepare(`
             INSERT INTO files (path, hash, mtime, size)
             VALUES (?, ?, ?, ?)
@@ -84,7 +104,7 @@ class SQLiteIndex {
                 hash = excluded.hash,
                 mtime = excluded.mtime,
                 size = excluded.size
-        `).run(file.path, file.hash, file.mtime, file.size);
+        `).run(filePath, hash, mtime, size);
     }
 
     /**
@@ -92,6 +112,16 @@ class SQLiteIndex {
      * @param {string} filePath
      */
     deleteFile(filePath) {
+        // Delete vectors for this file's chunks
+        if (this.vectorReady) {
+            try {
+                const chunkIds = this.db.prepare('SELECT id FROM chunks WHERE path = ?').all(filePath);
+                for (const { id } of chunkIds) {
+                    deleteVector(this.db, id);
+                }
+            } catch { /* vector table may not exist */ }
+        }
+
         // Delete from FTS first
         if (this.ftsAvailable) {
             try {
@@ -157,6 +187,15 @@ class SQLiteIndex {
             now
         );
 
+        // Update vector index
+        if (this.vectorReady && chunk.embedding && chunk.embedding.length > 0) {
+            try {
+                upsertVector(this.db, chunk.id, chunk.embedding);
+            } catch (err) {
+                // Vector table may not be initialized yet for this dimension
+            }
+        }
+
         // Update FTS
         if (this.ftsAvailable) {
             try {
@@ -179,6 +218,16 @@ class SQLiteIndex {
      * @param {string} filePath
      */
     deleteChunksForFile(filePath) {
+        // Delete vectors
+        if (this.vectorReady) {
+            try {
+                const chunkIds = this.db.prepare('SELECT id FROM chunks WHERE path = ?').all(filePath);
+                for (const { id } of chunkIds) {
+                    deleteVector(this.db, id);
+                }
+            } catch { /* vector table may not exist */ }
+        }
+
         if (this.ftsAvailable) {
             try {
                 this.db.prepare('DELETE FROM chunks_fts WHERE path = ?').run(filePath);
@@ -343,6 +392,7 @@ class SQLiteIndex {
             chunks: chunkCount,
             cacheEntries: cacheCount,
             ftsAvailable: this.ftsAvailable,
+            vectorReady: this.vectorReady,
             byTier: tierCounts,
             byModel: modelCounts,
             indexMeta: getIndexMeta(this.db)
@@ -376,6 +426,11 @@ class SQLiteIndex {
      * Clear all data for full reindex
      */
     clearAll() {
+        if (this.vectorReady) {
+            try {
+                this.db.exec('DROP TABLE IF EXISTS chunks_vec');
+            } catch { /* ignore */ }
+        }
         dropAllData(this.db);
     }
 
@@ -386,6 +441,21 @@ class SQLiteIndex {
      */
     transaction(fn) {
         return this.db.transaction(fn)();
+    }
+
+    /**
+     * Native vector search using sqlite-vec
+     * @param {number[]} queryVector - Query embedding
+     * @param {number} limit - Max results
+     * @returns {Array<{id: string, distance: number}>|null} Results or null if not available
+     */
+    searchVectorsNative(queryVector, limit) {
+        if (!this.vectorReady) return null;
+        try {
+            return searchVectors(this.db, queryVector, limit);
+        } catch {
+            return null;
+        }
     }
 
     /**

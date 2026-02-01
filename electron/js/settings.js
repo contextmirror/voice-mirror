@@ -918,10 +918,13 @@ function checkIfCustomProfile() {
         }
     }
 
-    // No match — show as custom (unsaved)
-    document.getElementById('profile-name').textContent = 'Custom (unsaved)';
-    state.activeToolProfile = null;
+    // No match — show as modified but keep the current profile name
+    // so Save will update it with the new groups
+    const currentName = state.activeToolProfile || 'voice-assistant';
+    const displayName = PROFILE_DISPLAY_NAMES[currentName] || currentName;
+    document.getElementById('profile-name').textContent = `${displayName} (modified)`;
     document.querySelectorAll('.profile-option').forEach(opt => opt.classList.remove('selected'));
+    updateToolCountDisplay();
 }
 
 /**
@@ -1040,14 +1043,12 @@ function getToolProfileUpdates() {
     const groups = getSelectedGroups();
     const profileName = state.activeToolProfile || 'voice-assistant';
 
-    const updates = { toolProfile: profileName };
-
-    // If it's an existing profile, update its groups too (in case user modified checkboxes)
-    if (profileName && !BUILTIN_PROFILES.includes(profileName)) {
-        updates.toolProfiles = {
+    const updates = {
+        toolProfile: profileName,
+        toolProfiles: {
             [profileName]: { groups }
-        };
-    }
+        }
+    };
 
     return updates;
 }
