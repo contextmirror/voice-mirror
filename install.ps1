@@ -191,19 +191,17 @@ function Install-Repo {
             exit 1
         }
         Write-Info "Installing into $InstallDir"
+        $prevEAP = $ErrorActionPreference; $ErrorActionPreference = "Continue"
         $cloneOut = git clone --branch $Branch --depth 1 $RepoUrl $InstallDir 2>&1
-        if ($LASTEXITCODE -ne 0) {
-            Write-Fail "Clone failed: $cloneOut"
-            exit 1
-        }
+        $ErrorActionPreference = $prevEAP
+        if ($LASTEXITCODE -ne 0) { Write-Fail "Clone failed: $cloneOut"; exit 1 }
         Write-Ok "Cloned to $InstallDir"
     } else {
         Write-Info "Cloning repository..."
+        $prevEAP = $ErrorActionPreference; $ErrorActionPreference = "Continue"
         $cloneOut = git clone --branch $Branch --depth 1 $RepoUrl $InstallDir 2>&1
-        if ($LASTEXITCODE -ne 0) {
-            Write-Fail "Clone failed: $cloneOut"
-            exit 1
-        }
+        $ErrorActionPreference = $prevEAP
+        if ($LASTEXITCODE -ne 0) { Write-Fail "Clone failed: $cloneOut"; exit 1 }
         Write-Ok "Cloned to $InstallDir"
     }
 }
