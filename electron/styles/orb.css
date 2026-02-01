@@ -1,7 +1,7 @@
 /* ========== Orb Styles ========== */
-/* Floating orb, button, states, and animations */
+/* Floating orb — matches wayland-orb/src/renderer.rs procedural rendering */
 
-/* Orb State - fixed 64px size, centered in window */
+/* Orb State - fixed size, centered in window */
 #orb {
     width: 64px;
     height: 64px;
@@ -10,24 +10,25 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: filter 0.2s ease;
     /* NATIVE DRAG - works on Wayland! */
     -webkit-app-region: drag;
-    /* Styled background since transparency doesn't work on Wayland */
-    background: radial-gradient(circle, #2d1b4e 0%, #1a1a2e 50%, #0d0d1a 100%);
-    box-shadow: 0 4px 20px rgba(102, 126, 234, 0.3);
-    border: 2px solid rgba(102, 126, 234, 0.5);
     user-select: none;
     /* Center in window */
     position: absolute;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
+    /* Base orb: purple gradient matching renderer.rs rgb(45,27,78) -> rgb(13,13,26) */
+    background: radial-gradient(circle, rgb(45, 27, 78) 0%, rgb(20, 20, 40) 60%, rgb(13, 13, 26) 100%);
+    /* Glow border: rgb(102,126,234) at 50% opacity */
+    border: 2px solid rgba(102, 126, 234, 0.5);
+    box-shadow: 0 0 12px rgba(102, 126, 234, 0.3), 0 0 24px rgba(102, 126, 234, 0.15);
+    transition: background 0.4s ease, border-color 0.4s ease, box-shadow 0.4s ease;
 }
 
 #orb:hover {
-    transform: translate(-50%, -50%) scale(1.1);
-    filter: brightness(1.1);
+    transform: translate(-50%, -50%) scale(1.08);
+    box-shadow: 0 0 16px rgba(102, 126, 234, 0.5), 0 0 32px rgba(102, 126, 234, 0.25);
 }
 
 #orb:active {
@@ -40,7 +41,7 @@
     height: 48px;
     border-radius: 50%;
     cursor: pointer;
-    -webkit-app-region: no-drag;  /* This area is clickable! */
+    -webkit-app-region: no-drag;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -51,7 +52,7 @@
 }
 
 #orb-button:hover {
-    transform: scale(1.1);
+    transform: scale(1.05);
 }
 
 #orb-button:active {
@@ -66,43 +67,53 @@
 }
 
 /* ========== Orb State Classes ========== */
+/* Idle/Listening: gentle purple pulse ±5% scale, 1500ms */
 #orb.listening {
-    animation: pulse 1.5s ease-in-out infinite;
+    animation: orb-pulse 1.5s ease-in-out infinite;
 }
 
+/* Recording: pink/red shift, fast pulse ±12%, 500ms */
 #orb.recording {
-    animation: recording-pulse 0.5s ease-in-out infinite;
-    filter: hue-rotate(30deg) saturate(1.3);
+    background: radial-gradient(circle, rgb(58, 19, 55) 0%, rgb(26, 13, 20) 60%, rgb(17, 9, 13) 100%);
+    border-color: rgba(234, 102, 126, 0.6);
+    box-shadow: 0 0 16px rgba(234, 102, 126, 0.4), 0 0 32px rgba(234, 102, 126, 0.2);
+    animation: orb-recording 0.5s ease-in-out infinite;
 }
 
+/* Speaking: blue/cyan shift, dual-wave, 1000ms */
 #orb.speaking {
-    animation: speaking-wave 1s ease-in-out infinite;
-    filter: hue-rotate(-30deg) brightness(1.2);
+    background: radial-gradient(circle, rgb(36, 30, 94) 0%, rgb(16, 22, 44) 60%, rgb(10, 16, 31) 100%);
+    border-color: rgba(102, 180, 234, 0.6);
+    box-shadow: 0 0 16px rgba(102, 180, 234, 0.4), 0 0 32px rgba(102, 180, 234, 0.2);
+    animation: orb-speaking 1s ease-in-out infinite;
 }
 
+/* Thinking: teal shift, gradient rotation, 2000ms */
 #orb.thinking {
-    animation: thinking-spin 2s linear infinite;
-    filter: hue-rotate(180deg) brightness(1.1);
+    background: conic-gradient(from 0deg, rgb(27, 45, 42) 0%, rgb(13, 26, 24) 50%, rgb(27, 45, 42) 100%);
+    border-color: rgba(102, 234, 200, 0.6);
+    box-shadow: 0 0 16px rgba(102, 234, 200, 0.4), 0 0 32px rgba(102, 234, 200, 0.2);
+    animation: orb-thinking 2s linear infinite;
 }
 
 /* ========== Orb Animations ========== */
-@keyframes pulse {
-    0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
-    50% { transform: translate(-50%, -50%) scale(1.05); opacity: 0.9; }
-}
-
-@keyframes recording-pulse {
+@keyframes orb-pulse {
     0%, 100% { transform: translate(-50%, -50%) scale(1); }
-    50% { transform: translate(-50%, -50%) scale(1.15); }
+    50% { transform: translate(-50%, -50%) scale(1.05); }
 }
 
-@keyframes speaking-wave {
+@keyframes orb-recording {
+    0%, 100% { transform: translate(-50%, -50%) scale(1); }
+    50% { transform: translate(-50%, -50%) scale(1.12); }
+}
+
+@keyframes orb-speaking {
     0%, 100% { transform: translate(-50%, -50%) scale(1); }
     25% { transform: translate(-50%, -50%) scale(1.08); }
     75% { transform: translate(-50%, -50%) scale(0.95); }
 }
 
-@keyframes thinking-spin {
+@keyframes orb-thinking {
     0% { transform: translate(-50%, -50%) rotate(0deg); }
     100% { transform: translate(-50%, -50%) rotate(360deg); }
 }

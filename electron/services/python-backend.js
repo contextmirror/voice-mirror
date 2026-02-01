@@ -233,7 +233,8 @@ function createPythonBackend(options = {}) {
                 pythonProcess = spawn(venvPython, [scriptToRun], spawnOptions);
             }
         } else {
-            pythonProcess = spawn(venvPython, [scriptToRun], spawnOptions);
+            // On Windows with shell: true, paths with spaces must be quoted for cmd.exe
+            pythonProcess = spawn(`"${venvPython}"`, [`"${scriptToRun}"`], spawnOptions);
         }
 
         // Buffer for incomplete JSON lines

@@ -77,6 +77,7 @@ function createWindowManager(options = {}) {
             skipTaskbar: true,
             resizable: false,
             hasShadow: false,
+            icon: path.join(__dirname, '..', '..', 'assets', 'icon-256.png'),
             backgroundColor: '#00000000',  // Fully transparent background
             webPreferences: {
                 nodeIntegration: false,

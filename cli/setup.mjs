@@ -497,6 +497,7 @@ function createDesktopShortcut(projectDir) {
             const args = existsSync(vmCmd) ? 'start' : '/c voice-mirror start';
             // Write a temp .ps1 script to avoid quote-escaping issues
             const tmpPs1 = join(process.env.TEMP || homedir(), 'vm-shortcut.ps1');
+            const icoPath = join(projectDir, 'assets', 'icon-256.ico');
             const lines = [
                 `$ws = New-Object -ComObject WScript.Shell`,
                 `$s = $ws.CreateShortcut('${lnkPath}')`,
@@ -504,8 +505,9 @@ function createDesktopShortcut(projectDir) {
                 `$s.Arguments = '${args}'`,
                 `$s.WorkingDirectory = '${projectDir}'`,
                 `$s.Description = 'Voice Mirror - Voice-controlled AI agent overlay'`,
+                existsSync(icoPath) ? `$s.IconLocation = '${icoPath},0'` : '',
                 `$s.Save()`,
-            ];
+            ].filter(Boolean);
             writeFileSync(tmpPs1, lines.join('\r\n'));
             execSync(`powershell -NoProfile -ExecutionPolicy Bypass -File "${tmpPs1}"`, { stdio: 'pipe' });
             try { unlinkSync(tmpPs1); } catch {}
