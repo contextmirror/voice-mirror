@@ -145,11 +145,12 @@ export function detectWakeWordModel(projectDir) {
 }
 
 /**
- * Check if TTS model exists.
+ * Check if TTS models exist (both ONNX model and voices file).
  */
 export function detectTTSModel(projectDir) {
     const modelPath = join(projectDir, 'python', 'kokoro-v1.0.onnx');
-    return existsSync(modelPath);
+    const voicesPath = join(projectDir, 'python', 'voices-v1.0.bin');
+    return existsSync(modelPath) && existsSync(voicesPath);
 }
 
 /**

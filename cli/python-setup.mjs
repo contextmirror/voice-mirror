@@ -134,13 +134,28 @@ export function installChromium(projectDir, spinner) {
  * Download TTS models (kokoro) via Python.
  * The kokoro-onnx package auto-downloads on first import.
  */
-export function downloadTTSModels(venvPython, projectDir, spinner) {
-    spinner.update('Downloading TTS models (kokoro)...');
+export async function downloadTTSModels(venvPython, projectDir, spinner) {
+    const pythonDir = join(projectDir, 'python');
+    const voicesPath = join(pythonDir, 'voices-v1.0.bin');
+    const voicesUrl = 'https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin';
+
+    // Step 1: Download voices file directly if missing (kokoro-onnx doesn't always auto-download it)
+    if (!existsSync(voicesPath)) {
+        spinner.update('Downloading TTS voices file (27 MB)...');
+        try {
+            const { downloadFile } = await import('./ollama-setup.mjs');
+            await downloadFile(voicesUrl, voicesPath);
+        } catch (err) {
+            spinner.update(`Voices download failed: ${err.message}, trying via Python...`);
+        }
+    }
+
+    // Step 2: Trigger kokoro ONNX model download by importing it
+    spinner.update('Downloading TTS model (kokoro)...');
     try {
-        // Trigger kokoro model download by importing it in the project dir
         execFileSync(venvPython, ['-c', `
 import os
-os.chdir(${JSON.stringify(join(projectDir, 'python'))})
+os.chdir(${JSON.stringify(pythonDir)})
 try:
     from kokoro_onnx import Kokoro
     k = Kokoro("kokoro-v1.0.onnx", "voices-v1.0.bin")
@@ -150,7 +165,7 @@ except Exception as e:
 `], {
             stdio: 'pipe',
             timeout: 300000, // 5 min for large download
-            cwd: join(projectDir, 'python'),
+            cwd: pythonDir,
         });
         return { ok: true };
     } catch (err) {

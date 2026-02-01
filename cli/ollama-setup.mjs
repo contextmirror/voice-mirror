@@ -197,6 +197,11 @@ export async function installOllama(spinner, installDir) {
                     process.env.OLLAMA_MODELS = modelsDir;
                     try { execSync(`setx OLLAMA_MODELS "${modelsDir}"`, { stdio: 'pipe' }); } catch {}
                 }
+                // Refresh PATH for this process (winget installs to default location)
+                const wingetPath = installDir || (process.env.LOCALAPPDATA + '\\Programs\\Ollama');
+                if (!process.env.PATH.includes(wingetPath)) {
+                    process.env.PATH = wingetPath + ';' + process.env.PATH;
+                }
                 // Kill auto-started Ollama so ensureOllamaRunning can restart with correct env
                 killOllama();
                 return true;

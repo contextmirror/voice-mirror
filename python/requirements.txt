@@ -10,8 +10,8 @@ numpy>=1.24.0
 # Claude API for CLI responses (optional)
 anthropic>=0.40.0
 
-# Local STT (Parakeet)
-onnx-asr>=0.10.0
+# Local STT (Parakeet) — gpu for CUDA acceleration, hub for HuggingFace model downloads
+onnx-asr[gpu,hub]>=0.10.0
 
 # Local TTS (Kokoro)
 kokoro-onnx>=0.4.0

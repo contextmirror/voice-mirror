@@ -395,7 +395,7 @@ export async function runSetup(opts = {}) {
             if (!detectTTSModel(PROJECT_DIR)) {
                 const spin9b = p.spinner();
                 spin9b.start('Downloading TTS models...');
-                const ttsResult = downloadTTSModels(venvResult.binary, PROJECT_DIR, { update: (m) => spin9b.message(m) });
+                const ttsResult = await downloadTTSModels(venvResult.binary, PROJECT_DIR, { update: (m) => spin9b.message(m) });
                 spin9b.stop(ttsResult.ok ? 'TTS models ready' : chalk.yellow('TTS models download skipped (will auto-download on first run)'));
             }
         } else {

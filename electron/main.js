@@ -230,6 +230,10 @@ function startOllamaServer(config) {
             // Check near the install dir (installer may have put it in parent dir)
             path.join(path.dirname(path.dirname(__dirname)), 'Ollama', 'ollama.exe'),
         ];
+        // If OLLAMA_MODELS is set, check its parent dir (installer puts ollama.exe alongside models/)
+        if (process.env.OLLAMA_MODELS) {
+            candidates.push(path.join(path.dirname(process.env.OLLAMA_MODELS), 'ollama.exe'));
+        }
         for (const c of candidates) {
             if (fs.existsSync(c)) { ollamaPath = c; break; }
         }
