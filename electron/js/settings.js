@@ -132,7 +132,6 @@ export async function loadSettingsUI() {
 
         // Behavior
         document.getElementById('start-minimized').checked = state.currentConfig.behavior?.startMinimized || false;
-        document.getElementById('click-to-talk').checked = state.currentConfig.behavior?.clickToTalk !== false;
 
         // AI Provider settings
         const aiConfig = state.currentConfig.ai || {};
@@ -408,8 +407,7 @@ export async function saveSettings() {
                 .replace('Ctrl', 'CommandOrControl'),
             pttKey: document.getElementById('keybind-ptt').dataset.rawKey ||
                 document.getElementById('keybind-ptt').textContent.replace(/ \+ /g, '+'),
-            startMinimized: document.getElementById('start-minimized').checked,
-            clickToTalk: document.getElementById('click-to-talk').checked
+            startMinimized: document.getElementById('start-minimized').checked
         },
         wakeWord: {
             phrase: document.getElementById('wake-word-phrase').value,

@@ -49,7 +49,6 @@ const DEFAULT_CONFIG = {
     behavior: {
         startMinimized: false,
         startWithSystem: false,
-        clickToTalk: true,
         hotkey: 'CommandOrControl+Shift+V',
         activationMode: 'wakeWord',  // 'wakeWord', 'callMode', 'pushToTalk'
         pttKey: 'MouseButton4',  // Push-to-talk key: MouseButton4, MouseButton5, or keyboard keys
