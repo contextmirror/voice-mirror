@@ -189,10 +189,11 @@ function createTray() {
             safeSend('open-settings');
         },
         onToggleVisibility: () => {
-            if (mainWindow?.isVisible()) {
-                mainWindow.hide();
+            if (isExpanded) {
+                collapseToOrb();
             } else {
                 mainWindow?.show();
+                expandPanel();
             }
         }
     });
