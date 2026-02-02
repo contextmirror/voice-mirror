@@ -164,20 +164,9 @@ function dropAllData(db) {
     }
 }
 
-/**
- * Vacuum the database to reclaim space
- * @param {import('better-sqlite3').Database} db
- */
-function vacuum(db) {
-    db.exec('VACUUM');
-}
-
 module.exports = {
     ensureSchema,
-    getMeta,
-    setMeta,
     getIndexMeta,
     setIndexMeta,
-    dropAllData,
-    vacuum
+    dropAllData
 };

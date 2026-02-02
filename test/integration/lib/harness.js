@@ -231,7 +231,7 @@ function createTestContext(suiteName) {
 
 module.exports = {
     // Paths
-    CONFIG_DIR, DATA_DIR, CONFIG_PATH, INBOX_PATH, STATUS_PATH,
+    CONFIG_DIR, DATA_DIR, CONFIG_PATH, INBOX_PATH,
     LOCK_PATH, VMR_LOG_PATH, SPAWNER_LOG_PATH,
 
     // Config

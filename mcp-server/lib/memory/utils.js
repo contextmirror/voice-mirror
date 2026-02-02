@@ -146,29 +146,6 @@ function debounce(fn, ms) {
 }
 
 /**
- * Normalize text for embedding comparison
- * @param {string} text - Text to normalize
- * @returns {string} Normalized text
- */
-function normalizeText(text) {
-    return text
-        .toLowerCase()
-        .replace(/\s+/g, ' ')
-        .trim();
-}
-
-/**
- * Truncate text to max length with ellipsis
- * @param {string} text - Text to truncate
- * @param {number} maxLength - Maximum length
- * @returns {string} Truncated text
- */
-function truncate(text, maxLength = 200) {
-    if (!text || text.length <= maxLength) return text;
-    return text.slice(0, maxLength - 3) + '...';
-}
-
-/**
  * Race a promise against a timeout
  * @param {Promise} promise - Promise to race
  * @param {number} ms - Timeout in milliseconds
@@ -270,8 +247,6 @@ module.exports = {
     getCurrentTime,
     estimateTokens,
     debounce,
-    normalizeText,
-    truncate,
     withTimeout,
     withRetry,
     RETRYABLE_PATTERN,

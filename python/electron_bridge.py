@@ -36,7 +36,7 @@ import uuid
 from datetime import datetime
 from io import StringIO
 from pathlib import Path
-from shared.paths import get_config_base, get_data_dir
+from shared.paths import get_data_dir
 
 # Force UTF-8 output on Windows (cp1252 can't encode emoji used in log output)
 if sys.platform == 'win32':

@@ -44,8 +44,6 @@ module.exports = {
     search,
     hybridSearch: search.hybridSearch,
     searchWithFallback: search.searchWithFallback,
-    searchVector: search.searchVector,
-    searchKeyword: search.searchKeyword,
 
     // Phase 8: Memory Manager (orchestrator)
     MemoryManager,
@@ -58,11 +56,6 @@ module.exports = {
     // Phase 10: Session Management
     SessionManager,
     createSessionManager: SessionManager.createSessionManager,
-
-    // Phase 11: Local Embedding Utilities
-    LocalProvider: embeddings.LocalProvider,
-    downloadEmbeddingModel: embeddings.LocalProvider.downloadModel,
-    isLocalEmbeddingAvailable: embeddings.LocalProvider.isAvailable,
 
     // Utils
     utils,

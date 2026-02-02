@@ -279,36 +279,6 @@ function resetConfig() {
 }
 
 /**
- * Get a specific config value by dot-notation path.
- * Example: getConfigValue('voice.ttsVoice') => 'af_bella'
- */
-function getConfigValue(keyPath) {
-    const config = loadConfig();
-    return keyPath.split('.').reduce((obj, key) => obj?.[key], config);
-}
-
-/**
- * Set a specific config value by dot-notation path.
- * Example: setConfigValue('voice.ttsSpeed', 1.2)
- */
-function setConfigValue(keyPath, value) {
-    const config = loadConfig();
-    const keys = keyPath.split('.');
-    const lastKey = keys.pop();
-
-    let target = config;
-    for (const key of keys) {
-        if (!(key in target)) {
-            target[key] = {};
-        }
-        target = target[key];
-    }
-    target[lastKey] = value;
-
-    return saveConfig(config);
-}
-
-/**
  * Deep merge two objects (source values override target).
  */
 function deepMerge(target, source) {
@@ -390,11 +360,8 @@ module.exports = {
 
     // Config CRUD
     loadConfig,
-    saveConfig,
     saveConfigAsync,
     updateConfig,
     updateConfigAsync,
-    resetConfig,
-    getConfigValue,
-    setConfigValue
+    resetConfig
 };
