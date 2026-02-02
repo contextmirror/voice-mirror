@@ -56,6 +56,8 @@ KOKORO_VOICES = [
 class KokoroAdapter(TTSAdapter):
     """TTS adapter using Kokoro ONNX for local synthesis."""
 
+    adapter_type = "kokoro"
+
     def __init__(self, voice: str | None = None):
         """
         Initialize Kokoro adapter.

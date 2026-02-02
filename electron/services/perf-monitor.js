@@ -41,6 +41,7 @@ function createPerfMonitor(options = {}) {
         prevTime = Date.now();
 
         interval = setInterval(() => sample(), 3000);
+        sample(); // Immediate first sample so UI doesn't show "--"
         console.log('[PerfMonitor] Started');
     }
 

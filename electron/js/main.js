@@ -36,22 +36,26 @@ export async function updateWelcomeMessage() {
         const welcomeBubble = document.getElementById('welcome-bubble');
         const copyBtn = welcomeBubble.querySelector('.message-copy-btn');
 
+        // Build provider prefix if available
+        const providerName = state.currentProviderName;
+        const prefix = providerName ? `Connected to ${providerName}. ` : '';
+
         let message = '';
         switch (mode) {
             case 'wakeWord':
                 const phrase = config.wakeWord?.phrase || 'hey_claude';
                 const displayPhrase = phrase.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-                message = `Say "${displayPhrase}" to start talking.`;
+                message = `${prefix}Say "${displayPhrase}" to start talking.`;
                 break;
             case 'callMode':
-                message = `Call mode active - I'm listening. Just start speaking.`;
+                message = `${prefix}Call mode active - I'm listening. Just start speaking.`;
                 break;
             case 'pushToTalk':
                 const pttKey = config.behavior?.pttKey || 'Space';
-                message = `Hold ${pttKey} to talk.`;
+                message = `${prefix}Hold ${pttKey} to talk.`;
                 break;
             default:
-                message = `Ready to assist.`;
+                message = `${prefix}Ready to assist.`;
         }
 
         // Update bubble text while preserving copy button

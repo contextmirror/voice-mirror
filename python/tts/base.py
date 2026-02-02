@@ -15,6 +15,8 @@ class TTSAdapter(ABC):
     the required methods.
     """
 
+    adapter_type: str = ""  # Override in subclasses: "kokoro", "qwen", etc.
+
     def __init__(self, voice: str | None = None):
         """
         Initialize the TTS adapter.

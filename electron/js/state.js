@@ -9,8 +9,8 @@ export const state = {
     callModeActive: false,
     // AI Provider state
     aiRunning: false,               // Whether AI provider is running (renamed from claudeRunning)
-    currentProvider: 'claude',      // Provider type: 'claude' | 'ollama' | 'lmstudio' | 'openai' | etc.
-    currentProviderName: 'Claude Code',  // Display name for UI
+    currentProvider: null,          // Provider type: 'claude' | 'ollama' | 'lmstudio' | 'openai' | etc. (null until config loads)
+    currentProviderName: '',        // Display name for UI (empty until config loads)
     currentModel: null,             // Model ID (e.g., 'llama3.2:latest', 'gpt-4')
     detectedProviders: [],          // List of auto-detected local providers
     // Terminal state

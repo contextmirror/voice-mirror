@@ -142,8 +142,8 @@ class VoiceMirror:
         new_model_size = settings.get("tts_model_size", "0.6B")
 
         # If adapter type changed, rebuild the entire TTS adapter
-        if self.tts and new_adapter != self.tts.name:
-            print(f"🔄 TTS adapter changed: {self.tts.name} -> {new_adapter}")
+        if self.tts and new_adapter != self.tts.adapter_type:
+            print(f"🔄 TTS adapter changed: {self.tts.adapter_type} -> {new_adapter}")
             try:
                 self.tts = create_tts_adapter(new_adapter, voice=new_voice, model_size=new_model_size)
                 self.tts.volume = float(settings.get("tts_volume", 1.0))

@@ -74,6 +74,8 @@ class QwenTTSAdapter(TTSAdapter):
     - Natural language voice design (VoiceDesign model)
     """
 
+    adapter_type = "qwen"
+
     def __init__(
         self,
         voice: str | None = None,
