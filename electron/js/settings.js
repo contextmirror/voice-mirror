@@ -5,7 +5,7 @@
 import { state } from './state.js';
 import { formatKeybind } from './utils.js';
 import { navigateTo } from './navigation.js';
-import { updateProviderDisplay, clearTerminal } from './terminal.js';
+import { updateProviderDisplay } from './terminal.js';
 
 // Provider display names
 const PROVIDER_NAMES = {
@@ -463,13 +463,14 @@ export async function saveSettings() {
         if (providerChanged || modelChanged || contextLengthChanged) {
             console.log(`[Settings] Provider/model changed: ${oldProvider}/${oldModel} -> ${aiProvider}/${aiModel}`);
 
-            // Update state first so terminal banner shows the NEW provider name
+            // Update state so next terminal banner shows the NEW provider name
             state.currentProvider = aiProvider;
             state.currentModel = aiModel;
             state.currentContextLength = aiContextLength;
 
-            // Clear terminal with new provider name
-            clearTerminal();
+            // Flag: clear terminal when new provider connects (not now — old provider
+            // exit messages would write over a premature clear)
+            state.pendingProviderClear = true;
         }
 
         // Show save confirmation

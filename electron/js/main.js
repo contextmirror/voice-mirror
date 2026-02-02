@@ -6,7 +6,7 @@
 import { state } from './state.js';
 import { initMarkdown } from './markdown.js';
 import { addMessage, isDuplicate, copyMessage, addToolCallCard, addToolResultCard } from './messages.js';
-import { initXterm, handleAIOutput, updateAIStatus, toggleTerminal, startAI, stopAI, updateProviderDisplay } from './terminal.js';
+import { initXterm, handleAIOutput, updateAIStatus, toggleTerminal, startAI, stopAI, updateProviderDisplay, clearTerminal } from './terminal.js';
 import { initSettings, toggleSettings } from './settings.js';
 import { initNavigation, navigateTo, toggleSidebarCollapse } from './navigation.js';
 import { initBrowserPanel, navigateToBrowserPage } from './browser-panel.js';
@@ -473,6 +473,11 @@ function handleVoiceEvent(data) {
             console.log('Mode changed to:', data.mode);
             break;
         case 'claude_connected':
+            // Clear terminal on provider switch (before writing new output)
+            if (state.pendingProviderClear) {
+                state.pendingProviderClear = false;
+                clearTerminal();
+            }
             updateAIStatus(true);
             // Update provider display if info is included
             if (data.provider && data.providerName) {

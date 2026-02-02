@@ -26,7 +26,8 @@ export const state = {
     imageVoicePrompt: null,         // Voice prompt to use with image
     // Navigation state
     currentPage: 'chat',            // 'chat' | 'terminal' | 'settings'
-    sidebarCollapsed: false         // Whether sidebar is collapsed to icons
+    sidebarCollapsed: false,        // Whether sidebar is collapsed to icons
+    pendingProviderClear: false     // Flag: clear terminal when new provider connects
 };
 
 // Deduplication: track recent messages to prevent duplicates
