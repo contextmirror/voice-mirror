@@ -313,7 +313,7 @@ export async function scanProviders() {
             html += `<div class="provider-item">`;
             html += `<span class="status-dot ${isOnline ? 'online' : 'offline'}"></span>`;
             html += `<span>${name}</span>`;
-            if (isOnline && model) {
+            if (isOnline && model && !/embed/i.test(model)) {
                 html += `<span class="model-name">${model}</span>`;
             } else if (!isOnline) {
                 html += `<span class="model-name">offline</span>`;

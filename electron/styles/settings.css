@@ -74,7 +74,12 @@
 }
 
 .settings-section {
-    margin-bottom: 24px;
+    margin-bottom: 32px;
+}
+
+.theme-static-value {
+    color: #ccc;
+    font-size: 14px;
 }
 
 .settings-section h3 {
