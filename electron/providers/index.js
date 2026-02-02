@@ -23,17 +23,19 @@ const PROVIDER_TYPES = {
     GROK: 'grok',
     MISTRAL: 'mistral',
     OPENROUTER: 'openrouter',
-    DEEPSEEK: 'deepseek'
+    DEEPSEEK: 'deepseek',
+    KIMI: 'kimi',
+    KIMI_CLI: 'kimi-cli'
 };
 
 // CLI agent providers (full terminal access, PTY-based)
-const CLI_PROVIDERS = ['claude', 'codex', 'gemini-cli'];
+const CLI_PROVIDERS = ['claude', 'codex', 'gemini-cli', 'kimi-cli'];
 
 // Local providers (don't require API key)
 const LOCAL_PROVIDERS = ['ollama', 'lmstudio', 'jan'];
 
 // Cloud providers (require API key)
-const CLOUD_PROVIDERS = ['openai', 'gemini', 'groq', 'grok', 'mistral', 'openrouter', 'deepseek'];
+const CLOUD_PROVIDERS = ['openai', 'gemini', 'groq', 'grok', 'mistral', 'openrouter', 'deepseek', 'kimi'];
 
 // Provider display names
 const PROVIDER_NAMES = {
@@ -49,7 +51,9 @@ const PROVIDER_NAMES = {
     grok: 'Grok (xAI)',
     mistral: 'Mistral',
     openrouter: 'OpenRouter',
-    deepseek: 'DeepSeek'
+    deepseek: 'DeepSeek',
+    kimi: 'Kimi (Moonshot)',
+    'kimi-cli': 'Kimi CLI'
 };
 
 /**
@@ -63,8 +67,8 @@ function createProvider(type, config = {}) {
         return new ClaudeProvider(config);
     }
 
-    // CLI agent providers (Codex, Gemini CLI)
-    if (type === PROVIDER_TYPES.CODEX || type === PROVIDER_TYPES.GEMINI_CLI) {
+    // CLI agent providers (Codex, Gemini CLI, Kimi CLI)
+    if (type === PROVIDER_TYPES.CODEX || type === PROVIDER_TYPES.GEMINI_CLI || type === PROVIDER_TYPES.KIMI_CLI) {
         return new CLIProvider(type, config);
     }
 
@@ -160,6 +164,16 @@ function getProviderList() {
             requiresApiKey: false,
             supportsVision: false,
             supportsMCP: false
+        },
+        {
+            type: 'kimi-cli',
+            name: 'Kimi CLI',
+            description: 'Moonshot AI CLI agent with MCP',
+            isLocal: false,
+            isPTY: true,
+            requiresApiKey: false,
+            supportsVision: true,
+            supportsMCP: true
         },
         {
             type: 'ollama',
@@ -266,6 +280,17 @@ function getProviderList() {
             requiresApiKey: true,
             apiKeyEnv: 'DEEPSEEK_API_KEY',
             supportsVision: false,
+            supportsMCP: false
+        },
+        {
+            type: 'kimi',
+            name: 'Kimi (Moonshot)',
+            description: 'Moonshot AI multimodal models',
+            isLocal: false,
+            isPTY: false,
+            requiresApiKey: true,
+            apiKeyEnv: 'MOONSHOT_API_KEY',
+            supportsVision: true,
             supportsMCP: false
         }
     ];

@@ -135,8 +135,9 @@ Voice Mirror Electron/
 | **Gemini** | Cloud API | Vision |
 | **Groq/Grok/Mistral** | Cloud API | Fast inference |
 | **OpenRouter/DeepSeek** | Cloud API | Multi-model |
+| **Kimi (Moonshot)** | Cloud API | Vision (K2.5) |
 
-See [CONFIGURATION.md](docs/CONFIGURATION.md) for full provider list (11 total).
+See [CONFIGURATION.md](docs/CONFIGURATION.md) for full provider list (12 total).
 
 ---
 

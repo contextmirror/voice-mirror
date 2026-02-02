@@ -107,6 +107,15 @@ const CLOUD_PROVIDERS = {
         apiKeyEnv: 'DEEPSEEK_API_KEY',
         baseUrl: 'https://api.deepseek.com/v1',
         chatEndpoint: '/chat/completions'
+    },
+    kimi: {
+        type: 'kimi',
+        name: 'Kimi (Moonshot)',
+        isLocal: false,
+        requiresApiKey: true,
+        apiKeyEnv: 'MOONSHOT_API_KEY',
+        baseUrl: 'https://api.moonshot.ai/v1',
+        chatEndpoint: '/chat/completions'
     }
 };
 

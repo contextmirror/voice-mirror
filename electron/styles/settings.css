@@ -692,6 +692,16 @@
     font-size: 12px;
 }
 
+/* Kimi - Moonshot AI blue/purple */
+.provider-icon-kimi {
+    background: linear-gradient(135deg, #6366f1, #4f46e5);
+    color: white;
+}
+.provider-icon-kimi::before {
+    content: "🌙";
+    font-size: 12px;
+}
+
 /* Codex - OpenAI green with terminal style */
 .provider-icon-codex {
     background: linear-gradient(135deg, #10a37f, #065f46);

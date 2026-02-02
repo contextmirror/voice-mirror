@@ -108,12 +108,13 @@ const DEFAULT_CONFIG = {
         apiKeys: {                    // API keys for cloud providers (stored locally)
             openai: null,
             anthropic: null,
-            google: null,
-            xai: null,
+            gemini: null,
+            grok: null,
             groq: null,
             mistral: null,
             openrouter: null,
-            deepseek: null
+            deepseek: null,
+            kimi: null
         }
     }
 };

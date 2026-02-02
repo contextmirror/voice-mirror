@@ -21,7 +21,9 @@ const PROVIDER_NAMES = {
     groq: 'Groq',
     mistral: 'Mistral',
     openrouter: 'OpenRouter',
-    deepseek: 'DeepSeek'
+    deepseek: 'DeepSeek',
+    kimi: 'Kimi (Moonshot)',
+    'kimi-cli': 'Kimi CLI'
 };
 
 // Provider icon CSS classes
@@ -38,11 +40,13 @@ const PROVIDER_ICON_CLASSES = {
     groq: 'provider-icon-groq',
     mistral: 'provider-icon-mistral',
     openrouter: 'provider-icon-openrouter',
-    deepseek: 'provider-icon-deepseek'
+    deepseek: 'provider-icon-deepseek',
+    kimi: 'provider-icon-kimi',
+    'kimi-cli': 'provider-icon-kimi'
 };
 
 // CLI agent providers (PTY-based, full terminal access)
-const CLI_PROVIDERS = ['claude', 'codex', 'gemini-cli'];
+const CLI_PROVIDERS = ['claude', 'codex', 'gemini-cli', 'kimi-cli'];
 
 // Local providers that can be auto-detected
 const LOCAL_PROVIDERS = ['ollama', 'lmstudio', 'jan'];
@@ -72,7 +76,7 @@ const TTS_VOICES = {
 };
 
 // Cloud providers that need API keys
-const CLOUD_PROVIDERS_WITH_APIKEY = ['openai', 'gemini', 'grok', 'groq', 'mistral', 'openrouter', 'deepseek'];
+const CLOUD_PROVIDERS_WITH_APIKEY = ['openai', 'gemini', 'grok', 'groq', 'mistral', 'openrouter', 'deepseek', 'kimi'];
 
 /**
  * Toggle settings - navigates to settings page or back to chat

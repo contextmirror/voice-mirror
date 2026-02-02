@@ -47,6 +47,12 @@ const CLI_CONFIGS = {
         args: [],
         readyPatterns: ['>', 'What', 'How can'],
         displayName: 'Gemini CLI'
+    },
+    'kimi-cli': {
+        command: 'kimi',
+        args: [],
+        readyPatterns: ['>', 'What', 'How can'],
+        displayName: 'Kimi CLI'
     }
 };
 

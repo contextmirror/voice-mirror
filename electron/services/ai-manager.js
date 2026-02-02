@@ -188,18 +188,16 @@ function createAIManager(options = {}) {
         const endpoints = config?.ai?.endpoints || {};
         const apiKeys = config?.ai?.apiKeys || {};
 
-        // Map provider type to alternative API key names (check both)
-        const apiKeyAltMap = {
-            gemini: 'google',  // gemini keys can be under 'gemini' or 'google'
-            grok: 'xai'        // grok keys can be under 'grok' or 'xai'
+        // Env var names that differ from provider type (e.g. grok uses XAI_API_KEY)
+        const envVarAltMap = {
+            grok: 'XAI_API_KEY',
+            gemini: 'GOOGLE_API_KEY'
         };
-        const altKeyName = apiKeyAltMap[providerType];
 
-        // Try provider name first, then alternative name, then env var
+        // Try config key first, then standard env var, then alternative env var
         const apiKey = apiKeys[providerType] ||
-                       (altKeyName && apiKeys[altKeyName]) ||
                        process.env[`${providerType.toUpperCase()}_API_KEY`] ||
-                       (altKeyName && process.env[`${altKeyName.toUpperCase()}_API_KEY`]) ||
+                       process.env[envVarAltMap[providerType]] ||
                        undefined;
 
         // Create provider instance
