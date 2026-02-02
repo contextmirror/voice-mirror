@@ -12,6 +12,7 @@ import { initNavigation, navigateTo, toggleSidebarCollapse } from './navigation.
 import { initBrowserPanel, navigateToBrowserPage } from './browser-panel.js';
 import { blobToBase64, formatSize } from './utils.js';
 import { initOrbCanvas, setOrbState, destroyOrbCanvas } from './orb-canvas.js';
+import { showToast, updateToast } from './notifications.js';
 
 // DOM elements
 const orb = document.getElementById('orb');
@@ -754,6 +755,34 @@ async function init() {
             perfMem.textContent = `MEM: ${stats.rss}MB`;
         });
     }
+
+    // Update checker notifications
+    window.voiceMirror.onUpdateAvailable((data) => {
+        const toast = showToast(
+            `Update available (${data.behind} commit${data.behind > 1 ? 's' : ''} behind) — click to update`,
+            'info',
+            0
+        );
+        toast.style.cursor = 'pointer';
+        toast.addEventListener('click', async (e) => {
+            if (e.target.closest('.toast-close')) return;
+            updateToast(toast, 'Pulling updates...', 'loading');
+            await window.voiceMirror.applyUpdate();
+        });
+    });
+
+    window.voiceMirror.onUpdateStatus((data) => {
+        const existing = document.querySelector('.toast.loading') || document.querySelector('.toast.info');
+        if (data.status === 'pulling') {
+            if (existing) updateToast(existing, 'Pulling updates...', 'loading');
+        } else if (data.status === 'installing') {
+            if (existing) updateToast(existing, 'Installing dependencies...', 'loading');
+        } else if (data.status === 'ready') {
+            if (existing) updateToast(existing, 'Update complete — restart to apply', 'success');
+        } else if (data.status === 'error') {
+            if (existing) updateToast(existing, `Update failed: ${data.message}`, 'error');
+        }
+    });
 
     console.log('[Voice Mirror] Initialized');
 }

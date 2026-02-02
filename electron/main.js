@@ -32,6 +32,7 @@ const { createBrowserWatcher } = require('./services/browser-watcher');
 const { createAIManager } = require('./services/ai-manager');
 const { createInboxWatcher } = require('./services/inbox-watcher');
 const { createPerfMonitor } = require('./services/perf-monitor');
+const { createUpdateChecker } = require('./services/update-checker');
 const { createTrayService } = require('./window/tray');
 const { createWindowManager } = require('./window');
 const { createWaylandOrb } = require('./services/wayland-orb');
@@ -71,6 +72,9 @@ let inboxWatcherService = null;
 
 // Performance monitor service
 let perfMonitor = null;
+
+// Update checker service
+let updateChecker = null;
 
 // Handle EPIPE errors gracefully (happens when terminal pipe breaks)
 process.stdout.on('error', (err) => {
@@ -690,6 +694,7 @@ app.whenReady().then(() => {
         getWaylandOrb: () => waylandOrb,
         getHotkeyManager: () => hotkeyManager,
         getInboxWatcherService: () => inboxWatcherService,
+        getUpdateChecker: () => updateChecker,
         logger
     });
 
@@ -814,6 +819,14 @@ app.whenReady().then(() => {
     // ptt_trigger.json directly. Electron's uiohook PTT was unreliable when collapsed to orb.
     // Electron's uiohook is still used for the toggle hotkey (Ctrl+Shift+V) via hotkey-manager.
 
+    // Update checker (git-based)
+    updateChecker = createUpdateChecker({
+        safeSend,
+        log: (level, msg) => logger.log(level, msg),
+        appDir: path.join(__dirname, '..')
+    });
+    updateChecker.start();
+
     // Start Docker services (SearXNG, n8n) if available
     startDockerServices();
 
@@ -903,6 +916,9 @@ app.on('before-quit', async () => {
 
     // Stop shared uiohook (after PTT and hotkey manager are done)
     uiohookShared.stop();
+
+    // Stop update checker
+    if (updateChecker) updateChecker.stop();
 
     // Stop watchers
     stopScreenCaptureWatcher();

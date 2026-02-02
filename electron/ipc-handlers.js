@@ -575,6 +575,15 @@ function registerIpcHandlers(ctx) {
         ctx.stopAIProvider();
         return { stopped: true };
     });
+
+    // Update checker
+    ipcMain.handle('apply-update', async () => {
+        const checker = ctx.getUpdateChecker?.();
+        if (checker) {
+            return await checker.applyUpdate();
+        }
+        return { success: false, error: 'Update checker not initialized' };
+    });
 }
 
 module.exports = { registerIpcHandlers };
