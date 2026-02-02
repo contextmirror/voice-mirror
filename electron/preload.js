@@ -91,7 +91,10 @@ contextBridge.exposeInMainWorld('voiceMirror', {
         setCallMode: (active) => ipcRenderer.invoke('set-call-mode', active),
 
         // Get current call mode status
-        getCallMode: () => ipcRenderer.invoke('get-call-mode')
+        getCallMode: () => ipcRenderer.invoke('get-call-mode'),
+
+        // List available audio input/output devices
+        listAudioDevices: () => ipcRenderer.invoke('list-audio-devices')
     },
 
     // Claude Code backend control

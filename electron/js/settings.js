@@ -123,6 +123,8 @@ export async function loadSettingsUI() {
         document.getElementById('tts-voice').value = state.currentConfig.voice?.ttsVoice || 'af_bella';
         document.getElementById('tts-speed').value = state.currentConfig.voice?.ttsSpeed || 1.0;
         document.getElementById('speed-value').textContent = (state.currentConfig.voice?.ttsSpeed || 1.0) + 'x';
+        document.getElementById('tts-volume').value = state.currentConfig.voice?.ttsVolume || 1.0;
+        document.getElementById('volume-value').textContent = Math.round((state.currentConfig.voice?.ttsVolume || 1.0) * 100) + '%';
         document.getElementById('stt-model').value = state.currentConfig.voice?.sttModel || 'parakeet';
 
         // Appearance
@@ -132,6 +134,7 @@ export async function loadSettingsUI() {
 
         // Behavior
         document.getElementById('start-minimized').checked = state.currentConfig.behavior?.startMinimized || false;
+        document.getElementById('start-with-system').checked = state.currentConfig.behavior?.startWithSystem || false;
 
         // AI Provider settings
         const aiConfig = state.currentConfig.ai || {};
@@ -162,6 +165,9 @@ export async function loadSettingsUI() {
         if (aiConfig.autoDetect !== false) {
             scanProviders();
         }
+
+        // Audio devices
+        await loadAudioDevices();
 
         // Overlay display (monitor selection)
         await loadOverlayOutputs();
@@ -407,7 +413,8 @@ export async function saveSettings() {
                 .replace('Ctrl', 'CommandOrControl'),
             pttKey: document.getElementById('keybind-ptt').dataset.rawKey ||
                 document.getElementById('keybind-ptt').textContent.replace(/ \+ /g, '+'),
-            startMinimized: document.getElementById('start-minimized').checked
+            startMinimized: document.getElementById('start-minimized').checked,
+            startWithSystem: document.getElementById('start-with-system').checked
         },
         wakeWord: {
             phrase: document.getElementById('wake-word-phrase').value,
@@ -419,7 +426,10 @@ export async function saveSettings() {
             ttsVoice: document.getElementById('tts-voice').value,
             ttsModelSize: document.getElementById('tts-model-size').value,
             ttsSpeed: parseFloat(document.getElementById('tts-speed').value),
-            sttModel: document.getElementById('stt-model').value
+            ttsVolume: parseFloat(document.getElementById('tts-volume').value),
+            sttModel: document.getElementById('stt-model').value,
+            inputDevice: document.getElementById('audio-input-device').value || null,
+            outputDevice: document.getElementById('audio-output-device').value || null
         },
         appearance: {
             orbSize: parseInt(document.getElementById('orb-size').value),
@@ -484,6 +494,48 @@ export async function saveSettings() {
     } catch (err) {
         console.error('[Settings] Failed to save:', err);
         alert('Failed to save settings: ' + err.message);
+    }
+}
+
+/**
+ * Load available audio devices from Python backend
+ */
+async function loadAudioDevices() {
+    const inputSelect = document.getElementById('audio-input-device');
+    const outputSelect = document.getElementById('audio-output-device');
+    if (!inputSelect || !outputSelect) return;
+
+    try {
+        const devices = await window.voiceMirror.python.listAudioDevices();
+        if (!devices) return;
+
+        // Populate input devices
+        if (devices.input?.length > 0) {
+            inputSelect.innerHTML = '<option value="">System Default</option>';
+            for (const dev of devices.input) {
+                const option = document.createElement('option');
+                option.value = dev.name;
+                option.textContent = dev.name;
+                inputSelect.appendChild(option);
+            }
+            const savedInput = state.currentConfig?.voice?.inputDevice;
+            if (savedInput) inputSelect.value = savedInput;
+        }
+
+        // Populate output devices
+        if (devices.output?.length > 0) {
+            outputSelect.innerHTML = '<option value="">System Default</option>';
+            for (const dev of devices.output) {
+                const option = document.createElement('option');
+                option.value = dev.name;
+                option.textContent = dev.name;
+                outputSelect.appendChild(option);
+            }
+            const savedOutput = state.currentConfig?.voice?.outputDevice;
+            if (savedOutput) outputSelect.value = savedOutput;
+        }
+    } catch (err) {
+        console.log('[Settings] Could not load audio devices:', err);
     }
 }
 
@@ -677,6 +729,10 @@ export function initSettings() {
 
     document.getElementById('tts-speed').addEventListener('input', (e) => {
         document.getElementById('speed-value').textContent = e.target.value + 'x';
+    });
+
+    document.getElementById('tts-volume').addEventListener('input', (e) => {
+        document.getElementById('volume-value').textContent = Math.round(e.target.value * 100) + '%';
     });
 
     document.getElementById('orb-size').addEventListener('input', (e) => {

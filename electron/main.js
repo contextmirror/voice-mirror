@@ -667,6 +667,7 @@ app.whenReady().then(() => {
         isAIProviderRunning,
         getAIManager: () => aiManager,
         getPythonBackend: () => pythonBackend,
+        listAudioDevices: () => pythonBackend?.listAudioDevices() ?? Promise.resolve(null),
         getWaylandOrb: () => waylandOrb,
         getHotkeyManager: () => hotkeyManager,
         getInboxWatcherService: () => inboxWatcherService,

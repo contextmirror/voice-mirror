@@ -3,7 +3,7 @@
  * Extracted from main.js to reduce file size and improve testability.
  */
 
-const { ipcMain, desktopCapturer, screen, shell } = require('electron');
+const { app, ipcMain, desktopCapturer, screen, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { validators } = require('./ipc-validators');
@@ -304,6 +304,19 @@ function registerIpcHandlers(ctx) {
             });
         }
 
+        // Handle start-with-system toggle
+        if (updates.behavior?.startWithSystem !== undefined) {
+            const oldStartWithSystem = appConfig?.behavior?.startWithSystem || false;
+            if (updates.behavior.startWithSystem !== oldStartWithSystem) {
+                try {
+                    app.setLoginItemSettings({ openAtLogin: updates.behavior.startWithSystem });
+                    console.log(`[Config] Start with system: ${updates.behavior.startWithSystem}`);
+                } catch (err) {
+                    console.error('[Config] Failed to set login item:', err.message);
+                }
+            }
+        }
+
         return ctx.getAppConfig();
     });
 
@@ -324,6 +337,11 @@ function registerIpcHandlers(ctx) {
 
     ipcMain.handle('get-platform-info', () => {
         return ctx.config.getPlatformPaths();
+    });
+
+    // Audio device enumeration (asks Python backend)
+    ipcMain.handle('list-audio-devices', async () => {
+        return ctx.listAudioDevices ? ctx.listAudioDevices() : null;
     });
 
     // Image handling - send to Python backend

@@ -23,6 +23,7 @@ class TTSAdapter(ABC):
             voice: Optional voice ID to use (adapter-dependent)
         """
         self.voice = voice
+        self.volume = 1.0  # Volume multiplier (0.1–2.0, 1.0 = no change)
         self.model = None
         self._is_speaking = False
         self._playback_process = None
@@ -91,9 +92,11 @@ class TTSAdapter(ABC):
 
     def _play_audio(self, audio_file: str) -> None:
         """Play audio via ffplay, interruptible via _interrupted flag."""
-        self._playback_process = subprocess.Popen(
-            ["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet", audio_file]
-        )
+        cmd = ["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet"]
+        if self.volume != 1.0:
+            cmd.extend(["-af", f"volume={self.volume:.1f}"])
+        cmd.append(audio_file)
+        self._playback_process = subprocess.Popen(cmd)
         # Poll instead of blocking .wait() so stop_speaking() can interrupt
         deadline = time.monotonic() + 60
         while time.monotonic() < deadline:

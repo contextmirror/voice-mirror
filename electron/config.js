@@ -34,7 +34,10 @@ const DEFAULT_CONFIG = {
         ttsVoice: 'af_bella',    // Voice ID (adapter-dependent)
         ttsModelSize: '0.6B',    // Qwen3-TTS model size: '0.6B' (faster) or '1.7B' (better quality)
         ttsSpeed: 1.0,
-        sttModel: 'parakeet'     // or 'whisper'
+        ttsVolume: 1.0,          // Volume multiplier (0.1–2.0, 1.0 = 100%)
+        sttModel: 'parakeet',    // or 'whisper'
+        inputDevice: null,       // Audio input device name (null = system default)
+        outputDevice: null       // Audio output device name (null = system default)
     },
 
     // Appearance

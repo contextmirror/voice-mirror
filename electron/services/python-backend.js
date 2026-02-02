@@ -88,8 +88,19 @@ function createPythonBackend(options = {}) {
      * Handle JSON events from Python electron_bridge.py
      * @param {Object} event - Event object from Python
      */
+    // Pending promise resolvers for request/response patterns
+    const pendingRequests = new Map();
+
     function handlePythonEvent(event) {
         const { event: eventType, data } = event;
+
+        // Resolve pending requests
+        if (pendingRequests.has(eventType)) {
+            const resolve = pendingRequests.get(eventType);
+            pendingRequests.delete(eventType);
+            resolve(data);
+            return;
+        }
 
         // Map Python events to UI events
         const eventMapping = {
@@ -520,6 +531,28 @@ function createPythonBackend(options = {}) {
         return send({ command: 'system_speak', text });
     }
 
+    /**
+     * List available audio devices from Python backend.
+     * @returns {Promise<{input: Array, output: Array}|null>}
+     */
+    function listAudioDevices() {
+        if (!isRunning()) return Promise.resolve(null);
+
+        return new Promise((resolve) => {
+            const timeout = setTimeout(() => {
+                pendingRequests.delete('audio_devices');
+                resolve(null);
+            }, 5000);
+
+            pendingRequests.set('audio_devices', (data) => {
+                clearTimeout(timeout);
+                resolve(data);
+            });
+
+            send({ command: 'list_audio_devices' });
+        });
+    }
+
     return {
         start,
         stop,
@@ -527,6 +560,7 @@ function createPythonBackend(options = {}) {
         send,
         sendImage,
         systemSpeak,
+        listAudioDevices,
         isRunning,
         getProcess,
         onEvent,

@@ -146,11 +146,17 @@ class VoiceMirror:
             print(f"🔄 TTS adapter changed: {self.tts.name} -> {new_adapter}")
             try:
                 self.tts = create_tts_adapter(new_adapter, voice=new_voice, model_size=new_model_size)
+                self.tts.volume = float(settings.get("tts_volume", 1.0))
                 self.tts.load()
                 print(f"✅ TTS adapter reloaded: {new_adapter} (voice: {new_voice})")
             except Exception as e:
                 print(f"❌ Failed to reload TTS adapter: {e}")
             return
+
+        # Update volume
+        new_volume = settings.get("tts_volume", 1.0)
+        if self.tts:
+            self.tts.volume = float(new_volume)
 
         # Same adapter, just update voice if changed
         if self.tts and new_voice and new_voice != self.tts.voice:

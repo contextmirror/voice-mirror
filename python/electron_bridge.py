@@ -562,7 +562,9 @@ async def process_commands(agent):
                 tts_voice = voice_cfg.get("ttsVoice")
                 tts_model_size = voice_cfg.get("ttsModelSize")
 
-                if tts_adapter or tts_voice or tts_model_size:
+                tts_volume = voice_cfg.get("ttsVolume")
+
+                if tts_adapter or tts_voice or tts_model_size or tts_volume is not None:
                     # Update voice_settings.json (read by voice_agent)
                     settings_path = get_data_dir() / "voice_settings.json"
                     try:
@@ -578,6 +580,8 @@ async def process_commands(agent):
                             voice_settings["tts_voice"] = tts_voice
                         if tts_model_size:
                             voice_settings["tts_model_size"] = tts_model_size
+                        if tts_volume is not None:
+                            voice_settings["tts_volume"] = float(tts_volume)
 
                         with open(settings_path, 'w', encoding='utf-8') as f:
                             json.dump(voice_settings, f, indent=2)
@@ -587,6 +591,27 @@ async def process_commands(agent):
                             agent.refresh_tts_settings()
                     except Exception as e:
                         emit_error(f"Failed to update TTS settings: {e}")
+
+            elif command == "list_audio_devices":
+                # Enumerate audio input/output devices
+                try:
+                    import sounddevice as sd
+                    devices = sd.query_devices()
+                    input_devs = []
+                    output_devs = []
+                    seen_input = set()
+                    seen_output = set()
+                    for i, d in enumerate(devices):
+                        name = d['name']
+                        if d['max_input_channels'] > 0 and name not in seen_input:
+                            input_devs.append({"id": i, "name": name})
+                            seen_input.add(name)
+                        if d['max_output_channels'] > 0 and name not in seen_output:
+                            output_devs.append({"id": i, "name": name})
+                            seen_output.add(name)
+                    emit_event("audio_devices", {"input": input_devs, "output": output_devs})
+                except Exception as e:
+                    emit_event("audio_devices", {"input": [], "output": [], "error": str(e)})
 
             elif command == "start_recording":
                 # Push-to-talk: start recording immediately
