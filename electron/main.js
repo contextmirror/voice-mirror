@@ -83,6 +83,7 @@ const { isWindows, isMac, isLinux } = config;
 let mainWindow = null;  // Reference to windowManager's window (for backward compatibility)
 let appConfig = null;
 let pythonReadyTimeout = null;
+let startupPinger = null;
 
 /** Send IPC to mainWindow only if it still exists and isn't destroyed. */
 function safeSend(channel, data) {
@@ -314,9 +315,17 @@ function syncVoiceSettingsToFile(cfg) {
 function startPythonVoiceMirror() {
     if (pythonBackend) {
         pythonBackend.start();
+        // Send periodic pings during startup to keep stdin pipe active
+        // (Windows pipe buffering can block Python's stdout during imports)
+        startupPinger = setInterval(() => {
+            if (pythonBackend?.isRunning()) {
+                sendToPython({ command: 'ping' });
+            }
+        }, 2000);
         // Set a 30-second timeout for Python ready event
         if (pythonReadyTimeout) clearTimeout(pythonReadyTimeout);
         pythonReadyTimeout = setTimeout(() => {
+            clearInterval(startupPinger);
             console.error('[Python] Backend failed to start within 30 seconds');
             safeSend('voice-event', {
                 type: 'error',
@@ -538,6 +547,7 @@ app.whenReady().then(() => {
 
         // Startup greeting when Python backend is ready
         if (event.type === 'ready') {
+            if (startupPinger) { clearInterval(startupPinger); startupPinger = null; }
             if (pythonReadyTimeout) { clearTimeout(pythonReadyTimeout); pythonReadyTimeout = null; }
             // Sync voice settings (TTS adapter/voice) but NOT activation mode
             // to avoid restarting the hotkey listener that's already running
