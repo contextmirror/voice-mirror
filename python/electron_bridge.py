@@ -593,15 +593,27 @@ async def process_commands(agent):
                         emit_error(f"Failed to update TTS settings: {e}")
 
             elif command == "list_audio_devices":
-                # Enumerate audio input/output devices
+                # Enumerate audio input/output devices (prefer WASAPI on Windows)
                 try:
                     import sounddevice as sd
                     devices = sd.query_devices()
+                    hostapis = sd.query_hostapis()
+
+                    # Find WASAPI host API index (Windows only, has full device names)
+                    wasapi_idx = None
+                    for idx, api in enumerate(hostapis):
+                        if 'WASAPI' in api.get('name', ''):
+                            wasapi_idx = idx
+                            break
+
                     input_devs = []
                     output_devs = []
                     seen_input = set()
                     seen_output = set()
                     for i, d in enumerate(devices):
+                        # Filter to WASAPI devices if available
+                        if wasapi_idx is not None and d.get('hostapi') != wasapi_idx:
+                            continue
                         name = d['name']
                         if d['max_input_channels'] > 0 and name not in seen_input:
                             input_devs.append({"id": i, "name": name})
