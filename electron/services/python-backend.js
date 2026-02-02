@@ -90,6 +90,7 @@ function createPythonBackend(options = {}) {
      */
     // Pending promise resolvers for request/response patterns
     const pendingRequests = new Map();
+    let cachedAudioDevices = null;
 
     function handlePythonEvent(event) {
         const { event: eventType, data } = event;
@@ -114,6 +115,8 @@ function createPythonBackend(options = {}) {
             },
             'ready': () => {
                 console.log('[Python] Backend ready');
+                // Pre-fetch audio devices on ready so they're cached for settings
+                send({ command: 'list_audio_devices' });
                 return { type: 'ready' };
             },
             'wake_word': () => ({
@@ -188,6 +191,9 @@ function createPythonBackend(options = {}) {
             if (uiEvent && onEventCallback) {
                 onEventCallback(uiEvent);
             }
+        } else if (eventType === 'audio_devices') {
+            // Cache late-arriving audio device list
+            cachedAudioDevices = data;
         } else {
             console.log('[Python] Unknown event:', eventType, data);
         }
@@ -536,16 +542,20 @@ function createPythonBackend(options = {}) {
      * @returns {Promise<{input: Array, output: Array}|null>}
      */
     function listAudioDevices() {
-        if (!isRunning()) return Promise.resolve(null);
+        if (!isRunning()) return Promise.resolve(cachedAudioDevices);
+
+        // Return cache immediately if available
+        if (cachedAudioDevices) return Promise.resolve(cachedAudioDevices);
 
         return new Promise((resolve) => {
             const timeout = setTimeout(() => {
                 pendingRequests.delete('audio_devices');
                 resolve(null);
-            }, 5000);
+            }, 10000);
 
             pendingRequests.set('audio_devices', (data) => {
                 clearTimeout(timeout);
+                cachedAudioDevices = data;
                 resolve(data);
             });
 
