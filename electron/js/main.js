@@ -785,8 +785,8 @@ document.addEventListener('keydown', (e) => {
         e.preventDefault();
         window.voiceMirror.hotkeyFallback('toggle-panel');
     }
-    // Ctrl+Shift+P toggles performance stats bar
-    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.code === 'KeyP') {
+    // Ctrl+Shift+M toggles performance stats bar
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.code === 'KeyM') {
         e.preventDefault();
         const bar = document.getElementById('perf-stats-bar');
         if (bar) {
