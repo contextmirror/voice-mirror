@@ -636,14 +636,17 @@ async def main():
 
     try:
         # Import and run VoiceMirror
+        emit_event("loading", {"step": "Importing modules..."})
         from voice_agent import VoiceMirror
 
+        emit_event("loading", {"step": "Initializing..."})
         agent = VoiceMirror()
 
         # Start command processor
         command_task = asyncio.create_task(process_commands(agent))
 
         # Run the agent
+        emit_event("loading", {"step": "Loading models..."})
         await agent.run()
 
     except ImportError as e:

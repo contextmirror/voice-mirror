@@ -97,6 +97,10 @@ function createPythonBackend(options = {}) {
                 console.log('[Python] Bridge starting...');
                 return { type: 'starting' };
             },
+            'loading': () => {
+                console.log('[Python] Loading:', data.step || '...');
+                return { type: 'loading', message: data.step };
+            },
             'ready': () => {
                 console.log('[Python] Backend ready');
                 return { type: 'ready' };

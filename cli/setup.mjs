@@ -562,7 +562,9 @@ function buildConfig(providerConfig, activationMode, features, existing) {
     if (providerConfig.localModel) config.ai.localModel = providerConfig.localModel;
 
     config.voice = config.voice || {};
-    config.voice.activationMode = activationMode;
+
+    config.behavior = config.behavior || {};
+    config.behavior.activationMode = activationMode;
 
     config.features = config.features || {};
     if (features.includes('browser')) config.features.browser = true;
@@ -607,7 +609,7 @@ function printSummary(config) {
     if (config.ai?.model) lines.push(`Model:        ${config.ai.model}`);
     if (config.ai?.localModel) lines.push(`Local LLM:    ${config.ai.localModel} (Ollama)`);
 
-    lines.push(`Voice:        ${formatActivation(config.voice?.activationMode)}`);
+    lines.push(`Voice:        ${formatActivation(config.behavior?.activationMode)}`);
     lines.push(`TTS:          Kokoro (local)`);
 
     const feats = [];

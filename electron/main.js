@@ -84,6 +84,13 @@ let mainWindow = null;  // Reference to windowManager's window (for backward com
 let appConfig = null;
 let pythonReadyTimeout = null;
 
+/** Send IPC to mainWindow only if it still exists and isn't destroyed. */
+function safeSend(channel, data) {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send(channel, data);
+    }
+}
+
 // Window state - kept in sync with windowManager
 let isExpanded = false;
 
@@ -167,7 +174,7 @@ function createTray() {
                 expandPanel();
             }
             // Send event to open settings panel in the UI
-            mainWindow?.webContents.send('open-settings');
+            safeSend('open-settings');
         },
         onToggleVisibility: () => {
             if (mainWindow?.isVisible()) {
@@ -269,6 +276,41 @@ function startOllamaServer(config) {
     proc.unref();
 }
 
+/**
+ * Write Electron's voice config to voice_settings.json so Python reads correct settings on startup.
+ */
+function syncVoiceSettingsToFile(cfg) {
+    try {
+        const dataDir = config.getDataDir();
+        if (!fs.existsSync(dataDir)) {
+            fs.mkdirSync(dataDir, { recursive: true });
+        }
+        const settingsPath = path.join(dataDir, 'voice_settings.json');
+
+        // Read existing settings to preserve location/timezone
+        let existing = {};
+        if (fs.existsSync(settingsPath)) {
+            try {
+                existing = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
+            } catch (e) { /* ignore parse errors */ }
+        }
+
+        // Merge Electron voice config into settings
+        const voice = cfg?.voice || {};
+        const updates = {};
+        if (voice.ttsAdapter) updates.tts_adapter = voice.ttsAdapter;
+        if (voice.ttsVoice) updates.tts_voice = voice.ttsVoice;
+        if (voice.ttsModelSize) updates.tts_model_size = voice.ttsModelSize;
+        if (voice.sttModel) updates.stt_adapter = voice.sttModel;
+
+        const merged = { ...existing, ...updates };
+        fs.writeFileSync(settingsPath, JSON.stringify(merged, null, 2), 'utf-8');
+        console.log('[Voice Mirror] Synced voice settings to', settingsPath);
+    } catch (err) {
+        console.error('[Voice Mirror] Failed to sync voice settings:', err.message);
+    }
+}
+
 function startPythonVoiceMirror() {
     if (pythonBackend) {
         pythonBackend.start();
@@ -276,7 +318,7 @@ function startPythonVoiceMirror() {
         if (pythonReadyTimeout) clearTimeout(pythonReadyTimeout);
         pythonReadyTimeout = setTimeout(() => {
             console.error('[Python] Backend failed to start within 30 seconds');
-            mainWindow?.webContents.send('voice-event', {
+            safeSend('voice-event', {
                 type: 'error',
                 message: 'Python backend failed to start. Run "node cli/index.mjs setup" to fix.'
             });
@@ -478,18 +520,41 @@ app.whenReady().then(() => {
     // Set up Python backend event handler
     pythonBackend.onEvent((event) => {
         // Send voice events to renderer
-        mainWindow?.webContents.send('voice-event', event);
+        safeSend('voice-event', event);
         forwardVoiceEventToOrb(event);
+
+        // Reset timeout on any loading progress (Python is alive, just loading)
+        if (event.type === 'loading' && pythonReadyTimeout) {
+            clearTimeout(pythonReadyTimeout);
+            pythonReadyTimeout = setTimeout(() => {
+                console.error('[Python] Backend failed to start within 30 seconds');
+                safeSend('voice-event', {
+                    type: 'error',
+                    message: 'Python backend failed to start. Run "node cli/index.mjs setup" to fix.'
+                });
+                pythonReadyTimeout = null;
+            }, 30000);
+        }
 
         // Startup greeting when Python backend is ready
         if (event.type === 'ready') {
             if (pythonReadyTimeout) { clearTimeout(pythonReadyTimeout); pythonReadyTimeout = null; }
+            // Send initial config so Python has correct TTS/voice settings on startup
+            sendToPython({
+                command: 'config_update',
+                config: {
+                    activationMode: appConfig.behavior?.activationMode,
+                    pttKey: appConfig.behavior?.pttKey,
+                    wakeWord: appConfig.wakeWord,
+                    voice: appConfig.voice
+                }
+            });
             setTimeout(() => doStartupGreeting(), 2000);
         }
 
         // Handle chat messages from transcription/response events
         if (event.chatMessage) {
-            mainWindow?.webContents.send('chat-message', event.chatMessage);
+            safeSend('chat-message', event.chatMessage);
         }
     });
 
@@ -511,20 +576,21 @@ app.whenReady().then(() => {
     });
 
     // Initialize AI manager service
+
     aiManager = createAIManager({
         getConfig: () => appConfig,
         onOutput: (data) => {
-            mainWindow?.webContents.send('claude-terminal', data);
+            safeSend('claude-terminal', data);
         },
         onVoiceEvent: (event) => {
-            mainWindow?.webContents.send('voice-event', event);
+            safeSend('voice-event', event);
             forwardVoiceEventToOrb(event);
         },
         onToolCall: (data) => {
-            mainWindow?.webContents.send('tool-call', data);
+            safeSend('tool-call', data);
         },
         onToolResult: (data) => {
-            mainWindow?.webContents.send('tool-result', data);
+            safeSend('tool-result', data);
         },
         onSystemSpeak: (text) => {
             pythonBackend?.systemSpeak(text);
@@ -545,16 +611,16 @@ app.whenReady().then(() => {
         isClaudeRunning: () => aiManager?.isClaudeRunning() || false,
         getProvider: () => aiManager?.getProvider() || null,
         onClaudeMessage: (msg) => {
-            mainWindow?.webContents.send('chat-message', msg);
+            safeSend('chat-message', msg);
         },
         onUserMessage: (msg) => {
-            mainWindow?.webContents.send('chat-message', msg);
+            safeSend('chat-message', msg);
         },
         onAssistantMessage: (msg) => {
-            mainWindow?.webContents.send('chat-message', msg);
+            safeSend('chat-message', msg);
         },
         onVoiceEvent: (event) => {
-            mainWindow?.webContents.send('voice-event', event);
+            safeSend('voice-event', event);
         },
         log: logger
     });
@@ -843,7 +909,7 @@ app.whenReady().then(() => {
         fs.writeFileSync(callPath, JSON.stringify({ active: active }, null, 2));
         console.log(`[Voice Mirror] Call mode: ${active ? 'ON' : 'OFF'}`);
 
-        mainWindow?.webContents.send('voice-event', {
+        safeSend('voice-event', {
             type: active ? 'call_active' : 'idle',
             callMode: active
         });
@@ -916,7 +982,7 @@ app.whenReady().then(() => {
                     if (provider._inputBuffer) {
                         provider._inputBuffer = provider._inputBuffer.slice(0, -1);
                         // Echo backspace to terminal
-                        mainWindow?.webContents.send('claude-terminal', {
+                        safeSend('claude-terminal', {
                             type: 'stdout',
                             text: '\b \b'
                         });
@@ -925,7 +991,7 @@ app.whenReady().then(() => {
                     // Printable characters - accumulate and echo
                     provider._inputBuffer = (provider._inputBuffer || '') + data;
                     // Echo to terminal
-                    mainWindow?.webContents.send('claude-terminal', {
+                    safeSend('claude-terminal', {
                         type: 'stdout',
                         text: data
                     });
@@ -1035,11 +1101,11 @@ app.whenReady().then(() => {
 
             // Notify renderer of URL changes
             guestWebContents.on('did-navigate', (e, url) => {
-                mainWindow?.webContents.send('browser-status', { url });
+                safeSend('browser-status', { url });
             });
             guestWebContents.on('did-navigate-in-page', (e, url, isMainFrame) => {
                 if (isMainFrame) {
-                    mainWindow?.webContents.send('browser-status', { url });
+                    safeSend('browser-status', { url });
                 }
             });
         } catch (err) {
@@ -1115,6 +1181,9 @@ app.whenReady().then(() => {
         if (['ollama', 'lmstudio', 'jan'].includes(providerName) || providerName === 'ollama') {
             ensureLocalLLMRunning(providerName, appConfig);
         }
+
+        // Write voice_settings.json BEFORE spawning Python so it loads correct TTS/STT config
+        syncVoiceSettingsToFile(appConfig);
 
         startPythonVoiceMirror();
 
