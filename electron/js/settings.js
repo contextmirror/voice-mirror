@@ -334,6 +334,8 @@ export async function scanProviders() {
             const savedModel = state.currentConfig?.ai?.model || null;
             modelSelect.innerHTML = '<option value="">Auto (default)</option>';
             for (const model of providerData.models) {
+                // Skip embedding models — they aren't chat models
+                if (/embed/i.test(model)) continue;
                 const option = document.createElement('option');
                 option.value = model;
                 option.textContent = model;
@@ -627,6 +629,8 @@ function initProviderSelector() {
         if (providerData?.models?.length > 0) {
             modelSelect.innerHTML = '<option value="">Auto (default)</option>';
             for (const model of providerData.models) {
+                // Skip embedding models — they aren't chat models
+                if (/embed/i.test(model)) continue;
                 const opt = document.createElement('option');
                 opt.value = model;
                 opt.textContent = model;
