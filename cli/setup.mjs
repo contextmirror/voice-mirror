@@ -101,6 +101,17 @@ export async function runSetup(opts = {}) {
         // 'modify' falls through to the wizard
     }
 
+    // --- Step 1b: User name ---
+    const existingName = existingConfig?.user?.name;
+    const userName = nonInteractive
+        ? (opts.userName || existingName || 'User')
+        : guard(await p.text({
+            message: 'What should I call you?',
+            placeholder: 'Your name or nickname',
+            initialValue: existingName || '',
+            validate: (v) => (!v || v.trim().length === 0) ? 'A name is required' : undefined,
+        }));
+
     // --- Step 2: Platform detection ---
     const spin = p.spinner();
     spin.start('Checking system...');
@@ -439,7 +450,7 @@ export async function runSetup(opts = {}) {
     }
 
     // --- Write config ---
-    const config = buildConfig(providerConfig, activationMode, features, existingConfig);
+    const config = buildConfig(providerConfig, activationMode, features, existingConfig, userName);
     writeConfig(config);
 
     // --- Desktop shortcut ---
@@ -551,7 +562,7 @@ Categories=Utility;
 /**
  * Build config object from wizard selections.
  */
-function buildConfig(providerConfig, activationMode, features, existing) {
+function buildConfig(providerConfig, activationMode, features, existing, userName) {
     const config = existing ? { ...existing } : {};
 
     config.ai = config.ai || {};
@@ -569,6 +580,9 @@ function buildConfig(providerConfig, activationMode, features, existing) {
     if (features.includes('browser')) config.features.browser = true;
     if (features.includes('voiceClone')) config.features.voiceClone = true;
     if (features.includes('n8n')) config.features.n8n = true;
+
+    config.user = config.user || {};
+    config.user.name = userName || existing?.user?.name || 'User';
 
     config.system = config.system || {};
     config.system.firstLaunchDone = true;

@@ -701,6 +701,16 @@
         </button>
     </div>
 
+    <!-- Name Required Modal (shown on first run if no name configured) -->
+    <div id="name-required-overlay" class="name-required-overlay" style="display:none">
+        <div class="name-required-modal">
+            <h2>Welcome to Voice Mirror</h2>
+            <p>What should I call you?</p>
+            <input type="text" id="name-required-input" placeholder="Your name or nickname" maxlength="50" autofocus>
+            <button id="name-required-submit" class="btn-primary" disabled>Continue</button>
+        </div>
+    </div>
+
     <!-- Voice Mirror Scripts (ES modules) -->
     <script type="module" src="js/main.js"></script>
 </body>

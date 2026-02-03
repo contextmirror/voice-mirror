@@ -780,6 +780,33 @@ async function init() {
         });
     }
 
+    // Name required check — show modal if no userName configured
+    const currentConfig = await window.voiceMirror.config.get();
+    if (!currentConfig.user?.name) {
+        const nameOverlay = document.getElementById('name-required-overlay');
+        const nameInput = document.getElementById('name-required-input');
+        const nameBtn = document.getElementById('name-required-submit');
+        nameOverlay.style.display = 'flex';
+
+        nameInput.addEventListener('input', () => {
+            nameBtn.disabled = !nameInput.value.trim();
+        });
+
+        nameBtn.addEventListener('click', async () => {
+            const name = nameInput.value.trim();
+            if (name) {
+                await window.voiceMirror.config.set({ user: { name } });
+                nameOverlay.style.display = 'none';
+                const settingsInput = document.getElementById('user-name');
+                if (settingsInput) settingsInput.value = name;
+            }
+        });
+
+        nameInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && nameInput.value.trim()) nameBtn.click();
+        });
+    }
+
     // Update checker notifications
     window.voiceMirror.onUpdateAvailable((data) => {
         const toast = showToast(

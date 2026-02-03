@@ -388,6 +388,15 @@ export async function scanProviders() {
  * Save settings to config
  */
 export async function saveSettings() {
+    // Validate required name field
+    const nameInput = document.getElementById('user-name');
+    if (!nameInput.value.trim()) {
+        nameInput.classList.add('input-error');
+        nameInput.focus();
+        nameInput.addEventListener('input', () => nameInput.classList.remove('input-error'), { once: true });
+        return;
+    }
+
     const activationMode = document.querySelector('input[name="activationMode"]:checked').value;
     const aiProvider = document.getElementById('ai-provider').value;
     const aiModel = document.getElementById('ai-model').value || null;
@@ -456,7 +465,7 @@ export async function saveSettings() {
             theme: document.getElementById('theme-select').value
         },
         user: {
-            name: document.getElementById('user-name').value.trim() || null
+            name: document.getElementById('user-name').value.trim() || state.currentConfig.user?.name || null
         },
         ai: aiUpdates,
         overlay: {
