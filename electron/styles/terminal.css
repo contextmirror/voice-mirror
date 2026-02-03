@@ -37,7 +37,7 @@
 }
 
 #xterm-container .xterm-viewport {
-    overflow-y: auto !important;
+    overflow-y: auto;
     scrollbar-width: thin;
     scrollbar-color: rgba(255, 255, 255, 0.15) #0a0a12;
 }
@@ -207,7 +207,7 @@
 }
 
 #xterm-fullscreen-container .xterm-viewport {
-    overflow-y: auto !important;
+    overflow-y: auto;
     scrollbar-width: thin;
     scrollbar-color: rgba(255, 255, 255, 0.15) #0a0a12;
 }

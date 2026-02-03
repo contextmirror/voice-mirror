@@ -10,6 +10,7 @@ import { state } from './state.js';
 let term = null;
 let fitAddon = null;
 let resizeObserver = null;
+let resizeTimeout = null;  // For debouncing resize events
 
 // DOM elements (initialized in initTerminal)
 let terminalContainer;      // Chat page bottom panel container
@@ -126,26 +127,35 @@ export async function initXterm() {
         return true;
     });
 
-    // Handle resize - create observer for current container
+    // Handle resize - create observer for current container (debounced)
     resizeObserver = new ResizeObserver(() => {
-        if (fitAddon && !state.terminalMinimized) {
-            // Only fit if the current container is visible
-            const currentContainer = state.terminalLocation === 'chat-bottom' ? xtermContainer : fullscreenContainer;
-            if (currentContainer.offsetParent !== null) {
-                fitAddon.fit();
-                // Tell PTY about new size
-                if (term.cols && term.rows) {
-                    window.voiceMirror.claude.resize(term.cols, term.rows);
+        if (resizeTimeout) clearTimeout(resizeTimeout);
+        resizeTimeout = setTimeout(() => {
+            if (fitAddon && !state.terminalMinimized) {
+                // Only fit if the current container is visible
+                const currentContainer = state.terminalLocation === 'chat-bottom' ? xtermContainer : fullscreenContainer;
+                if (currentContainer.offsetParent !== null) {
+                    // Use requestAnimationFrame to ensure layout is settled
+                    requestAnimationFrame(() => {
+                        fitAddon.fit();
+                        // Tell PTY about new size
+                        if (term.cols && term.rows) {
+                            window.voiceMirror.claude.resize(term.cols, term.rows);
+                        }
+                    });
                 }
             }
-        }
+        }, 50);  // Debounce 50ms to prevent rapid-fire refits
     });
     resizeObserver.observe(mountContainer);
 
-    // Initial fit after a small delay to ensure container is sized
-    setTimeout(() => {
-        fitAddon.fit();
-    }, 100);
+    // Initial fit after layout settles
+    // Double rAF ensures browser has completed initial layout
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+            fitAddon.fit();
+        });
+    });
 
     // Welcome message - use current provider name
     const providerName = state.currentProviderName || 'AI Provider';
@@ -172,10 +182,17 @@ export function toggleTerminal() {
         terminalContainer.classList.remove('minimized');
         state.terminalMinimized = false;
         state.terminalVisible = true;
-        // Refit terminal after showing
-        setTimeout(() => {
-            if (fitAddon) fitAddon.fit();
-        }, 100);
+        // Refit terminal after layout settles
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                if (fitAddon) {
+                    fitAddon.fit();
+                    if (term.cols && term.rows) {
+                        window.voiceMirror.claude.resize(term.cols, term.rows);
+                    }
+                }
+            });
+        });
     } else {
         terminalContainer.classList.add('hidden');
         state.terminalVisible = false;
@@ -189,9 +206,27 @@ export function toggleTerminal() {
 export function minimizeTerminal() {
     state.terminalMinimized = !state.terminalMinimized;
     terminalContainer.classList.toggle('minimized', state.terminalMinimized);
-    // Refit when expanding
+
+    // Refit when expanding - wait for CSS transition to complete
     if (!state.terminalMinimized && fitAddon) {
-        setTimeout(() => fitAddon.fit(), 100);
+        const onTransitionEnd = (e) => {
+            // Only respond to height transition on the container itself
+            if (e.propertyName === 'height' && e.target === terminalContainer) {
+                terminalContainer.removeEventListener('transitionend', onTransitionEnd);
+                requestAnimationFrame(() => {
+                    fitAddon.fit();
+                    if (term.cols && term.rows) {
+                        window.voiceMirror.claude.resize(term.cols, term.rows);
+                    }
+                });
+            }
+        };
+        terminalContainer.addEventListener('transitionend', onTransitionEnd);
+
+        // Fallback in case transitionend doesn't fire (e.g., no transition defined)
+        setTimeout(() => {
+            terminalContainer.removeEventListener('transitionend', onTransitionEnd);
+        }, 300);
     }
 }
 
@@ -248,15 +283,18 @@ export async function relocateTerminal(location) {
     // Update state
     state.terminalLocation = location;
 
-    // Refit terminal to new container size
-    setTimeout(() => {
-        if (fitAddon) {
-            fitAddon.fit();
-            if (term.cols && term.rows) {
-                window.voiceMirror.claude.resize(term.cols, term.rows);
+    // Refit terminal to new container size after layout settles
+    // Double rAF ensures browser has completed layout recalculation
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+            if (fitAddon) {
+                fitAddon.fit();
+                if (term.cols && term.rows) {
+                    window.voiceMirror.claude.resize(term.cols, term.rows);
+                }
             }
-        }
-    }, 50);
+        });
+    });
 
     // Save preference to config
     try {
@@ -422,10 +460,12 @@ export function handleAIOutput(data) {
             }
             term.writeln(`\x1b[34m${data.text}\x1b[0m`);
             updateAIStatus(true);
-            // Fit terminal after provider starts
-            setTimeout(() => {
-                if (fitAddon) fitAddon.fit();
-            }, 100);
+            // Fit terminal after provider starts - wait for layout
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    if (fitAddon) fitAddon.fit();
+                });
+            });
             break;
         case 'stdout':
             // Write raw PTY data directly (includes ANSI codes)
