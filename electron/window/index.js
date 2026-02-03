@@ -228,7 +228,7 @@ function createWindowManager(options = {}) {
                 screenHeight - panelHeight - 50
             );
             mainWindow.setSkipTaskbar(false);
-            mainWindow.setAlwaysOnTop(true, 'floating');
+            mainWindow.setAlwaysOnTop(false);  // Allow other windows to cover when expanded
             mainWindow.focus();
             console.log('[Window] Expanded to panel:', panelWidth, 'x', panelHeight);
             // Re-register hotkeys after compositor settles
