@@ -99,7 +99,7 @@ const DEFAULT_CONFIG = {
         autoDetect: true,             // Auto-detect local LLM servers on startup
         toolProfile: 'voice-assistant',  // Active tool profile name (Claude Code only)
         toolProfiles: {                  // Saved tool profiles (which MCP groups to pre-load)
-            'voice-assistant': { groups: ['core', 'meta', 'screen', 'memory'] },
+            'voice-assistant': { groups: ['core', 'meta', 'screen', 'memory', 'browser'] },
             'n8n-workflows':   { groups: ['core', 'meta', 'n8n'] },
             'web-browser':     { groups: ['core', 'meta', 'screen', 'browser'] },
             'full-toolbox':    { groups: ['core', 'meta', 'screen', 'memory', 'voice-clone', 'browser', 'n8n'] },
