@@ -288,7 +288,8 @@ function registerIpcHandlers(ctx) {
         // Notify Python backend of config changes (only if voice-related settings changed)
         const activationModeChanged = updates.behavior?.activationMode !== undefined && updates.behavior.activationMode !== oldActivationMode;
         const pttKeyChanged = updates.behavior?.pttKey !== undefined && updates.behavior.pttKey !== oldPttKey;
-        const voiceSettingsChanged = activationModeChanged || pttKeyChanged ||
+        const userNameChanged = updates.user?.name !== undefined;
+        const voiceSettingsChanged = activationModeChanged || pttKeyChanged || userNameChanged ||
             (updates.wakeWord && JSON.stringify(updates.wakeWord) !== JSON.stringify(oldWakeWord)) ||
             (updates.voice && JSON.stringify(updates.voice) !== JSON.stringify(oldVoice));
         if (voiceSettingsChanged && ctx.getPythonBackend()?.isRunning()) {
@@ -299,7 +300,8 @@ function registerIpcHandlers(ctx) {
                     activationMode: currentConfig.behavior?.activationMode,
                     pttKey: currentConfig.behavior?.pttKey,
                     wakeWord: currentConfig.wakeWord,
-                    voice: currentConfig.voice
+                    voice: currentConfig.voice,
+                    userName: currentConfig.user?.name || null
                 }
             });
         }

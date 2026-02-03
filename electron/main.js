@@ -593,7 +593,8 @@ app.whenReady().then(() => {
                 command: 'config_update',
                 config: {
                     wakeWord: appConfig.wakeWord,
-                    voice: appConfig.voice
+                    voice: appConfig.voice,
+                    userName: appConfig.user?.name || null
                 }
             });
             setTimeout(() => doStartupGreeting(), 2000);
@@ -627,6 +628,12 @@ app.whenReady().then(() => {
     aiManager = createAIManager({
         getConfig: () => appConfig,
         onOutput: (data) => {
+            if (data.type === 'context-usage') {
+                try {
+                    safeSend('context-usage', JSON.parse(data.text));
+                } catch { /* ignore parse errors */ }
+                return;
+            }
             safeSend('claude-terminal', data);
         },
         onVoiceEvent: (event) => {

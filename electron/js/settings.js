@@ -102,6 +102,9 @@ export async function loadSettingsUI() {
         state.currentConfig = await window.voiceMirror.config.get();
         console.log('[Settings] Loaded config:', state.currentConfig);
 
+        // User name
+        document.getElementById('user-name').value = state.currentConfig.user?.name || '';
+
         // Activation mode
         const mode = state.currentConfig.behavior?.activationMode || 'wakeWord';
         document.querySelector(`input[name="activationMode"][value="${mode}"]`).checked = true;
@@ -451,6 +454,9 @@ export async function saveSettings() {
         appearance: {
             orbSize: parseInt(document.getElementById('orb-size').value),
             theme: document.getElementById('theme-select').value
+        },
+        user: {
+            name: document.getElementById('user-name').value.trim() || null
         },
         ai: aiUpdates,
         overlay: {

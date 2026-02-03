@@ -756,6 +756,19 @@ async function init() {
         });
     }
 
+    // Context usage indicator (local LLMs only)
+    const perfCtxSep = document.getElementById('perf-ctx-sep');
+    const perfCtx = document.getElementById('perf-ctx');
+    if (perfCtx && window.voiceMirror.onContextUsage) {
+        window.voiceMirror.onContextUsage((usage) => {
+            const usedK = (usage.used / 1000).toFixed(1);
+            const limitK = (usage.limit / 1000).toFixed(0);
+            perfCtx.textContent = `CTX: ${usedK}K/${limitK}K`;
+            perfCtxSep.style.display = '';
+            perfCtx.style.display = '';
+        });
+    }
+
     // Update checker notifications
     window.voiceMirror.onUpdateAvailable((data) => {
         const toast = showToast(

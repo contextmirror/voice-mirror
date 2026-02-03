@@ -61,7 +61,7 @@ class VoiceToolHandler:
                 messages = data.get("messages", [])
                 voice_messages = [
                     m for m in messages
-                    if m.get("from") == "nathan" or m.get("thread_id") == "voice-mirror"
+                    if m.get("thread_id") == "voice-mirror"
                 ]
 
                 if voice_messages:

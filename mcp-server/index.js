@@ -105,7 +105,7 @@ const TOOL_GROUPS = {
                     type: 'object',
                     properties: {
                         instance_id: { type: 'string', description: 'Your instance ID' },
-                        from_sender: { type: 'string', description: 'Sender to listen for (use "nathan" for voice input)' },
+                        from_sender: { type: 'string', description: 'Sender to listen for (use the user\'s configured name for voice input)' },
                         thread_id: { type: 'string', description: 'Optional thread filter' },
                         timeout_seconds: { type: 'number', description: 'Max wait time (default: 60, max: 600)' }
                     },

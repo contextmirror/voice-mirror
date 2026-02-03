@@ -192,6 +192,9 @@ contextBridge.exposeInMainWorld('voiceMirror', {
     onPerfStats: (callback) => {
         ipcRenderer.on('perf-stats', (event, data) => callback(data));
     },
+    onContextUsage: (callback) => {
+        ipcRenderer.on('context-usage', (event, data) => callback(data));
+    },
     togglePerfMonitor: () => ipcRenderer.send('toggle-perf-monitor'),
 
     // Update checker

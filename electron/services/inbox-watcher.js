@@ -294,6 +294,7 @@ function createInboxWatcher(options = {}) {
      */
     function clearProcessedUserMessageIds() {
         processedUserMessageIds.clear();
+        displayedMessageIds.clear();
 
         // Re-seed from current inbox to mark all existing messages as already processed
         const contextMirrorDir = dataDir || require('./platform-paths').getDataDir();
@@ -303,11 +304,14 @@ function createInboxWatcher(options = {}) {
                 const data = JSON.parse(fs.readFileSync(inboxPath, 'utf-8'));
                 const messages = data.messages || [];
                 for (const msg of messages) {
-                    if (msg.id && msg.from === 'nathan') {
-                        processedUserMessageIds.add(msg.id);
+                    if (msg.id) {
+                        displayedMessageIds.add(msg.id);
+                        if (msg.from === 'nathan') {
+                            processedUserMessageIds.add(msg.id);
+                        }
                     }
                 }
-                console.log(`[InboxWatcher] Re-seeded ${processedUserMessageIds.size} user message IDs for provider switch`);
+                console.log(`[InboxWatcher] Re-seeded ${displayedMessageIds.size} display IDs, ${processedUserMessageIds.size} user message IDs for provider switch`);
             }
         } catch (err) {
             console.error('[InboxWatcher] Failed to re-seed message IDs:', err);

@@ -38,6 +38,19 @@ from io import StringIO
 from pathlib import Path
 from shared.paths import get_data_dir
 
+
+def get_sender_name() -> str:
+    """Get the user's configured sender name from voice_config.json, default 'user'."""
+    try:
+        config_path = get_data_dir() / "voice_config.json"
+        if config_path.exists():
+            with open(config_path, encoding='utf-8') as f:
+                return json.load(f).get("userName") or "user"
+    except Exception:
+        pass
+    return "user"
+
+
 # Force UTF-8 output on Windows (cp1252 can't encode emoji used in log output)
 if sys.platform == 'win32':
     os.environ.setdefault('PYTHONIOENCODING', 'utf-8')
@@ -415,7 +428,7 @@ async def process_commands(agent):
 
                 msg = {
                     "id": f"msg-{uuid.uuid4().hex[:12]}",
-                    "from": "nathan",
+                    "from": get_sender_name(),
                     "message": prompt,
                     "timestamp": datetime.now().isoformat(),
                     "thread_id": "voice-mirror",
@@ -470,7 +483,7 @@ async def process_commands(agent):
                     # Create message with image attachment
                     msg = {
                         "id": f"msg-{uuid.uuid4().hex[:12]}",
-                        "from": "nathan",
+                        "from": get_sender_name(),
                         "message": text if text else "What do you see in this image?",
                         "timestamp": datetime.now().isoformat(),
                         "thread_id": "voice-mirror",
@@ -599,11 +612,14 @@ async def process_commands(agent):
                     devices = sd.query_devices()
                     hostapis = sd.query_hostapis()
 
-                    # Find WASAPI host API index (Windows only, has full device names)
-                    wasapi_idx = None
+                    # Find preferred host API index:
+                    # - Windows: WASAPI (full device names, no duplicates)
+                    # - Linux: PulseAudio (avoids ALSA/JACK duplicates)
+                    preferred_idx = None
                     for idx, api in enumerate(hostapis):
-                        if 'WASAPI' in api.get('name', ''):
-                            wasapi_idx = idx
+                        api_name = api.get('name', '')
+                        if 'WASAPI' in api_name or 'pulse' in api_name.lower():
+                            preferred_idx = idx
                             break
 
                     input_devs = []
@@ -611,8 +627,8 @@ async def process_commands(agent):
                     seen_input = set()
                     seen_output = set()
                     for i, d in enumerate(devices):
-                        # Filter to WASAPI devices if available
-                        if wasapi_idx is not None and d.get('hostapi') != wasapi_idx:
+                        # Filter to preferred host API if available
+                        if preferred_idx is not None and d.get('hostapi') != preferred_idx:
                             continue
                         name = d['name']
                         if d['max_input_channels'] > 0 and name not in seen_input:

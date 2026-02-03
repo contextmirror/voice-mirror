@@ -283,6 +283,9 @@ class OpenAIProvider extends BaseProvider {
                 });
             }
 
+            // Emit context usage estimate
+            this.emitOutput('context-usage', JSON.stringify(this.estimateTokenUsage()));
+
             // Check for tool call in response (only for local providers with tools enabled)
             if (this.supportsTools() && fullResponse) {
                 const toolCall = this.toolExecutor.parseToolCall(fullResponse);
@@ -466,6 +469,21 @@ class OpenAIProvider extends BaseProvider {
         } else if (prompt) {
             this.messages.unshift({ role: 'system', content: prompt });
         }
+    }
+
+    /**
+     * Estimate token usage from the current messages array.
+     * Uses ~4 characters per token as a rough approximation.
+     * @returns {{ used: number, limit: number }} Estimated tokens used and context limit
+     */
+    estimateTokenUsage() {
+        const totalChars = this.messages.reduce((sum, m) => {
+            return sum + (typeof m.content === 'string' ? m.content.length : 0);
+        }, 0);
+        return {
+            used: Math.ceil(totalChars / 4),
+            limit: this.contextLength
+        };
     }
 
     /**

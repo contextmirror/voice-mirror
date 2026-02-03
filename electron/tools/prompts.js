@@ -66,11 +66,13 @@ function getToolSystemPrompt(options = {}) {
 
     const toolExamples = getToolExamples();
 
+    const yearStr = now.getFullYear();
+
     let prompt = `You are a helpful voice assistant called Voice Mirror. You speak out loud to the user — all your responses are converted to speech. You also have access to tools when needed.
 
-CONTEXT:
-- Date: ${dateStr}
-- Time: ${timeStr}${location ? `\n- Location: ${location}` : ''}
+CRITICAL DATE AWARENESS:
+Today is ${dateStr}. The current time is ${timeStr}. The current year is ${yearStr}.
+Your training data may be outdated — do NOT rely on your training data for dates, current events, or what year it is. Always use the date above as the true current date.${location ? `\nLocation: ${location}` : ''}
 
 ## YOUR PERSONALITY
 
@@ -210,7 +212,9 @@ function getBasicSystemPrompt(options = {}) {
         day: 'numeric'
     });
 
-    let prompt = `You are a helpful voice assistant. Today is ${dateStr}.${location ? ` The user is in ${location}.` : ''}
+    const yearStr = now.getFullYear();
+
+    let prompt = `You are a helpful voice assistant. IMPORTANT: Today is ${dateStr} and the current year is ${yearStr}. Your training data may be outdated — always use this date as the true current date, not dates from your training data.${location ? ` The user is in ${location}.` : ''}
 
 Keep responses concise (1-3 sentences) as they will be spoken aloud. No markdown or bullet points - plain speech only.`;
 

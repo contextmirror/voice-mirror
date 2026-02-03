@@ -227,6 +227,17 @@
                         <h2>Settings</h2>
                     </div>
                     <div id="settings-page-body">
+                        <!-- User -->
+                        <div class="settings-section">
+                            <h3>User</h3>
+                            <div class="settings-group">
+                                <div class="setting-row">
+                                    <label for="user-name">Your Name</label>
+                                    <input type="text" id="user-name" placeholder="Enter your name" maxlength="50" class="setting-input">
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- AI Provider -->
                         <div class="settings-section">
                             <h3>AI Provider</h3>
@@ -637,6 +648,16 @@
                             </div>
                         </div>
 
+                        <div class="settings-section">
+                            <h3>Keyboard Shortcuts</h3>
+                            <div class="settings-group">
+                                <div class="shortcut-list">
+                                    <div class="shortcut-row"><kbd>Ctrl+Shift+V</kbd><span>Toggle panel (expand/collapse)</span></div>
+                                    <div class="shortcut-row"><kbd>Ctrl+Shift+M</kbd><span>Toggle performance stats bar</span></div>
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- Actions -->
                         <div class="settings-actions">
                             <button class="settings-btn secondary" onclick="resetSettings()">Reset to Defaults</button>
@@ -654,6 +675,8 @@
                 <span id="perf-cpu">CPU: --%</span>
                 <span class="perf-sep">|</span>
                 <span id="perf-mem">MEM: --MB</span>
+                <span id="perf-ctx-sep" class="perf-sep" style="display:none">|</span>
+                <span id="perf-ctx" style="display:none">CTX: --</span>
             </div>
         </main>
     </div>

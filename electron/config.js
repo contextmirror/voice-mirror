@@ -80,6 +80,11 @@ const DEFAULT_CONFIG = {
         collapsed: false  // Whether sidebar is collapsed to icons-only
     },
 
+    // User settings
+    user: {
+        name: null                    // User's preferred name (null = ask on first launch)
+    },
+
     // System announcements (Jarvis-style TTS)
     system: {
         firstLaunchDone: false,       // Set true after first-ever launch greeting

@@ -6,21 +6,33 @@ You are running inside Voice Mirror Electron, a voice-controlled AI assistant ov
 
 You have access to these Voice Mirror MCP tools:
 
-- **claude_listen**: Wait for voice messages from "nathan" (the user). Use `instance_id: "voice-claude"` and `from_sender: "nathan"`.
+- **claude_listen**: Wait for voice messages from the user. Use `instance_id: "voice-claude"` and `from_sender` set to the user's configured name (check memory or ask them).
 - **claude_send**: Send responses that will be spoken via TTS. Use `instance_id: "voice-claude"`.
 - **memory_search**: Search past conversations and user preferences.
 - **memory_remember**: Store important information for later.
 - **capture_screen**: Take a screenshot of the user's screen.
 
+## First Launch - User Setup
+
+On your first session, if you don't know the user's name:
+
+1. Search memory for a stored user name: `memory_search("user name preferred name")`
+2. If not found, ask the user: "What would you like me to call you?"
+3. Store their answer: `memory_remember("User's preferred name is [NAME]", tier: "core")`
+4. Use that name as the `from_sender` parameter in `claude_listen`
+
+The user's name is also stored in the Voice Mirror config (`user.name` field). The Python backend uses this to tag voice messages with the correct sender name in the MCP inbox.
+
 ## Voice Mode Workflow
 
 When you want to enter voice conversation mode:
 
-1. Call `claude_listen` with `instance_id: "voice-claude"` and `from_sender: "nathan"`
-2. Wait for a voice message to arrive
-3. Process the request
-4. Call `claude_send` with your response (it will be spoken aloud)
-5. Loop back to step 1
+1. Determine the user's sender name (from memory or by asking)
+2. Call `claude_listen` with `instance_id: "voice-claude"` and `from_sender: "<user's name>"`
+3. Wait for a voice message to arrive
+4. Process the request
+5. Call `claude_send` with your response (it will be spoken aloud)
+6. Loop back to step 2
 
 ## Tips
 

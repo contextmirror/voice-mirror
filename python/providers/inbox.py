@@ -65,16 +65,18 @@ def cleanup_inbox(inbox_path: Path, max_age_hours: float = 2.0) -> int:
 class InboxManager:
     """Manages MCP inbox communication."""
 
-    def __init__(self, inbox_path: Path, ai_provider_getter: Callable[[], dict]):
+    def __init__(self, inbox_path: Path, ai_provider_getter: Callable[[], dict], sender_name_getter: Callable[[], str] | None = None):
         """
         Initialize inbox manager.
 
         Args:
             inbox_path: Path to inbox.json file
             ai_provider_getter: Callback to get current AI provider config
+            sender_name_getter: Callback to get user's configured name (default: "user")
         """
         self.inbox_path = inbox_path
         self._get_ai_provider = ai_provider_getter
+        self._get_sender_name = sender_name_getter or (lambda: "user")
         self._lock = threading.Lock()
         self._last_message_hash = None
         self._last_message_time = 0.0
@@ -118,7 +120,7 @@ class InboxManager:
             # Create new message
             msg = {
                 "id": f"msg-{uuid.uuid4().hex[:12]}",
-                "from": "nathan",
+                "from": self._get_sender_name(),
                 "message": message,
                 "timestamp": datetime.now().isoformat(),
                 "thread_id": "voice-mirror",
