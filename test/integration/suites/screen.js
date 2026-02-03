@@ -22,6 +22,12 @@ function getPlan() {
                 mcpCall: { tool: 'capture_screen', args: { display: 0 } },
                 verify: 'Should return image data for display 0',
             },
+            {
+                id: 'capture-display-1',
+                description: 'Capture second display (if available)',
+                mcpCall: { tool: 'capture_screen', args: { display: 1 } },
+                verify: 'Should return image data for display 1, or fall back to display 0 if only one monitor',
+            },
         ],
     };
 }

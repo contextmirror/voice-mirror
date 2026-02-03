@@ -82,7 +82,7 @@ async function handleCaptureScreen(args) {
 
     // Write request
     fs.writeFileSync(requestPath, JSON.stringify({
-        display: args?.display || 0,
+        display: args?.display != null ? args.display : 0,
         timestamp: new Date().toISOString()
     }, null, 2));
 
@@ -98,11 +98,15 @@ async function handleCaptureScreen(args) {
                 const response = JSON.parse(fs.readFileSync(responsePath, 'utf-8'));
 
                 if (response.success) {
+                    const displaysInfo = response.displays_available > 1
+                        ? `\n${response.displays_available} displays available. Use display parameter (0-${response.displays_available - 1}) to capture a different monitor.`
+                        : '';
                     return {
                         content: [{
                             type: 'text',
                             text: `Screenshot captured and saved to: ${response.image_path}\n` +
-                                  `You can now analyze this image. The path is: ${response.image_path}`
+                                  `You can now analyze this image. The path is: ${response.image_path}` +
+                                  displaysInfo
                         }]
                     };
                 } else {

@@ -171,7 +171,7 @@ const TOOL_GROUPS = {
                 inputSchema: {
                     type: 'object',
                     properties: {
-                        display: { type: 'number', description: 'Display index (default: 0)' }
+                        display: { description: 'Display index (default: 0). Response includes displays_available count so you can request other monitors.' }
                     }
                 }
             }

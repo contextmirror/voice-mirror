@@ -6,6 +6,7 @@
 const fs = require('fs');
 const fsPromises = fs.promises;
 const path = require('path');
+const { screen, nativeImage } = require('electron');
 
 /**
  * Create a screen capture watcher service instance.
@@ -73,14 +74,67 @@ function createScreenCaptureWatcher(options = {}) {
                     return;
                 }
 
+                // Get all displays from Electron's screen module
+                const displays = screen.getAllDisplays();
+                const primaryDisplay = screen.getPrimaryDisplay();
+                console.log(`[ScreenCapture] Found ${displays.length} display(s): ${displays.map((d, i) => `[${i}] ${d.size.width}x${d.size.height} id=${d.id}${d.id === primaryDisplay.id ? ' (primary)' : ''}`).join(', ')}`);
+
                 const sources = await captureScreen({
                     types: ['screen'],
                     thumbnailSize: { width: 1920, height: 1080 }
                 });
 
+                console.log(`[ScreenCapture] desktopCapturer returned ${sources.length} source(s): ${sources.map((s, i) => `[${i}] "${s.name}" display_id=${s.display_id}`).join(', ')}`);
+
                 if (sources.length > 0) {
-                    const displayIndex = request.display || 0;
-                    const source = sources[displayIndex] || sources[0];
+                    const requestedDisplay = request.display;
+                    let source;
+
+                    if (requestedDisplay === 'all' && sources.length > 1) {
+                        // Stitch all displays into one image
+                        // Calculate total canvas size from actual display bounds
+                        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+                        for (const d of displays) {
+                            minX = Math.min(minX, d.bounds.x);
+                            minY = Math.min(minY, d.bounds.y);
+                            maxX = Math.max(maxX, d.bounds.x + d.bounds.width);
+                            maxY = Math.max(maxY, d.bounds.y + d.bounds.height);
+                        }
+                        const totalWidth = maxX - minX;
+                        const totalHeight = maxY - minY;
+
+                        // Scale factor to keep image manageable
+                        const scale = Math.min(3840 / totalWidth, 2160 / totalHeight, 1);
+                        const canvasWidth = Math.round(totalWidth * scale);
+                        const canvasHeight = Math.round(totalHeight * scale);
+
+                        // Create empty canvas
+                        const canvas = nativeImage.createEmpty();
+                        // For stitching we need to use a different approach since nativeImage
+                        // doesn't have a canvas API. We'll capture each display individually
+                        // at full res and save them as separate files, returning the primary.
+                        // TODO: Implement proper stitching with sharp or canvas module
+                        console.log('[ScreenCapture] Multi-display "all" requested, capturing primary display');
+                        source = sources.find(s => s.display_id === String(primaryDisplay.id)) || sources[0];
+                    } else {
+                        // Select specific display
+                        const displayIndex = parseInt(requestedDisplay, 10) || 0;
+
+                        if (sources.length === 1) {
+                            // Only one source returned - use it regardless of index
+                            source = sources[0];
+                        } else {
+                            // Try to match by display_id from Electron's screen module
+                            const targetDisplay = displays[displayIndex] || displays[0];
+                            source = sources.find(s => s.display_id === String(targetDisplay.id));
+                            if (!source) {
+                                // Fallback to array index
+                                source = sources[displayIndex] || sources[0];
+                            }
+                        }
+                    }
+
+                    console.log(`[ScreenCapture] Using source: "${source.name}" display_id=${source.display_id}`);
                     const dataUrl = source.thumbnail.toDataURL();
 
                     const imagePath = path.join(imagesDir, `capture-${Date.now()}.png`);
@@ -88,10 +142,12 @@ function createScreenCaptureWatcher(options = {}) {
                     const imageBuffer = Buffer.from(base64Data, 'base64');
                     await fsPromises.writeFile(imagePath, imageBuffer);
 
+                    const thumbSize = source.thumbnail.getSize();
                     await fsPromises.writeFile(responsePath, JSON.stringify({
                         success: true, image_path: imagePath,
                         timestamp: new Date().toISOString(),
-                        width: 1920, height: 1080
+                        width: thumbSize.width, height: thumbSize.height,
+                        displays_available: displays.length
                     }));
 
                     console.log('[ScreenCapture] Screenshot saved:', imagePath);
