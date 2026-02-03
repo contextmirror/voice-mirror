@@ -302,6 +302,38 @@
     text-overflow: ellipsis;
 }
 
+/* Warning status indicator (reconnecting) */
+#sidebar-status #status-indicator.warning {
+    background: var(--warning, #f59e0b);
+    box-shadow: 0 0 8px rgba(245, 158, 11, 0.5);
+    animation: status-glow 0.8s ease-in-out infinite;
+}
+
+/* Error status indicator */
+#sidebar-status #status-indicator.error {
+    background: var(--danger);
+    box-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
+    animation: none;
+}
+
+/* Reconnect button */
+.reconnect-btn {
+    background: var(--accent, #7c3aed);
+    color: white;
+    border: none;
+    border-radius: var(--radius-sm);
+    padding: 4px 10px;
+    font-size: 11px;
+    cursor: pointer;
+    margin-left: 4px;
+    flex-shrink: 0;
+    transition: background var(--duration-fast) var(--ease-out);
+}
+
+.reconnect-btn:hover {
+    background: var(--accent-hover, #6d28d9);
+}
+
 /* Collapsed state for sidebar footer */
 #sidebar.collapsed #sidebar-actions {
     flex-direction: column;

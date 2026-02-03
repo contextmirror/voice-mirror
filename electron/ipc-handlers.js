@@ -418,6 +418,16 @@ function registerIpcHandlers(ctx) {
         return { stopped: false, reason: 'not running' };
     });
 
+    // Manual restart (resets retry counter for user-initiated recovery)
+    ipcMain.handle('python-restart', () => {
+        const pythonBackend = ctx.getPythonBackend();
+        if (pythonBackend) {
+            pythonBackend.restart();
+            return { restarting: true };
+        }
+        return { restarting: false, reason: 'backend not initialized' };
+    });
+
     // Call mode handlers (always listening, no wake word)
     ipcMain.handle('set-call-mode', (event, active) => {
         const v = validators['set-call-mode'](active);

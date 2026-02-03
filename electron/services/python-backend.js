@@ -85,6 +85,12 @@ function createPythonBackend(options = {}) {
     let onEventCallback = null;
     let onResponseIdCallback = null;  // For getting response IDs from displayedMessageIds
 
+    // Auto-restart state
+    let restartAttempts = 0;
+    let intentionalStop = false;
+    const MAX_RESTARTS = 3;
+    const RESTART_DELAY = 5000; // 5 seconds
+
     /**
      * Handle JSON events from Python electron_bridge.py
      * @param {Object} event - Event object from Python
@@ -116,6 +122,7 @@ function createPythonBackend(options = {}) {
             },
             'ready': () => {
                 console.log('[Python] Backend ready');
+                restartAttempts = 0;  // Reset on successful start
                 // Pre-fetch audio devices on ready so they're cached for settings
                 send({ command: 'list_audio_devices' });
                 return { type: 'ready' };
@@ -331,11 +338,37 @@ function createPythonBackend(options = {}) {
             console.log(`[Python] Process exited with code ${code}`);
             if (log) log('PYTHON', `Process exited with code ${code}`);
             pythonProcess = null;
-            if (code !== 0 && onEventCallback) {
-                onEventCallback({ type: "error", message: `Python exited with code ${code}` });
+
+            // Don't restart if intentionally stopped
+            if (intentionalStop) {
+                intentionalStop = false;
+                if (onEventCallback) onEventCallback({ type: 'disconnected' });
+                return;
             }
-            if (onEventCallback) {
-                onEventCallback({ type: 'disconnected' });
+
+            // Attempt auto-restart on crash
+            if (code !== 0 && restartAttempts < MAX_RESTARTS) {
+                restartAttempts++;
+                console.log(`[Python] Attempting restart ${restartAttempts}/${MAX_RESTARTS}...`);
+                if (log) log('PYTHON', `Attempting restart ${restartAttempts}/${MAX_RESTARTS}`);
+                if (onEventCallback) {
+                    onEventCallback({
+                        type: 'reconnecting',
+                        attempt: restartAttempts,
+                        maxAttempts: MAX_RESTARTS
+                    });
+                }
+                setTimeout(() => start(), RESTART_DELAY);
+            } else if (code !== 0 && restartAttempts >= MAX_RESTARTS) {
+                console.error('[Python] Max restart attempts reached');
+                if (log) log('PYTHON', 'Max restart attempts reached');
+                if (onEventCallback) {
+                    onEventCallback({ type: 'error', message: 'Voice backend failed after 3 restart attempts' });
+                    onEventCallback({ type: 'restart_failed' });
+                }
+            } else {
+                // Clean exit (code 0)
+                if (onEventCallback) onEventCallback({ type: 'disconnected' });
             }
         });
 
@@ -348,6 +381,7 @@ function createPythonBackend(options = {}) {
      */
     function stop() {
         if (pythonProcess) {
+            intentionalStop = true;  // Prevent auto-restart
             send({ command: 'stop' });
             // Give Python 3 seconds to exit gracefully, then force kill
             const proc = pythonProcess;
@@ -362,6 +396,18 @@ function createPythonBackend(options = {}) {
             return true;
         }
         return false;
+    }
+
+    /**
+     * Restart the Python backend (manual restart, resets retry counter).
+     * @returns {boolean} True if restart initiated
+     */
+    function restart() {
+        restartAttempts = 0;  // Reset counter for manual restart
+        intentionalStop = false;
+        stop();
+        setTimeout(() => start(), 1000);
+        return true;
     }
 
     /**
@@ -567,6 +613,7 @@ function createPythonBackend(options = {}) {
     return {
         start,
         stop,
+        restart,
         kill,
         send,
         sendImage,

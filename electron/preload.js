@@ -87,6 +87,9 @@ contextBridge.exposeInMainWorld('voiceMirror', {
         // Stop Python backend
         stop: () => ipcRenderer.invoke('stop-python'),
 
+        // Restart Python backend (manual retry after failures)
+        restart: () => ipcRenderer.invoke('python-restart'),
+
         // Call mode - always listening, no wake word needed
         setCallMode: (active) => ipcRenderer.invoke('set-call-mode', active),
 

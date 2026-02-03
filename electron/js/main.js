@@ -425,6 +425,9 @@ function handleVoiceEvent(data) {
             break;
         case 'ready':
             statusIndicator.className = '';
+            // Hide reconnect button on successful connection
+            const reconnectBtnReady = document.getElementById('voice-reconnect-btn');
+            if (reconnectBtnReady) reconnectBtnReady.style.display = 'none';
             window.voiceMirror.config.get().then(cfg => {
                 const mode = cfg.behavior?.activationMode || 'wakeWord';
                 if (mode === 'pushToTalk') {
@@ -440,6 +443,19 @@ function handleVoiceEvent(data) {
             }).catch(() => {
                 statusText.textContent = 'Ready';
             });
+            break;
+        case 'reconnecting':
+            statusText.textContent = `Reconnecting (${data.attempt}/${data.maxAttempts})...`;
+            statusIndicator.className = 'warning';
+            showToast(`Voice backend disconnected. Reconnecting (attempt ${data.attempt})...`, 'warning', 5000);
+            break;
+        case 'restart_failed':
+            statusText.textContent = 'Voice backend offline';
+            statusIndicator.className = 'error';
+            showToast('Voice backend failed to restart. Click Reconnect to try again.', 'error', 0);
+            // Show reconnect button
+            const reconnectBtnFailed = document.getElementById('voice-reconnect-btn');
+            if (reconnectBtnFailed) reconnectBtnFailed.style.display = 'inline-block';
             break;
         case 'wake':
             setOrbState('idle');
@@ -690,6 +706,16 @@ async function init() {
     const pythonStatus = await window.voiceMirror.python.getStatus();
     if (!pythonStatus.running) {
         statusText.textContent = 'Voice backend not running';
+    }
+
+    // Reconnect button handler
+    const reconnectBtn = document.getElementById('voice-reconnect-btn');
+    if (reconnectBtn) {
+        reconnectBtn.addEventListener('click', async () => {
+            reconnectBtn.style.display = 'none';
+            showToast('Reconnecting to voice backend...', 'info');
+            await window.voiceMirror.python.restart();
+        });
     }
 
     // Check AI provider status
