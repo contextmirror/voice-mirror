@@ -88,8 +88,9 @@ function createPythonBackend(options = {}) {
     // Auto-restart state
     let restartAttempts = 0;
     let intentionalStop = false;
+    let isStarting = false; // Guard against concurrent start attempts
     const MAX_RESTARTS = 3;
-    const RESTART_DELAY = 5000; // 5 seconds
+    const RESTART_DELAY = 8000; // 8 seconds - give Windows time to release model resources
 
     /**
      * Handle JSON events from Python electron_bridge.py
@@ -216,6 +217,11 @@ function createPythonBackend(options = {}) {
             console.log('[Python] Already running');
             return false;
         }
+        if (isStarting) {
+            console.log('[Python] Start already in progress');
+            return false;
+        }
+        isStarting = true;
 
         const pythonPath = pythonDir || path.join(__dirname, '..', '..', 'python');
         const venvPython = getPythonExecutable(pythonPath, isWindows);
@@ -233,6 +239,7 @@ function createPythonBackend(options = {}) {
                     message: 'Python venv not found. Set up the python folder venv.'
                 });
             }
+            isStarting = false;
             return false;
         }
 
@@ -275,6 +282,8 @@ function createPythonBackend(options = {}) {
             if (log) log('PYTHON', `Spawn: ${venvPython} -u ${scriptToRun} (cwd: ${spawnOptions.cwd})`);
             pythonProcess = spawn(venvPython, ['-u', scriptToRun], spawnOptions);
         }
+
+        isStarting = false; // Spawn complete, reset guard
 
         // Buffer for incomplete JSON lines
         let stdoutBuffer = '';
@@ -338,6 +347,7 @@ function createPythonBackend(options = {}) {
             console.log(`[Python] Process exited with code ${code}`);
             if (log) log('PYTHON', `Process exited with code ${code}`);
             pythonProcess = null;
+            isStarting = false; // Allow new start attempts
 
             // Don't restart if intentionally stopped
             if (intentionalStop) {
