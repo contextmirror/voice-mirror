@@ -124,6 +124,7 @@ function createPythonBackend(options = {}) {
             'ready': () => {
                 console.log('[Python] Backend ready');
                 restartAttempts = 0;  // Reset on successful start
+                isStarting = false;   // Process fully started, allow new start attempts
                 // Pre-fetch audio devices on ready so they're cached for settings
                 send({ command: 'list_audio_devices' });
                 return { type: 'ready' };
@@ -283,7 +284,8 @@ function createPythonBackend(options = {}) {
             pythonProcess = spawn(venvPython, ['-u', scriptToRun], spawnOptions);
         }
 
-        isStarting = false; // Spawn complete, reset guard
+        // Note: isStarting is reset in 'ready' event handler or on process 'close'
+        // NOT here, because spawn() returns immediately before the process is actually ready
 
         // Buffer for incomplete JSON lines
         let stdoutBuffer = '';
@@ -340,6 +342,7 @@ function createPythonBackend(options = {}) {
         pythonProcess.on('error', (err) => {
             console.error(`[Python] Spawn error:`, err);
             if (log) log('PYTHON', `Spawn error: ${err.message}`);
+            isStarting = false; // Reset guard on spawn failure
             if (onEventCallback) onEventCallback({ type: "error", message: `Python spawn failed: ${err.message}` });
         });
 
