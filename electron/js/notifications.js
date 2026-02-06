@@ -86,8 +86,10 @@ export function updateToast(toast, message, type) {
     toast.querySelector('.toast-icon').innerHTML = toastIcons[type] || toastIcons.info;
     toast.querySelector('.toast-message').textContent = message;
 
-    // Auto-dismiss after update
-    setTimeout(() => dismissToast(toast), 3000);
+    // Auto-dismiss after update (loading/error toasts stay until manually closed)
+    if (type !== 'loading' && type !== 'error') {
+        setTimeout(() => dismissToast(toast), 3000);
+    }
 }
 
 // Expose dismissToast globally for onclick handlers

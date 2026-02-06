@@ -26,6 +26,7 @@
     font-size: 13px;
     animation: slide-up var(--duration-normal) var(--ease-out);
     pointer-events: auto;
+    -webkit-app-region: no-drag;
 }
 
 /* ========== Toast Variants ========== */
