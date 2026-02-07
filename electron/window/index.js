@@ -8,6 +8,34 @@ const { execSync, execFileSync } = require('child_process');
 const path = require('path');
 
 /**
+ * Clamp window bounds so the window stays within the nearest display's work area.
+ * Ensures at least `minVisible` pixels are visible on each axis so the user can
+ * always grab the window and drag it back.
+ *
+ * @param {number} x - Desired X position
+ * @param {number} y - Desired Y position
+ * @param {number} width - Window width
+ * @param {number} height - Window height
+ * @param {Object} [screenApi] - Electron screen module (for testability)
+ * @param {number} [minVisible=100] - Minimum visible pixels on each axis
+ * @returns {{ x: number, y: number }} Clamped position
+ */
+function clampToVisibleArea(x, y, width, height, screenApi, minVisible = 100) {
+    const api = screenApi || screen;
+    const display = api.getDisplayNearestPoint({ x: x + Math.floor(width / 2), y: y + Math.floor(height / 2) });
+    const wa = display.workArea;
+
+    // Ensure at least minVisible px visible inside the work area on each axis.
+    // Clamp so the window can't go further left than (wa.x - width + minVisible)
+    // and can't go further right than (wa.x + wa.width - minVisible).
+    const effectiveMinVisible = Math.min(minVisible, width, height);
+    const clampedX = Math.max(wa.x - width + effectiveMinVisible, Math.min(x, wa.x + wa.width - effectiveMinVisible));
+    const clampedY = Math.max(wa.y - height + effectiveMinVisible, Math.min(y, wa.y + wa.height - effectiveMinVisible));
+
+    return { x: Math.round(clampedX), y: Math.round(clampedY) };
+}
+
+/**
  * Create a window manager service instance.
  * @param {Object} options - Window manager options
  * @param {Function} options.getConfig - Function to get current app config
@@ -62,8 +90,11 @@ function createWindowManager(options = {}) {
         // Use saved position from config, or default to bottom-right
         const savedX = config?.window?.orbX;
         const savedY = config?.window?.orbY;
-        const startX = savedX !== null && savedX !== undefined ? savedX : screenWidth - orbSize - 20;
-        const startY = savedY !== null && savedY !== undefined ? savedY : screenHeight - orbSize - 100;
+        const rawX = savedX !== null && savedX !== undefined ? savedX : screenWidth - orbSize - 20;
+        const rawY = savedY !== null && savedY !== undefined ? savedY : screenHeight - orbSize - 100;
+
+        // Clamp to visible area to prevent off-screen launch from stale config
+        const { x: startX, y: startY } = clampToVisibleArea(rawX, rawY, orbSize, orbSize);
 
         mainWindow = new BrowserWindow({
             width: orbSize,
@@ -122,7 +153,9 @@ function createWindowManager(options = {}) {
         // Save position when window is moved (only when collapsed to orb)
         mainWindow.on('moved', () => {
             if (!isExpanded) {
-                const [x, y] = mainWindow.getPosition();
+                const [rawX, rawY] = mainWindow.getPosition();
+                const orbSz = getOrbSize();
+                const { x, y } = clampToVisibleArea(rawX, rawY, orbSz, orbSz);
                 updateConfig({ window: { orbX: x, orbY: y } });
             }
         });
@@ -208,7 +241,10 @@ function createWindowManager(options = {}) {
     function expand() {
         if (!mainWindow || isExpanded) return;
 
-        const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().workAreaSize;
+        // Use the display nearest to the orb's current position (multi-monitor aware)
+        const [orbX, orbY] = mainWindow.getPosition();
+        const nearestDisplay = screen.getDisplayNearestPoint({ x: orbX, y: orbY });
+        const { x: waX, y: waY, width: waWidth, height: waHeight } = nearestDisplay.workArea;
         const panelWidth = getPanelWidth();
         const panelHeight = getPanelHeight();
 
@@ -218,15 +254,17 @@ function createWindowManager(options = {}) {
         // Send state change first
         mainWindow.webContents.send('state-change', { expanded: true });
 
+        // Position panel near bottom-right of the nearest display's work area, clamped to bounds
+        const rawExpandX = waX + waWidth - panelWidth - 20;
+        const rawExpandY = waY + waHeight - panelHeight - 50;
+        const { x: expandX, y: expandY } = clampToVisibleArea(rawExpandX, rawExpandY, panelWidth, panelHeight);
+
         // Then resize and enable resizing
         setTimeout(() => {
             mainWindow.setResizable(true);
             mainWindow.setMinimumSize(300, 400);
             mainWindow.setContentSize(panelWidth, panelHeight);
-            mainWindow.setPosition(
-                screenWidth - panelWidth - 20,
-                screenHeight - panelHeight - 50
-            );
+            mainWindow.setPosition(expandX, expandY);
             mainWindow.setSkipTaskbar(false);
             mainWindow.setAlwaysOnTop(false);  // Allow other windows to cover when expanded
             mainWindow.focus();
@@ -257,11 +295,12 @@ function createWindowManager(options = {}) {
             });
         }
 
-        // Restore to saved position or default
+        // Restore to saved position or default, clamped to visible area
         const savedX = config?.window?.orbX;
         const savedY = config?.window?.orbY;
-        const restoreX = savedX !== null && savedX !== undefined ? savedX : screenWidth - orbSize - 20;
-        const restoreY = savedY !== null && savedY !== undefined ? savedY : screenHeight - orbSize - 100;
+        const rawRestoreX = savedX !== null && savedX !== undefined ? savedX : screenWidth - orbSize - 20;
+        const rawRestoreY = savedY !== null && savedY !== undefined ? savedY : screenHeight - orbSize - 100;
+        const { x: restoreX, y: restoreY } = clampToVisibleArea(rawRestoreX, rawRestoreY, orbSize, orbSize);
 
         isExpanded = false;
         startOverlayEnforcer();
@@ -360,7 +399,9 @@ function createWindowManager(options = {}) {
      */
     function setPosition(x, y) {
         if (mainWindow) {
-            mainWindow.setPosition(Math.round(x), Math.round(y));
+            const [width, height] = mainWindow.getSize();
+            const clamped = clampToVisibleArea(x, y, width, height);
+            mainWindow.setPosition(clamped.x, clamped.y);
         }
     }
 
@@ -416,5 +457,6 @@ function createWindowManager(options = {}) {
 }
 
 module.exports = {
-    createWindowManager
+    createWindowManager,
+    clampToVisibleArea
 };

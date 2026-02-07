@@ -249,7 +249,7 @@ async function captureScreenshot(opts = {}) {
         format,
         ...(quality !== undefined ? { quality } : {}),
         fromSurface: true,
-        captureBeyondViewport: true,
+        captureBeyondViewport: !!opts.fullPage,
         ...(clip ? { clip } : {})
     });
 

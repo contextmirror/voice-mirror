@@ -105,6 +105,29 @@ function createBrowserWatcher(options = {}) {
                     case 'act':
                         result = await getController().actOnTab(args.request || args);
                         break;
+                    case 'tabs': {
+                        // Webview is a single-tab browser — return current tab info
+                        const status = await getController().getStatus();
+                        result = {
+                            ok: true,
+                            tabs: status.url && status.url !== 'about:blank'
+                                ? [{ targetId: 'webview', title: status.title || '', url: status.url }]
+                                : []
+                        };
+                        break;
+                    }
+                    case 'open':
+                        // Open = navigate to URL in the webview
+                        result = await getController().navigateTab(args.url);
+                        break;
+                    case 'close_tab':
+                        // Close = navigate to about:blank
+                        result = await getController().stopBrowser();
+                        break;
+                    case 'focus':
+                        // Single-tab webview — focus is a no-op
+                        result = { ok: true, action: 'focus' };
+                        break;
                     case 'console':
                         result = await getController().getConsoleLog();
                         break;

@@ -549,6 +549,9 @@ async function pressAction(opts) {
     const def = keyDefinition(key);
     const delay = Math.max(0, Math.floor(opts.delayMs ?? 0));
 
+    // Ensure page content has focus so key events reach the document (fixes PageDown/Up scroll)
+    await cdp.evaluate('document.body?.focus()').catch(() => {});
+
     await cdp.sendCommand('Input.dispatchKeyEvent', {
         type: 'keyDown', key: def.key, code: def.code,
         windowsVirtualKeyCode: def.keyCode, nativeVirtualKeyCode: def.keyCode,
@@ -564,34 +567,53 @@ async function pressAction(opts) {
 }
 
 async function evaluateAction(opts) {
-    const fn = (opts.fn || '').trim();
-    if (!fn) throw new Error('fn (JavaScript code) is required');
+    // Accept both 'fn' and 'expression' (MCP schema uses 'expression')
+    const fn = (opts.fn || opts.expression || '').trim();
+    if (!fn) throw new Error('fn or expression (JavaScript code) is required');
+
+    const timeout = clampTimeout(opts.timeoutMs, 15000);
+
+    const withTimeout = (promise) => Promise.race([
+        promise,
+        new Promise((_, reject) =>
+            setTimeout(() => reject(new Error(`Evaluate timed out after ${timeout}ms`)), timeout)
+        )
+    ]);
 
     if (opts.ref) {
+        // For element-scoped evaluation, wrap in a function with `this` bound to the element.
+        // Try as expression first (return (expr)), fall back to multi-statement (no auto-return).
         const { objectId } = await resolveRef(opts.ref);
-        const result = await cdp.sendCommand('Runtime.callFunctionOn', {
+        let result = await withTimeout(cdp.sendCommand('Runtime.callFunctionOn', {
             objectId,
-            functionDeclaration: `function() {
-                try {
-                    const candidate = eval('(' + ${JSON.stringify(fn)} + ')');
-                    return typeof candidate === 'function' ? candidate(this) : candidate;
-                } catch (err) {
-                    throw new Error('Invalid evaluate function: ' + (err?.message || String(err)));
-                }
-            }`,
+            functionDeclaration: `function() { return (${fn}); }`,
             returnByValue: true
-        });
+        })).catch(() => null);
+
+        if (!result || result.exceptionDetails) {
+            result = await withTimeout(cdp.sendCommand('Runtime.callFunctionOn', {
+                objectId,
+                functionDeclaration: `function() { ${fn} }`,
+                returnByValue: true
+            }));
+        }
+
+        if (result?.exceptionDetails) {
+            const desc = result.exceptionDetails.exception?.description || result.exceptionDetails.text;
+            return { ok: true, action: 'evaluate', error: desc };
+        }
         return { ok: true, action: 'evaluate', result: result?.result?.value };
     }
 
-    const result = await cdp.evaluate(`(() => {
-        try {
-            const candidate = eval('(' + ${JSON.stringify(fn)} + ')');
-            return typeof candidate === 'function' ? candidate() : candidate;
-        } catch (err) {
-            throw new Error('Invalid evaluate function: ' + (err?.message || String(err)));
-        }
-    })()`);
+    // Global page evaluate — use CDP Runtime.evaluate directly.
+    // This supports multi-statement code (const, let, loops, etc.) and returns the
+    // completion value of the last expression, just like the browser console.
+    const result = await withTimeout(cdp.evaluate(fn));
+
+    if (result?.exceptionDetails) {
+        const desc = result.exceptionDetails.exception?.description || result.exceptionDetails.text;
+        return { ok: true, action: 'evaluate', error: desc };
+    }
     return { ok: true, action: 'evaluate', result: result?.result?.value };
 }
 
