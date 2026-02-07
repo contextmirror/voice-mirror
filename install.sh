@@ -2,7 +2,7 @@
 # Voice Mirror — One-liner installer
 # Works on macOS, Linux, and Windows (Git Bash/MSYS2)
 #
-# macOS/Linux:  curl -fsSL https://raw.githubusercontent.com/nayballs/voice-mirror-electron/main/install.sh | bash
+# macOS/Linux:  curl -fsSL https://raw.githubusercontent.com/contextmirror/voice-mirror-electron/main/install.sh | bash
 # Windows:      Use install.ps1 for native PowerShell, or run this via Git Bash
 #
 # Options:
@@ -45,7 +45,7 @@ BRANCH="main"
 INSTALL_DIR="$HOME/voice-mirror-electron"
 SKIP_SETUP=false
 NON_INTERACTIVE=false
-REPO_URL="https://github.com/nayballs/voice-mirror-electron.git"
+REPO_URL="https://github.com/contextmirror/voice-mirror-electron.git"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in

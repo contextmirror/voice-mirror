@@ -1,0 +1,119 @@
+name: Installer Test
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - install.ps1
+      - install.sh
+      - cli/**
+      - package.json
+      - mcp-server/package.json
+      - python/requirements.txt
+  pull_request:
+    branches: [main]
+    paths:
+      - install.ps1
+      - install.sh
+      - cli/**
+      - package.json
+      - mcp-server/package.json
+      - python/requirements.txt
+  workflow_dispatch:
+
+concurrency:
+  group: installer-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  installer-linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run install.sh (update mode)
+        run: |
+          chmod +x install.sh
+          bash install.sh \
+            --dir "${{ github.workspace }}" \
+            --branch "${{ github.head_ref || github.ref_name }}" \
+            --repo "https://github.com/${{ github.repository }}.git" \
+            --skip-setup \
+            --non-interactive
+        env:
+          DEBIAN_FRONTEND: noninteractive
+
+      - name: Verify npm dependencies installed
+        run: |
+          test -d node_modules
+          test -d mcp-server/node_modules
+
+      - name: Run doctor (informational)
+        run: node cli/index.mjs doctor 2>&1 || true
+
+      - name: Run unit tests
+        run: npm test
+
+  installer-macos:
+    runs-on: macos-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run install.sh (update mode)
+        run: |
+          chmod +x install.sh
+          bash install.sh \
+            --dir "${{ github.workspace }}" \
+            --branch "${{ github.head_ref || github.ref_name }}" \
+            --repo "https://github.com/${{ github.repository }}.git" \
+            --skip-setup \
+            --non-interactive
+
+      - name: Verify npm dependencies installed
+        run: |
+          test -d node_modules
+          test -d mcp-server/node_modules
+
+      - name: Run doctor (informational)
+        run: node cli/index.mjs doctor 2>&1 || true
+
+      - name: Run unit tests
+        run: npm test
+
+  installer-windows:
+    runs-on: windows-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run install.ps1 (update mode)
+        shell: pwsh
+        run: |
+          $env:VM_DIR = "${{ github.workspace }}"
+          $env:VM_BRANCH = "${{ github.head_ref || github.ref_name }}"
+          $env:VM_REPO = "https://github.com/${{ github.repository }}.git"
+          $env:VM_SKIP_SETUP = "1"
+          $env:VM_NON_INTERACTIVE = "1"
+          & .\install.ps1
+
+      - name: Verify npm dependencies installed
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "node_modules")) { throw "node_modules missing" }
+          if (-not (Test-Path "mcp-server\node_modules")) { throw "mcp-server\node_modules missing" }
+
+      - name: Run doctor (informational)
+        shell: pwsh
+        run: node cli/index.mjs doctor 2>&1
+        continue-on-error: true
+
+      - name: Run unit tests
+        run: npm test

@@ -1,10 +1,11 @@
 # Voice Mirror — Windows PowerShell Installer
-# Usage: iwr -useb https://raw.githubusercontent.com/nayballs/voice-mirror-electron/main/install.ps1 | iex
+# Usage: iwr -useb https://raw.githubusercontent.com/contextmirror/voice-mirror-electron/main/install.ps1 | iex
 #
 # Options (via environment variables):
 #   $env:VM_INSTALL_METHOD = "git" or "npm"  (default: git)
 #   $env:VM_BRANCH = "main"
 #   $env:VM_DIR = "C:\voice-mirror-electron"
+#   $env:VM_REPO = "https://github.com/contextmirror/voice-mirror-electron.git"
 #   $env:VM_SKIP_SETUP = "1"
 #   $env:VM_NON_INTERACTIVE = "1"
 
@@ -16,7 +17,7 @@ $Branch = if ($env:VM_BRANCH) { $env:VM_BRANCH } else { "main" }
 $InstallDir = if ($env:VM_DIR) { $env:VM_DIR } else { Join-Path $HOME "voice-mirror-electron" }
 $SkipSetup = $env:VM_SKIP_SETUP -eq "1"
 $NonInteractive = $env:VM_NON_INTERACTIVE -eq "1"
-$RepoUrl = "https://github.com/nayballs/voice-mirror-electron.git"
+$RepoUrl = if ($env:VM_REPO) { $env:VM_REPO } else { "https://github.com/contextmirror/voice-mirror-electron.git" }
 
 # ─── Colors ──────────────────────────────────────────────────────────
 function Write-Banner {
