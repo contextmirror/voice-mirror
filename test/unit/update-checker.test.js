@@ -84,7 +84,7 @@ describe('update-checker', () => {
 
             // Init bare remote
             fs.mkdirSync(remoteDir);
-            git(remoteDir, 'init', '--bare');
+            git(remoteDir, 'init', '--bare', '--initial-branch=main');
 
             // Clone it
             git(tmp, 'clone', remoteDir, 'local');
