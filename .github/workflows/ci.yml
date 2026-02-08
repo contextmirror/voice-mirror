@@ -34,16 +34,9 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install system dependencies (Linux)
+      - name: Install setuptools for node-gyp (Linux)
         if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libportaudio2 libasound2-dev ffmpeg
-          pip install setuptools
-
-      - name: Install system dependencies (macOS)
-        if: runner.os == 'macOS'
-        run: brew install portaudio ffmpeg
+        run: pip install setuptools
 
       - name: Install root dependencies
         run: npm install
