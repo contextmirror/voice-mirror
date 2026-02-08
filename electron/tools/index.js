@@ -271,7 +271,7 @@ class ToolExecutor {
      *
      * @param {string} toolName - Tool that was executed
      * @param {Object} result - Tool execution result
-     * @returns {string} Formatted result for the model
+     * @returns {string|Object} Formatted result — string for text, or object with {text, image_data_url} for vision
      */
     formatToolResult(toolName, result) {
         let formatted;
@@ -290,12 +290,18 @@ class ToolExecutor {
                 dc.addActiveStage('format_tool_result', {
                     tool: toolName,
                     success: result.success,
+                    has_image: !!(result.data_url),
                     raw_result_length: result.success ? (result.result || '').length : (result.error || '').length,
                     formatted_length: formatted.length,
                     formatted_preview: formatted.substring(0, 500)
                 });
             }
         } catch { /* diagnostic not available */ }
+
+        // If tool returned image data, include it for vision models
+        if (result.success && result.data_url) {
+            return { text: formatted, image_data_url: result.data_url };
+        }
 
         return formatted;
     }

@@ -69,8 +69,17 @@ class OpenAIProvider extends BaseProvider {
     }
 
     supportsVision() {
-        // Some models support vision (gpt-4-vision, llava, etc.)
-        const visionModels = ['gpt-4-vision', 'gpt-4o', 'llava', 'bakllava'];
+        // Models that support vision (image input)
+        const visionModels = [
+            'gpt-4-vision', 'gpt-4o',           // OpenAI
+            'llava', 'bakllava',                  // LLaVA family
+            'qwen3-vl', 'qwen2.5vl', 'qwen2-vl', 'qwen-vl',  // Qwen vision
+            'minicpm-v', 'minicpm-o',             // MiniCPM vision/omni
+            'gemma3',                             // Google Gemma 3 (vision)
+            'llama3.2-vision',                    // Meta Llama vision
+            'moondream',                          // Moondream
+            'granite3.2-vision',                  // IBM Granite vision
+        ];
         return visionModels.some(v => this.model?.toLowerCase().includes(v));
     }
 
@@ -193,13 +202,15 @@ class OpenAIProvider extends BaseProvider {
             try {
                 const dc = require('../services/diagnostic-collector');
                 if (dc.hasActiveTrace()) {
+                    const contentLength = (c) => typeof c === 'string' ? c.length : Array.isArray(c) ? c.reduce((s, p) => s + (p.text || '').length, 0) : 0;
+                    const contentPreview = (c) => typeof c === 'string' ? c.substring(0, 200) : Array.isArray(c) ? `(multimodal: ${c.map(p => p.type).join('+')})` : '(unknown)';
                     dc.addActiveStage('provider_request', {
                         message_count: this.messages.length,
-                        total_chars: this.messages.reduce((s, m) => s + (typeof m.content === 'string' ? m.content.length : 0), 0),
+                        total_chars: this.messages.reduce((s, m) => s + contentLength(m.content), 0),
                         messages: this.messages.map(m => ({
                             role: m.role,
-                            length: typeof m.content === 'string' ? m.content.length : 0,
-                            preview: typeof m.content === 'string' ? m.content.substring(0, 200) : '(non-string)'
+                            length: contentLength(m.content),
+                            preview: contentPreview(m.content)
                         })),
                         is_tool_followup: isToolFollowUp,
                         model: this.model
@@ -346,22 +357,45 @@ class OpenAIProvider extends BaseProvider {
                     // Format and inject result into conversation
                     // Append instruction directly to result message (avoids dual system messages confusing small models)
                     const resultMessage = this.toolExecutor.formatToolResult(toolCall.tool, result);
-                    this.messages.push({
-                        role: 'user',
-                        content: resultMessage + '\n\n[INSTRUCTION] The above is REAL, CURRENT data from a live web page. Read it carefully and answer my original question using ONLY facts from this data. Respond in plain natural language, under 3 sentences. No JSON. No markdown.'
-                    });
+                    const instruction = '\n\n[INSTRUCTION] The above is REAL, CURRENT data. Read it carefully and answer my original question using ONLY facts from this data. Respond in plain natural language, under 3 sentences. No JSON. No markdown.';
+
+                    // If result includes an image and model supports vision, send as multimodal content
+                    if (typeof resultMessage === 'object' && resultMessage.image_data_url && this.supportsVision()) {
+                        this.messages.push({
+                            role: 'user',
+                            content: [
+                                {
+                                    type: 'image_url',
+                                    image_url: { url: resultMessage.image_data_url }
+                                },
+                                {
+                                    type: 'text',
+                                    text: resultMessage.text + instruction
+                                }
+                            ]
+                        });
+                    } else {
+                        const textResult = typeof resultMessage === 'object' ? resultMessage.text : resultMessage;
+                        this.messages.push({
+                            role: 'user',
+                            content: textResult + instruction
+                        });
+                    }
 
                     // Diagnostic trace: tool result injected
                     try {
                         const dc = require('../services/diagnostic-collector');
                         if (dc.hasActiveTrace()) {
+                            const rmText = typeof resultMessage === 'object' ? resultMessage.text : resultMessage;
+                            const ctxChars = (c) => typeof c === 'string' ? c.length : Array.isArray(c) ? c.reduce((s, p) => s + (p.text || '').length, 0) : 0;
                             dc.addActiveStage('tool_result_injected', {
                                 tool: toolCall.tool,
                                 success: result.success,
-                                result_message_length: resultMessage.length,
-                                result_message_preview: resultMessage.substring(0, 500),
+                                has_image: typeof resultMessage === 'object' && !!resultMessage.image_data_url,
+                                result_message_length: rmText.length,
+                                result_message_preview: rmText.substring(0, 500),
                                 conversation_size: this.messages.length,
-                                total_context_chars: this.messages.reduce((s, m) => s + (typeof m.content === 'string' ? m.content.length : 0), 0)
+                                total_context_chars: this.messages.reduce((s, m) => s + ctxChars(m.content), 0)
                             });
                         }
                     } catch { /* diagnostic not available */ }
@@ -478,7 +512,16 @@ class OpenAIProvider extends BaseProvider {
      */
     estimateTokenUsage() {
         const totalChars = this.messages.reduce((sum, m) => {
-            return sum + (typeof m.content === 'string' ? m.content.length : 0);
+            if (typeof m.content === 'string') return sum + m.content.length;
+            // Multimodal content array — count text parts, estimate image tokens
+            if (Array.isArray(m.content)) {
+                return sum + m.content.reduce((s, part) => {
+                    if (part.type === 'text') return s + (part.text || '').length;
+                    if (part.type === 'image_url') return s + 1000; // ~250 tokens for an image
+                    return s;
+                }, 0);
+            }
+            return sum;
         }, 0);
         return {
             used: Math.ceil(totalChars / 4),
