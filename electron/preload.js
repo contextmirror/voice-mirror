@@ -211,6 +211,7 @@ contextBridge.exposeInMainWorld('voiceMirror', {
         ipcRenderer.on('update-status', (event, data) => callback(data));
     },
     applyUpdate: () => ipcRenderer.invoke('apply-update'),
+    relaunch: () => ipcRenderer.invoke('app-relaunch'),
 
     // Hotkey fallback — renderer sends this when it detects the hotkey via DOM keydown
     // (only honored if primary uiohook + globalShortcut layers both failed)

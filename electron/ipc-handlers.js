@@ -613,6 +613,12 @@ function registerIpcHandlers(ctx) {
         }
         return { success: false, error: 'Update checker not initialized' };
     });
+
+    // App relaunch (used after updates)
+    ipcMain.handle('app-relaunch', () => {
+        app.relaunch();
+        app.exit(0);
+    });
 }
 
 module.exports = { registerIpcHandlers };

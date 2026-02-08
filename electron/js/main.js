@@ -841,32 +841,50 @@ async function init() {
         });
     }
 
-    // Update checker notifications
+    // Update checker notifications — sidebar banner
+    const updateBanner = document.getElementById('sidebar-update-banner');
+    const updateText = document.getElementById('update-banner-text');
+    const updateBtn = document.getElementById('update-banner-btn');
+
     window.voiceMirror.onUpdateAvailable((data) => {
-        showToast(
-            `Update available (${data.behind} commit${data.behind > 1 ? 's' : ''} behind)`,
-            'info',
-            0,
-            {
-                actionText: 'Update',
-                onAction: async (toast) => {
-                    updateToast(toast, 'Pulling updates...', 'loading');
-                    await window.voiceMirror.applyUpdate();
-                }
-            }
-        );
+        if (!updateBanner) return;
+        updateText.textContent = `Update (${data.behind} new)`;
+        updateBtn.textContent = 'Update';
+        updateBtn.disabled = false;
+        updateBtn.onclick = async () => {
+            updateBtn.disabled = true;
+            updateText.textContent = 'Pulling...';
+            updateBanner.className = 'loading';
+            await window.voiceMirror.applyUpdate();
+        };
+        updateBanner.style.display = '';
+        updateBanner.className = 'available';
     });
 
     window.voiceMirror.onUpdateStatus((data) => {
-        const existing = document.querySelector('.toast.loading') || document.querySelector('.toast.info');
+        if (!updateBanner || updateBanner.style.display === 'none') return;
         if (data.status === 'pulling') {
-            if (existing) updateToast(existing, 'Pulling updates...', 'loading');
+            updateText.textContent = 'Pulling...';
+            updateBanner.className = 'loading';
         } else if (data.status === 'installing') {
-            if (existing) updateToast(existing, 'Installing dependencies...', 'loading');
+            updateText.textContent = 'Installing...';
         } else if (data.status === 'ready') {
-            if (existing) updateToast(existing, 'Update complete — restart to apply', 'success');
+            updateText.textContent = 'Restart to apply';
+            updateBanner.className = 'success';
+            updateBtn.textContent = 'Restart';
+            updateBtn.disabled = false;
+            updateBtn.onclick = () => window.voiceMirror.relaunch();
         } else if (data.status === 'error') {
-            if (existing) updateToast(existing, `Update failed: ${data.message}`, 'error');
+            updateText.textContent = 'Update failed';
+            updateBanner.className = 'error';
+            updateBtn.textContent = 'Retry';
+            updateBtn.disabled = false;
+            updateBtn.onclick = async () => {
+                updateBtn.disabled = true;
+                updateText.textContent = 'Pulling...';
+                updateBanner.className = 'loading';
+                await window.voiceMirror.applyUpdate();
+            };
         }
     });
 

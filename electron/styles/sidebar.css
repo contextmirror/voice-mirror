@@ -210,6 +210,121 @@
     gap: 8px;
 }
 
+/* ========== Update Banner ========== */
+#sidebar-update-banner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    background: var(--accent-subtle, rgba(124, 58, 237, 0.1));
+    border: 1px solid var(--accent, #7c3aed);
+    border-radius: var(--radius-md);
+    color: var(--text);
+    font-size: 12px;
+    animation: update-banner-in 0.25s var(--ease-out);
+}
+
+@keyframes update-banner-in {
+    from { opacity: 0; transform: translateY(-8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+#sidebar-update-banner .update-icon {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    color: var(--accent, #7c3aed);
+}
+
+#sidebar-update-banner #update-banner-text {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+#sidebar-update-banner #update-banner-btn {
+    background: var(--accent, #7c3aed);
+    color: white;
+    border: none;
+    border-radius: var(--radius-sm);
+    padding: 3px 10px;
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background var(--duration-fast) var(--ease-out);
+}
+
+#sidebar-update-banner #update-banner-btn:hover {
+    background: var(--accent-hover, #6d28d9);
+}
+
+#sidebar-update-banner #update-banner-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* Banner loading state */
+#sidebar-update-banner.loading {
+    border-color: var(--muted);
+    background: var(--bg);
+}
+
+#sidebar-update-banner.loading .update-icon {
+    color: var(--muted);
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+/* Banner success state */
+#sidebar-update-banner.success {
+    border-color: var(--ok, #4ade80);
+    background: rgba(74, 222, 128, 0.1);
+}
+
+#sidebar-update-banner.success .update-icon {
+    color: var(--ok, #4ade80);
+}
+
+#sidebar-update-banner.success #update-banner-btn {
+    background: var(--ok, #4ade80);
+    color: #0a0a12;
+}
+
+#sidebar-update-banner.success #update-banner-btn:hover {
+    background: #22c55e;
+}
+
+/* Banner error state */
+#sidebar-update-banner.error {
+    border-color: var(--danger, #ef4444);
+    background: rgba(239, 68, 68, 0.1);
+}
+
+#sidebar-update-banner.error .update-icon {
+    color: var(--danger, #ef4444);
+}
+
+#sidebar-update-banner.error #update-banner-btn {
+    background: var(--danger, #ef4444);
+}
+
+/* Collapsed sidebar: icon only */
+#sidebar.collapsed #sidebar-update-banner {
+    justify-content: center;
+    padding: 8px;
+}
+
+#sidebar.collapsed #sidebar-update-banner #update-banner-text,
+#sidebar.collapsed #sidebar-update-banner #update-banner-btn {
+    display: none;
+}
+
 /* Sidebar Action Buttons */
 #sidebar-actions {
     display: flex;

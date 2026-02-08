@@ -132,13 +132,13 @@ describe('notifications', () => {
         const mainJsPath = path.join(__dirname, '../../electron/js/main.js');
         const mainContent = fs.readFileSync(mainJsPath, 'utf-8');
 
-        it('should use showToast for update notifications', () => {
+        it('should use sidebar banner for update notifications', () => {
             assert.ok(mainContent.includes('onUpdateAvailable'));
-            assert.ok(mainContent.includes('showToast'));
+            assert.ok(mainContent.includes('sidebar-update-banner'));
         });
 
-        it('should use action button for update', () => {
-            assert.ok(mainContent.includes("actionText: 'Update'"));
+        it('should have Update button in banner', () => {
+            assert.ok(mainContent.includes("'Update'"));
         });
 
         it('should call applyUpdate on action', () => {
