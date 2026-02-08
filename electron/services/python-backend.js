@@ -5,7 +5,7 @@
 
 const path = require('path');
 const fs = require('fs');
-const { spawn, execSync } = require('child_process');
+const { spawn, execFileSync } = require('child_process');
 
 /**
  * Get the Python executable path for the virtual environment.
@@ -49,13 +49,13 @@ function _needsInputGroupEscalation() {
     if (process.platform !== 'linux') return false;
     try {
         // Check if current session already has input group
-        const sessionGroups = execSync('id -Gn', { encoding: 'utf8' }).trim().split(/\s+/);
+        const sessionGroups = execFileSync('id', ['-Gn'], { encoding: 'utf8' }).trim().split(/\s+/);
         if (sessionGroups.includes('input')) {
             return false; // Session already has it
         }
 
         // Check if user is in input group (in /etc/group) but session doesn't have it
-        const userGroups = execSync(`groups ${process.env.USER || ''}`, { encoding: 'utf8' }).trim();
+        const userGroups = execFileSync('groups', [], { encoding: 'utf8' }).trim();
         if (userGroups.includes('input')) {
             // User is in group but session doesn't have it — sg will help
             return true;
@@ -647,11 +647,11 @@ function createPythonBackend(options = {}) {
  * These are needed for local LLM tool support.
  */
 function startDockerServices() {
-    const { execSync } = require('child_process');
+    const { execFileSync: dockerExec } = require('child_process');
 
     // Check if Docker is available first
     try {
-        execSync('docker --version', { encoding: 'utf-8', timeout: 3000, stdio: 'pipe' });
+        dockerExec('docker', ['--version'], { encoding: 'utf-8', timeout: 3000, stdio: 'pipe' });
     } catch {
         return; // Docker not installed - skip silently
     }
@@ -665,7 +665,7 @@ function startDockerServices() {
     for (const [containerName, description] of Object.entries(services)) {
         try {
             // Check if container exists
-            const allContainers = execSync('docker ps -a --format "{{.Names}}"', {
+            const allContainers = dockerExec('docker', ['ps', '-a', '--format', '{{.Names}}'], {
                 encoding: 'utf-8',
                 timeout: 5000,
                 stdio: 'pipe'
@@ -674,7 +674,7 @@ function startDockerServices() {
 
             if (exists) {
                 // Check if it's running
-                const runningContainers = execSync('docker ps --format "{{.Names}}"', {
+                const runningContainers = dockerExec('docker', ['ps', '--format', '{{.Names}}'], {
                     encoding: 'utf-8',
                     timeout: 5000
                 }).trim();
@@ -682,7 +682,7 @@ function startDockerServices() {
 
                 if (!running) {
                     console.log(`[Docker] Starting ${description}...`);
-                    execSync(`docker start ${containerName}`, { timeout: 10000 });
+                    dockerExec('docker', ['start', containerName], { timeout: 10000 });
                     console.log(`[Docker] ✓ ${description} started`);
                 }
             }

@@ -40,7 +40,7 @@ function cleanupOldScreenshots(imagesDir, keepCount = 3) {
  * Falls back to Electron desktopCapturer on other platforms
  */
 async function handleCaptureScreen(args) {
-    const { execSync } = require('child_process');
+    const { execFileSync } = require('child_process');
     const imagesDir = path.join(HOME_DATA_DIR, 'images');
 
     // Ensure images directory exists
@@ -53,10 +53,10 @@ async function handleCaptureScreen(args) {
 
     // Try cosmic-screenshot first (works on Pop!_OS Cosmic without permission dialog)
     try {
-        const result = execSync(
-            `cosmic-screenshot --interactive=false --modal=false --notify=false --save-dir="${imagesDir}"`,
-            { encoding: 'utf-8', timeout: 5000 }
-        ).trim();
+        const result = execFileSync('cosmic-screenshot', [
+            '--interactive=false', '--modal=false', '--notify=false',
+            `--save-dir=${imagesDir}`
+        ], { encoding: 'utf-8', timeout: 5000 }).trim();
 
         if (result && fs.existsSync(result)) {
             return {

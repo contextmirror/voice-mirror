@@ -141,12 +141,12 @@ function isClaudeAvailable() {
     if (_resolvedClaudePath) return true;
 
     try {
-        const { execSync } = require('child_process');
+        const { execFileSync } = require('child_process');
         if (process.platform === 'win32') {
             // Try claude.cmd first (npm global), then claude.exe, then claude
             for (const name of ['claude.cmd', 'claude.exe', 'claude']) {
                 try {
-                    const result = execSync(`where ${name}`, { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'ignore'] }).trim();
+                    const result = execFileSync('where', [name], { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'ignore'] }).trim();
                     // `where` can return multiple lines; take the first
                     const firstLine = result.split(/\r?\n/)[0].trim();
                     if (firstLine && fs.existsSync(firstLine)) {
@@ -159,7 +159,7 @@ function isClaudeAvailable() {
             _resolvedClaudePath = null;
             return false;
         } else {
-            const result = execSync('which claude', { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'ignore'] }).trim();
+            const result = execFileSync('which', ['claude'], { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'ignore'] }).trim();
             if (result) {
                 _resolvedClaudePath = result;
                 return true;

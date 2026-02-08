@@ -20,7 +20,7 @@ if (!fs.existsSync(VOICES_DIR)) {
  * Uses file-based IPC to communicate with Python voice agent
  */
 async function handleCloneVoice(args) {
-    const { execSync } = require('child_process');
+    const { execFileSync } = require('child_process');
 
     try {
         const audioUrl = args?.audio_url;
@@ -47,10 +47,11 @@ async function handleCloneVoice(args) {
                 // Try yt-dlp first (handles YouTube, SoundCloud, etc.)
                 if (audioUrl.includes('youtube.com') || audioUrl.includes('youtu.be') ||
                     audioUrl.includes('soundcloud.com') || audioUrl.includes('vimeo.com')) {
-                    execSync(
-                        `yt-dlp -x --audio-format wav -o "${downloadPath}.%(ext)s" "${audioUrl}"`,
-                        { encoding: 'utf-8', timeout: 60000 }
-                    );
+                    execFileSync('yt-dlp', [
+                        '-x', '--audio-format', 'wav',
+                        '-o', `${downloadPath}.%(ext)s`,
+                        audioUrl
+                    ], { encoding: 'utf-8', timeout: 60000 });
                     // Find the downloaded file
                     const files = fs.readdirSync(VOICES_DIR).filter(f => f.startsWith(`download_${downloadPath.split('_').pop()}`));
                     if (files.length > 0) {
@@ -60,7 +61,7 @@ async function handleCloneVoice(args) {
                 } else {
                     // Try curl first (fast, follows redirects), fall back to Node.js https
                     try {
-                        execSync(`curl -L -o "${downloadPath}" "${audioUrl}"`, { timeout: 30000 });
+                        execFileSync('curl', ['-L', '-o', downloadPath, audioUrl], { timeout: 30000 });
                     } catch {
                         const https = require('https');
                         const http = require('http');
@@ -102,10 +103,12 @@ async function handleCloneVoice(args) {
         console.error(`[clone_voice] Processing audio to: ${processedPath}`);
 
         try {
-            execSync(
-                `ffmpeg -y -i "${sourceAudioPath}" -ar 16000 -ac 1 -t 5 -af "silenceremove=1:0:-50dB,loudnorm" "${processedPath}"`,
-                { encoding: 'utf-8', timeout: 30000 }
-            );
+            execFileSync('ffmpeg', [
+                '-y', '-i', sourceAudioPath,
+                '-ar', '16000', '-ac', '1', '-t', '5',
+                '-af', 'silenceremove=1:0:-50dB,loudnorm',
+                processedPath
+            ], { encoding: 'utf-8', timeout: 30000 });
         } catch (ffmpegErr) {
             if (downloadedFile && fs.existsSync(downloadedFile)) {
                 fs.unlinkSync(downloadedFile);

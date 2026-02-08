@@ -127,6 +127,10 @@ async function getStatus() {
  * @param {string} url
  */
 async function navigateTab(url) {
+    // Block dangerous URL schemes — only allow http/https and about:blank
+    if (!/^https?:\/\//i.test(url) && url !== 'about:blank') {
+        return { ok: false, action: 'navigate', error: 'Only http/https URLs allowed' };
+    }
     await ensureBrowserAvailable();
     await cdp.navigate(url);
     const currentUrl = await cdp.getUrl();
