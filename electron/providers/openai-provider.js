@@ -361,19 +361,33 @@ class OpenAIProvider extends BaseProvider {
 
                     // If result includes an image and model supports vision, send as multimodal content
                     if (typeof resultMessage === 'object' && resultMessage.image_data_url && this.supportsVision()) {
-                        this.messages.push({
-                            role: 'user',
-                            content: [
-                                {
-                                    type: 'image_url',
-                                    image_url: { url: resultMessage.image_data_url }
-                                },
-                                {
-                                    type: 'text',
-                                    text: resultMessage.text + instruction
-                                }
-                            ]
-                        });
+                        // Strip data URL prefix to get raw base64
+                        const rawBase64 = resultMessage.image_data_url.replace(/^data:image\/\w+;base64,/, '');
+
+                        if (this.providerType === 'ollama') {
+                            // Ollama native format: images array with raw base64 on message
+                            this.messages.push({
+                                role: 'user',
+                                content: resultMessage.text + instruction,
+                                images: [rawBase64]
+                            });
+                            console.log(`[OpenAIProvider] Sending image via Ollama native format (${Math.round(rawBase64.length / 1024)}KB)`);
+                        } else {
+                            // OpenAI-compatible format: multimodal content array
+                            this.messages.push({
+                                role: 'user',
+                                content: [
+                                    {
+                                        type: 'image_url',
+                                        image_url: { url: resultMessage.image_data_url }
+                                    },
+                                    {
+                                        type: 'text',
+                                        text: resultMessage.text + instruction
+                                    }
+                                ]
+                            });
+                        }
                     } else {
                         const textResult = typeof resultMessage === 'object' ? resultMessage.text : resultMessage;
                         this.messages.push({
