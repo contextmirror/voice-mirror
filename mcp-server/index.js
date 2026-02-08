@@ -221,11 +221,12 @@ const TOOL_GROUPS = {
             },
             {
                 name: 'memory_forget',
-                description: 'Delete a memory by content or chunk ID.',
+                description: 'Delete a memory by content or chunk ID. Requires confirmed: true (ask user first).',
                 inputSchema: {
                     type: 'object',
                     properties: {
-                        content_or_id: { type: 'string', description: 'Memory content to match, or chunk_* ID' }
+                        content_or_id: { type: 'string', description: 'Memory content to match, or chunk_* ID' },
+                        confirmed: { type: 'boolean', description: 'Set to true after getting user confirmation' }
                     },
                     required: ['content_or_id']
                 }
@@ -357,7 +358,8 @@ const TOOL_GROUPS = {
                             required: ['kind']
                         },
                         targetId: { type: 'string', description: 'Target ID (uses active tab if omitted)' },
-                        profile: { type: 'string', description: 'Browser profile name' }
+                        profile: { type: 'string', description: 'Browser profile name' },
+                        confirmed: { type: 'boolean', description: 'Required for evaluate action — set to true after getting user confirmation' }
                     },
                     required: ['request']
                 }
@@ -466,8 +468,8 @@ const TOOL_GROUPS = {
             },
             {
                 name: 'n8n_delete_workflow',
-                description: 'Delete a workflow by ID. This action is permanent.',
-                inputSchema: { type: 'object', properties: { workflow_id: { type: 'string', description: 'Workflow ID' } }, required: ['workflow_id'] }
+                description: 'Delete a workflow by ID. This action is permanent. Requires confirmed: true (ask user first).',
+                inputSchema: { type: 'object', properties: { workflow_id: { type: 'string', description: 'Workflow ID' }, confirmed: { type: 'boolean', description: 'Set to true after getting user confirmation' } }, required: ['workflow_id'] }
             },
             {
                 name: 'n8n_validate_workflow',
@@ -496,8 +498,8 @@ const TOOL_GROUPS = {
             },
             {
                 name: 'n8n_delete_execution',
-                description: 'Delete an execution by ID.',
-                inputSchema: { type: 'object', properties: { execution_id: { type: 'string', description: 'Execution ID' } }, required: ['execution_id'] }
+                description: 'Delete an execution by ID. Requires confirmed: true (ask user first).',
+                inputSchema: { type: 'object', properties: { execution_id: { type: 'string', description: 'Execution ID' }, confirmed: { type: 'boolean', description: 'Set to true after getting user confirmation' } }, required: ['execution_id'] }
             },
             {
                 name: 'n8n_retry_execution',
@@ -516,8 +518,8 @@ const TOOL_GROUPS = {
             },
             {
                 name: 'n8n_delete_credential',
-                description: 'Delete a credential by ID.',
-                inputSchema: { type: 'object', properties: { credential_id: { type: 'string', description: 'Credential ID' } }, required: ['credential_id'] }
+                description: 'Delete a credential by ID. Requires confirmed: true (ask user first).',
+                inputSchema: { type: 'object', properties: { credential_id: { type: 'string', description: 'Credential ID' }, confirmed: { type: 'boolean', description: 'Set to true after getting user confirmation' } }, required: ['credential_id'] }
             },
             {
                 name: 'n8n_get_credential_schema',
@@ -536,8 +538,8 @@ const TOOL_GROUPS = {
             },
             {
                 name: 'n8n_delete_tag',
-                description: 'Delete a tag by ID.',
-                inputSchema: { type: 'object', properties: { tag_id: { type: 'string', description: 'Tag ID' } }, required: ['tag_id'] }
+                description: 'Delete a tag by ID. Requires confirmed: true (ask user first).',
+                inputSchema: { type: 'object', properties: { tag_id: { type: 'string', description: 'Tag ID' }, confirmed: { type: 'boolean', description: 'Set to true after getting user confirmation' } }, required: ['tag_id'] }
             },
             {
                 name: 'n8n_list_variables',
@@ -819,6 +821,27 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         groupLastUsed[calledGroup] = totalCallCount;
     }
 
+    // Destructive tools that require explicit confirmation.
+    // If called without confirmed:true, return a warning instead of executing.
+    const DESTRUCTIVE_TOOLS = new Set([
+        'memory_forget',
+        'n8n_delete_workflow',
+        'n8n_delete_credential',
+        'n8n_delete_tag',
+        'n8n_delete_execution',
+    ]);
+
+    if (DESTRUCTIVE_TOOLS.has(name) && !args?.confirmed) {
+        return {
+            content: [{
+                type: 'text',
+                text: `⚠️ CONFIRMATION REQUIRED: "${name}" is a destructive operation.\n` +
+                      `Ask the user for voice confirmation before proceeding.\n` +
+                      `To execute, call ${name} again with confirmed: true in the arguments.`
+            }]
+        };
+    }
+
     // Execute the tool, then check for idle groups
     const result = await (async () => {
     switch (name) {
@@ -883,6 +906,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         case 'browser_snapshot':
             return await handleBrowserControl('snapshot', args);
         case 'browser_act':
+            // Gate: evaluate action runs arbitrary JS — require confirmation
+            if (args?.request?.kind === 'evaluate' && !args?.confirmed) {
+                return {
+                    content: [{
+                        type: 'text',
+                        text: `⚠️ CONFIRMATION REQUIRED: browser_act with "evaluate" executes arbitrary JavaScript.\n` +
+                              `Ask the user for voice confirmation before proceeding.\n` +
+                              `To execute, call browser_act again with confirmed: true in the arguments.`
+                    }]
+                };
+            }
             return await handleBrowserControl('act', args);
         case 'browser_console':
             return await handleBrowserControl('console', args);

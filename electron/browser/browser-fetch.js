@@ -55,6 +55,23 @@ async function fetchUrl(args = {}) {
                     clone.querySelectorAll(sel).forEach(function(el) { el.remove(); });
                 });
 
+                // Remove hidden elements commonly used for prompt injection
+                clone.querySelectorAll('*').forEach(function(el) {
+                    var cs = window.getComputedStyle(el);
+                    if (cs.display === 'none' || cs.visibility === 'hidden' ||
+                        cs.opacity === '0' || cs.fontSize === '0px' ||
+                        (cs.position === 'absolute' && cs.clip === 'rect(0px, 0px, 0px, 0px)') ||
+                        (parseInt(cs.height) === 0 && cs.overflow === 'hidden') ||
+                        (parseInt(cs.width) === 0 && cs.overflow === 'hidden')) {
+                        el.remove();
+                    }
+                });
+                // Remove HTML comments (can contain injected instructions)
+                var walker = document.createTreeWalker(clone, NodeFilter.SHOW_COMMENT, null);
+                var comments = [];
+                while (walker.nextNode()) comments.push(walker.currentNode);
+                comments.forEach(function(c) { c.remove(); });
+
                 // Find main content
                 var mainSelectors = ['main','article','[role="main"]','.content','#content','.post','.article'];
                 var mainContent = null;
