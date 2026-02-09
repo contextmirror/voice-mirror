@@ -906,10 +906,11 @@ export function initSettings() {
 // Tool Profiles
 // ============================================
 
-const BUILTIN_PROFILES = ['voice-assistant', 'n8n-workflows', 'web-browser', 'full-toolbox', 'minimal'];
+const BUILTIN_PROFILES = ['voice-assistant', 'voice-assistant-lite', 'n8n-workflows', 'web-browser', 'full-toolbox', 'minimal'];
 
 const PROFILE_DISPLAY_NAMES = {
     'voice-assistant': 'Voice Assistant',
+    'voice-assistant-lite': 'Voice Assistant Lite',
     'n8n-workflows': 'n8n Workflows',
     'web-browser': 'Web Browser',
     'full-toolbox': 'Full Toolbox',
@@ -917,7 +918,8 @@ const PROFILE_DISPLAY_NAMES = {
 };
 
 const TOOL_GROUP_COUNTS = {
-    core: 4, meta: 3, screen: 1, memory: 5, 'voice-clone': 3, browser: 14, n8n: 22
+    core: 4, meta: 3, screen: 1, memory: 5, 'voice-clone': 3, browser: 14, n8n: 22,
+    'memory-facade': 1, 'n8n-facade': 1, 'browser-facade': 1
 };
 
 /**

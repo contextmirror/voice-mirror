@@ -104,7 +104,8 @@ const DEFAULT_CONFIG = {
             'n8n-workflows':   { groups: ['core', 'meta', 'n8n'] },
             'web-browser':     { groups: ['core', 'meta', 'screen', 'browser'] },
             'full-toolbox':    { groups: ['core', 'meta', 'screen', 'memory', 'voice-clone', 'browser', 'n8n'] },
-            'minimal':         { groups: ['core', 'meta'] }
+            'minimal':         { groups: ['core', 'meta'] },
+            'voice-assistant-lite': { groups: ['core', 'meta', 'screen', 'memory-facade', 'browser-facade'] }
         },
         endpoints: {
             ollama: 'http://127.0.0.1:11434',

@@ -9,7 +9,7 @@
     "build": "electron-builder",
     "setup": "node cli/index.mjs setup",
     "doctor": "node cli/index.mjs doctor",
-    "test": "node --test test/unit/*.test.js mcp-server/lib/memory/*.test.js"
+    "test": "node --test test/unit/*.test.js mcp-server/lib/memory/*.test.js mcp-server/handlers/*.test.js"
   },
   "author": "",
   "license": "MIT",

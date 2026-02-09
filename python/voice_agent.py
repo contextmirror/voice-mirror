@@ -25,6 +25,7 @@ from pathlib import Path
 import numpy as np
 import sounddevice as sd
 from audio.state import AudioState
+from audio.vad import SileroVAD
 from audio.wake_word import WakeWordProcessor
 from notifications import NotificationWatcher
 
@@ -112,6 +113,7 @@ class VoiceMirror:
             return "user"
         self.inbox = InboxManager(INBOX_PATH, lambda: self._ai_provider, sender_name_getter=_get_sender_name)
         self.audio_state = AudioState()  # Shared audio state
+        self.vad = SileroVAD()  # Neural VAD (loaded in load_models)
         self.stt_adapter = None  # STT adapter (parakeet, whisper, etc.)
 
         self._activation_mode = ActivationMode.WAKE_WORD  # Will be set in load_models
@@ -197,6 +199,12 @@ class VoiceMirror:
             print(f"Skipping wake word model (mode: {self._activation_mode})")
 
         script_dir = Path(__file__).parent
+
+        # Load Silero VAD model
+        if self.vad.load(script_dir / "models"):
+            print("Silero VAD loaded")
+        else:
+            print("Silero VAD not available, using energy fallback")
 
         # Load STT adapter from settings
         settings = load_voice_settings()
@@ -569,13 +577,13 @@ class VoiceMirror:
             # Check if in call mode (setting or file-based)
             elif self._activation_mode == ActivationMode.CALL_MODE or self.is_call_active():
                 # In call mode - detect speech start without wake word
-                energy = np.abs(audio).mean()
-                # Debug: show energy level in call mode
-                if energy > 0.005:
-                    print(f"📞 Call mode energy: {energy:.4f}", end="\r")
-                if energy > 0.008:  # Very sensitive threshold for speech detection
+                is_speech, prob = self.vad.process(audio, 'call')
+                # Debug: show VAD probability in call mode
+                if prob > 0.05:
+                    print(f"📞 Call mode VAD: {prob:.3f} energy={energy:.4f}", end="\r")
+                if is_speech:
                     self.audio_state.start_recording('call')
-                    print(f"\n🔴 Recording (call)... energy={energy:.4f} (speak now)")
+                    print(f"\n🔴 Recording (call)... VAD={prob:.3f} (speak now)")
             # Check if in conversation mode (no wake word needed, with timeout)
             elif self.audio_state.in_conversation:
                 # Check if conversation window expired
@@ -588,11 +596,11 @@ class VoiceMirror:
                         print(f"\n{self.get_listening_status()}")
                 else:
                     # In conversation mode - detect speech start without wake word
-                    energy = np.abs(audio).mean()
-                    if energy > 0.03:  # Speech threshold (slightly higher to avoid noise)
+                    is_speech, prob = self.vad.process(audio, 'follow_up')
+                    if is_speech:
                         self.audio_state.start_recording('follow_up')
                         self.audio_state.in_conversation = False  # Exit conversation mode once recording starts
-                        print("🔴 Recording follow-up... (speak now)")
+                        print(f"🔴 Recording follow-up... VAD={prob:.3f} (speak now)")
             elif self._activation_mode == ActivationMode.WAKE_WORD and self.wake_word.is_loaded:
                 # Wake word mode - check for wake word
                 if self.process_wake_word(audio):
@@ -604,9 +612,9 @@ class VoiceMirror:
             # Record audio (thread-safe via AudioState)
             self.audio_state.append_audio(audio)
 
-            # Simple VAD: check if there's significant audio
-            energy = np.abs(audio).mean()
-            if energy > 0.01:  # Lowered threshold for VAD
+            # Neural VAD: check if there's speech activity
+            is_speech, prob = self.vad.process(audio, 'recording')
+            if is_speech:
                 self.audio_state.last_speech_time = time.time()
 
     async def process_recording(self):
@@ -797,6 +805,7 @@ class VoiceMirror:
                     if self.audio_state.ptt_process_pending:
                         self.audio_state.ptt_process_pending = False
                         await self.process_recording()
+                        self.vad.reset()
                         self.audio_state.is_processing = False
                         continue
 
@@ -808,6 +817,7 @@ class VoiceMirror:
                             self.audio_state.is_recording = False
                             self.audio_state.is_processing = True
                             await self.process_recording()
+                            self.vad.reset()
                             self.audio_state.is_processing = False
                             # Only show status for conversational modes where context changes
                             if self.audio_state.in_conversation:

@@ -29,6 +29,7 @@ const { handleMemorySearch, handleMemoryGet, handleMemoryRemember, handleMemoryF
 const { handleCloneVoice, handleClearVoiceClone, handleListVoiceClones } = require('./handlers/voice-clone');
 const { handleBrowserControl, handleBrowserSearch, handleBrowserFetch } = require('./handlers/browser');
 const n8n = require('./handlers/n8n');
+const { handleMemoryManage, handleN8nManage, handleBrowserManage } = require('./handlers/facades');
 
 // Ensure directory exists
 if (!fs.existsSync(HOME_DATA_DIR)) {
@@ -571,6 +572,85 @@ const TOOL_GROUPS = {
                 }
             }
         ]
+    },
+    'memory-facade': {
+        description: 'Memory system (single tool: memory_manage)',
+        keywords: ['remember', 'memory', 'recall', 'forget', 'what did i say', 'previously', 'last time', 'you told me', 'i mentioned'],
+        tools: [
+            {
+                name: 'memory_manage',
+                description: 'Manage persistent memories. Actions: search (query memories), remember (store a memory), forget (delete — requires confirmed:true), stats (system info), flush (save context before compaction). Pass action as first parameter, plus action-specific args.',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        action: { type: 'string', enum: ['search', 'remember', 'forget', 'stats', 'flush'], description: 'Action to perform' },
+                        query: { type: 'string', description: 'Search query (for search)' },
+                        content: { type: 'string', description: 'What to remember (for remember)' },
+                        tier: { type: 'string', enum: ['core', 'stable', 'notes'], description: 'Memory tier (for remember)' },
+                        content_or_id: { type: 'string', description: 'Memory to forget (for forget)' },
+                        confirmed: { type: 'boolean', description: 'Confirm destructive action (for forget)' },
+                        max_results: { type: 'number', description: 'Max results (for search)' },
+                        topics: { type: 'array', items: { type: 'string' }, description: 'Topics (for flush)' },
+                        decisions: { type: 'array', items: { type: 'string' }, description: 'Decisions (for flush)' },
+                        action_items: { type: 'array', items: { type: 'string' }, description: 'Action items (for flush)' },
+                        summary: { type: 'string', description: 'Session summary (for flush)' }
+                    },
+                    required: ['action']
+                }
+            }
+        ]
+    },
+    'n8n-facade': {
+        description: 'n8n workflow automation (single tool: n8n_manage)',
+        keywords: ['n8n', 'workflow', 'automation', 'trigger', 'webhook'],
+        tools: [
+            {
+                name: 'n8n_manage',
+                description: 'Manage n8n workflows. Actions: list (all workflows), get (workflow details), create (new workflow), trigger (run via webhook), status (recent executions), delete (requires confirmed:true).',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        action: { type: 'string', enum: ['list', 'get', 'create', 'trigger', 'status', 'delete'], description: 'Action to perform' },
+                        workflow_id: { type: 'string', description: 'Workflow ID (for get, trigger, status, delete)' },
+                        name: { type: 'string', description: 'Workflow name (for create)' },
+                        nodes: { type: 'array', description: 'Node configs (for create)', items: { type: 'object' } },
+                        connections: { type: 'object', description: 'Node connections (for create)' },
+                        data: { type: 'object', description: 'Data to send (for trigger)' },
+                        confirmed: { type: 'boolean', description: 'Confirm destructive action (for delete)' },
+                        active_only: { type: 'boolean', description: 'Only active workflows (for list)' }
+                    },
+                    required: ['action']
+                }
+            }
+        ]
+    },
+    'browser-facade': {
+        description: 'Browser control and web research (single tool: browser_manage)',
+        keywords: ['search', 'browse', 'website', 'web', 'google', 'open page', 'fetch url', 'look up', 'find online', 'what is', 'who is', 'latest news'],
+        dependencies: ['screen'],
+        tools: [
+            {
+                name: 'browser_manage',
+                description: 'Control Chrome browser and do web research. Actions: search (Google search), open (new tab), fetch (extract page text), snapshot (accessibility tree), screenshot (capture tab), click (click element by ref), type (type text into element), tabs (list tabs), navigate (go to URL), start (launch browser), stop (close browser).',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        action: { type: 'string', enum: ['search', 'open', 'fetch', 'snapshot', 'screenshot', 'click', 'type', 'tabs', 'navigate', 'start', 'stop'], description: 'Action to perform' },
+                        query: { type: 'string', description: 'Search query (for search)' },
+                        url: { type: 'string', description: 'URL (for open, fetch, navigate)' },
+                        ref: { type: 'string', description: 'Element ref from snapshot (for click, type)' },
+                        text: { type: 'string', description: 'Text to type (for type)' },
+                        request: { type: 'object', description: 'Full action request (for advanced click/type)' },
+                        targetId: { type: 'string', description: 'Tab target ID' },
+                        profile: { type: 'string', description: 'Browser profile name' },
+                        max_results: { type: 'number', description: 'Max results (for search)' },
+                        timeout: { type: 'number', description: 'Timeout in ms (for fetch)' },
+                        max_length: { type: 'number', description: 'Max content length (for fetch)' }
+                    },
+                    required: ['action']
+                }
+            }
+        ]
     }
 };
 
@@ -976,6 +1056,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         // Diagnostic tools
         case 'pipeline_trace':
             return await handlePipelineTrace(args);
+        // Facade tools (voice mode)
+        case 'memory_manage':
+            return await handleMemoryManage(args);
+        case 'n8n_manage':
+            return await handleN8nManage(args);
+        case 'browser_manage':
+            return await handleBrowserManage(args);
         default:
             return {
                 content: [{ type: 'text', text: `Unknown tool: ${name}` }],

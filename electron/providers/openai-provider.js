@@ -12,6 +12,7 @@
 
 const { BaseProvider } = require('./base-provider');
 const { ToolExecutor } = require('../tools');
+const { toOpenAITools, accumulateToolCalls, parseCompletedToolCalls } = require('../tools/openai-schema');
 
 // Limit conversation history to prevent context overflow in local LLMs
 const MAX_HISTORY_MESSAGES = 20;
@@ -84,12 +85,20 @@ class OpenAIProvider extends BaseProvider {
     }
 
     /**
-     * Check if this provider supports tools via JSON output.
-     * Local providers (Ollama, LM Studio, Jan) get tool support.
+     * Check if this provider supports tools (any path: native or text-parsing).
+     * All providers get tool support when enabled.
      */
     supportsTools() {
-        const localProviders = ['ollama', 'lmstudio', 'jan'];
-        return this.toolsEnabled && localProviders.includes(this.providerType);
+        return this.toolsEnabled;
+    }
+
+    /**
+     * Check if this provider supports native OpenAI function calling.
+     * Cloud providers use native tool calling; local providers use text-parsing fallback.
+     */
+    supportsNativeTools() {
+        const nativeProviders = ['openai', 'gemini', 'groq', 'grok', 'mistral', 'openrouter', 'deepseek'];
+        return nativeProviders.includes(this.providerType);
     }
 
     /**
@@ -116,14 +125,23 @@ class OpenAIProvider extends BaseProvider {
         this.currentToolIteration = 0;
 
         // Add system prompt
-        // For local providers with tools enabled, use the tool system prompt
+        // Native-tools providers get a lean prompt (tools are sent via API);
+        // text-parsing providers get the full tool system prompt with JSON examples.
         let systemPrompt = this.systemPrompt;
-        if (this.supportsTools() && !systemPrompt) {
-            systemPrompt = this.toolExecutor.getSystemPrompt({
-                location: options.location,
-                customInstructions: options.customInstructions
-            });
-            console.log(`[OpenAIProvider] Using tool-enabled system prompt`);
+        if (!systemPrompt && this.supportsTools()) {
+            if (this.supportsNativeTools()) {
+                systemPrompt = this.toolExecutor.getBasicPrompt({
+                    location: options.location,
+                    customInstructions: options.customInstructions
+                });
+                console.log(`[OpenAIProvider] Using basic prompt (native tool calling)`);
+            } else {
+                systemPrompt = this.toolExecutor.getSystemPrompt({
+                    location: options.location,
+                    customInstructions: options.customInstructions
+                });
+                console.log(`[OpenAIProvider] Using tool-enabled system prompt (text-parsing)`);
+            }
         }
 
         if (systemPrompt) {
@@ -198,6 +216,13 @@ class OpenAIProvider extends BaseProvider {
                 stream: true  // Use streaming for real-time output
             };
 
+            // Add native tool definitions for cloud providers
+            const useNativeTools = this.supportsTools() && this.supportsNativeTools();
+            if (useNativeTools) {
+                body.tools = toOpenAITools();
+                body.tool_choice = 'auto';
+            }
+
             // Diagnostic trace: capture what the model receives
             try {
                 const dc = require('../services/diagnostic-collector');
@@ -245,6 +270,8 @@ class OpenAIProvider extends BaseProvider {
 
             // Process streaming response
             let fullResponse = '';
+            let accumulatedToolCalls = [];
+            let finishReason = null;
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
 
@@ -262,10 +289,21 @@ class OpenAIProvider extends BaseProvider {
 
                         try {
                             const parsed = JSON.parse(data);
-                            const content = parsed.choices?.[0]?.delta?.content;
+                            const choice = parsed.choices?.[0];
+                            const content = choice?.delta?.content;
                             if (content) {
                                 fullResponse += content;
                                 this.emitOutput('stdout', content);
+                            }
+
+                            // Accumulate native tool calls from streaming deltas
+                            if (choice?.delta?.tool_calls) {
+                                accumulateToolCalls(accumulatedToolCalls, choice.delta.tool_calls);
+                            }
+
+                            // Track finish reason
+                            if (choice?.finish_reason) {
+                                finishReason = choice.finish_reason;
                             }
                         } catch {
                             // Ignore parse errors for incomplete chunks
@@ -286,6 +324,96 @@ class OpenAIProvider extends BaseProvider {
                 }
             } catch { /* diagnostic not available */ }
 
+            // --- Native tool calling path (cloud providers) ---
+            const hasNativeToolCalls = useNativeTools && accumulatedToolCalls.length > 0 &&
+                (finishReason === 'tool_calls' || finishReason === 'stop');
+
+            if (hasNativeToolCalls) {
+                // Add assistant message with tool_calls to history (required by API)
+                const assistantMsg = { role: 'assistant', content: fullResponse || null, tool_calls: accumulatedToolCalls };
+                this.messages.push(assistantMsg);
+
+                // Parse accumulated tool calls
+                const parsedCalls = parseCompletedToolCalls(accumulatedToolCalls);
+
+                // Check iteration limit
+                if (this.currentToolIteration >= this.maxToolIterations) {
+                    console.log(`[OpenAIProvider] Max tool iterations (${this.maxToolIterations}) reached`);
+                    this.emitOutput('stdout', '\n[Max tool iterations reached]\n');
+                    this.emitOutput('context-usage', JSON.stringify(this.estimateTokenUsage()));
+                    return;
+                }
+
+                // Execute each tool call and add role:"tool" messages
+                for (const tc of parsedCalls) {
+                    this.currentToolIteration++;
+
+                    // Notify UI
+                    if (this.onToolCall) {
+                        this.onToolCall({ tool: tc.name, args: tc.args, iteration: this.currentToolIteration });
+                    }
+
+                    console.log(`[OpenAIProvider] Native tool call: ${tc.name}`);
+                    this.emitOutput('stdout', `\n[Executing tool: ${tc.name}...]\n`);
+
+                    // Diagnostic trace
+                    try {
+                        const dc = require('../services/diagnostic-collector');
+                        if (dc.hasActiveTrace()) {
+                            dc.addActiveStage('tool_call_detected', {
+                                tool: tc.name, args: tc.args, native: true,
+                                raw_response_length: fullResponse.length,
+                                raw_response_preview: fullResponse.substring(0, 300)
+                            });
+                        }
+                    } catch { /* diagnostic not available */ }
+
+                    // Execute
+                    const result = await this.toolExecutor.execute(tc.name, tc.args);
+
+                    // Notify UI of result
+                    if (this.onToolResult) {
+                        this.onToolResult({ tool: tc.name, success: result.success, result: result.result || result.error });
+                    }
+
+                    // Format result text
+                    const resultMessage = this.toolExecutor.formatToolResult(tc.name, result);
+                    const resultText = typeof resultMessage === 'object' ? resultMessage.text : resultMessage;
+
+                    // Add role:"tool" message with tool_call_id (required by API)
+                    this.messages.push({
+                        role: 'tool',
+                        tool_call_id: tc.id,
+                        content: resultText
+                    });
+
+                    // Diagnostic trace
+                    try {
+                        const dc = require('../services/diagnostic-collector');
+                        if (dc.hasActiveTrace()) {
+                            const ctxChars = (c) => typeof c === 'string' ? c.length : Array.isArray(c) ? c.reduce((s, p) => s + (p.text || '').length, 0) : 0;
+                            dc.addActiveStage('tool_result_injected', {
+                                tool: tc.name, success: result.success, native: true,
+                                result_message_length: resultText.length,
+                                result_message_preview: resultText.substring(0, 500),
+                                conversation_size: this.messages.length,
+                                total_context_chars: this.messages.reduce((s, m) => s + ctxChars(m.content), 0)
+                            });
+                        }
+                    } catch { /* diagnostic not available */ }
+
+                    console.log(`[OpenAIProvider] Tool result: ${result.success ? 'success' : 'failed'}`);
+                    this.emitOutput('stdout', `[Tool ${result.success ? 'succeeded' : 'failed'}]\n\n`);
+                }
+
+                // Emit context usage before follow-up
+                this.emitOutput('context-usage', JSON.stringify(this.estimateTokenUsage()));
+
+                // Get follow-up response from model with tool results
+                await this.sendInput('', true);
+                return;
+            }
+
             // Add assistant response to history
             if (fullResponse) {
                 this.messages.push({
@@ -297,8 +425,8 @@ class OpenAIProvider extends BaseProvider {
             // Emit context usage estimate
             this.emitOutput('context-usage', JSON.stringify(this.estimateTokenUsage()));
 
-            // Check for tool call in response (only for local providers with tools enabled)
-            if (this.supportsTools() && fullResponse) {
+            // --- Text-parsing tool path (local providers fallback) ---
+            if (this.supportsTools() && !this.supportsNativeTools() && fullResponse) {
                 const toolCall = this.toolExecutor.parseToolCall(fullResponse);
 
                 if (toolCall && toolCall.isToolCall) {
@@ -453,10 +581,14 @@ class OpenAIProvider extends BaseProvider {
         this.messages = [];
         this.currentToolIteration = 0;
 
-        // Re-add system prompt
+        // Re-add system prompt (use correct type for provider)
         let systemPrompt = this.systemPrompt;
-        if (this.supportsTools() && !systemPrompt) {
-            systemPrompt = this.toolExecutor.getSystemPrompt();
+        if (!systemPrompt && this.supportsTools()) {
+            if (this.supportsNativeTools()) {
+                systemPrompt = this.toolExecutor.getBasicPrompt();
+            } else {
+                systemPrompt = this.toolExecutor.getSystemPrompt();
+            }
         }
 
         if (systemPrompt) {
@@ -470,6 +602,9 @@ class OpenAIProvider extends BaseProvider {
     /**
      * Limit message history to prevent context overflow.
      * Keeps system message + last N messages.
+     * When trimming, ensures assistant messages with tool_calls stay paired
+     * with their corresponding role:"tool" messages (orphaned tool messages
+     * cause API errors).
      * @private
      */
     _limitMessageHistory() {
@@ -477,7 +612,13 @@ class OpenAIProvider extends BaseProvider {
 
         const system = this.messages.filter(m => m.role === 'system');
         const nonSystem = this.messages.filter(m => m.role !== 'system');
-        const recent = nonSystem.slice(-MAX_HISTORY_MESSAGES);
+        let recent = nonSystem.slice(-MAX_HISTORY_MESSAGES);
+
+        // Ensure we don't start with an orphaned role:"tool" message
+        // (tool messages must follow their assistant+tool_calls message)
+        while (recent.length > 0 && recent[0].role === 'tool') {
+            recent = recent.slice(1);
+        }
 
         this.messages = [...system, ...recent];
         console.log(`[OpenAIProvider] Trimmed history to ${this.messages.length} messages`);
@@ -526,16 +667,24 @@ class OpenAIProvider extends BaseProvider {
      */
     estimateTokenUsage() {
         const totalChars = this.messages.reduce((sum, m) => {
-            if (typeof m.content === 'string') return sum + m.content.length;
-            // Multimodal content array — count text parts, estimate image tokens
-            if (Array.isArray(m.content)) {
-                return sum + m.content.reduce((s, part) => {
+            let chars = 0;
+            if (typeof m.content === 'string') {
+                chars += m.content.length;
+            } else if (Array.isArray(m.content)) {
+                // Multimodal content array — count text parts, estimate image tokens
+                chars += m.content.reduce((s, part) => {
                     if (part.type === 'text') return s + (part.text || '').length;
                     if (part.type === 'image_url') return s + 1000; // ~250 tokens for an image
                     return s;
                 }, 0);
             }
-            return sum;
+            // Count tool_calls on assistant messages (function names + arguments)
+            if (m.tool_calls && Array.isArray(m.tool_calls)) {
+                chars += m.tool_calls.reduce((s, tc) => {
+                    return s + (tc.function?.name || '').length + (tc.function?.arguments || '').length;
+                }, 0);
+            }
+            return sum + chars;
         }, 0);
         return {
             used: Math.ceil(totalChars / 4),
