@@ -14,8 +14,10 @@ describe('perf-monitor', () => {
         tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'perf-test-'));
     });
 
-    afterEach(() => {
-        if (monitor) monitor.stop();
+    afterEach(async () => {
+        if (monitor) await monitor.stop();
+        // Allow file handles to close before cleanup (prevents ENOTEMPTY on macOS)
+        await new Promise(r => setTimeout(r, 100));
         fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
     });
 
