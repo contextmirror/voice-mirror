@@ -11,6 +11,12 @@
 
 $ErrorActionPreference = "Continue"
 
+# Allow npm.ps1 and other package-manager scripts to run in this session.
+# Without this, a default Windows "Restricted" execution policy blocks npm.ps1
+# and the installer silently fails to install dependencies.
+# -Scope Process only affects this process, not the system policy.
+try { Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force } catch {}
+
 # ─── Config ──────────────────────────────────────────────────────────
 $InstallMethod = if ($env:VM_INSTALL_METHOD) { $env:VM_INSTALL_METHOD } else { "git" }
 $Branch = if ($env:VM_BRANCH) { $env:VM_BRANCH } else { "main" }
@@ -472,23 +478,35 @@ function Install-Deps {
     Write-Step "Installing dependencies..."
 
     Push-Location $InstallDir
-    $npmOut = npm install 2>&1
-    if ($LASTEXITCODE -ne 0) { Write-Fail "npm install failed"; Pop-Location; exit 1 }
+    try {
+        $npmOut = npm install 2>&1
+        if ($LASTEXITCODE -ne 0) { throw "npm exited with code $LASTEXITCODE" }
+    } catch {
+        Write-Fail "npm install failed: $_"
+        Write-Warn "If scripts are disabled, run:  Set-ExecutionPolicy -Scope CurrentUser RemoteSigned"
+        Pop-Location; exit 1
+    }
+    # Verify node_modules actually exists (catches silent failures)
+    if (-not (Test-Path (Join-Path $InstallDir "node_modules"))) {
+        Write-Fail "npm install produced no node_modules — dependencies are missing"
+        Write-Warn "If scripts are disabled, run:  Set-ExecutionPolicy -Scope CurrentUser RemoteSigned"
+        Pop-Location; exit 1
+    }
     Write-Ok "npm dependencies installed"
 
     $mcpDir = Join-Path $InstallDir "mcp-server"
     if (Test-Path $mcpDir) {
         Push-Location $mcpDir
-        $npmOut = npm install 2>&1
-        if ($LASTEXITCODE -ne 0) {
-            Pop-Location
-            Write-Warn "MCP server native modules failed"
+        try {
+            $npmOut = npm install 2>&1
+            if ($LASTEXITCODE -ne 0) { throw "npm exited with code $LASTEXITCODE" }
+            Write-Ok "MCP server dependencies installed"
+        } catch {
+            Write-Warn "MCP server native modules failed: $_"
             Write-Info "Try: cd `"$mcpDir`" && npm install"
             Write-Info "If it persists, check Node.js and build tools compatibility"
-        } else {
-            Pop-Location
-            Write-Ok "MCP server dependencies installed"
         }
+        Pop-Location
     }
     Pop-Location
 }
@@ -498,7 +516,7 @@ function Link-CLI {
     Write-Step "Setting up CLI..."
 
     Push-Location $InstallDir
-    $linkOut = npm link 2>&1
+    try { $linkOut = npm link 2>&1 } catch { $linkOut = $_ }
     Pop-Location
 
     if (Test-Command "voice-mirror") {
@@ -509,10 +527,10 @@ function Link-CLI {
     # npm link may need admin — try setting user-level npm prefix instead
     Write-Info "Setting up user-level npm prefix..."
     $npmPrefix = Join-Path $env:APPDATA "npm"
-    $npmOut = npm config set prefix $npmPrefix 2>&1
+    try { $npmOut = npm config set prefix $npmPrefix 2>&1 } catch {}
 
     Push-Location $InstallDir
-    $linkOut = npm link 2>&1
+    try { $linkOut = npm link 2>&1 } catch { $linkOut = $_ }
     Pop-Location
 
     # Add npm prefix to user PATH if not already there
@@ -574,7 +592,8 @@ function Write-Done {
 
 # ─── Main ────────────────────────────────────────────────────────────
 Write-Banner
-Write-Info "Platform: Windows/$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)"
+try { $arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture } catch { $arch = $env:PROCESSOR_ARCHITECTURE }
+Write-Info "Platform: Windows/$arch"
 
 Ensure-Git
 Ensure-Node
