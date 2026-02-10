@@ -130,6 +130,11 @@ const validators = {
           errors.push('behavior.pttKey must be a string (max 50 chars)');
         }
       }
+      if (s.behavior.dictationKey !== undefined) {
+        if (typeof s.behavior.dictationKey !== 'string' || s.behavior.dictationKey.length > 50) {
+          errors.push('behavior.dictationKey must be a string (max 50 chars)');
+        }
+      }
     }
 
     if (s.appearance) {

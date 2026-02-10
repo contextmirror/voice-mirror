@@ -218,6 +218,7 @@ function registerIpcHandlers(ctx) {
         const oldStatsHotkey = appConfig?.behavior?.statsHotkey;
         const oldActivationMode = appConfig?.behavior?.activationMode;
         const oldPttKey = appConfig?.behavior?.pttKey;
+        const oldDictationKey = appConfig?.behavior?.dictationKey;
         const oldOutputName = appConfig?.overlay?.outputName || null;
         const oldVoice = appConfig?.voice;
         const oldWakeWord = appConfig?.wakeWord;
@@ -292,6 +293,8 @@ function registerIpcHandlers(ctx) {
             }
         }
 
+        // Dictation key is handled by Python's GlobalHotkeyListener (forwarded via config_update below)
+
         // Forward overlay output change to wayland orb (only if actually changed)
         const waylandOrb = ctx.getWaylandOrb();
         if (updates.overlay?.outputName !== undefined && waylandOrb?.isReady()) {
@@ -305,8 +308,9 @@ function registerIpcHandlers(ctx) {
         // Notify Python backend of config changes (only if voice-related settings changed)
         const activationModeChanged = updates.behavior?.activationMode !== undefined && updates.behavior.activationMode !== oldActivationMode;
         const pttKeyChanged = updates.behavior?.pttKey !== undefined && updates.behavior.pttKey !== oldPttKey;
+        const dictationKeyChanged = updates.behavior?.dictationKey !== undefined && updates.behavior.dictationKey !== oldDictationKey;
         const userNameChanged = updates.user?.name !== undefined;
-        const voiceSettingsChanged = activationModeChanged || pttKeyChanged || userNameChanged ||
+        const voiceSettingsChanged = activationModeChanged || pttKeyChanged || dictationKeyChanged || userNameChanged ||
             (updates.wakeWord && JSON.stringify(updates.wakeWord) !== JSON.stringify(oldWakeWord)) ||
             (updates.voice && JSON.stringify(updates.voice) !== JSON.stringify(oldVoice));
         if (voiceSettingsChanged && ctx.getPythonBackend()?.isRunning()) {
@@ -316,6 +320,7 @@ function registerIpcHandlers(ctx) {
                 config: {
                     activationMode: currentConfig.behavior?.activationMode,
                     pttKey: currentConfig.behavior?.pttKey,
+                    dictationKey: currentConfig.behavior?.dictationKey,
                     wakeWord: currentConfig.wakeWord,
                     voice: currentConfig.voice,
                     userName: currentConfig.user?.name || null

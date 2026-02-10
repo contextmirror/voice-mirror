@@ -181,6 +181,13 @@ function createPythonBackend(options = {}) {
                 type: 'mode_change',
                 mode: data.mode
             }),
+            'dictation_start': () => ({ type: 'dictation_start' }),
+            'dictation_stop': () => ({ type: 'dictation_stop' }),
+            'dictation_result': () => ({
+                type: 'dictation_result',
+                text: data.text,
+                success: data.success
+            }),
             'error': () => {
                 console.error('[Python] Error:', data.message);
                 return {

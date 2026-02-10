@@ -32,6 +32,11 @@ class AudioState:
     ptt_last_check: float = 0.0
     ptt_process_pending: bool = False
 
+    # Dictation state
+    dictation_active: bool = False
+    dictation_last_check: float = 0.0
+    dictation_process_pending: bool = False
+
     # Conversation mode
     in_conversation: bool = False
     conversation_end_time: float = 0.0

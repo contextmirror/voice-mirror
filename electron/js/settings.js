@@ -119,6 +119,9 @@ export async function loadSettingsUI() {
         const statsKeyRaw = state.currentConfig.behavior?.statsHotkey || 'CommandOrControl+Shift+M';
         document.getElementById('keybind-stats').textContent = formatKeybind(statsKeyRaw);
         document.getElementById('keybind-stats').dataset.rawKey = statsKeyRaw;
+        const dictationKeyRaw = state.currentConfig.behavior?.dictationKey || 'MouseButton5';
+        document.getElementById('keybind-dictation').textContent = formatKeybind(dictationKeyRaw);
+        document.getElementById('keybind-dictation').dataset.rawKey = dictationKeyRaw;
 
         // Wake word settings
         document.getElementById('wake-word-phrase').value = state.currentConfig.wakeWord?.phrase || 'hey_claude';
@@ -455,6 +458,10 @@ export async function saveSettings() {
                 document.getElementById('keybind-ptt').textContent.replace(/ \+ /g, '+'),
             statsHotkey: (document.getElementById('keybind-stats').dataset.rawKey ||
                 document.getElementById('keybind-stats').textContent)
+                .replace(/ \+ /g, '+')
+                .replace('Ctrl', 'CommandOrControl'),
+            dictationKey: (document.getElementById('keybind-dictation').dataset.rawKey ||
+                document.getElementById('keybind-dictation').textContent)
                 .replace(/ \+ /g, '+')
                 .replace('Ctrl', 'CommandOrControl'),
             startMinimized: document.getElementById('start-minimized').checked,
@@ -869,7 +876,8 @@ export function initSettings() {
         if (!state.recordingKeybind) return;
 
         const isPttKeybind = state.recordingKeybind.id === 'keybind-ptt';
-        if (!isPttKeybind) return;
+        const isDictationKeybind = state.recordingKeybind.id === 'keybind-dictation';
+        if (!isPttKeybind && !isDictationKeybind) return;
 
         // Skip left (0) and right (2) click — those are for UI interaction
         if (e.button === 0 || e.button === 2) return;

@@ -1,8 +1,8 @@
-"""Global push-to-talk hotkey listener.
+"""Global hotkey listener for push-to-talk and dictation.
 
 Captures keyboard and mouse events system-wide (even when another
-window has focus), matching Discord's PTT behavior. Writes to
-ptt_trigger.json so voice_agent.py can pick it up.
+window has focus). Supports multiple key bindings with a single set
+of OS-level hooks for reliable event suppression on Windows.
 
 Platform support:
   - Linux (Wayland): evdev (needs input group)
@@ -86,60 +86,86 @@ _EVDEV_MOUSE_MAP = {
 
 
 class GlobalHotkeyListener:
-    """Listens for a configurable PTT key globally across all applications."""
+    """Listens for configurable hotkeys globally across all applications.
 
-    def __init__(self, data_dir: str | None = None):
+    Supports multiple key bindings (e.g. PTT + dictation), each writing
+    to a separate trigger file. Uses a SINGLE set of OS-level hooks so
+    event suppression works reliably on Windows.
+    """
+
+    def __init__(self, data_dir: str | None = None, trigger_filename: str = "ptt_trigger.json"):
         from shared.paths import get_data_dir
         self._data_dir = Path(data_dir) if data_dir else get_data_dir()
-        self._ptt_path = self._data_dir / "ptt_trigger.json"
+        self._default_trigger = trigger_filename
         self._data_dir.mkdir(parents=True, exist_ok=True)
 
-        self._active = False     # Currently held down
         self._running = False
         self._lock = threading.Lock()
         self._backend = None     # 'evdev' or 'pynput'
 
-        # evdev state
-        self._evdev_thread = None
-        self._evdev_target_code = None
-        self._evdev_is_mouse = False
+        # Bindings: list of dicts with keys:
+        #   key_name, trigger_path, key_type, target_key, active,
+        #   evdev_code, evdev_is_mouse
+        self._bindings = []
 
-        # pynput state
-        self._target_key = None
-        self._key_type = None
+        # pynput state (shared across all bindings)
         self._kb_listener = None
         self._mouse_listener = None
 
+        # evdev state
+        self._evdev_thread = None
+
     # ── Public API ──────────────────────────────────────────────
 
-    def start(self, key_name: str) -> bool:
-        """Start listening for the given PTT key globally.
+    def add_binding(self, key_name: str, trigger_filename: str):
+        """Register a key binding. Call before start()."""
+        self._bindings.append({
+            "key_name": key_name,
+            "trigger_path": self._data_dir / trigger_filename,
+            "key_type": None,
+            "target_key": None,
+            "active": False,
+            "evdev_code": None,
+            "evdev_is_mouse": False,
+        })
+
+    def start(self, key_name: str | None = None) -> bool:
+        """Start listening for hotkeys globally.
 
         Args:
-            key_name: Key string from config, e.g. 'MouseButton4', 'Space', 'F13'
+            key_name: If provided, adds a single binding using the default
+                     trigger filename (backward compat). If None, uses
+                     bindings added via add_binding().
 
         Returns:
             True if started successfully
         """
+        if key_name is not None and not self._bindings:
+            self.add_binding(key_name, self._default_trigger)
+
+        if not self._bindings:
+            print("[GlobalHotkey] No bindings registered")
+            return False
+
         self._running = True
-        self._active = False
+        for b in self._bindings:
+            b["active"] = False
 
         # On Linux with Wayland, prefer evdev for true global capture
         if _is_linux() and _is_wayland():
-            ok = self._start_evdev(key_name)
+            ok = self._start_evdev()
             if ok:
                 return True
             print("[GlobalHotkey] evdev failed, falling back to pynput (may not work on Wayland)")
 
         # Fallback: pynput (works on X11, macOS, Windows)
-        return self._start_pynput(key_name)
+        return self._start_pynput()
 
     def stop(self):
         """Stop all listeners."""
         self._running = False
         # Stop evdev
         if self._evdev_thread and self._evdev_thread.is_alive():
-            # Thread checks _running flag and will exit
             self._evdev_thread = None
         # Stop pynput
         if self._kb_listener:
@@ -148,17 +174,31 @@ class GlobalHotkeyListener:
         if self._mouse_listener:
             self._mouse_listener.stop()
             self._mouse_listener = None
-        self._active = False
+        for b in self._bindings:
+            b["active"] = False
         print("[GlobalHotkey] Stopped")
 
-    def update_key(self, key_name: str):
-        """Change the PTT key at runtime."""
+    def update_key(self, key_name: str, trigger_filename: str | None = None):
+        """Change a key binding at runtime. Restarts all listeners.
+
+        Args:
+            key_name: New key string
+            trigger_filename: Which binding to update (by filename).
+                            If None, updates the first binding.
+        """
+        if trigger_filename:
+            for b in self._bindings:
+                if b["trigger_path"].name == trigger_filename:
+                    b["key_name"] = key_name
+                    break
+        elif self._bindings:
+            self._bindings[0]["key_name"] = key_name
         self.stop()
-        self.start(key_name)
+        self.start()
 
     # ── evdev backend (Linux/Wayland) ─────────────────────────
 
-    def _start_evdev(self, key_name: str) -> bool:
+    def _start_evdev(self) -> bool:
         """Start listening via evdev (reads /dev/input directly)."""
         try:
             import evdev
@@ -166,17 +206,25 @@ class GlobalHotkeyListener:
             print("[GlobalHotkey] evdev not available")
             return False
 
-        name = key_name.lower().strip()
+        # Parse all bindings for evdev codes
+        any_parsed = False
+        all_codes = set()
+        for b in self._bindings:
+            name = b["key_name"].lower().strip()
+            if name in _EVDEV_MOUSE_MAP:
+                b["evdev_code"] = _EVDEV_MOUSE_MAP[name]
+                b["evdev_is_mouse"] = True
+                all_codes.add(b["evdev_code"])
+                any_parsed = True
+            elif name in _EVDEV_KEY_MAP:
+                b["evdev_code"] = _EVDEV_KEY_MAP[name]
+                b["evdev_is_mouse"] = False
+                all_codes.add(b["evdev_code"])
+                any_parsed = True
+            else:
+                print(f"[GlobalHotkey] Unknown evdev key: {b['key_name']}")
 
-        # Parse key to evdev code
-        if name in _EVDEV_MOUSE_MAP:
-            self._evdev_target_code = _EVDEV_MOUSE_MAP[name]
-            self._evdev_is_mouse = True
-        elif name in _EVDEV_KEY_MAP:
-            self._evdev_target_code = _EVDEV_KEY_MAP[name]
-            self._evdev_is_mouse = False
-        else:
-            print(f"[GlobalHotkey] Unknown evdev key: {key_name}")
+        if not any_parsed:
             return False
 
         # Find input devices
@@ -186,26 +234,25 @@ class GlobalHotkeyListener:
                   "Add user to 'input' group: sudo usermod -aG input $USER")
             return False
 
-        # Filter to keyboards and mice that have our target key/button
+        # Filter to devices that have any of our target codes
         target_devices = []
         for dev in devices:
             caps = dev.capabilities(verbose=False)
-            # EV_KEY = 1
-            key_caps = caps.get(1, [])
-            if self._evdev_target_code in key_caps:
+            key_caps = set(caps.get(1, []))
+            if key_caps & all_codes:
                 target_devices.append(dev)
             else:
                 dev.close()
 
         if not target_devices:
-            print(f"[GlobalHotkey] No device has code {self._evdev_target_code} for '{key_name}'")
+            print(f"[GlobalHotkey] No device has any of the target codes")
             for dev in devices:
                 dev.close()
             return False
 
         self._backend = "evdev"
-        print(f"[GlobalHotkey] evdev: Listening for code {self._evdev_target_code} "
-              f"({'mouse' if self._evdev_is_mouse else 'keyboard'}) on "
+        names = [b["key_name"] for b in self._bindings if b.get("evdev_code") is not None]
+        print(f"[GlobalHotkey] evdev: Listening for {', '.join(names)} on "
               f"{len(target_devices)} device(s): {[d.name for d in target_devices]}")
 
         # Start reader thread
@@ -226,6 +273,13 @@ class GlobalHotkeyListener:
         for dev in devices:
             sel.register(dev, selectors.EVENT_READ)
 
+        # Build code->bindings lookup
+        code_to_bindings = {}
+        for b in self._bindings:
+            code = b.get("evdev_code")
+            if code is not None:
+                code_to_bindings.setdefault(code, []).append(b)
+
         try:
             while self._running:
                 events = sel.select(timeout=0.1)
@@ -238,15 +292,17 @@ class GlobalHotkeyListener:
                             # EV_KEY = 1, value: 0=up, 1=down, 2=repeat
                             if event.type != 1:
                                 continue
-                            if event.code != self._evdev_target_code:
+                            bindings = code_to_bindings.get(event.code)
+                            if not bindings:
                                 continue
-                            with self._lock:
-                                if event.value == 1 and not self._active:
-                                    self._active = True
-                                    self._write_trigger("start")
-                                elif event.value == 0 and self._active:
-                                    self._active = False
-                                    self._write_trigger("stop")
+                            for b in bindings:
+                                with self._lock:
+                                    if event.value == 1 and not b["active"]:
+                                        b["active"] = True
+                                        self._write_trigger(b["trigger_path"], "start")
+                                    elif event.value == 0 and b["active"]:
+                                        b["active"] = False
+                                        self._write_trigger(b["trigger_path"], "stop")
                     except OSError:
                         # Device disconnected
                         pass
@@ -260,14 +316,21 @@ class GlobalHotkeyListener:
 
     # ── pynput backend (X11, macOS, Windows) ──────────────────
 
-    def _start_pynput(self, key_name: str) -> bool:
+    def _start_pynput(self) -> bool:
         """Start listening via pynput."""
-        parsed = self._parse_key_pynput(key_name)
-        if parsed is None:
-            print(f"[GlobalHotkey] Unknown PTT key: {key_name}")
+        # Parse all bindings
+        for b in self._bindings:
+            parsed = self._parse_key_pynput(b["key_name"])
+            if parsed is None:
+                print(f"[GlobalHotkey] Unknown key: {b['key_name']}")
+                continue
+            b["key_type"], b["target_key"] = parsed
+
+        valid = [b for b in self._bindings if b["target_key"] is not None]
+        if not valid:
+            print("[GlobalHotkey] No valid key bindings")
             return False
 
-        self._key_type, self._target_key = parsed
         self._backend = "pynput"
 
         try:
@@ -282,9 +345,9 @@ class GlobalHotkeyListener:
                 on_click=self._on_click,
             )
 
-            # On Windows, suppress the PTT key/button to prevent the
-            # system "ding" beep and unwanted side-effects (e.g. browser
-            # back on Mouse4).  Similar to how Discord handles PTT.
+            # On Windows, suppress hotkey events to prevent the system
+            # "ding" beep and unwanted side-effects (e.g. browser back
+            # on Mouse4). Uses a SINGLE hook for all bindings.
             if platform.system() == "Windows":
                 kb_kwargs["win32_event_filter"] = self._win32_kb_filter
                 mouse_kwargs["win32_event_filter"] = self._win32_mouse_filter
@@ -295,7 +358,8 @@ class GlobalHotkeyListener:
             self._mouse_listener = MouseListener(**mouse_kwargs)
             self._mouse_listener.start()
 
-            print(f"[GlobalHotkey] Listening for key: {key_name}")
+            names = [b["key_name"] for b in valid]
+            print(f"[GlobalHotkey] Listening for keys: {', '.join(names)}")
             return True
         except Exception as e:
             print(f"[GlobalHotkey] Failed to start pynput: {e}")
@@ -365,46 +429,52 @@ class GlobalHotkeyListener:
     # ── pynput event handlers ─────────────────────────────────
 
     def _on_click(self, _x, _y, button, pressed):
-        """Mouse click handler."""
+        """Mouse click handler — checks all mouse bindings."""
         if not self._running:
             return
-        if self._target_key != button:
-            return
-        with self._lock:
-            if pressed and not self._active:
-                self._active = True
-                self._write_trigger("start")
-            elif not pressed and self._active:
-                self._active = False
-                self._write_trigger("stop")
+        for b in self._bindings:
+            if b["key_type"] != "mouse" or b["target_key"] != button:
+                continue
+            with self._lock:
+                if pressed and not b["active"]:
+                    b["active"] = True
+                    self._write_trigger(b["trigger_path"], "start")
+                elif not pressed and b["active"]:
+                    b["active"] = False
+                    self._write_trigger(b["trigger_path"], "stop")
 
     def _on_press(self, key):
-        """Key press handler."""
+        """Key press handler — checks all keyboard bindings."""
         if not self._running:
             return
-        if not self._matches_key(key):
-            return
-        with self._lock:
-            if not self._active:
-                self._active = True
-                self._write_trigger("start")
+        for b in self._bindings:
+            if b["key_type"] != "keyboard":
+                continue
+            if not self._matches_key(key, b["target_key"]):
+                continue
+            with self._lock:
+                if not b["active"]:
+                    b["active"] = True
+                    self._write_trigger(b["trigger_path"], "start")
 
     def _on_release(self, key):
-        """Key release handler."""
+        """Key release handler — checks all keyboard bindings."""
         if not self._running:
             return
-        if not self._matches_key(key):
-            return
-        with self._lock:
-            if self._active:
-                self._active = False
-                self._write_trigger("stop")
+        for b in self._bindings:
+            if b["key_type"] != "keyboard":
+                continue
+            if not self._matches_key(key, b["target_key"]):
+                continue
+            with self._lock:
+                if b["active"]:
+                    b["active"] = False
+                    self._write_trigger(b["trigger_path"], "stop")
 
-    def _matches_key(self, key) -> bool:
-        """Check if a pynput key event matches our target."""
+    @staticmethod
+    def _matches_key(key, target) -> bool:
+        """Check if a pynput key event matches a target key."""
         from pynput.keyboard import Key, KeyCode
-
-        target = self._target_key
 
         if isinstance(target, Key) and isinstance(key, Key):
             return key == target
@@ -421,64 +491,115 @@ class GlobalHotkeyListener:
 
     # ── Windows event suppression ──────────────────────────────
 
-    def _get_target_vk(self) -> int | None:
-        """Get the Windows virtual-key code for the current PTT key."""
+    @staticmethod
+    def _get_target_vk(target) -> int | None:
+        """Get the Windows virtual-key code for a pynput key."""
         from pynput.keyboard import Key, KeyCode
 
-        target = self._target_key
         if isinstance(target, Key):
             return target.value.vk
         if isinstance(target, KeyCode):
-            return target.vk
+            if target.vk is not None:
+                return target.vk
+            # KeyCode.from_char() leaves vk=None. Derive it from the char:
+            # Windows VK codes for 0-9 (0x30-0x39) and A-Z (0x41-0x5A)
+            # match ASCII, so ord(char.upper()) gives the correct VK.
+            if target.char and len(target.char) == 1 and target.char.isalnum():
+                return ord(target.char.upper())
         return None
 
     def _win32_kb_filter(self, msg, data):
-        """Suppress the PTT key on Windows so the system doesn't beep."""
-        if self._key_type != "keyboard":
+        """Suppress registered keyboard hotkeys on Windows.
+
+        When suppress_event() is called, pynput skips its own _on_press/
+        _on_release callbacks. So we must handle trigger writing here.
+        """
+        has_kb = any(b["key_type"] == "keyboard" for b in self._bindings)
+        if not has_kb:
             return True
-        target_vk = self._get_target_vk()
-        if target_vk is not None and data.vkCode == target_vk:
-            self._kb_listener.suppress_event()
+
+        # WM_KEYDOWN/WM_SYSKEYDOWN = press, WM_KEYUP/WM_SYSKEYUP = release
+        is_down = msg in (0x0100, 0x0104)
+        is_up = msg in (0x0101, 0x0105)
+
+        for b in self._bindings:
+            if b["key_type"] != "keyboard":
+                continue
+            target_vk = self._get_target_vk(b["target_key"])
+            if target_vk is not None and data.vkCode == target_vk:
+                # Handle press/release directly (suppress_event skips callbacks)
+                with self._lock:
+                    if is_down and not b["active"]:
+                        b["active"] = True
+                        self._write_trigger(b["trigger_path"], "start")
+                    elif is_up and b["active"]:
+                        b["active"] = False
+                        self._write_trigger(b["trigger_path"], "stop")
+                self._kb_listener.suppress_event()
+                return
 
     def _win32_mouse_filter(self, msg, data):
-        """Suppress the PTT mouse button on Windows (prevent browser-back etc)."""
-        if self._key_type != "mouse":
+        """Suppress registered mouse buttons on Windows.
+
+        When suppress_event() is called, pynput skips its own _on_click
+        callback. So we must handle trigger writing here.
+        """
+        has_mouse = any(b["key_type"] == "mouse" for b in self._bindings)
+        if not has_mouse:
             return True
 
         from pynput.mouse import Button
 
-        target = self._target_key
-        should_suppress = False
+        btn4 = getattr(Button, "x1", None) or getattr(Button, "button8", None)
+        btn5 = getattr(Button, "x2", None) or getattr(Button, "button9", None)
 
-        # Middle button: WM_MBUTTONDOWN=0x207, WM_MBUTTONUP=0x208
-        if target == Button.middle and msg in (0x0207, 0x0208):
-            should_suppress = True
-        # X buttons: WM_XBUTTONDOWN=0x20B, WM_XBUTTONUP=0x20C
-        elif msg in (0x020B, 0x020C):
-            x_button = (data.mouseData >> 16) & 0xFFFF
-            btn4 = getattr(Button, "x1", None) or getattr(Button, "button8", None)
-            btn5 = getattr(Button, "x2", None) or getattr(Button, "button9", None)
-            if (target == btn4 and x_button == 1) or (target == btn5 and x_button == 2):
-                should_suppress = True
+        for b in self._bindings:
+            if b["key_type"] != "mouse":
+                continue
+            target = b["target_key"]
+            matched = False
+            pressed = False
 
-        if should_suppress:
-            self._mouse_listener.suppress_event()
+            # Middle button: WM_MBUTTONDOWN=0x207, WM_MBUTTONUP=0x208
+            if target == Button.middle:
+                if msg == 0x0207:
+                    matched, pressed = True, True
+                elif msg == 0x0208:
+                    matched, pressed = True, False
+            # X buttons: WM_XBUTTONDOWN=0x20B, WM_XBUTTONUP=0x20C
+            elif msg in (0x020B, 0x020C):
+                x_button = (data.mouseData >> 16) & 0xFFFF
+                if (target == btn4 and x_button == 1) or (target == btn5 and x_button == 2):
+                    matched = True
+                    pressed = (msg == 0x020B)
+
+            if matched:
+                self._mouse_listener.suppress_event()
+                # Handle press/release directly (callbacks won't fire)
+                with self._lock:
+                    if pressed and not b["active"]:
+                        b["active"] = True
+                        self._write_trigger(b["trigger_path"], "start")
+                    elif not pressed and b["active"]:
+                        b["active"] = False
+                        self._write_trigger(b["trigger_path"], "stop")
+                return
 
     # ── Trigger file ────────────────────────────────────────────
 
-    def _write_trigger(self, action: str):
-        """Write PTT trigger JSON for voice_agent to pick up.
+    def _write_trigger(self, trigger_path: Path, action: str):
+        """Write trigger JSON for voice_agent to pick up.
 
         Uses atomic write (write to temp, then os.replace) to prevent
         voice_agent from reading a partially-written JSON file.
         """
         try:
-            temp_path = str(self._ptt_path) + '.tmp'
+            temp_path = str(trigger_path) + '.tmp'
             with open(temp_path, 'w', encoding='utf-8') as f:
                 json.dump({
                     "action": action,
                     "timestamp": datetime.now().isoformat()
                 }, f)
-            os.replace(temp_path, self._ptt_path)  # Atomic on all platforms
+            os.replace(temp_path, trigger_path)  # Atomic on all platforms
         except Exception as e:
             print(f"[GlobalHotkey] Failed to write trigger: {e}")

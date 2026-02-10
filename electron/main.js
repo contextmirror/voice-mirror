@@ -835,6 +835,10 @@ app.whenReady().then(() => {
         safeSend('toggle-stats-bar');
     });
 
+    // Dictation key is handled by Python's GlobalHotkeyListener (same as PTT).
+    // Hold-to-speak: press and hold to record, release to transcribe + paste.
+    // Python captures key press/release globally and writes dictation_trigger.json.
+
     // PTT capture is handled entirely by Python's GlobalHotkeyListener (evdev/pynput).
     // Python captures key press/release globally regardless of window state and writes
     // ptt_trigger.json directly. Electron's uiohook PTT was unreliable when collapsed to orb.

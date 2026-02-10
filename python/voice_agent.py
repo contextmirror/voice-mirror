@@ -68,6 +68,9 @@ VOICE_CALL_PATH = VM_DATA_DIR / "voice_call.json"
 # Push-to-talk trigger file (written by Electron)
 PTT_TRIGGER_PATH = VM_DATA_DIR / "ptt_trigger.json"
 
+# Dictation trigger file (written by Electron)
+DICTATION_TRIGGER_PATH = VM_DATA_DIR / "dictation_trigger.json"
+
 # Voice cloning IPC files (written by MCP server)
 VOICE_CLONE_REQUEST_PATH = VM_DATA_DIR / "voice_clone_request.json"
 VOICE_CLONE_RESPONSE_PATH = VM_DATA_DIR / "voice_clone_response.json"
@@ -325,6 +328,45 @@ class VoiceMirror:
 
         return None
 
+    def check_dictation_trigger(self) -> str | None:
+        """
+        Check for dictation trigger from Electron.
+        Returns 'start', 'stop', or None.
+        Reads and clears the trigger file.
+        """
+        now = time.time()
+        # Check at most every 50ms to avoid excessive file reads
+        if now - self.audio_state.dictation_last_check < 0.05:
+            return None
+        self.audio_state.dictation_last_check = now
+
+        try:
+            if DICTATION_TRIGGER_PATH.exists():
+                with open(DICTATION_TRIGGER_PATH, encoding='utf-8') as f:
+                    data = json.load(f)
+                    action = data.get("action")
+
+                # Clear the trigger file after reading
+                DICTATION_TRIGGER_PATH.unlink()
+
+                if action == "start" and not self.audio_state.dictation_active:
+                    self.audio_state.dictation_active = True
+                    return "start"
+                elif action == "stop" and self.audio_state.dictation_active:
+                    self.audio_state.dictation_active = False
+                    return "stop"
+        except json.JSONDecodeError:
+            # File might be partially written, try again next time
+            pass
+        except FileNotFoundError:
+            # File was already processed
+            pass
+        except Exception as e:
+            # Log other errors but don't crash
+            print(f"Dictation trigger error: {e}")
+
+        return None
+
     def send_to_inbox(self, message: str):
         """Send transcribed message to MCP inbox."""
         return self.inbox.send(message)
@@ -569,6 +611,30 @@ class VoiceMirror:
                 self.audio_state.is_processing = True
                 self.audio_state.ptt_process_pending = True
 
+        # Check for dictation trigger (from Electron) - works in ALL modes
+        dictation_action = self.check_dictation_trigger()
+        if dictation_action == "start" and not self.audio_state.is_recording:
+            if self.tts.is_speaking:
+                self.tts.stop_speaking()
+            self.audio_state.start_recording('dictation')
+            self.audio_state._dictation_start_time = time.time()
+            print('Recording (dictation)...')
+        elif dictation_action == "stop" and self.audio_state.is_recording and self.audio_state.recording_source == 'dictation':
+            self.audio_state.is_recording = False
+            self.audio_state.is_processing = True
+            self.audio_state.dictation_process_pending = True
+
+        # Safety: force-stop dictation recording after 120s
+        if (self.audio_state.is_recording
+                and self.audio_state.recording_source == 'dictation'
+                and hasattr(self.audio_state, '_dictation_start_time')):
+            if time.time() - self.audio_state._dictation_start_time > 120:
+                print('Dictation recording timeout (120s), force-stopping')
+                self.audio_state.is_recording = False
+                self.audio_state.dictation_active = False
+                self.audio_state.is_processing = True
+                self.audio_state.dictation_process_pending = True
+
         if self.audio_state.is_listening and not self.audio_state.is_recording:
             # Push-to-talk mode: only record when PTT is pressed (handled above)
             if self._activation_mode == ActivationMode.PUSH_TO_TALK:
@@ -653,20 +719,52 @@ class VoiceMirror:
             msg_id = self.send_to_inbox(text)
 
             # Release processing lock before waiting for response
-            # so PTT can be used again while waiting
+            # so PTT/dictation can be used again while waiting.
+            # Run the wait+speak in a background task so the main loop
+            # stays free to process new PTT/dictation triggers.
             self.audio_state.is_processing = False
 
-            # Wait for AI provider to respond via inbox
-            response = await self.wait_for_claude_response(msg_id, timeout=90.0)
-            if response:
-                print(f"💬 {self._ai_provider['name']}: {response}")
-                # Strip provider prefix before speaking (e.g., "Claude: " -> "")
-                clean_response = strip_provider_prefix(response)
-                await self.speak(clean_response)
-            else:
-                print(f"⏰ No response from {self._ai_provider['name']} (timeout - this is normal if thinking)")
+            async def _wait_and_speak(msg_id):
+                try:
+                    response = await self.wait_for_claude_response(msg_id, timeout=90.0)
+                    if response:
+                        print(f"💬 {self._ai_provider['name']}: {response}")
+                        clean_response = strip_provider_prefix(response)
+                        await self.speak(clean_response)
+                    else:
+                        print(f"⏰ No response from {self._ai_provider['name']} (timeout - this is normal if thinking)")
+                except Exception as e:
+                    print(f"Error waiting for response: {e}")
+
+            asyncio.create_task(_wait_and_speak(msg_id))
         else:
             print("❌ No speech detected")
+
+    async def process_dictation(self):
+        """Process recorded audio for dictation (transcribe and inject text, no AI)."""
+        audio_data = self.audio_state.get_and_clear_buffer()
+        if audio_data is None:
+            return
+
+        # Minimum duration check (0.4s = 6400 samples at 16kHz)
+        min_samples = int(0.4 * 16000)
+        if len(audio_data) < min_samples:
+            duration_ms = int(len(audio_data) / 16000 * 1000)
+            print(f"Dictation too short ({duration_ms}ms), discarding")
+            return
+
+        text = await self.transcribe(audio_data)
+
+        if text and len(text.strip()) >= 3:
+            from text_injector import inject_text
+            if inject_text(text):
+                print(f"Dictation: {text}")
+            else:
+                print(f"Dictation inject failed: {text}")
+        elif text:
+            print(f"Dictation too short to inject: '{text}'")
+        else:
+            print("Dictation: no speech detected")
 
     async def run(self):
         """Main loop."""
@@ -750,19 +848,33 @@ class VoiceMirror:
         with stream:
             # Start GlobalHotkey listener NOW that the audio stream is active
             # (must be after stream start so PTT triggers aren't lost during model loading)
-            if self._activation_mode == ActivationMode.PUSH_TO_TALK:
-                try:
-                    from global_hotkey import GlobalHotkeyListener
-                    from providers.config import ELECTRON_CONFIG_PATH
-                    ptt_key = "MouseButton4"
-                    if ELECTRON_CONFIG_PATH.exists():
-                        with open(ELECTRON_CONFIG_PATH, encoding='utf-8') as f:
-                            ptt_key = json.load(f).get("behavior", {}).get("pttKey", "MouseButton4")
-                    self._hotkey_listener = GlobalHotkeyListener()
-                    self._hotkey_listener.start(ptt_key)
-                    print(f"[GlobalHotkey] Started with key: {ptt_key}")
-                except Exception as e:
-                    print(f"[GlobalHotkey] Failed to start: {e}")
+            # Uses a SINGLE listener with multiple bindings so Windows only installs
+            # one low-level mouse hook — required for reliable event suppression.
+            try:
+                from global_hotkey import GlobalHotkeyListener
+                from providers.config import ELECTRON_CONFIG_PATH
+
+                config = {}
+                if ELECTRON_CONFIG_PATH.exists():
+                    with open(ELECTRON_CONFIG_PATH, encoding='utf-8') as f:
+                        config = json.load(f).get("behavior", {})
+
+                self._hotkey_listener = GlobalHotkeyListener()
+
+                # PTT binding (only in push-to-talk mode)
+                if self._activation_mode == ActivationMode.PUSH_TO_TALK:
+                    ptt_key = config.get("pttKey", "MouseButton4")
+                    self._hotkey_listener.add_binding(ptt_key, "ptt_trigger.json")
+                    print(f"[GlobalHotkey] PTT binding: {ptt_key}")
+
+                # Dictation binding (always active, independent of activation mode)
+                dictation_key = config.get("dictationKey", "MouseButton5")
+                self._hotkey_listener.add_binding(dictation_key, "dictation_trigger.json")
+                print(f"[GlobalHotkey] Dictation binding: {dictation_key}")
+
+                self._hotkey_listener.start()
+            except Exception as e:
+                print(f"[GlobalHotkey] Failed to start: {e}")
 
             # Start notification watcher in background
             notification_task = None
@@ -809,6 +921,14 @@ class VoiceMirror:
                         self.audio_state.is_processing = False
                         continue
 
+                    # Check for dictation release (transcribe + inject, no AI)
+                    if self.audio_state.dictation_process_pending:
+                        self.audio_state.dictation_process_pending = False
+                        await self.process_dictation()
+                        self.vad.reset()
+                        self.audio_state.is_processing = False
+                        continue
+
                     # Check for silence timeout during recording
                     if self.audio_state.is_recording and not self.audio_state.is_processing:
                         elapsed = time.time() - self.audio_state.last_speech_time
@@ -816,7 +936,11 @@ class VoiceMirror:
                             print("⏹️ Silence detected, processing...")
                             self.audio_state.is_recording = False
                             self.audio_state.is_processing = True
-                            await self.process_recording()
+                            # Route dictation recordings to process_dictation (not AI)
+                            if self.audio_state.recording_source == 'dictation':
+                                await self.process_dictation()
+                            else:
+                                await self.process_recording()
                             self.vad.reset()
                             self.audio_state.is_processing = False
                             # Only show status for conversational modes where context changes
