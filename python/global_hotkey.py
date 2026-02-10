@@ -409,6 +409,11 @@ class GlobalHotkeyListener:
             "numlock": Key.num_lock,
             "tab": Key.tab,
             "escape": Key.esc,
+            # Arrow keys (DOM sends ArrowUp/ArrowDown/ArrowLeft/ArrowRight)
+            "arrowup": Key.up, "arrowdown": Key.down,
+            "arrowleft": Key.left, "arrowright": Key.right,
+            "up": Key.up, "down": Key.down,
+            "left": Key.left, "right": Key.right,
         }
         if name in kb_map:
             return ("keyboard", kb_map[name])

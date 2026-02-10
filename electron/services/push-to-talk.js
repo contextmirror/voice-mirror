@@ -66,6 +66,9 @@ function createPushToTalk(options = {}) {
             'pagedown': 109,
             'capslock': 58,
             'numlock': 69,
+            // Arrow keys (DOM sends ArrowUp/ArrowDown/ArrowLeft/ArrowRight)
+            'arrowup': 103, 'arrowdown': 108, 'arrowleft': 105, 'arrowright': 106,
+            'up': 103, 'down': 108, 'left': 105, 'right': 106,
         };
 
         if (keyMap[keyLower]) {
