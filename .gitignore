@@ -53,6 +53,8 @@ coverage/
 
 # Benchmark (local testing only)
 test/browser-benchmark/
+test/benchmark/images/
+test/benchmark/results/
 
 # Temporary files
 *.tmp
