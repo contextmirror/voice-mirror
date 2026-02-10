@@ -7,6 +7,51 @@ const fs = require('fs');
 const fsPromises = fs.promises;
 const path = require('path');
 const { screen, nativeImage } = require('electron');
+const { execFile } = require('child_process');
+
+/**
+ * Capture a specific display on Windows using PowerShell + .NET GDI+.
+ * This bypasses Electron's desktopCapturer which has a known bug where
+ * multi-monitor setups return the same image for different displays.
+ *
+ * @param {number} displayIndex - Display index to capture
+ * @param {string} outputPath - Path to save the PNG screenshot
+ * @returns {Promise<boolean>} True if capture succeeded
+ */
+function captureDisplayWindows(displayIndex, outputPath) {
+    if (process.platform !== 'win32') return Promise.resolve(false);
+
+    return new Promise((resolve) => {
+        // PowerShell script that uses .NET to capture a specific monitor
+        const script = `
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+$screens = [System.Windows.Forms.Screen]::AllScreens
+$idx = ${displayIndex}
+if ($idx -ge $screens.Length) { $idx = 0 }
+$s = $screens[$idx]
+$bmp = New-Object System.Drawing.Bitmap($s.Bounds.Width, $s.Bounds.Height)
+$g = [System.Drawing.Graphics]::FromImage($bmp)
+$g.CopyFromScreen($s.Bounds.Location, [System.Drawing.Point]::Empty, $s.Bounds.Size)
+$bmp.Save('${outputPath.replace(/\\/g, '\\\\')}', [System.Drawing.Imaging.ImageFormat]::Png)
+$g.Dispose()
+$bmp.Dispose()
+Write-Output "$($s.Bounds.Width)x$($s.Bounds.Height)"
+`;
+        execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], {
+            timeout: 8000,
+            windowsHide: true
+        }, (err, stdout) => {
+            if (err) {
+                console.error('[ScreenCapture] Windows native capture failed:', err.message);
+                resolve(false);
+            } else {
+                console.log(`[ScreenCapture] Windows native capture succeeded: display ${displayIndex}, ${stdout.trim()}`);
+                resolve(true);
+            }
+        });
+    });
+}
 
 /**
  * Create a screen capture watcher service instance.
@@ -65,88 +110,77 @@ function createScreenCaptureWatcher(options = {}) {
 
                 console.log('[ScreenCapture] Capture requested by Claude');
 
-                if (!captureScreen) {
-                    console.error('[ScreenCapture] No capture function provided');
-                    await fsPromises.writeFile(responsePath, JSON.stringify({
-                        success: false, error: 'Screen capture not available',
-                        timestamp: new Date().toISOString()
-                    }));
-                    return;
-                }
-
                 // Get all displays from Electron's screen module
                 const displays = screen.getAllDisplays();
                 const primaryDisplay = screen.getPrimaryDisplay();
                 console.log(`[ScreenCapture] Found ${displays.length} display(s): ${displays.map((d, i) => `[${i}] ${d.size.width}x${d.size.height} id=${d.id}${d.id === primaryDisplay.id ? ' (primary)' : ''}`).join(', ')}`);
 
-                const sources = await captureScreen({
-                    types: ['screen'],
-                    thumbnailSize: { width: 1920, height: 1080 }
-                });
+                const requestedDisplay = request.display;
+                const displayIndex = (requestedDisplay === 'all') ? 0 : (parseInt(requestedDisplay, 10) || 0);
+                const imagePath = path.join(imagesDir, `capture-${Date.now()}.png`);
+                let captureSuccess = false;
 
-                console.log(`[ScreenCapture] desktopCapturer returned ${sources.length} source(s): ${sources.map((s, i) => `[${i}] "${s.name}" display_id=${s.display_id}`).join(', ')}`);
+                // On Windows with multiple displays, use native PowerShell capture
+                // to avoid Electron desktopCapturer bug returning same image for all displays
+                if (process.platform === 'win32' && displays.length > 1) {
+                    console.log(`[ScreenCapture] Windows multi-monitor: trying native capture for display ${displayIndex}`);
+                    captureSuccess = await captureDisplayWindows(displayIndex, imagePath);
+                }
 
-                if (sources.length > 0) {
-                    const requestedDisplay = request.display;
-                    let source;
-
-                    if (requestedDisplay === 'all' && sources.length > 1) {
-                        // Stitch all displays into one image
-                        // Calculate total canvas size from actual display bounds
-                        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-                        for (const d of displays) {
-                            minX = Math.min(minX, d.bounds.x);
-                            minY = Math.min(minY, d.bounds.y);
-                            maxX = Math.max(maxX, d.bounds.x + d.bounds.width);
-                            maxY = Math.max(maxY, d.bounds.y + d.bounds.height);
-                        }
-                        const totalWidth = maxX - minX;
-                        const totalHeight = maxY - minY;
-
-                        // Scale factor to keep image manageable
-                        const scale = Math.min(3840 / totalWidth, 2160 / totalHeight, 1);
-                        const canvasWidth = Math.round(totalWidth * scale);
-                        const canvasHeight = Math.round(totalHeight * scale);
-
-                        // Create empty canvas
-                        const canvas = nativeImage.createEmpty();
-                        // For stitching we need to use a different approach since nativeImage
-                        // doesn't have a canvas API. We'll capture each display individually
-                        // at full res and save them as separate files, returning the primary.
-                        // TODO: Implement proper stitching with sharp or canvas module
-                        console.log('[ScreenCapture] Multi-display "all" requested, capturing primary display');
-                        source = sources.find(s => s.display_id === String(primaryDisplay.id)) || sources[0];
-                    } else {
-                        // Select specific display
-                        const displayIndex = parseInt(requestedDisplay, 10) || 0;
-
-                        if (sources.length === 1) {
-                            // Only one source returned - use it regardless of index
-                            source = sources[0];
-                        } else {
-                            // Try to match by display_id from Electron's screen module
-                            const targetDisplay = displays[displayIndex] || displays[0];
-                            source = sources.find(s => s.display_id === String(targetDisplay.id));
-                            if (!source) {
-                                // Fallback to array index
-                                source = sources[displayIndex] || sources[0];
-                            }
-                        }
+                if (!captureSuccess) {
+                    // Fallback to Electron desktopCapturer
+                    if (!captureScreen) {
+                        console.error('[ScreenCapture] No capture function provided');
+                        await fsPromises.writeFile(responsePath, JSON.stringify({
+                            success: false, error: 'Screen capture not available',
+                            timestamp: new Date().toISOString()
+                        }));
+                        return;
                     }
 
-                    console.log(`[ScreenCapture] Using source: "${source.name}" display_id=${source.display_id}`);
-                    const dataUrl = source.thumbnail.toDataURL();
+                    const sources = await captureScreen({
+                        types: ['screen'],
+                        thumbnailSize: { width: 1920, height: 1080 }
+                    });
 
-                    const imagePath = path.join(imagesDir, `capture-${Date.now()}.png`);
-                    const base64Data = dataUrl.replace(/^data:image\/\w+;base64,/, '');
-                    const imageBuffer = Buffer.from(base64Data, 'base64');
-                    await fsPromises.writeFile(imagePath, imageBuffer);
+                    console.log(`[ScreenCapture] desktopCapturer returned ${sources.length} source(s): ${sources.map((s, i) => `[${i}] "${s.name}" display_id=${s.display_id}`).join(', ')}`);
 
-                    const thumbSize = source.thumbnail.getSize();
+                    if (sources.length > 0) {
+                        let source;
+
+                        if (requestedDisplay === 'all' && sources.length > 1) {
+                            console.log('[ScreenCapture] Multi-display "all" requested, capturing primary display');
+                            source = sources.find(s => s.display_id === String(primaryDisplay.id)) || sources[0];
+                        } else {
+                            if (sources.length === 1) {
+                                source = sources[0];
+                            } else {
+                                const targetDisplay = displays[displayIndex] || displays[0];
+                                source = sources.find(s => s.display_id === String(targetDisplay.id));
+                                if (!source) {
+                                    source = sources[displayIndex] || sources[0];
+                                }
+                            }
+                        }
+
+                        console.log(`[ScreenCapture] Using source: "${source.name}" display_id=${source.display_id}`);
+                        const dataUrl = source.thumbnail.toDataURL();
+                        const base64Data = dataUrl.replace(/^data:image\/\w+;base64,/, '');
+                        const imageBuffer = Buffer.from(base64Data, 'base64');
+                        await fsPromises.writeFile(imagePath, imageBuffer);
+                        captureSuccess = true;
+                    }
+                }
+
+                if (captureSuccess) {
+                    // Read the saved image to get dimensions
+                    const img = nativeImage.createFromPath(imagePath);
+                    const imgSize = img.getSize();
+
                     await fsPromises.writeFile(responsePath, JSON.stringify({
                         success: true, image_path: imagePath,
                         timestamp: new Date().toISOString(),
-                        width: thumbSize.width, height: thumbSize.height,
+                        width: imgSize.width, height: imgSize.height,
                         displays_available: displays.length
                     }));
 
@@ -172,7 +206,7 @@ function createScreenCaptureWatcher(options = {}) {
                     await fsPromises.writeFile(inboxPath, JSON.stringify(data));
                 } else {
                     await fsPromises.writeFile(responsePath, JSON.stringify({
-                        success: false, error: 'No displays available',
+                        success: false, error: 'No displays available for capture',
                         timestamp: new Date().toISOString()
                     }));
                 }
