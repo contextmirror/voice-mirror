@@ -23,9 +23,9 @@
   <img src="https://img.shields.io/badge/electron-28.3.3-47848f" alt="Electron">
   <img src="https://img.shields.io/badge/node-%3E%3D18-339933" alt="Node.js">
   <img src="https://img.shields.io/badge/python-%3E%3D3.9-3776ab" alt="Python">
-  <img src="https://img.shields.io/badge/MCP_tools-55-blueviolet" alt="MCP Tools">
+  <img src="https://img.shields.io/badge/MCP_tools-58-blueviolet" alt="MCP Tools">
   <img src="https://img.shields.io/badge/AI_providers-15-orange" alt="AI Providers">
-  <img src="https://img.shields.io/badge/tests-406_passing-brightgreen" alt="Tests">
+  <img src="https://img.shields.io/badge/tests-452_passing-brightgreen" alt="Tests">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
   <a href="https://discord.com/invite/JBpsSFB7EQ"><img src="https://img.shields.io/badge/Discord-Join%20us-5865F2?logo=discord&logoColor=white" alt="Discord"></a>
 </p>
@@ -54,7 +54,7 @@ Voice Mirror is an always-on overlay that listens, sees your screen, executes co
 ## What Makes This Different
 
 - **Claude Code as a PTY-backed brain** — runs Claude Code inside Electron as a real terminal. Full MCP tool access, zero extra API cost beyond the CLI itself.
-- **MCP as the agent backbone** — 55 tools across 8 dynamically-loaded groups. Not a plugin system — a structured tool protocol with schema validation, gating, and hot-loading.
+- **MCP as the agent backbone** — 58 tools across 10 dynamically-loaded groups (including 3 facade tools for voice-mode efficiency). Not a plugin system — a structured tool protocol with schema validation, gating, and hot-loading.
 - **Real browser automation** — not "search and summarize." Actual CDP-level click, type, navigate, screenshot, and DOM snapshot. Verified by a 102-test benchmark.
 - **Wayland-native overlay** — Rust layer-shell binary for proper always-on-top on Linux/Wayland, where Electron can't do it alone.
 - **Unified agent loop** — wake word + screen capture + terminal execution + browser control + persistent memory, all wired together. Most tools pick one; this closes the full Hear → See → Think → Act → Speak → Persist loop.
@@ -69,25 +69,37 @@ Voice Mirror is an always-on overlay that listens, sees your screen, executes co
 |------|---------|----------|
 | **Wake Word** | "Hey Claude" | Hands-free, on-demand |
 | **Push to Talk** | Mouse button / keyboard | Manual control |
+| **Dictation** | Configurable hotkey | Voice-to-text input anywhere |
 
 ### Screen Awareness
-Capture your screen at any time — the AI sees what you see and can analyze errors, UI, or anything on screen.
+Capture your screen at any time — the AI sees what you see and can analyze errors, UI, or anything on screen. Multi-monitor support with native Windows PowerShell capture. Images are sent directly to vision-capable LLMs (Ollama, OpenAI, etc.).
+
+### Chat Dashboard
+Full chat interface with message history, Slack-style grouped messages, markdown rendering, image paste/drop, and persistent chat sessions. AI activity status bar shows real-time provider state.
 
 ### Terminal Power
 Claude Code runs inside Voice Mirror with full MCP tool access. Execute commands, manage files, and automate workflows — all by voice.
 
-### 55 MCP Tools (8 groups, dynamically loaded)
+### 58 MCP Tools (10 groups, dynamically loaded)
 
 | Group | Tools | Capabilities |
 |-------|-------|-------------|
 | **core** | 4 | Voice I/O, presence tracking |
 | **memory** | 6 | Semantic search, 3-tier persistent memory |
-| **browser** | 14 | Full CDP automation — navigate, click, type, screenshot |
+| **browser** | 16 | Full CDP automation — navigate, click, type, screenshot, cookies, storage |
 | **n8n** | 22 | Workflow CRUD, executions, credentials, tags |
 | **voice-clone** | 3 | Clone any voice from a 3-second audio sample |
 | **screen** | 1 | Desktop screenshot capture |
 | **diagnostic** | 1 | Pipeline message tracing |
 | **meta** | 3 | Dynamic tool loading/unloading |
+| **facades** | 3 | Single-tool wrappers for memory, browser, and n8n (voice-mode efficiency) |
+
+### Speech Recognition
+
+| Engine | Speed | Notes |
+|--------|-------|-------|
+| **Parakeet** (default) | Fast, ONNX | NVIDIA NeMo Parakeet model |
+| **Whisper** | Standard | OpenAI Whisper + Faster-Whisper adapters |
 
 ### Voice Synthesis
 
@@ -198,21 +210,19 @@ voice-mirror-electron/
 ├── electron/              # Electron app
 │   ├── main.js            # Window, tray, IPC orchestration
 │   ├── services/          # 16 service modules
-│   ├── providers/         # Multi-AI provider system
+│   ├── providers/         # 5-file multi-AI provider system (15 providers)
 │   ├── browser/           # CDP browser automation (11 modules)
-│   ├── tools/             # Tool system for local LLMs
-│   ├── js/                # Renderer modules (11 files)
+│   ├── tools/             # Tool system for local LLMs (8 tools)
+│   ├── js/                # Renderer modules (13 files)
 │   └── styles/            # CSS modules (10 files)
 ├── python/                # Voice backend (STT, TTS, wake word)
-├── mcp-server/            # MCP server (55 tools, 8 groups)
+├── mcp-server/            # MCP server (58 tools, 10 groups)
 ├── wayland-orb/           # Rust native overlay (Linux/Wayland)
 ├── chrome-extension/      # Browser relay extension (MV3)
-├── test/                  # Test suites (106 suites, 406 cases)
+├── test/                  # Test suites (114 suites, 452 cases)
 ├── cli/                   # Setup wizard + CLI
 └── assets/                # Icons
 ```
-
----
 
 ---
 
@@ -285,7 +295,7 @@ All cloud provider API keys are auto-detected from environment variables on star
 npm test
 ```
 
-406 tests across 106 suites covering config safety, API key detection, provider detection, settings, startup behavior, cross-platform paths, terminal rendering, MCP memory, and more.
+452 tests across 114 suites covering config safety, API key detection, provider detection, settings, startup behavior, cross-platform paths, terminal rendering, MCP memory, browser automation, IPC validation, and more.
 
 ---
 

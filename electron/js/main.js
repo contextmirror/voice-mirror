@@ -11,7 +11,7 @@ import { initSettings, toggleSettings } from './settings.js';
 import { initNavigation, navigateTo, toggleSidebarCollapse } from './navigation.js';
 import { initBrowserPanel, navigateToBrowserPage } from './browser-panel.js';
 import { initChatInput, setRecordingVisual, setSendImageWithPrompt } from './chat-input.js';
-import { initChatStore, autoSave } from './chat-store.js';
+import { initChatStore, autoSave, triggerAutoName } from './chat-store.js';
 import { blobToBase64, formatSize } from './utils.js';
 import { initOrbCanvas, setOrbState, destroyOrbCanvas } from './orb-canvas.js';
 import { showToast, updateToast } from './notifications.js';
@@ -222,6 +222,7 @@ async function sendImageWithPrompt(prompt) {
 
     // Clear preview immediately so UI feels fast
     cancelImage();
+    triggerAutoName();
 
     // Send to backend (response comes via inbox watcher, not inline)
     window.voiceMirror.sendImageToBackend({ ...imageData, prompt })

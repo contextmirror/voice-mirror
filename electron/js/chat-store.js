@@ -7,6 +7,7 @@ import { addMessage } from './messages.js';
 import { getAllMessages, clearChat } from './chat-input.js';
 
 let currentChatId = null;
+let contextMenuEl = null;
 
 /**
  * Initialize chat store: wire up sidebar controls and load chat list.
@@ -71,6 +72,10 @@ export async function loadChatList() {
         li.appendChild(deleteBtn);
 
         li.addEventListener('click', () => switchChat(chat.id));
+        li.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            showChatContextMenu(e.clientX, e.clientY, chat.id);
+        });
 
         listEl.appendChild(li);
     }
@@ -249,4 +254,133 @@ export function formatRelativeTime(dateString) {
         day: 'numeric',
         month: 'short'
     });
+}
+
+/**
+ * Trigger auto-save and refresh the sidebar.
+ * Call this after a user message is sent so the chat title updates immediately.
+ */
+export async function triggerAutoName() {
+    await autoSave();
+    await loadChatList();
+}
+
+// ========== Context Menu ==========
+
+function getOrCreateContextMenu() {
+    if (contextMenuEl) return contextMenuEl;
+
+    contextMenuEl = document.createElement('div');
+    contextMenuEl.className = 'context-menu hidden';
+
+    const renameBtn = document.createElement('button');
+    renameBtn.className = 'context-menu-item';
+    renameBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Rename`;
+
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'context-menu-item';
+    deleteBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg> Delete`;
+
+    contextMenuEl.appendChild(renameBtn);
+    contextMenuEl.appendChild(deleteBtn);
+    document.body.appendChild(contextMenuEl);
+
+    // Dismiss on click outside
+    document.addEventListener('click', (e) => {
+        if (!contextMenuEl.contains(e.target)) hideChatContextMenu();
+    });
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') hideChatContextMenu();
+    });
+
+    return contextMenuEl;
+}
+
+function showChatContextMenu(x, y, chatId) {
+    const menu = getOrCreateContextMenu();
+    menu.classList.remove('hidden');
+    menu.style.left = `${x}px`;
+    menu.style.top = `${y}px`;
+
+    // Clamp to viewport
+    requestAnimationFrame(() => {
+        const rect = menu.getBoundingClientRect();
+        if (rect.right > window.innerWidth) {
+            menu.style.left = `${window.innerWidth - rect.width - 4}px`;
+        }
+        if (rect.bottom > window.innerHeight) {
+            menu.style.top = `${window.innerHeight - rect.height - 4}px`;
+        }
+    });
+
+    // Wire up actions for this chat
+    const [renameBtn, deleteBtn] = menu.querySelectorAll('.context-menu-item');
+
+    renameBtn.onclick = () => {
+        hideChatContextMenu();
+        startInlineRename(chatId);
+    };
+    deleteBtn.onclick = () => {
+        hideChatContextMenu();
+        deleteChat(chatId);
+    };
+}
+
+function hideChatContextMenu() {
+    if (contextMenuEl) contextMenuEl.classList.add('hidden');
+}
+
+/**
+ * Start inline rename for a chat item in the sidebar.
+ */
+function startInlineRename(chatId) {
+    const listEl = document.getElementById('chat-list');
+    if (!listEl) return;
+
+    const li = listEl.querySelector(`li[data-chat-id="${chatId}"]`);
+    if (!li) return;
+
+    const nameSpan = li.querySelector('.chat-name');
+    if (!nameSpan) return;
+
+    const currentName = nameSpan.textContent;
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'chat-rename-input';
+    input.value = currentName.replace(/\.\.\.$/, ''); // Remove trailing ellipsis for editing
+    input.style.cssText = 'width:100%;background:var(--bg-elevated);color:var(--text);border:1px solid var(--accent);border-radius:var(--radius-sm);padding:2px 4px;font-size:13px;outline:none;';
+
+    nameSpan.replaceWith(input);
+    input.focus();
+    input.select();
+
+    let committed = false;
+
+    const commit = async () => {
+        if (committed) return;
+        committed = true;
+
+        const newName = input.value.trim();
+        if (newName && newName !== currentName) {
+            try {
+                await window.voiceMirror.chat.rename(chatId, newName);
+            } catch (err) {
+                console.error('[ChatStore] Rename failed:', err);
+            }
+        }
+        await loadChatList();
+    };
+
+    const cancel = async () => {
+        if (committed) return;
+        committed = true;
+        await loadChatList();
+    };
+
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); commit(); }
+        if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+    });
+    input.addEventListener('blur', commit);
 }

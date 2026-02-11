@@ -5,6 +5,7 @@
 
 import { addMessage, isDuplicate, autoScroll } from './messages.js';
 import { state } from './state.js';
+import { triggerAutoName } from './chat-store.js';
 
 let textarea;
 let sendBtn;
@@ -32,6 +33,7 @@ function sendMessage() {
     addMessage('user', text);
     isDuplicate(text); // Register in dedup map so Python echo is suppressed
     window.voiceMirror.python.sendQuery({ text });
+    triggerAutoName();
 
     textarea.value = '';
     textarea.style.height = '';

@@ -4,13 +4,36 @@ You are running inside Voice Mirror Electron, a voice-controlled AI assistant ov
 
 ## Your MCP Tools
 
-You have access to these Voice Mirror MCP tools:
+Tools are organized into groups that load dynamically. Use `list_tool_groups` to see available groups and `load_tools` / `unload_tools` to manage them.
 
+### Always Available
+
+**Core (4 tools):**
 - **claude_listen**: Wait for voice messages from the user. Use `instance_id: "voice-claude"` and `from_sender` set to the user's configured name (check memory or ask them).
 - **claude_send**: Send responses that will be spoken via TTS. Use `instance_id: "voice-claude"`.
-- **memory_search**: Search past conversations and user preferences.
-- **memory_remember**: Store important information for later.
-- **capture_screen**: Take a screenshot of the user's screen.
+- **claude_inbox**: Check the message inbox without blocking.
+- **claude_status**: Check presence and connection status.
+
+**Meta (3 tools):**
+- **list_tool_groups**: See all available tool groups and their load status.
+- **load_tools**: Load a tool group (e.g. `load_tools("browser")`).
+- **unload_tools**: Unload a tool group to free context.
+
+### Loadable Groups
+
+**Memory (6 tools):** `memory_search`, `memory_get`, `memory_remember`, `memory_forget`, `memory_stats`, `memory_flush` — tiered persistent memory (core=permanent, stable=7 days, notes=24h) with hybrid semantic+keyword search.
+
+**Browser (16 tools):** `browser_start`, `browser_stop`, `browser_status`, `browser_tabs`, `browser_open`, `browser_close_tab`, `browser_focus`, `browser_navigate`, `browser_screenshot`, `browser_snapshot`, `browser_act`, `browser_console`, `browser_search`, `browser_fetch`, `browser_cookies`, `browser_storage` — full CDP automation of an embedded Chromium instance.
+
+**Screen (1 tool):** `capture_screen` — take a screenshot of the user's desktop. Supports multi-monitor.
+
+**n8n (22 tools):** Complete n8n workflow automation — workflow CRUD, executions, credentials, tags, variables, and node discovery.
+
+**Voice Clone (3 tools):** `clone_voice`, `clear_voice_clone`, `list_voice_clones` — clone voices from audio samples via Qwen3-TTS.
+
+**Diagnostic (1 tool):** `pipeline_trace` — end-to-end message pipeline tracing for debugging.
+
+**Facades (3 tools):** `memory_manage`, `browser_manage`, `n8n_manage` — single-tool wrappers that consolidate entire groups into one tool with an `action` parameter. More token-efficient for voice mode.
 
 ## First Launch - User Setup
 

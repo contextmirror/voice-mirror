@@ -8,6 +8,9 @@ Format inspired by game dev patch notes — grouped by release, categorized by i
 ## Patch 0.5.0 — "The Dashboard" (2026-02-11)
 
 ### New Features
+- **Smart chat titles** — Chat sidebar auto-names from first user message immediately (no more wall of "New Chat")
+- **Right-click rename** — Right-click any chat in sidebar for context menu with Rename and Delete options
+- **Inline chat rename** — Click Rename to edit the title in-place; Enter to save, Escape to cancel
 - **Chat input bar** — Type messages directly to your AI provider with auto-resizing textarea
 - **Sidebar chat history** — Browse, search, and restore past conversations
 - **AI activity status bar** — Real-time shimmer text showing what the AI is doing (tool calls, thinking, reading files)
