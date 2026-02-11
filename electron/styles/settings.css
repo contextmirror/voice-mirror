@@ -363,6 +363,163 @@
     max-width: 600px;
 }
 
+/* ========== Settings Tabs ========== */
+.settings-tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--border);
+    padding: 0 24px;
+    background: var(--bg-accent);
+    flex-shrink: 0;
+}
+
+.settings-tab {
+    padding: 10px 20px;
+    border: none;
+    border-bottom: 2px solid transparent;
+    background: none;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--duration-normal) var(--ease-out);
+    white-space: nowrap;
+}
+
+.settings-tab:hover {
+    color: var(--text);
+}
+
+.settings-tab.active {
+    color: var(--text-strong);
+    border-bottom-color: var(--accent);
+    font-weight: 600;
+}
+
+/* Tab content visibility */
+.settings-tab-content {
+    display: none;
+}
+
+.settings-tab-content.active {
+    display: block;
+}
+
+/* ========== Settings Icon Cards ========== */
+.settings-card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+    gap: 10px;
+    margin-bottom: 24px;
+    padding: 0;
+}
+
+.settings-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 8px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-align: center;
+}
+
+.settings-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+    border-color: var(--border-strong);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.settings-card.active {
+    border-color: var(--accent);
+    background: var(--accent-subtle);
+}
+
+.settings-card svg {
+    width: 28px;
+    height: 28px;
+    color: var(--muted);
+    transition: color 0.2s ease;
+}
+
+.settings-card:hover svg {
+    color: var(--accent);
+}
+
+.settings-card span {
+    font-size: 11px;
+    color: var(--text);
+    font-weight: 500;
+    line-height: 1.2;
+}
+
+/* ========== Toggle Switches ========== */
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    height: 24px;
+    flex-shrink: 0;
+}
+
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    inset: 0;
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 24px;
+    transition: background 0.3s ease;
+}
+
+.toggle-slider::before {
+    content: '';
+    position: absolute;
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background: white;
+    border-radius: 50%;
+    transition: transform 0.3s ease;
+}
+
+.toggle-switch input:checked + .toggle-slider {
+    background: var(--accent);
+}
+
+.toggle-switch input:checked + .toggle-slider::before {
+    transform: translateX(20px);
+}
+
+/* Toggle in a setting row — align right */
+.setting-row .toggle-switch {
+    margin-left: auto;
+}
+
+/* Checkbox-option with toggle switch */
+.checkbox-option .toggle-switch {
+    margin-left: auto;
+}
+
+/* ========== Field Descriptions ========== */
+.setting-desc {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 2px;
+    line-height: 1.3;
+}
+
 /* ========== AI Provider Detection Status ========== */
 .detection-status {
     padding: 12px;
@@ -618,151 +775,119 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 12px;
-    font-weight: 700;
     flex-shrink: 0;
+    overflow: hidden;
 }
 
-/* Ollama - Llama face icon */
-.provider-icon-ollama {
-    background: linear-gradient(135deg, #f0f0f0, #d0d0d0);
-    color: #333;
-}
-.provider-icon-ollama::before {
-    content: "🦙";
-    font-size: 14px;
-}
-
-/* LM Studio - Blue gradient with "LM" */
-.provider-icon-lmstudio {
-    background: linear-gradient(135deg, #3b82f6, #1d4ed8);
-    color: white;
-}
-.provider-icon-lmstudio::before {
-    content: "LM";
-    font-size: 9px;
-    letter-spacing: -0.5px;
+/* Shared icon setup — each provider sets background + ::before image */
+.provider-icon::before {
+    content: "";
+    display: block;
+    width: 65%;
+    height: 65%;
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
 }
 
-/* Jan - Purple with "J" */
-.provider-icon-jan {
-    background: linear-gradient(135deg, #a855f7, #7c3aed);
-    color: white;
-}
-.provider-icon-jan::before {
-    content: "J";
-}
-
-/* Claude - Orange/peach Anthropic color */
 .provider-icon-claude {
-    background: linear-gradient(135deg, #da7756, #c45a38);
-    color: white;
+    background: url(../assets/icons/providers/claude.webp) center/cover no-repeat;
+    border-radius: 4px;
 }
 .provider-icon-claude::before {
-    content: "◈";
-    font-size: 14px;
+    display: none;
 }
 
-/* OpenAI - Green/teal */
 .provider-icon-openai {
     background: linear-gradient(135deg, #10a37f, #0d8c6d);
-    color: white;
 }
 .provider-icon-openai::before {
-    content: "◎";
-    font-size: 14px;
+    background-image: url(../assets/icons/providers/openai.svg);
 }
 
-/* Gemini - Google multicolor */
 .provider-icon-gemini {
     background: linear-gradient(135deg, #4285f4, #ea4335, #fbbc04, #34a853);
     background-size: 200% 200%;
-    color: white;
 }
 .provider-icon-gemini::before {
-    content: "✦";
-    font-size: 14px;
+    background-image: url(../assets/icons/providers/gemini.svg);
 }
 
-/* Grok (xAI) - X logo style, black/white */
-.provider-icon-grok {
-    background: linear-gradient(135deg, #1a1a1a, #333);
-    color: white;
-}
-.provider-icon-grok::before {
-    content: "𝕏";
-    font-size: 13px;
-}
-
-/* Groq - Orange lightning fast */
-.provider-icon-groq {
-    background: linear-gradient(135deg, #f97316, #ea580c);
-    color: white;
-}
-.provider-icon-groq::before {
-    content: "⚡";
-    font-size: 13px;
-}
-
-/* Mistral - Blue/cyan */
-.provider-icon-mistral {
-    background: linear-gradient(135deg, #ff6b35, #f7931e);
-    color: white;
-}
-.provider-icon-mistral::before {
-    content: "M";
-}
-
-/* OpenRouter - Purple router */
-.provider-icon-openrouter {
-    background: linear-gradient(135deg, #6366f1, #4f46e5);
-    color: white;
-}
-.provider-icon-openrouter::before {
-    content: "⇆";
-    font-size: 14px;
-}
-
-/* DeepSeek - Blue deep ocean */
-.provider-icon-deepseek {
-    background: linear-gradient(135deg, #0ea5e9, #0284c7);
-    color: white;
-}
-.provider-icon-deepseek::before {
-    content: "🔍";
-    font-size: 12px;
-}
-
-/* Kimi - Moonshot AI blue/purple */
-.provider-icon-kimi {
-    background: linear-gradient(135deg, #6366f1, #4f46e5);
-    color: white;
-}
-.provider-icon-kimi::before {
-    content: "🌙";
-    font-size: 12px;
-}
-
-/* Codex - OpenAI green with terminal style */
-.provider-icon-codex {
-    background: linear-gradient(135deg, #10a37f, #065f46);
-    color: white;
-}
-.provider-icon-codex::before {
-    content: ">_";
-    font-size: 9px;
-    font-family: monospace;
-    font-weight: 700;
-}
-
-/* Gemini CLI - Google colors with terminal accent */
 .provider-icon-gemini-cli {
     background: linear-gradient(135deg, #4285f4, #1a73e8);
-    color: white;
 }
 .provider-icon-gemini-cli::before {
-    content: "✦";
-    font-size: 14px;
+    background-image: url(../assets/icons/providers/gemini.svg);
+}
+
+.provider-icon-ollama {
+    background: linear-gradient(135deg, #f0f0f0, #d0d0d0);
+}
+.provider-icon-ollama::before {
+    background-image: url(../assets/icons/providers/ollama.svg);
+}
+
+.provider-icon-lmstudio {
+    background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+}
+.provider-icon-lmstudio::before {
+    background-image: url(../assets/icons/providers/lmstudio.svg);
+}
+
+.provider-icon-jan {
+    background: linear-gradient(135deg, #a855f7, #7c3aed);
+}
+.provider-icon-jan::before {
+    background-image: url(../assets/icons/providers/jan.svg);
+}
+
+.provider-icon-grok {
+    background: linear-gradient(135deg, #1a1a1a, #333);
+}
+.provider-icon-grok::before {
+    background-image: url(../assets/icons/providers/grok.svg);
+}
+
+.provider-icon-groq {
+    background: linear-gradient(135deg, #f97316, #ea580c);
+}
+.provider-icon-groq::before {
+    background-image: url(../assets/icons/providers/groq.svg);
+}
+
+.provider-icon-mistral {
+    background: linear-gradient(135deg, #ff6b35, #f7931e);
+}
+.provider-icon-mistral::before {
+    background-image: url(../assets/icons/providers/mistral.svg);
+}
+
+.provider-icon-openrouter {
+    background: linear-gradient(135deg, #6366f1, #4f46e5);
+}
+.provider-icon-openrouter::before {
+    background-image: url(../assets/icons/providers/openrouter.svg);
+}
+
+.provider-icon-deepseek {
+    background: linear-gradient(135deg, #0ea5e9, #0284c7);
+}
+.provider-icon-deepseek::before {
+    background-image: url(../assets/icons/providers/deepseek.svg);
+}
+
+.provider-icon-kimi {
+    background: linear-gradient(135deg, #0071e3, #005bb5);
+}
+.provider-icon-kimi::before {
+    background-image: url(../assets/icons/providers/kimi.svg);
+}
+
+.provider-icon-codex {
+    background: linear-gradient(135deg, #10a37f, #065f46);
+}
+.provider-icon-codex::before {
+    background-image: url(../assets/icons/providers/codex.svg);
 }
 
 /* ========== Provider Badge (inline pill next to name) ========== */

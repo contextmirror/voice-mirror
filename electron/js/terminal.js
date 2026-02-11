@@ -5,6 +5,7 @@
  */
 
 import { state } from './state.js';
+import { PROVIDER_ICON_CLASSES } from './settings.js';
 
 // xterm.js instance
 let term = null;
@@ -25,6 +26,8 @@ let aiBadge;
 
 // Dynamic UI elements for provider display
 let navTerminalLabel;
+let navProviderName;
+let navProviderIcon;
 let terminalTitle;
 let terminalFullscreenTitle;
 
@@ -80,6 +83,8 @@ export async function initXterm() {
 
     // Dynamic provider display elements
     navTerminalLabel = document.getElementById('nav-terminal-label');
+    navProviderName = document.getElementById('nav-provider-name');
+    navProviderIcon = document.getElementById('nav-provider-icon');
     terminalTitle = document.getElementById('terminal-title');
     terminalFullscreenTitle = document.getElementById('terminal-fullscreen-title');
 
@@ -488,9 +493,14 @@ export function updateProviderDisplay(providerName, providerType = 'claude', mod
     state.currentProviderName = providerName;
     state.currentModel = model;
 
-    // Update sidebar nav label
-    if (navTerminalLabel) {
-        navTerminalLabel.textContent = providerName;
+    // Update sidebar nav sub-label (main label stays "Terminal")
+    if (navProviderName) {
+        navProviderName.textContent = providerName;
+    }
+    if (navProviderIcon) {
+        navProviderIcon.className = 'provider-icon';
+        const iconClass = PROVIDER_ICON_CLASSES[providerType];
+        if (iconClass) navProviderIcon.classList.add(iconClass);
     }
 
     // Update terminal header titles (with terminal icon)

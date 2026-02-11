@@ -551,8 +551,8 @@ async function init() {
     // Initialize browser panel
     initBrowserPanel();
 
-    // Initialize settings
-    initSettings();
+    // Initialize settings (loads tab templates, then wires event handlers)
+    await initSettings();
 
     // Manual drag for Windows (CSS -webkit-app-region: drag is unreliable on small transparent windows)
     // Uses screen.getCursorScreenPoint() via IPC — works even when cursor leaves the 64px window.

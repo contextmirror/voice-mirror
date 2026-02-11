@@ -1,0 +1,116 @@
+<!-- Icon Cards -->
+<div class="settings-card-grid">
+    <div class="settings-card" data-scroll-to="section-user">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        <span>User</span>
+    </div>
+    <div class="settings-card" data-scroll-to="section-shortcuts">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><line x1="6" y1="8" x2="6" y2="8"/><line x1="10" y1="8" x2="10" y2="8"/><line x1="14" y1="8" x2="14" y2="8"/><line x1="18" y1="8" x2="18" y2="8"/><line x1="6" y1="12" x2="18" y2="12"/><line x1="8" y1="16" x2="16" y2="16"/></svg>
+        <span>Shortcuts</span>
+    </div>
+    <div class="settings-card" data-scroll-to="section-appearance">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="10.5" r="2.5"/><circle cx="8.5" cy="7.5" r="2.5"/><circle cx="6.5" cy="12.5" r="2.5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>
+        <span>Appearance</span>
+    </div>
+    <div class="settings-card" data-scroll-to="section-behavior">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <span>Behavior</span>
+    </div>
+</div>
+
+<!-- User -->
+<div class="settings-section" id="section-user">
+    <h3>User</h3>
+    <div class="settings-group">
+        <div class="setting-row">
+            <label for="user-name">Your Name</label>
+            <input type="text" id="user-name" placeholder="Enter your name" maxlength="50" class="setting-input">
+        </div>
+    </div>
+</div>
+
+<!-- Keyboard Shortcuts -->
+<div class="settings-section" id="section-shortcuts">
+    <h3>Keyboard Shortcuts</h3>
+    <div class="settings-group">
+        <div class="keybind-row">
+            <span class="keybind-label">Toggle Panel</span>
+            <button class="keybind-input" id="keybind-toggle" data-key="behavior.hotkey">
+                Ctrl+Shift+V
+            </button>
+        </div>
+        <div class="keybind-row" id="ptt-keybind-row" style="display: none;">
+            <span class="keybind-label">Push to Talk (AI)</span>
+            <button class="keybind-input" id="keybind-ptt" data-key="behavior.pttKey">
+                Space
+            </button>
+        </div>
+        <div class="keybind-row">
+            <span class="keybind-label">Toggle Stats</span>
+            <button class="keybind-input" id="keybind-stats" data-key="behavior.statsHotkey">
+                Ctrl+Shift+M
+            </button>
+        </div>
+        <div class="keybind-row">
+            <span class="keybind-label">Dictation (Type)</span>
+            <button class="keybind-input" id="keybind-dictation" data-key="behavior.dictationKey">
+                Mouse Button 5
+            </button>
+        </div>
+    </div>
+    <p class="settings-hint">Push to Talk sends speech to the AI. Dictation holds to record, then types into the focused window.</p>
+</div>
+
+<!-- Appearance -->
+<div class="settings-section" id="section-appearance">
+    <h3>Appearance</h3>
+    <div class="settings-group">
+        <div class="setting-row">
+            <label>Orb Size</label>
+            <div class="slider-container">
+                <input type="range" id="orb-size" min="48" max="96" step="8" value="64">
+                <span id="orb-size-value">64px</span>
+            </div>
+        </div>
+        <div class="setting-row">
+            <label>Theme</label>
+            <span class="theme-static-value">Dark</span>
+            <input type="hidden" id="theme-select" value="dark">
+        </div>
+    </div>
+</div>
+
+<!-- Overlay Display -->
+<div class="settings-section" id="overlay-display-section" style="display: none;">
+    <h3>Overlay Display</h3>
+    <div class="settings-group">
+        <div class="setting-row">
+            <label>Monitor</label>
+            <select id="overlay-output">
+                <option value="">Default</option>
+            </select>
+        </div>
+        <p class="settings-hint">Choose which monitor displays the overlay orb</p>
+    </div>
+</div>
+
+<!-- Behavior -->
+<div class="settings-section" id="section-behavior">
+    <h3>Behavior</h3>
+    <div class="settings-group">
+        <div class="setting-row">
+            <label>Start minimized to tray</label>
+            <label class="toggle-switch">
+                <input type="checkbox" id="start-minimized">
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+        <div class="setting-row">
+            <label>Start with system</label>
+            <label class="toggle-switch">
+                <input type="checkbox" id="start-with-system">
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+    </div>
+</div>

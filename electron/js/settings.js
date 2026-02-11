@@ -26,8 +26,8 @@ const PROVIDER_NAMES = {
     'kimi-cli': 'Kimi CLI'
 };
 
-// Provider icon CSS classes
-const PROVIDER_ICON_CLASSES = {
+// Provider icon CSS classes (exported for sidebar provider display)
+export const PROVIDER_ICON_CLASSES = {
     claude: 'provider-icon-claude',
     codex: 'provider-icon-codex',
     'gemini-cli': 'provider-icon-gemini-cli',
@@ -77,6 +77,94 @@ const TTS_VOICES = {
 
 // Cloud providers that need API keys
 const CLOUD_PROVIDERS_WITH_APIKEY = ['openai', 'gemini', 'grok', 'groq', 'mistral', 'openrouter', 'deepseek', 'kimi'];
+
+// ========== Modular Tab System ==========
+// Add new tabs by adding an entry here + a matching data-tab div in overlay.html
+// + a template file at templates/settings-{id}.html
+const SETTINGS_TABS = [
+    { id: 'ai',      label: 'AI & Tools' },
+    { id: 'voice',   label: 'Voice & Audio' },
+    { id: 'general', label: 'General' },
+];
+
+const SETTINGS_TAB_STORAGE_KEY = 'vm-settings-tab';
+
+// Template cache — loaded once, reused across tab switches
+const _templateCache = {};
+
+/**
+ * Load all tab templates into the DOM.
+ * Fetches templates/settings-{id}.html for each tab and injects into the
+ * matching data-tab div. All tabs load in parallel on first call.
+ */
+async function loadAllTabTemplates() {
+    await Promise.all(SETTINGS_TABS.map(async (tab) => {
+        const panel = document.querySelector(`.settings-tab-content[data-tab="${tab.id}"]`);
+        if (!panel || panel.dataset.loaded) return;
+
+        if (!_templateCache[tab.id]) {
+            const resp = await fetch(`templates/settings-${tab.id}.html`);
+            _templateCache[tab.id] = await resp.text();
+        }
+
+        panel.innerHTML = _templateCache[tab.id];
+        panel.dataset.loaded = 'true';
+    }));
+}
+
+/**
+ * Initialize settings tabs — generates tab buttons, attaches handlers, restores last tab.
+ * Must be called AFTER loadAllTabTemplates() so icon cards exist in the DOM.
+ */
+function initSettingsTabs() {
+    const tabBar = document.querySelector('.settings-tabs');
+    if (!tabBar) return;
+
+    // Generate tab buttons from registry
+    tabBar.innerHTML = '';
+    SETTINGS_TABS.forEach(tab => {
+        const btn = document.createElement('button');
+        btn.className = 'settings-tab';
+        btn.dataset.tab = tab.id;
+        btn.textContent = tab.label;
+        btn.addEventListener('click', () => switchSettingsTab(tab.id));
+        tabBar.appendChild(btn);
+    });
+
+    // Restore last active tab or default to first
+    const savedTab = localStorage.getItem(SETTINGS_TAB_STORAGE_KEY);
+    const initialTab = SETTINGS_TABS.find(t => t.id === savedTab) ? savedTab : SETTINGS_TABS[0].id;
+    switchSettingsTab(initialTab);
+
+    // Icon card click → smooth scroll to section
+    document.querySelectorAll('.settings-card[data-scroll-to]').forEach(card => {
+        card.addEventListener('click', () => {
+            const targetId = card.dataset.scrollTo;
+            const target = document.getElementById(targetId);
+            if (target) {
+                target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        });
+    });
+}
+
+/**
+ * Switch active settings tab
+ */
+function switchSettingsTab(tabId) {
+    // Update tab buttons
+    document.querySelectorAll('.settings-tab').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.tab === tabId);
+    });
+
+    // Update tab content panels
+    document.querySelectorAll('.settings-tab-content').forEach(panel => {
+        panel.classList.toggle('active', panel.dataset.tab === tabId);
+    });
+
+    // Persist
+    localStorage.setItem(SETTINGS_TAB_STORAGE_KEY, tabId);
+}
 
 /**
  * Toggle settings - navigates to settings page or back to chat
@@ -768,9 +856,16 @@ function initProviderSelector() {
 }
 
 /**
- * Initialize settings event listeners
+ * Initialize settings event listeners.
+ * Loads tab templates first, then wires up all event handlers.
  */
-export function initSettings() {
+export async function initSettings() {
+    // Load tab templates into the DOM before anything else
+    await loadAllTabTemplates();
+
+    // Initialize tab system (needs templates loaded for icon card handlers)
+    initSettingsTabs();
+
     // Initialize custom provider selector
     initProviderSelector();
 

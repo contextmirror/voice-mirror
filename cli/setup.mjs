@@ -382,7 +382,6 @@ export async function runSetup(opts = {}) {
             message: 'Voice activation mode',
             options: [
                 { value: 'wakeWord', label: 'Wake Word (Recommended)', hint: 'Say "Hey Claude" to activate' },
-                { value: 'callMode', label: 'Call Mode', hint: 'Always listening, no wake word' },
                 { value: 'pushToTalk', label: 'Push to Talk', hint: 'Hold key to speak' },
             ],
             initialValue: 'wakeWord',
@@ -637,7 +636,6 @@ function printSummary(config) {
 
 function formatActivation(mode) {
     switch (mode) {
-        case 'callMode': return 'Call Mode (always listening)';
         case 'pushToTalk': return 'Push to Talk';
         default: return 'Wake Word (Hey Claude)';
     }

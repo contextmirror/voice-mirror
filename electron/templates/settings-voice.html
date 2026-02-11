@@ -1,0 +1,146 @@
+<!-- Icon Cards -->
+<div class="settings-card-grid">
+    <div class="settings-card" data-scroll-to="section-activation">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+        <span>Activation</span>
+    </div>
+    <div class="settings-card" data-scroll-to="wake-word-settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+        <span>Wake Word</span>
+    </div>
+    <div class="settings-card" data-scroll-to="section-tts">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+        <span>Text-to-Speech</span>
+    </div>
+    <div class="settings-card" data-scroll-to="section-stt">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M17 18l4 4"/></svg>
+        <span>Speech Recognition</span>
+    </div>
+    <div class="settings-card" data-scroll-to="audio-device-section">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
+        <span>Audio Devices</span>
+    </div>
+</div>
+
+<!-- Activation Mode -->
+<div class="settings-section" id="section-activation">
+    <h3>Activation Mode</h3>
+    <div class="settings-group">
+        <label class="radio-option">
+            <input type="radio" name="activationMode" value="wakeWord" checked>
+            <span class="radio-label">Wake Word</span>
+            <span class="radio-desc" id="wakeWordDesc">Say the wake word to activate</span>
+        </label>
+        <label class="radio-option">
+            <input type="radio" name="activationMode" value="pushToTalk">
+            <span class="radio-label">Push to Talk</span>
+            <span class="radio-desc">Hold a key to record</span>
+        </label>
+    </div>
+</div>
+
+<!-- Wake Word Settings -->
+<div class="settings-section" id="wake-word-settings">
+    <h3>Wake Word</h3>
+    <div class="settings-group">
+        <div class="setting-row">
+            <label>Phrase</label>
+            <select id="wake-word-phrase">
+                <option value="hey_claude">Hey Claude</option>
+                <option value="hey_jarvis">Hey Jarvis</option>
+                <option value="alexa">Alexa</option>
+            </select>
+        </div>
+        <div class="setting-row">
+            <label>Sensitivity</label>
+            <div class="slider-container">
+                <input type="range" id="wake-word-sensitivity" min="0.1" max="0.9" step="0.1" value="0.5">
+                <span id="sensitivity-value">0.5</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Voice Settings (TTS) -->
+<div class="settings-section" id="section-tts">
+    <h3>Text-to-Speech</h3>
+    <div class="settings-group">
+        <div class="setting-row">
+            <label>TTS Engine</label>
+            <select id="tts-adapter">
+                <option value="kokoro">Kokoro (Fast, ~100MB)</option>
+                <option value="qwen">Qwen3-TTS (Voice cloning, ~3-7GB download)</option>
+            </select>
+        </div>
+        <div class="setting-row" id="tts-model-size-row" style="display: none;">
+            <label>Model Size</label>
+            <select id="tts-model-size">
+                <option value="0.6B">0.6B (~1.5GB disk, ~2GB VRAM)</option>
+                <option value="1.7B">1.7B (~3.5GB disk, ~4GB VRAM)</option>
+            </select>
+        </div>
+        <p class="settings-hint" id="tts-qwen-hint" style="display: none;">
+            Qwen3-TTS downloads models on first use (~3-7GB). Voice cloning requires both Base + CustomVoice models.
+        </p>
+        <div class="setting-row" id="tts-voice-row">
+            <label>TTS Voice</label>
+            <select id="tts-voice">
+                <!-- Kokoro voices (default) -->
+                <option value="af_bella">Bella (Female)</option>
+                <option value="af_nicole">Nicole (Female)</option>
+                <option value="af_sarah">Sarah (Female)</option>
+                <option value="am_adam">Adam (Male)</option>
+                <option value="am_michael">Michael (Male)</option>
+                <option value="bf_emma">Emma (British)</option>
+                <option value="bm_george">George (British)</option>
+            </select>
+        </div>
+        <div class="setting-row">
+            <label>Speech Speed</label>
+            <div class="slider-container">
+                <input type="range" id="tts-speed" min="0.5" max="2.0" step="0.1" value="1.0">
+                <span id="speed-value">1.0x</span>
+            </div>
+        </div>
+        <div class="setting-row">
+            <label>TTS Volume</label>
+            <div class="slider-container">
+                <input type="range" id="tts-volume" min="0.1" max="2.0" step="0.1" value="1.0">
+                <span id="volume-value">100%</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Speech Recognition (STT) -->
+<div class="settings-section" id="section-stt">
+    <h3>Speech Recognition</h3>
+    <div class="settings-group">
+        <div class="setting-row">
+            <label>STT Model</label>
+            <select id="stt-model">
+                <option value="parakeet">Parakeet (Fast)</option>
+                <option value="whisper">Whisper (Accurate)</option>
+            </select>
+        </div>
+    </div>
+</div>
+
+<!-- Audio Devices -->
+<div class="settings-section" id="audio-device-section">
+    <h3>Audio Devices</h3>
+    <div class="settings-group">
+        <div class="setting-row">
+            <label>Input Device</label>
+            <select id="audio-input-device">
+                <option value="">System Default</option>
+            </select>
+        </div>
+        <div class="setting-row">
+            <label>Output Device</label>
+            <select id="audio-output-device">
+                <option value="">System Default</option>
+            </select>
+        </div>
+    </div>
+</div>

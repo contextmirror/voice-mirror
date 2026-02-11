@@ -1,0 +1,242 @@
+<!-- Icon Cards -->
+<div class="settings-card-grid">
+    <div class="settings-card" data-scroll-to="section-ai-provider">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a4 4 0 0 1 4 4v1h1a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3v-8a3 3 0 0 1 3-3h1V6a4 4 0 0 1 4-4z"/><circle cx="9" cy="14" r="1.5"/><circle cx="15" cy="14" r="1.5"/></svg>
+        <span>AI Provider</span>
+    </div>
+    <div class="settings-card" data-scroll-to="ai-system-prompt-row">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        <span>System Prompt</span>
+    </div>
+    <div class="settings-card" data-scroll-to="tool-profile-section">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+        <span>Tool Profiles</span>
+    </div>
+</div>
+
+<!-- AI Provider -->
+<div class="settings-section" id="section-ai-provider">
+    <h3>AI Provider</h3>
+    <div class="settings-group">
+        <div class="setting-row">
+            <label>Auto-detect local LLMs</label>
+            <label class="toggle-switch">
+                <input type="checkbox" id="ai-auto-detect" checked>
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+        <div id="ai-detected-status" class="detection-status">
+            <span class="detection-label">Scanning...</span>
+        </div>
+        <div class="setting-row">
+            <label>Provider</label>
+            <div class="provider-selector" id="ai-provider-selector">
+                <button class="provider-selector-btn" id="ai-provider-btn" type="button">
+                    <span class="provider-icon" id="selected-provider-icon"></span>
+                    <span class="provider-name" id="selected-provider-name">Claude Code</span>
+                    <svg class="dropdown-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="6 9 12 15 18 9"/>
+                    </svg>
+                </button>
+                <div class="provider-dropdown" id="ai-provider-dropdown">
+                    <div class="provider-group">
+                        <div class="provider-group-label">CLI Agents <span class="group-badge cli-badge">Terminal Access</span></div>
+                        <div class="provider-option" data-value="claude">
+                            <span class="provider-icon provider-icon-claude"></span>
+                            <span>Claude Code</span>
+                        </div>
+                        <div class="provider-option" data-value="codex">
+                            <span class="provider-icon provider-icon-codex"></span>
+                            <span>OpenAI Codex</span>
+                        </div>
+                        <div class="provider-option" data-value="gemini-cli">
+                            <span class="provider-icon provider-icon-gemini-cli"></span>
+                            <span>Gemini CLI</span>
+                        </div>
+                        <div class="provider-option" data-value="kimi-cli">
+                            <span class="provider-icon provider-icon-kimi"></span>
+                            <span>Kimi CLI</span>
+                            <span class="provider-badge mcp">MCP</span>
+                        </div>
+                    </div>
+                    <div class="provider-group">
+                        <div class="provider-group-label">Local (Auto-detected)</div>
+                        <div class="provider-option" data-value="ollama">
+                            <span class="provider-icon provider-icon-ollama"></span>
+                            <span>Ollama</span>
+                        </div>
+                        <div class="provider-option" data-value="lmstudio">
+                            <span class="provider-icon provider-icon-lmstudio"></span>
+                            <span>LM Studio</span>
+                        </div>
+                        <div class="provider-option" data-value="jan">
+                            <span class="provider-icon provider-icon-jan"></span>
+                            <span>Jan</span>
+                        </div>
+                    </div>
+                    <div class="provider-group">
+                        <div class="provider-group-label">Cloud API</div>
+                        <div class="provider-option" data-value="openai">
+                            <span class="provider-icon provider-icon-openai"></span>
+                            <span>OpenAI</span>
+                        </div>
+                        <div class="provider-option" data-value="gemini">
+                            <span class="provider-icon provider-icon-gemini"></span>
+                            <span>Google Gemini</span>
+                        </div>
+                        <div class="provider-option" data-value="grok">
+                            <span class="provider-icon provider-icon-grok"></span>
+                            <span>Grok (xAI)</span>
+                        </div>
+                        <div class="provider-option" data-value="groq">
+                            <span class="provider-icon provider-icon-groq"></span>
+                            <span>Groq</span>
+                        </div>
+                        <div class="provider-option" data-value="mistral">
+                            <span class="provider-icon provider-icon-mistral"></span>
+                            <span>Mistral</span>
+                        </div>
+                        <div class="provider-option" data-value="openrouter">
+                            <span class="provider-icon provider-icon-openrouter"></span>
+                            <span>OpenRouter</span>
+                        </div>
+                        <div class="provider-option" data-value="deepseek">
+                            <span class="provider-icon provider-icon-deepseek"></span>
+                            <span>DeepSeek</span>
+                        </div>
+                        <div class="provider-option" data-value="kimi">
+                            <span class="provider-icon provider-icon-kimi"></span>
+                            <span>Kimi (Moonshot)</span>
+                        </div>
+                    </div>
+                </div>
+                <!-- Hidden input for form value -->
+                <input type="hidden" id="ai-provider" value="claude">
+            </div>
+        </div>
+        <div class="settings-info-box cli-warning" id="cli-warning" style="display: none;">
+            CLI Agent &mdash; This provider has full terminal access and can execute commands on your system.
+        </div>
+        <div class="setting-row" id="ai-model-row">
+            <label>Model</label>
+            <select id="ai-model">
+                <option value="">Auto (default)</option>
+            </select>
+        </div>
+        <div class="setting-row" id="ai-context-length-row" style="display: none;">
+            <label>Context Length</label>
+            <select id="ai-context-length">
+                <option value="4096">4K (4,096 tokens)</option>
+                <option value="8192">8K (8,192 tokens)</option>
+                <option value="16384">16K (16,384 tokens)</option>
+                <option value="32768" selected>32K (32,768 tokens)</option>
+                <option value="65536">64K (65,536 tokens)</option>
+                <option value="131072">128K (131,072 tokens)</option>
+            </select>
+        </div>
+        <div class="setting-row" id="ai-endpoint-row" style="display: none;">
+            <label>Endpoint</label>
+            <input type="text" id="ai-endpoint" placeholder="http://127.0.0.1:11434">
+        </div>
+        <div class="setting-row" id="ai-apikey-row" style="display: none;">
+            <label>API Key</label>
+            <input type="password" id="ai-apikey" placeholder="Enter API key...">
+        </div>
+        <div class="setting-row setting-row-vertical" id="ai-system-prompt-row">
+            <label>System Prompt <span class="label-hint">(optional persona/instructions)</span></label>
+            <textarea id="ai-system-prompt" rows="3" placeholder="e.g., You are JARVIS, Tony Stark's AI assistant. Address the user as 'Sir' and speak in a formal British manner with dry wit."></textarea>
+        </div>
+        <button class="settings-btn secondary" id="ai-scan-btn" onclick="scanProviders()">
+            Scan Now
+        </button>
+    </div>
+</div>
+
+<!-- Tool Profiles (Claude Code only) -->
+<div class="settings-section" id="tool-profile-section" style="display: none;">
+    <h3>Tool Profiles</h3>
+    <div class="settings-group">
+        <div class="setting-row">
+            <label>Active Profile</label>
+            <div class="profile-selector" id="profile-selector">
+                <button class="profile-selector-btn" id="profile-selector-btn">
+                    <span class="profile-name" id="profile-name">Voice Assistant</span>
+                    <span class="profile-arrow">&#x25BE;</span>
+                </button>
+                <div class="profile-dropdown" id="profile-dropdown">
+                    <div class="profile-group-label">Presets</div>
+                    <div class="profile-option" data-profile="voice-assistant">
+                        <span class="profile-option-name">Voice Assistant</span>
+                        <span class="profile-option-desc">screen, memory, browser</span>
+                    </div>
+                    <div class="profile-option" data-profile="n8n-workflows">
+                        <span class="profile-option-name">n8n Workflows</span>
+                        <span class="profile-option-desc">n8n automation</span>
+                    </div>
+                    <div class="profile-option" data-profile="web-browser">
+                        <span class="profile-option-name">Web Browser</span>
+                        <span class="profile-option-desc">screen, browser</span>
+                    </div>
+                    <div class="profile-option" data-profile="full-toolbox">
+                        <span class="profile-option-name">Full Toolbox</span>
+                        <span class="profile-option-desc">all 48 tools</span>
+                    </div>
+                    <div class="profile-option" data-profile="minimal">
+                        <span class="profile-option-name">Minimal</span>
+                        <span class="profile-option-desc">voice I/O only</span>
+                    </div>
+                    <div class="profile-group-label" id="custom-profiles-label" style="display: none;">Custom</div>
+                    <div id="custom-profiles-container"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="tool-group-list" id="tool-group-list">
+            <label class="tool-group-item">
+                <input type="checkbox" value="core" checked disabled>
+                <span class="tool-group-name">core <span class="tool-group-count">(4)</span></span>
+                <span class="tool-group-desc">Voice I/O</span>
+                <span class="tool-group-badge">always on</span>
+            </label>
+            <label class="tool-group-item">
+                <input type="checkbox" value="meta" checked disabled>
+                <span class="tool-group-name">meta <span class="tool-group-count">(3)</span></span>
+                <span class="tool-group-desc">Dynamic loading</span>
+                <span class="tool-group-badge">always on</span>
+            </label>
+            <label class="tool-group-item">
+                <input type="checkbox" value="screen" data-group="screen">
+                <span class="tool-group-name">screen <span class="tool-group-count">(1)</span></span>
+                <span class="tool-group-desc">Screenshots</span>
+            </label>
+            <label class="tool-group-item">
+                <input type="checkbox" value="memory" data-group="memory">
+                <span class="tool-group-name">memory <span class="tool-group-count">(5)</span></span>
+                <span class="tool-group-desc">Persistent memory</span>
+            </label>
+            <label class="tool-group-item">
+                <input type="checkbox" value="voice-clone" data-group="voice-clone">
+                <span class="tool-group-name">voice-clone <span class="tool-group-count">(3)</span></span>
+                <span class="tool-group-desc">Voice cloning</span>
+            </label>
+            <label class="tool-group-item">
+                <input type="checkbox" value="browser" data-group="browser">
+                <span class="tool-group-name">browser <span class="tool-group-count">(14)</span></span>
+                <span class="tool-group-desc">Browser automation</span>
+            </label>
+            <label class="tool-group-item">
+                <input type="checkbox" value="n8n" data-group="n8n">
+                <span class="tool-group-name">n8n <span class="tool-group-count">(22)</span></span>
+                <span class="tool-group-desc">Workflow automation</span>
+            </label>
+        </div>
+
+        <div class="tool-profile-footer">
+            <span class="tool-count" id="tool-count">7 of 48 tools</span>
+            <div class="tool-profile-actions">
+                <button class="settings-btn secondary small" id="save-profile-btn" onclick="saveCustomProfile()">Save as Profile</button>
+                <button class="settings-btn danger small" id="delete-profile-btn" style="display: none;" onclick="deleteCurrentProfile()">Delete</button>
+            </div>
+        </div>
+    </div>
+</div>

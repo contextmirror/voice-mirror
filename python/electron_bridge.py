@@ -221,7 +221,6 @@ class ElectronOutputCapture:
     # Patterns to ignore completely (noisy debug output)
     IGNORE_PATTERNS = [
         '🎤 Audio:',           # Audio level debug
-        '📞 Call mode energy', # Call mode energy debug
         '🔊 █',                # Audio level bar
         'Audio status:',       # sounddevice status
     ]

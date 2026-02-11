@@ -201,6 +201,37 @@
     margin-left: 0;
 }
 
+/* Terminal nav — two-line label with provider sub-label */
+.nav-label-group {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.nav-provider-sub {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    opacity: 0.6;
+    font-weight: 400;
+}
+
+/* Smaller provider icon for sidebar sub-label */
+.nav-provider-sub .provider-icon {
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+}
+
+#sidebar.collapsed .nav-label-group {
+    opacity: 0;
+    width: 0;
+    overflow: hidden;
+    position: absolute;
+}
+
 /* ========== Sidebar Footer ========== */
 #sidebar-footer {
     padding: 12px 8px;
