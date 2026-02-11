@@ -524,11 +524,12 @@ function createPythonBackend(options = {}) {
                 const newMessage = {
                     id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
                     from: _senderName(),
-                    message: `Please analyze this screenshot: ${imagePath}`,
+                    message: imageData.prompt || "What's in this image?",
                     timestamp: new Date().toISOString(),
                     read_by: [],
                     thread_id: `voice-${Date.now()}`,
-                    image_path: imagePath  // Extra field for image
+                    image_path: imagePath,
+                    image_data_url: `data:image/png;base64,${base64Data}`
                 };
 
                 data.messages.push(newMessage);

@@ -191,8 +191,9 @@ class OpenAIProvider extends BaseProvider {
      *
      * @param {string} text - User message (empty string for tool follow-up)
      * @param {boolean} isToolFollowUp - Whether this is a follow-up after tool execution
+     * @param {string|null} imageDataUrl - Optional data URL for image (data:image/png;base64,...)
      */
-    async sendInput(text, isToolFollowUp = false) {
+    async sendInput(text, isToolFollowUp = false, imageDataUrl = null) {
         if (!this.running) {
             this.emitOutput('stderr', '[Error] Provider not running\n');
             return;
@@ -200,10 +201,30 @@ class OpenAIProvider extends BaseProvider {
 
         // Add user message to history (unless it's a tool follow-up with empty text)
         if (text && !isToolFollowUp) {
-            this.messages.push({
-                role: 'user',
-                content: text
-            });
+            if (imageDataUrl && this.supportsVision()) {
+                const rawBase64 = imageDataUrl.replace(/^data:image\/\w+;base64,/, '');
+                if (this.providerType === 'ollama') {
+                    this.messages.push({
+                        role: 'user',
+                        content: text,
+                        images: [rawBase64]
+                    });
+                } else {
+                    this.messages.push({
+                        role: 'user',
+                        content: [
+                            { type: 'image_url', image_url: { url: imageDataUrl } },
+                            { type: 'text', text }
+                        ]
+                    });
+                }
+                console.log(`[OpenAIProvider] Sending user image via ${this.providerType} format (${Math.round(rawBase64.length / 1024)}KB)`);
+            } else {
+                this.messages.push({
+                    role: 'user',
+                    content: text
+                });
+            }
             this.emitOutput('stdout', `\n> ${text}\n\n`);
             // Reset tool iteration counter for new user input
             this.currentToolIteration = 0;

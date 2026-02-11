@@ -10,7 +10,7 @@ import { initXterm, handleAIOutput, updateAIStatus, toggleTerminal, startAI, sto
 import { initSettings, toggleSettings } from './settings.js';
 import { initNavigation, navigateTo, toggleSidebarCollapse } from './navigation.js';
 import { initBrowserPanel, navigateToBrowserPage } from './browser-panel.js';
-import { initChatInput, setRecordingVisual } from './chat-input.js';
+import { initChatInput, setRecordingVisual, setSendImageWithPrompt } from './chat-input.js';
 import { initChatStore, autoSave } from './chat-store.js';
 import { blobToBase64, formatSize } from './utils.js';
 import { initOrbCanvas, setOrbState, destroyOrbCanvas } from './orb-canvas.js';
@@ -217,6 +217,7 @@ async function sendImageWithPrompt(prompt) {
     // Only add prompt message if there is one
     if (prompt) {
         addMessage('user', prompt);
+        isDuplicate(prompt); // Register in dedup map so inbox echo is suppressed
     }
 
     // Clear preview immediately so UI feels fast
@@ -904,6 +905,7 @@ async function init() {
 
     // Initialize chat input bar (textarea, send/mic buttons, clear/save actions)
     initChatInput();
+    setSendImageWithPrompt(sendImageWithPrompt);
 
     // Initialize scroll navigation buttons
     initScrollButtons();

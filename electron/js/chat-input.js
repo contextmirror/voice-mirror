@@ -4,6 +4,7 @@
  */
 
 import { addMessage, isDuplicate, autoScroll } from './messages.js';
+import { state } from './state.js';
 
 let textarea;
 let sendBtn;
@@ -12,9 +13,21 @@ let saveBtn;
 let chatContainer;
 let welcomeMessage;
 
+// Optional callback for sending image+text together (set by main.js)
+let _sendImageWithPrompt = null;
+export function setSendImageWithPrompt(fn) { _sendImageWithPrompt = fn; }
+
 function sendMessage() {
     const text = textarea.value.trim();
     if (!text) return;
+
+    // If an image is pending, bundle text + image together
+    if (state.pendingImageData && _sendImageWithPrompt) {
+        _sendImageWithPrompt(text);
+        textarea.value = '';
+        textarea.style.height = '';
+        return;
+    }
 
     addMessage('user', text);
     isDuplicate(text); // Register in dedup map so Python echo is suppressed

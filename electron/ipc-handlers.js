@@ -3,11 +3,49 @@
  * Extracted from main.js to reduce file size and improve testability.
  */
 
-const { app, ipcMain, desktopCapturer, screen, shell } = require('electron');
+const { app, ipcMain, desktopCapturer, screen, shell, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const { execFile } = require('child_process');
 const { validators } = require('./ipc-validators');
 const CLI_PROVIDERS = ['claude', 'codex', 'gemini-cli'];
+
+/**
+ * Capture a specific display on Windows using PowerShell + .NET GDI+.
+ * Bypasses Electron's desktopCapturer bug where multi-monitor returns same image.
+ * @param {number} displayIndex - Display index to capture
+ * @param {string} outputPath - Path to save the PNG screenshot
+ * @returns {Promise<boolean>} True if capture succeeded
+ */
+function captureDisplayWindows(displayIndex, outputPath) {
+    if (process.platform !== 'win32') return Promise.resolve(false);
+    return new Promise((resolve) => {
+        const script = `
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+$screens = [System.Windows.Forms.Screen]::AllScreens
+$idx = ${displayIndex}
+if ($idx -ge $screens.Length) { $idx = 0 }
+$s = $screens[$idx]
+$bmp = New-Object System.Drawing.Bitmap($s.Bounds.Width, $s.Bounds.Height)
+$g = [System.Drawing.Graphics]::FromImage($bmp)
+$g.CopyFromScreen($s.Bounds.Location, [System.Drawing.Point]::Empty, $s.Bounds.Size)
+$bmp.Save('${outputPath.replace(/\\/g, '\\\\')}', [System.Drawing.Imaging.ImageFormat]::Png)
+$g.Dispose()
+$bmp.Dispose()
+`;
+        execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], {
+            timeout: 8000, windowsHide: true
+        }, (err) => {
+            if (err) {
+                console.error('[IPC] Windows native capture failed:', err.message);
+                resolve(false);
+            } else {
+                resolve(true);
+            }
+        });
+    });
+}
 
 /**
  * Register all IPC handlers.
@@ -64,6 +102,35 @@ function registerIpcHandlers(ctx) {
     });
 
     ipcMain.handle('get-screens', async () => {
+        const displays = screen.getAllDisplays();
+        const primary = screen.getPrimaryDisplay();
+
+        // On Windows multi-monitor, use native PowerShell capture for accurate thumbnails
+        // (Electron desktopCapturer returns same image for all displays)
+        if (process.platform === 'win32' && displays.length > 1) {
+            const tmpDir = app.getPath('temp');
+            const results = [];
+            for (let i = 0; i < displays.length; i++) {
+                const d = displays[i];
+                const isPrimary = d.id === primary.id;
+                const tmpPath = path.join(tmpDir, `vm-thumb-${i}.png`);
+                const ok = await captureDisplayWindows(i, tmpPath);
+                let thumbnail = '';
+                if (ok && fs.existsSync(tmpPath)) {
+                    const img = nativeImage.createFromPath(tmpPath);
+                    thumbnail = img.resize({ width: 320 }).toDataURL();
+                    try { fs.unlinkSync(tmpPath); } catch {}
+                }
+                results.push({
+                    id: `display:${i}`,
+                    name: `Screen ${i + 1} (${d.size.width}x${d.size.height})${isPrimary ? ' - Primary' : ''}`,
+                    thumbnail
+                });
+            }
+            return results;
+        }
+
+        // Fallback: use desktopCapturer
         const sources = await desktopCapturer.getSources({
             types: ['screen'],
             thumbnailSize: { width: 320, height: 180 }
@@ -76,6 +143,20 @@ function registerIpcHandlers(ctx) {
     });
 
     ipcMain.handle('capture-screen', async (_event, sourceId) => {
+        // Windows native capture for multi-monitor (display:N format from get-screens)
+        if (process.platform === 'win32' && typeof sourceId === 'string' && sourceId.startsWith('display:')) {
+            const displayIndex = parseInt(sourceId.split(':')[1], 10) || 0;
+            const tmpPath = path.join(app.getPath('temp'), `vm-capture-${Date.now()}.png`);
+            const ok = await captureDisplayWindows(displayIndex, tmpPath);
+            if (ok && fs.existsSync(tmpPath)) {
+                const img = nativeImage.createFromPath(tmpPath);
+                const dataUrl = img.toDataURL();
+                try { fs.unlinkSync(tmpPath); } catch {}
+                return dataUrl;
+            }
+        }
+
+        // Fallback: use desktopCapturer
         const sources = await desktopCapturer.getSources({
             types: ['screen'],
             thumbnailSize: { width: 1920, height: 1080 }

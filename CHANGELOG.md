@@ -17,6 +17,7 @@ Format inspired by game dev patch notes — grouped by release, categorized by i
 - **Scroll navigation buttons** — Jump to top/bottom of chat with floating buttons
 - **Clear chat confirmation** — Two-click safety on the clear button to prevent accidents
 - **Ministral vision support** — Added to vision model detection list
+- **Image + text bundling** — Type a message with a pending screenshot to send both together
 
 ### Improved
 - **Settings overhaul** — Refactored into template fragments with real provider icons and cleaner sidebar nav
@@ -24,10 +25,15 @@ Format inspired by game dev patch notes — grouped by release, categorized by i
 - **Auto-start Ollama** — Detects Ollama installation on Windows/macOS/Linux and starts the service automatically
 - **Status bar parses Claude Code TUI** — Detects thinking spinners, tool calls, MCP activity, and prompt state from raw PTY output
 - **Always-visible pause button** — No longer flickers with status changes
+- **Windows multi-monitor screenshots** — Native PowerShell GDI+ capture bypasses Electron's desktopCapturer bug that returned the same image for all displays
+- **Vision image passthrough** — Screenshots sent to local LLMs now include the actual image data (Ollama native format + OpenAI content blocks)
+- **Sidebar widened** — 275px with larger window control buttons for easier clicking
 
 ### Fixed
 - **Dictation events not reaching UI** — Python bridge now emits `dictation_start`/`dictation_stop` events
 - **Voice loop not resuming after interrupt** — Claude Code re-enters `claude_listen` after Ctrl+C
+- **Screenshot picker not clickable** — Added `-webkit-app-region: no-drag` to screen picker overlay
+- **Image prompt echo** — Duplicate suppression now covers image prompt text in inbox
 - **Status bar stuck on "Thinking"** — Clears when Claude returns to prompt (`❯` detection)
 - **PTY ANSI parsing** — Accumulates raw data before stripping escape sequences to handle split chunks
 - **CI tests** — Updated for settings template refactor

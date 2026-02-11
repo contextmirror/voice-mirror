@@ -734,6 +734,7 @@
     align-items: center;
     justify-content: center;
     z-index: 10000;
+    -webkit-app-region: no-drag;
 }
 
 .screen-picker-title {

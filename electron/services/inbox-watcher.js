@@ -182,7 +182,7 @@ function createInboxWatcher(options = {}) {
                             });
                         }
 
-                        captureProviderResponse(activeProvider, msg.message, _devlog).then((response) => {
+                        captureProviderResponse(activeProvider, msg.message, _devlog, msg.image_data_url || null).then((response) => {
                             if (response) {
                                 const cleanedResponse = stripEchoedContent(response);
                                 writeResponseToInbox(contextMirrorDir, cleanedResponse, providerName, msg.id);
@@ -346,9 +346,11 @@ function createInboxWatcher(options = {}) {
  * Handles tool calls by waiting for the tool loop to complete.
  * @param {Object} provider - The provider instance
  * @param {string} message - The message to send
+ * @param {Function} _devlog - Dev logging function
+ * @param {string|null} imageDataUrl - Optional image data URL to send with message
  * @returns {Promise<string|null>} The final response (after tool execution) or null on timeout
  */
-async function captureProviderResponse(provider, message, _devlog = () => {}) {
+async function captureProviderResponse(provider, message, _devlog = () => {}, imageDataUrl = null) {
     return new Promise((resolve) => {
         let fullResponse = '';
         let allOutput = '';  // Never reset — keeps everything for fallback extraction
@@ -414,8 +416,8 @@ async function captureProviderResponse(provider, message, _devlog = () => {}) {
             }
         };
 
-        // Send the message
-        provider.sendInput(message);
+        // Send the message (with optional image)
+        provider.sendInput(message, false, imageDataUrl);
         const startTime = Date.now();
 
         // Wait for response to complete (detect when output stops)
