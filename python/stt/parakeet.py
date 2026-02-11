@@ -4,6 +4,7 @@ import asyncio
 import os
 import struct
 import tempfile
+from pathlib import Path
 
 import numpy as np
 
@@ -29,10 +30,16 @@ class ParakeetAdapter(STTAdapter):
 
             print(f"Loading Parakeet STT model ({self.model_name})...")
 
+            # Store model in a flat local directory to avoid onnxruntime 1.24+
+            # rejecting HuggingFace cache symlinks ("escapes model directory").
+            model_dir = Path(__file__).resolve().parent.parent / "models" / "parakeet"
+            model_dir.mkdir(parents=True, exist_ok=True)
+
             # Load with CPU provider (CUDA/Blackwell sm_120 not yet supported in ONNX Runtime)
             # RTX 50xx series requires custom builds or future ONNX Runtime versions
             self.model = onnx_asr.load_model(
                 self.model_name,
+                str(model_dir),
                 providers=["CPUExecutionProvider"]
             )
             self.supports_gpu = False
