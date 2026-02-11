@@ -307,6 +307,13 @@ jobs:
         with:
           path: source
 
+      # macos-latest ships Python 3.14 which is too new for onnxruntime 1.23.x.
+      # Pin to 3.12 until ORT catches up. The installer still creates its own venv.
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
       - name: Run install.sh (fresh clone, full setup)
         run: |
           bash source/install.sh \
