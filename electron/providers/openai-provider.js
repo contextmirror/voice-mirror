@@ -80,6 +80,7 @@ class OpenAIProvider extends BaseProvider {
             'llama3.2-vision',                    // Meta Llama vision
             'moondream',                          // Moondream
             'granite3.2-vision',                  // IBM Granite vision
+            'ministral',                          // Mistral ministral (vision)
         ];
         return visionModels.some(v => this.model?.toLowerCase().includes(v));
     }

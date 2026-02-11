@@ -335,17 +335,12 @@ function dismissScreenPicker() {
 /**
  * Update the capture button enabled/disabled state based on vision support.
  */
-async function updateCaptureButtonState() {
+function updateCaptureButtonState() {
     const btn = document.getElementById('capture-screen-btn');
     if (!btn) return;
-    try {
-        const hasVision = await window.voiceMirror.supportsVision();
-        btn.disabled = !hasVision;
-        btn.title = hasVision ? 'Capture Screen' : 'Requires a vision-capable model';
-        btn.style.opacity = hasVision ? '' : '0.4';
-    } catch {
-        // If check fails, leave enabled
-    }
+    btn.disabled = false;
+    btn.title = 'Capture Screen';
+    btn.style.opacity = '';
 }
 
 /**
