@@ -10,6 +10,7 @@ on:
       - package.json
       - mcp-server/package.json
       - python/requirements.txt
+      - .github/workflows/installer-test.yml
   pull_request:
     branches: [main]
     paths:
@@ -19,6 +20,10 @@ on:
       - package.json
       - mcp-server/package.json
       - python/requirements.txt
+      - .github/workflows/installer-test.yml
+  schedule:
+    # Nightly at 03:00 UTC — catches upstream breakage (e.g. pip, node-gyp)
+    - cron: '0 3 * * *'
   workflow_dispatch:
 
 concurrency:
@@ -26,6 +31,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # ─── Quick tests: installer scripts run with --skip-setup ──────────
+  # These are fast (<5 min) and run on every push/PR.
+
   installer-linux:
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -55,49 +63,6 @@ jobs:
         run: node cli/index.mjs doctor 2>&1 || true
 
       - name: Run unit tests
-        run: npm test
-
-  fresh-clone-linux:
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
-
-    steps:
-      - name: Checkout (only for the installer script)
-        uses: actions/checkout@v4
-        with:
-          path: source
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install setuptools for node-gyp
-        run: pip install setuptools
-
-      - name: Run install.sh (fresh clone)
-        run: |
-          bash source/install.sh \
-            --dir "${{ runner.temp }}/voice-mirror-fresh" \
-            --branch "${{ github.head_ref || github.ref_name }}" \
-            --repo "https://github.com/${{ github.repository }}.git" \
-            --skip-setup \
-            --non-interactive
-        env:
-          DEBIAN_FRONTEND: noninteractive
-
-      - name: Verify fresh installation
-        run: |
-          test -d "${{ runner.temp }}/voice-mirror-fresh/node_modules"
-          test -d "${{ runner.temp }}/voice-mirror-fresh/mcp-server/node_modules"
-          test -f "${{ runner.temp }}/voice-mirror-fresh/electron/main.js"
-
-      - name: Run doctor (informational)
-        working-directory: ${{ runner.temp }}/voice-mirror-fresh
-        run: node cli/index.mjs doctor 2>&1 || true
-
-      - name: Run unit tests
-        working-directory: ${{ runner.temp }}/voice-mirror-fresh
         run: npm test
 
   installer-macos:
@@ -159,4 +124,208 @@ jobs:
         continue-on-error: true
 
       - name: Run unit tests
+        run: npm test
+
+  # ─── Full setup tests: no --skip-setup, tests Python venv + pip ────
+  # These run setup wizard in non-interactive mode to test the full
+  # dependency chain that real users hit. Skips model downloads (too large
+  # for CI) but tests everything else: Python detection, venv creation,
+  # pip install, MCP server deps, config write.
+
+  full-setup-linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout (installer script only)
+        uses: actions/checkout@v4
+        with:
+          path: source
+
+      # NO actions/setup-python — let the installer's ensure_python find it.
+      # Ubuntu runners have Python 3.x pre-installed on PATH, which is what
+      # real users on Ubuntu/Debian will also have.
+
+      - name: Install setuptools for node-gyp
+        run: pip install setuptools || pip3 install setuptools
+
+      - name: Run install.sh (fresh clone, full setup)
+        run: |
+          bash source/install.sh \
+            --dir "${{ runner.temp }}/voice-mirror-full" \
+            --branch "${{ github.head_ref || github.ref_name }}" \
+            --repo "https://github.com/${{ github.repository }}.git" \
+            --non-interactive
+        env:
+          DEBIAN_FRONTEND: noninteractive
+
+      - name: Verify installation structure
+        working-directory: ${{ runner.temp }}/voice-mirror-full
+        run: |
+          echo "=== Checking core files ==="
+          test -d node_modules
+          test -d mcp-server/node_modules
+          test -f electron/main.js
+
+          echo "=== Checking Python venv ==="
+          test -d python/.venv
+          test -f python/.venv/bin/python || test -f python/.venv/Scripts/python.exe
+
+          echo "=== Checking config was created ==="
+          CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/voice-mirror"
+          test -f "$CONFIG_DIR/config.json" && echo "Config exists" || echo "WARN: No config (expected in non-interactive)"
+
+      - name: Run doctor (strict — failures visible)
+        working-directory: ${{ runner.temp }}/voice-mirror-full
+        run: |
+          # Run doctor and capture exit code.
+          # Expected failures: TTS model (not downloaded), Claude CLI, Ollama
+          # Unexpected failures: Python, venv, pip requirements, MCP deps
+          node cli/index.mjs doctor 2>&1 | tee doctor-output.txt
+          # Don't fail the job — doctor exits non-zero if optional things are missing.
+          # But print it prominently so we can see what's wrong.
+          echo "--- Doctor output above ---"
+
+      - name: Verify pip packages installed
+        working-directory: ${{ runner.temp }}/voice-mirror-full
+        run: |
+          VENV_PYTHON="python/.venv/bin/python"
+          echo "=== Python version ==="
+          $VENV_PYTHON --version
+
+          echo "=== Installed packages ==="
+          $VENV_PYTHON -m pip list --format=columns | head -30
+
+          echo "=== Checking key packages ==="
+          $VENV_PYTHON -c "import numpy; print(f'numpy {numpy.__version__}')"
+          $VENV_PYTHON -c "import onnxruntime; print(f'onnxruntime {onnxruntime.__version__}')"
+          $VENV_PYTHON -c "import websockets; print(f'websockets {websockets.__version__}')"
+
+      - name: Run unit tests
+        working-directory: ${{ runner.temp }}/voice-mirror-full
+        run: npm test
+
+  full-setup-windows:
+    runs-on: windows-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Checkout (installer script only)
+        uses: actions/checkout@v4
+        with:
+          path: source
+
+      # NO actions/setup-python — let install.ps1's Ensure-Python find it.
+      # Windows runners have Python on PATH (via chocolatey), same as real users
+      # who install Python from python.org or winget.
+
+      - name: Run install.ps1 (fresh clone, full setup)
+        shell: pwsh
+        run: |
+          $env:VM_DIR = "${{ runner.temp }}\voice-mirror-full"
+          $env:VM_BRANCH = "${{ github.head_ref || github.ref_name }}"
+          $env:VM_REPO = "https://github.com/${{ github.repository }}.git"
+          $env:VM_NON_INTERACTIVE = "1"
+          & .\source\install.ps1
+
+      - name: Verify installation structure
+        shell: pwsh
+        run: |
+          $dir = "${{ runner.temp }}\voice-mirror-full"
+          Write-Host "=== Checking core files ==="
+          if (-not (Test-Path "$dir\node_modules")) { throw "node_modules missing" }
+          if (-not (Test-Path "$dir\mcp-server\node_modules")) { throw "mcp-server\node_modules missing" }
+          if (-not (Test-Path "$dir\electron\main.js")) { throw "electron\main.js missing" }
+
+          Write-Host "=== Checking Python venv ==="
+          if (-not (Test-Path "$dir\python\.venv")) { throw "Python venv missing" }
+          $venvPython = "$dir\python\.venv\Scripts\python.exe"
+          if (-not (Test-Path $venvPython)) { throw "venv python.exe missing" }
+
+      - name: Run doctor (strict — failures visible)
+        shell: pwsh
+        working-directory: ${{ runner.temp }}\voice-mirror-full
+        run: |
+          node cli/index.mjs doctor 2>&1
+          Write-Host "--- Doctor output above ---"
+        continue-on-error: true
+
+      - name: Verify pip packages installed
+        shell: pwsh
+        working-directory: ${{ runner.temp }}\voice-mirror-full
+        run: |
+          $venvPython = "python\.venv\Scripts\python.exe"
+          Write-Host "=== Python version ==="
+          & $venvPython --version
+
+          Write-Host "=== Installed packages ==="
+          & $venvPython -m pip list --format=columns
+
+          Write-Host "=== Checking key packages ==="
+          & $venvPython -c "import numpy; print(f'numpy {numpy.__version__}')"
+          if ($LASTEXITCODE -ne 0) { throw "numpy import failed" }
+
+          & $venvPython -c "import onnxruntime; print(f'onnxruntime {onnxruntime.__version__}')"
+          if ($LASTEXITCODE -ne 0) { throw "onnxruntime import failed" }
+
+          & $venvPython -c "import websockets; print(f'websockets {websockets.__version__}')"
+          if ($LASTEXITCODE -ne 0) { throw "websockets import failed" }
+
+      - name: Run unit tests
+        working-directory: ${{ runner.temp }}\voice-mirror-full
+        run: npm test
+
+  full-setup-macos:
+    runs-on: macos-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Checkout (installer script only)
+        uses: actions/checkout@v4
+        with:
+          path: source
+
+      # NO actions/setup-python — let install.sh's ensure_python find it.
+      # macOS runners have Python 3 via Homebrew.
+
+      - name: Run install.sh (fresh clone, full setup)
+        run: |
+          bash source/install.sh \
+            --dir "${{ runner.temp }}/voice-mirror-full" \
+            --branch "${{ github.head_ref || github.ref_name }}" \
+            --repo "https://github.com/${{ github.repository }}.git" \
+            --non-interactive
+
+      - name: Verify installation structure
+        working-directory: ${{ runner.temp }}/voice-mirror-full
+        run: |
+          echo "=== Checking core files ==="
+          test -d node_modules
+          test -d mcp-server/node_modules
+          test -f electron/main.js
+
+          echo "=== Checking Python venv ==="
+          test -d python/.venv
+          test -f python/.venv/bin/python
+
+      - name: Run doctor (strict — failures visible)
+        working-directory: ${{ runner.temp }}/voice-mirror-full
+        run: |
+          node cli/index.mjs doctor 2>&1 | tee doctor-output.txt
+          echo "--- Doctor output above ---"
+
+      - name: Verify pip packages installed
+        working-directory: ${{ runner.temp }}/voice-mirror-full
+        run: |
+          VENV_PYTHON="python/.venv/bin/python"
+          echo "=== Python version ==="
+          $VENV_PYTHON --version
+
+          echo "=== Checking key packages ==="
+          $VENV_PYTHON -c "import numpy; print(f'numpy {numpy.__version__}')"
+          $VENV_PYTHON -c "import onnxruntime; print(f'onnxruntime {onnxruntime.__version__}')"
+          $VENV_PYTHON -c "import websockets; print(f'websockets {websockets.__version__}')"
+
+      - name: Run unit tests
+        working-directory: ${{ runner.temp }}/voice-mirror-full
         run: npm test
