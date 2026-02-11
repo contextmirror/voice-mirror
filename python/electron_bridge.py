@@ -491,9 +491,37 @@ async def process_commands(agent):
                     emit_event("sent_to_inbox", {"message": msg["message"], "image": str(image_path)})
 
                 elif text:
-                    # Text-only query - route through the agent's normal processing
-                    emit_event("processing", {"text": text})
-                    # TODO: Call agent's query method directly
+                    # Text-only query - route through inbox (same pipeline as voice)
+                    # Don't emit transcription event — the input bar already shows the user's message
+                    inbox_path = get_data_dir() / "inbox.json"
+                    inbox_path.parent.mkdir(parents=True, exist_ok=True)
+
+                    if inbox_path.exists():
+                        try:
+                            with open(inbox_path, encoding='utf-8') as f:
+                                data = json.load(f)
+                            if "messages" not in data:
+                                data = {"messages": []}
+                        except (json.JSONDecodeError, KeyError):
+                            data = {"messages": []}
+                    else:
+                        data = {"messages": []}
+
+                    msg = {
+                        "id": f"msg-{uuid.uuid4().hex[:12]}",
+                        "from": get_sender_name(),
+                        "message": text,
+                        "timestamp": datetime.now().isoformat(),
+                        "thread_id": "voice-mirror",
+                        "read_by": []
+                    }
+
+                    data["messages"].append(msg)
+
+                    with open(inbox_path, 'w', encoding='utf-8') as f:
+                        json.dump(data, f, indent=2)
+
+                    emit_event("sent_to_inbox", {"message": text})
 
             elif command == "set_mode":
                 mode = cmd.get("mode", "auto")

@@ -573,6 +573,85 @@ function registerIpcHandlers(ctx) {
         return { stopped: true };
     });
 
+    // ========== Chat History Persistence ==========
+    const chatsDir = path.join(app.getPath('userData'), 'chats');
+
+    ipcMain.handle('chat-list', async () => {
+        try {
+            if (!fs.existsSync(chatsDir)) return [];
+            const files = fs.readdirSync(chatsDir).filter(f => f.endsWith('.json'));
+            const chats = [];
+            for (const file of files) {
+                try {
+                    const data = JSON.parse(fs.readFileSync(path.join(chatsDir, file), 'utf-8'));
+                    chats.push({
+                        id: data.id,
+                        name: data.name || 'Untitled',
+                        created: data.created,
+                        updated: data.updated,
+                        messageCount: (data.messages || []).length,
+                    });
+                } catch { /* skip corrupt files */ }
+            }
+            chats.sort((a, b) => new Date(b.updated) - new Date(a.updated));
+            return chats;
+        } catch (err) {
+            console.error('[Chat] Failed to list chats:', err);
+            return [];
+        }
+    });
+
+    ipcMain.handle('chat-load', async (_event, id) => {
+        try {
+            const filePath = path.join(chatsDir, `${id}.json`);
+            if (!fs.existsSync(filePath)) return null;
+            return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+        } catch (err) {
+            console.error('[Chat] Failed to load chat:', err);
+            return null;
+        }
+    });
+
+    ipcMain.handle('chat-save', async (_event, chat) => {
+        try {
+            if (!chat || !chat.id) return { success: false, error: 'Invalid chat data' };
+            if (!fs.existsSync(chatsDir)) fs.mkdirSync(chatsDir, { recursive: true });
+            const filePath = path.join(chatsDir, `${chat.id}.json`);
+            chat.updated = new Date().toISOString();
+            fs.writeFileSync(filePath, JSON.stringify(chat, null, 2), 'utf-8');
+            return { success: true };
+        } catch (err) {
+            console.error('[Chat] Failed to save chat:', err);
+            return { success: false, error: err.message };
+        }
+    });
+
+    ipcMain.handle('chat-delete', async (_event, id) => {
+        try {
+            const filePath = path.join(chatsDir, `${id}.json`);
+            if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+            return { success: true };
+        } catch (err) {
+            console.error('[Chat] Failed to delete chat:', err);
+            return { success: false, error: err.message };
+        }
+    });
+
+    ipcMain.handle('chat-rename', async (_event, id, name) => {
+        try {
+            const filePath = path.join(chatsDir, `${id}.json`);
+            if (!fs.existsSync(filePath)) return { success: false, error: 'Chat not found' };
+            const chat = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+            chat.name = name;
+            chat.updated = new Date().toISOString();
+            fs.writeFileSync(filePath, JSON.stringify(chat, null, 2), 'utf-8');
+            return { success: true };
+        } catch (err) {
+            console.error('[Chat] Failed to rename chat:', err);
+            return { success: false, error: err.message };
+        }
+    });
+
     // Update checker
     ipcMain.handle('apply-update', async () => {
         const checker = ctx.getUpdateChecker?.();

@@ -48,6 +48,19 @@
                     <button class="win-btn win-close" onclick="hideToTray()" title="Close to tray">×</button>
                 </div>
             </div>
+            <!-- Chat History -->
+            <div id="sidebar-chats">
+                <div class="sidebar-section-header">
+                    <span>Chats</span>
+                    <button id="new-chat-btn" title="New Chat">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="12" y1="5" x2="12" y2="19"/>
+                            <line x1="5" y1="12" x2="19" y2="12"/>
+                        </svg>
+                    </button>
+                </div>
+                <ul id="chat-list" class="sidebar-chat-list"></ul>
+            </div>
             <nav id="sidebar-nav">
                 <button class="nav-item active" data-page="chat" data-tooltip="Chat">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -160,6 +173,39 @@
                     <div class="preview-actions">
                         <button class="send-btn" onclick="sendImage()">Send</button>
                         <button class="cancel-btn" onclick="cancelImage()">Cancel</button>
+                    </div>
+                </div>
+
+                <!-- Chat Input Bar -->
+                <div id="chat-input-bar">
+                    <div id="chat-input-row">
+                        <textarea id="chat-input" placeholder="Type a message..." rows="1"></textarea>
+                        <button id="chat-send-btn" title="Send message">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="22" y1="2" x2="11" y2="13"/>
+                                <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <div id="chat-actions-row">
+                        <button class="chat-action-btn" id="action-clear-chat" title="Clear chat">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="3 6 5 6 21 6"/>
+                                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                                <path d="M10 11v6"/>
+                                <path d="M14 11v6"/>
+                                <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+                            </svg>
+                            <span>Clear</span>
+                        </button>
+                        <button class="chat-action-btn" id="action-save-chat" title="Save chat">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                                <polyline points="17 21 17 13 7 13 7 21"/>
+                                <polyline points="7 3 7 8 15 8"/>
+                            </svg>
+                            <span>Save</span>
+                        </button>
                     </div>
                 </div>
 

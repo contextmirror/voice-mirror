@@ -160,6 +160,15 @@ contextBridge.exposeInMainWorld('voiceMirror', {
         }
     },
 
+    // Chat history persistence
+    chat: {
+        list: () => ipcRenderer.invoke('chat-list'),
+        load: (id) => ipcRenderer.invoke('chat-load', id),
+        save: (chat) => ipcRenderer.invoke('chat-save', chat),
+        delete: (id) => ipcRenderer.invoke('chat-delete', id),
+        rename: (id, name) => ipcRenderer.invoke('chat-rename', id, name),
+    },
+
     // Combined controls
     startAll: () => ipcRenderer.invoke('start-all'),
     stopAll: () => ipcRenderer.invoke('stop-all'),

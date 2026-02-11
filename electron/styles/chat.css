@@ -28,17 +28,11 @@
     -webkit-app-region: drag;  /* Allow dragging window from empty space */
 }
 
-/* Gradient fade at bottom of chat */
+/* Bottom spacing so last message doesn't touch input bar */
 #chat-container::after {
     content: '';
-    position: sticky;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    height: 48px;
-    background: linear-gradient(to bottom, transparent, var(--bg) 80%);
-    pointer-events: none;
     display: block;
+    height: 8px;
 }
 
 /* ========== Legacy Message Styles ========== */
@@ -464,6 +458,114 @@
 
 .tool-result-icon {
     display: none;  /* Hidden - status badge shows success/error */
+}
+
+/* ========== Chat Input Bar ========== */
+#chat-input-bar {
+    padding: 10px 16px 8px;
+    background: rgba(20, 20, 30, 0.95);
+    backdrop-filter: blur(12px);
+    border-top: 1px solid var(--border);
+    flex-shrink: 0;
+    -webkit-app-region: no-drag;
+}
+
+#chat-input-row {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+}
+
+#chat-input {
+    flex: 1;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    color: var(--text);
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 0.85rem;
+    padding: 8px 12px;
+    resize: none;
+    min-height: 36px;
+    max-height: 40vh;
+    line-height: 1.5;
+    overflow-y: auto;
+    transition: border-color var(--duration-fast) var(--ease-out);
+}
+
+#chat-input:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+#chat-input::placeholder {
+    color: var(--muted);
+    opacity: 0.6;
+}
+
+#chat-send-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: none;
+    background: var(--accent);
+    color: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: background var(--duration-fast) var(--ease-out),
+                transform var(--duration-fast) var(--ease-out);
+}
+
+#chat-send-btn:hover {
+    background: var(--accent-hover);
+    transform: scale(1.05);
+}
+
+#chat-send-btn:active {
+    transform: scale(0.95);
+}
+
+#chat-send-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+#chat-actions-row {
+    display: flex;
+    gap: 4px;
+    margin-top: 6px;
+    overflow-x: auto;
+}
+
+.chat-action-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--muted);
+    font-size: 0.7rem;
+    cursor: pointer;
+    opacity: 0.6;
+    transition: all var(--duration-fast) var(--ease-out);
+    white-space: nowrap;
+}
+
+.chat-action-btn:hover {
+    opacity: 1;
+    background: var(--bg-hover);
+    color: var(--text);
+}
+
+.chat-action-btn svg {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
 }
 
 /* ========== Screen Picker Overlay ========== */

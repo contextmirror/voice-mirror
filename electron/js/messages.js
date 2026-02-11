@@ -12,7 +12,7 @@ import { formatTime } from './utils.js';
  * Smart auto-scroll: only scrolls if user is near the bottom.
  * Uses smooth scrolling for a polished feel.
  */
-function autoScroll(container) {
+export function autoScroll(container) {
     // If user has scrolled up more than 150px from bottom, don't force scroll
     const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
     if (distanceFromBottom > 150) return;

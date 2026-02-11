@@ -10,6 +10,8 @@ import { initXterm, handleAIOutput, updateAIStatus, toggleTerminal, startAI, sto
 import { initSettings, toggleSettings } from './settings.js';
 import { initNavigation, navigateTo, toggleSidebarCollapse } from './navigation.js';
 import { initBrowserPanel, navigateToBrowserPage } from './browser-panel.js';
+import { initChatInput } from './chat-input.js';
+import { initChatStore, autoSave } from './chat-store.js';
 import { blobToBase64, formatSize } from './utils.js';
 import { initOrbCanvas, setOrbState, destroyOrbCanvas } from './orb-canvas.js';
 import { showToast, updateToast } from './notifications.js';
@@ -551,6 +553,12 @@ async function init() {
     // Initialize browser panel
     initBrowserPanel();
 
+    // Initialize chat input bar (textarea, send/mic buttons, clear/save actions)
+    initChatInput();
+
+    // Initialize chat store (sidebar history, persistence)
+    initChatStore();
+
     // Initialize settings (loads tab templates, then wires event handlers)
     await initSettings();
 
@@ -630,6 +638,7 @@ async function init() {
 
         if (!isDuplicate(data.text)) {
             addMessage(data.role, data.text);
+            autoSave();
         }
     });
 
