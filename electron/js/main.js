@@ -548,6 +548,7 @@ let ptyBuffer = '';
 const PTY_BUFFER_MAX = 3000;
 let lastPtyStatus = '';
 let ptyDebounceTimer = null;
+let _lastPtyDiag = 0; // Throttle for PTY diagnostic logging
 
 /**
  * Debounced PTY status setter — prevents flickering from rapid PTY output.
@@ -651,23 +652,31 @@ function parsePtyActivity(rawText) {
     }
 
     // --- Prompt / waiting for input detection ---
-    if (text.includes('❯') || text.includes('$') && text.trim().endsWith('$')) {
-        // Claude Code returned to prompt
+    if (text.includes('❯') || (text.includes('$') && text.trim().endsWith('$'))) {
+        // Claude Code returned to prompt — force clear, bypass hold timer
         if (ptyActivityTimer) clearTimeout(ptyActivityTimer);
+        statusHoldUntil = 0;
         setAIStatus(null);
+        lastPtyStatus = '';
         ptyBuffer = '';
         return;
     }
 
     // --- Generic activity fallback ---
-    // If we're receiving non-trivial PTY data but no specific pattern matched,
-    // show "Working..." when idle, and keep the activity timer alive so the
-    // status doesn't flicker back to "Waiting for input" during continuous work.
-    if (text.length > 10) {
+    // Show "Working..." when idle and receiving substantial PTY data.
+    // Skip status-line noise (short chunks with tokens/cost/context stats).
+    const isStatusLineNoise = text.length < 80 && /tokens|cost|context|model|%|\d+k/i.test(text);
+    if (text.length > 20 && !isStatusLineNoise) {
         if (currentStatusSource === 'idle') {
             setPtyStatus('Working...', true);
+            // Diagnostic: log buffer when fallback triggers (once per 10s)
+            const now = Date.now();
+            if (now - _lastPtyDiag > 10000 && window.voiceMirror?.devlog) {
+                _lastPtyDiag = now;
+                window.voiceMirror.devlog('STATUS', 'pty-no-match', { text: ptyBuffer.slice(-400) });
+            }
         }
-        // Always refresh the auto-clear timer — keeps status alive while data flows
+        // Refresh auto-clear timer — keeps status alive while real data flows
         if (ptyActivityTimer) clearTimeout(ptyActivityTimer);
         ptyActivityTimer = setTimeout(() => setAIStatus(null), 4000);
     }
