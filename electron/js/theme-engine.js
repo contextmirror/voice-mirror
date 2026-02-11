@@ -76,7 +76,7 @@ export function blend(hex1, hex2, t) {
     );
 }
 
-function hexToRgba(hex, alpha) {
+export function hexToRgba(hex, alpha) {
     const { r, g, b } = hexToRgb(hex);
     return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
@@ -153,6 +153,20 @@ export const PRESETS = {
             fontFamily: "'Segoe UI', system-ui, -apple-system, sans-serif",
             fontMono: "'Cascadia Code', 'Fira Code', monospace"
         }
+    },
+    gray: {
+        name: 'Claude Gray',
+        colors: {
+            bg: '#191919', bgElevated: '#232323',
+            text: '#d4cfc7', textStrong: '#f5f0e8', muted: '#8a8580',
+            accent: '#d4873e',
+            ok: '#6bba6b', warn: '#e0a832', danger: '#d45b5b',
+            orbCore: '#3d2e1f'
+        },
+        fonts: {
+            fontFamily: "'Segoe UI', system-ui, -apple-system, sans-serif",
+            fontMono: "'Cascadia Code', 'Fira Code', monospace"
+        }
     }
 };
 
@@ -193,6 +207,16 @@ export function deriveTheme(colors, fonts = {}) {
         '--shadow-lg': `0 12px 28px ${hexToRgba(darken(c.bg, 0.05), 0.6)}`,
         '--font-family': f.fontFamily || PRESETS.dark.fonts.fontFamily,
         '--font-mono': f.fontMono || PRESETS.dark.fonts.fontMono,
+        '--msg-font-size': '14px',
+        '--msg-line-height': '1.5',
+        '--msg-padding': '12px 16px',
+        '--msg-avatar-size': '36px',
+        '--msg-user-bg': `linear-gradient(135deg, ${hexToRgba(c.accent, 0.4)} 0%, ${hexToRgba(darken(c.accent, 0.15), 0.35)} 100%)`,
+        '--msg-user-border': hexToRgba(c.accent, 0.3),
+        '--msg-user-radius': '16px 16px 4px 16px',
+        '--msg-ai-bg': `linear-gradient(135deg, ${blend(c.bg, c.bgElevated, 0.3)} 0%, ${c.bg} 100%)`,
+        '--msg-ai-border': hexToRgba(c.textStrong, 0.06),
+        '--msg-ai-radius': '4px 16px 16px 16px',
     };
 }
 
@@ -258,6 +282,40 @@ export function applyTheme(colors, fonts = {}) {
 }
 
 /**
+ * Apply message card overrides from config onto :root CSS variables.
+ * Also toggles the .chat-hide-avatars class on #chat-container.
+ * @param {Object} messageCard - config object with optional keys:
+ *   fontSize, lineHeight, padding, avatarSize, userBg, userBorder,
+ *   userRadius, aiBg, aiBorder, aiRadius, showAvatars
+ */
+export function applyMessageCardOverrides(messageCard) {
+    if (!messageCard || typeof messageCard !== 'object') return;
+    const root = document.documentElement;
+    const map = {
+        fontSize:   '--msg-font-size',
+        lineHeight: '--msg-line-height',
+        padding:    '--msg-padding',
+        avatarSize: '--msg-avatar-size',
+        userBg:     '--msg-user-bg',
+        userBorder: '--msg-user-border',
+        userRadius: '--msg-user-radius',
+        aiBg:       '--msg-ai-bg',
+        aiBorder:   '--msg-ai-border',
+        aiRadius:   '--msg-ai-radius',
+    };
+    for (const [key, prop] of Object.entries(map)) {
+        if (messageCard[key] !== undefined && messageCard[key] !== null) {
+            root.style.setProperty(prop, messageCard[key]);
+        }
+    }
+    // Toggle avatar visibility class
+    const chatContainer = document.getElementById('chat-container');
+    if (chatContainer) {
+        chatContainer.classList.toggle('chat-hide-avatars', messageCard.showAvatars === false);
+    }
+}
+
+/**
  * Clear all inline theme overrides, reverting to tokens.css defaults.
  */
 export function clearThemeOverrides() {
@@ -270,6 +328,9 @@ export function clearThemeOverrides() {
         '--ok', '--warn', '--danger',
         '--shadow-sm', '--shadow-md', '--shadow-lg',
         '--font-family', '--font-mono',
+        '--msg-font-size', '--msg-line-height', '--msg-padding', '--msg-avatar-size',
+        '--msg-user-bg', '--msg-user-border', '--msg-user-radius',
+        '--msg-ai-bg', '--msg-ai-border', '--msg-ai-radius',
     ];
     const root = document.documentElement;
     for (const prop of props) {

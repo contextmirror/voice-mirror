@@ -154,7 +154,7 @@ const validators = {
         }
       }
       if (s.appearance.theme !== undefined) {
-        const VALID_THEMES = ['dark', 'midnight', 'emerald', 'rose', 'slate', 'custom'];
+        const VALID_THEMES = ['dark', 'midnight', 'emerald', 'rose', 'slate', 'gray', 'custom'];
         if (typeof s.appearance.theme !== 'string' || !VALID_THEMES.includes(s.appearance.theme)) {
           errors.push(`appearance.theme must be one of: ${VALID_THEMES.join(', ')}`);
         }
@@ -183,6 +183,48 @@ const validators = {
           }
           if (s.appearance.fonts.fontMono !== undefined && typeof s.appearance.fonts.fontMono !== 'string') {
             errors.push('appearance.fonts.fontMono must be a string');
+          }
+        }
+      }
+      if (s.appearance.messageCard !== undefined && s.appearance.messageCard !== null) {
+        if (!isPlainObject(s.appearance.messageCard)) {
+          errors.push('appearance.messageCard must be an object or null');
+        } else {
+          const mc = s.appearance.messageCard;
+          if (mc.fontSize !== undefined) {
+            if (!Number.isFinite(mc.fontSize) || mc.fontSize < 10 || mc.fontSize > 24) {
+              errors.push('appearance.messageCard.fontSize must be a number 10-24');
+            }
+          }
+          if (mc.lineHeight !== undefined) {
+            if (!Number.isFinite(mc.lineHeight) || mc.lineHeight < 1.0 || mc.lineHeight > 2.5) {
+              errors.push('appearance.messageCard.lineHeight must be a number 1.0-2.5');
+            }
+          }
+          if (mc.padding !== undefined) {
+            if (typeof mc.padding !== 'string' || mc.padding.length > 50) {
+              errors.push('appearance.messageCard.padding must be a string (max 50 chars)');
+            }
+          }
+          if (mc.avatarSize !== undefined) {
+            if (!Number.isInteger(mc.avatarSize) || mc.avatarSize < 20 || mc.avatarSize > 64) {
+              errors.push('appearance.messageCard.avatarSize must be an integer 20-64');
+            }
+          }
+          if (mc.showAvatars !== undefined && typeof mc.showAvatars !== 'boolean') {
+            errors.push('appearance.messageCard.showAvatars must be a boolean');
+          }
+          if (mc.bubbleStyle !== undefined) {
+            if (!['rounded', 'square', 'pill'].includes(mc.bubbleStyle)) {
+              errors.push('appearance.messageCard.bubbleStyle must be one of: rounded, square, pill');
+            }
+          }
+          for (const cssKey of ['userColor', 'aiColor', 'userBg', 'userBorder', 'userRadius', 'aiBg', 'aiBorder', 'aiRadius']) {
+            if (mc[cssKey] !== undefined && mc[cssKey] !== null) {
+              if (typeof mc[cssKey] !== 'string' || mc[cssKey].length > 200) {
+                errors.push(`appearance.messageCard.${cssKey} must be a string (max 200 chars) or null`);
+              }
+            }
           }
         }
       }

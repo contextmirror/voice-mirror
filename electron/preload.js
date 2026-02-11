@@ -63,6 +63,15 @@ contextBridge.exposeInMainWorld('voiceMirror', {
         import: () => ipcRenderer.invoke('theme-import'),
     },
 
+    // Custom font management
+    fonts: {
+        upload: () => ipcRenderer.invoke('font-upload'),
+        add: (filePath, type) => ipcRenderer.invoke('font-add', filePath, type),
+        remove: (fontId) => ipcRenderer.invoke('font-remove', fontId),
+        list: () => ipcRenderer.invoke('font-list'),
+        getDataUrl: (fontId) => ipcRenderer.invoke('font-get-data-url', fontId),
+    },
+
     // Send image to Python backend for Claude vision
     sendImageToBackend: (imageData) => ipcRenderer.invoke('send-image', imageData),
 

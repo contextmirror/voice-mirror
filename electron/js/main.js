@@ -15,7 +15,7 @@ import { initChatStore, autoSave, triggerAutoName } from './chat-store.js';
 import { blobToBase64, formatSize } from './utils.js';
 import { initOrbCanvas, setOrbState, destroyOrbCanvas } from './orb-canvas.js';
 import { showToast, updateToast } from './notifications.js';
-import { resolveTheme, applyTheme as applyThemeEngine } from './theme-engine.js';
+import { resolveTheme, applyTheme as applyThemeEngine, applyMessageCardOverrides } from './theme-engine.js';
 
 // DOM elements
 const orb = document.getElementById('orb');
@@ -886,9 +886,33 @@ async function init() {
         }
         updateProviderDisplay(displayName, provider, model);
 
+        // Inject custom fonts before theme application so CSS variables reference valid families
+        try {
+            const customFonts = await window.voiceMirror.fonts.list();
+            for (const font of customFonts) {
+                const data = await window.voiceMirror.fonts.getDataUrl(font.id);
+                if (data.success) {
+                    const style = document.createElement('style');
+                    style.dataset.fontId = font.id;
+                    style.textContent = `@font-face { font-family: '${data.familyName}'; src: url('${data.dataUrl}') format('${data.format}'); font-weight: 100 900; font-style: normal; }`;
+                    document.head.appendChild(style);
+                }
+            }
+        } catch (err) {
+            console.warn('[Fonts] Failed to load custom fonts at startup:', err);
+        }
+
         // Apply saved theme (colors, fonts, orb) before first paint
         const { colors: themeColors, fonts: themeFonts } = resolveTheme(config.appearance);
         applyThemeEngine(themeColors, themeFonts);
+
+        // Apply message card customizations if saved
+        if (config.appearance?.messageCard) {
+            applyMessageCardOverrides(config.appearance.messageCard);
+        }
+        if (config.appearance?.messageCard?.showAvatars === false) {
+            document.getElementById('chat-container')?.classList.add('chat-hide-avatars');
+        }
     } catch (err) {
         console.warn('[Init] Failed to load provider config:', err);
     }

@@ -47,7 +47,8 @@ const DEFAULT_CONFIG = {
         panelWidth: 500,
         panelHeight: 700,
         colors: null,    // null = use preset from theme, object = custom { bg, bgElevated, ... }
-        fonts: null      // null = use preset defaults, object = { fontFamily, fontMono }
+        fonts: null,     // null = use preset defaults, object = { fontFamily, fontMono }
+        messageCard: null // null = use theme defaults, object = { fontSize, lineHeight, padding, avatarSize, showAvatars, bubbleStyle, userColor, aiColor, userRadius, aiRadius }
     },
 
     // Behavior

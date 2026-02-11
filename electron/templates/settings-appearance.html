@@ -12,6 +12,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/></svg>
         <span>Orb</span>
     </div>
+    <div class="settings-card" data-scroll-to="section-message-cards">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        <span>Messages</span>
+    </div>
     <div class="settings-card" data-scroll-to="section-fonts">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
         <span>Fonts</span>
@@ -140,6 +144,90 @@
     </div>
 </div>
 
+<!-- Message Cards -->
+<div class="settings-section" id="section-message-cards">
+    <h3>Message Cards</h3>
+    <div class="settings-group">
+        <!-- Live Preview -->
+        <div class="msg-preview-area" id="msg-preview-area">
+            <div class="msg-preview-container" id="msg-preview-container">
+                <div class="message-group user msg-preview-msg">
+                    <div class="message-avatar">&#128100;</div>
+                    <div class="message-content">
+                        <div class="message-header">
+                            <span class="message-sender">You</span>
+                            <span class="message-time">12:00</span>
+                        </div>
+                        <div class="message-bubble">What's the weather like today?</div>
+                    </div>
+                </div>
+                <div class="message-group assistant msg-preview-msg">
+                    <div class="message-avatar">&#129302;</div>
+                    <div class="message-content">
+                        <div class="message-header">
+                            <span class="message-sender">Assistant</span>
+                            <span class="message-time">12:00</span>
+                        </div>
+                        <div class="message-bubble">
+                            <div class="markdown-content">It's a <strong>beautiful day</strong> outside! Currently 72&deg;F with clear skies.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="setting-row">
+            <label>Bubble Style</label>
+            <select id="msg-bubble-style">
+                <option value="rounded">Rounded (default)</option>
+                <option value="square">Square</option>
+                <option value="pill">Pill</option>
+            </select>
+        </div>
+        <div class="setting-row">
+            <label>Font Size</label>
+            <div class="slider-container">
+                <input type="range" id="msg-font-size" min="10" max="24" value="14" step="1">
+                <span id="msg-font-size-value">14px</span>
+            </div>
+        </div>
+        <div class="setting-row">
+            <label>Padding</label>
+            <div class="slider-container">
+                <input type="range" id="msg-padding" min="4" max="24" value="12" step="2">
+                <span id="msg-padding-value">12px</span>
+            </div>
+        </div>
+        <div class="setting-row">
+            <label>Avatar Size</label>
+            <div class="slider-container">
+                <input type="range" id="msg-avatar-size" min="20" max="64" value="36" step="2">
+                <span id="msg-avatar-size-value">36px</span>
+            </div>
+        </div>
+        <div class="setting-row">
+            <label>Show Avatars</label>
+            <label class="toggle-switch">
+                <input type="checkbox" id="msg-show-avatars" checked>
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+        <div class="color-picker-row">
+            <label>User Bubble Color</label>
+            <div class="color-picker-control">
+                <input type="color" id="msg-user-color" value="#667eea">
+                <span class="color-hex" id="msg-user-color-hex">#667eea</span>
+            </div>
+        </div>
+        <div class="color-picker-row">
+            <label>AI Bubble Color</label>
+            <div class="color-picker-control">
+                <input type="color" id="msg-ai-color" value="#111318">
+                <span class="color-hex" id="msg-ai-color-hex">#111318</span>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Fonts -->
 <div class="settings-section" id="section-fonts">
     <h3>Fonts</h3>
@@ -164,6 +252,16 @@
                 <option value="'Source Code Pro', monospace">Source Code Pro</option>
                 <option value="'Consolas', monospace">Consolas</option>
             </select>
+        </div>
+        <!-- Upload buttons -->
+        <div class="font-upload-row">
+            <button class="btn-secondary" id="font-upload-ui-btn">Upload UI Font...</button>
+            <button class="btn-secondary" id="font-upload-mono-btn">Upload Mono Font...</button>
+        </div>
+        <!-- Custom fonts list -->
+        <div id="custom-fonts-list" class="custom-fonts-list" style="display:none;">
+            <h4 class="color-group-label">Custom Fonts</h4>
+            <div id="custom-fonts-items"></div>
         </div>
     </div>
 </div>

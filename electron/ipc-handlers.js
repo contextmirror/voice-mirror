@@ -8,6 +8,7 @@ const path = require('path');
 const fs = require('fs');
 const { execFile } = require('child_process');
 const { validators } = require('./ipc-validators');
+const fontManager = require('./font-manager');
 const CLI_PROVIDERS = ['claude', 'codex', 'gemini-cli'];
 
 /**
@@ -73,6 +74,9 @@ $bmp.Dispose()
  * @param {Object} ctx.logger - Logger
  */
 function registerIpcHandlers(ctx) {
+    // Initialize font manager with the config directory
+    fontManager.init(ctx.config.getConfigDir());
+
     // Local state for drag capture
     let preDragBounds = null;
 
@@ -790,6 +794,47 @@ function registerIpcHandlers(ctx) {
             console.error('[Theme] Import failed:', err);
             return { success: false, error: err.message };
         }
+    });
+
+    // ========== Custom Font Management ==========
+
+    ipcMain.handle('font-upload', async () => {
+        const win = ctx.getWindow?.();
+        const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+            title: 'Upload Font',
+            filters: [{ name: 'Font Files', extensions: ['ttf', 'otf', 'woff', 'woff2'] }],
+            properties: ['openFile']
+        });
+        if (canceled || !filePaths?.length) return { success: false, error: 'Cancelled' };
+        return { success: true, filePath: filePaths[0] };
+    });
+
+    ipcMain.handle('font-add', async (_event, filePath, type) => {
+        if (type !== 'ui' && type !== 'mono') return { success: false, error: 'type must be "ui" or "mono"' };
+        if (typeof filePath !== 'string' || filePath.length > 1024) return { success: false, error: 'Invalid file path' };
+        try { return await fontManager.addFont(filePath, type); }
+        catch (err) { return { success: false, error: err.message }; }
+    });
+
+    ipcMain.handle('font-remove', async (_event, fontId) => {
+        if (typeof fontId !== 'string' || fontId.length > 20) return { success: false, error: 'Invalid font ID' };
+        try { return await fontManager.removeFont(fontId); }
+        catch (err) { return { success: false, error: err.message }; }
+    });
+
+    ipcMain.handle('font-list', () => fontManager.listFonts());
+
+    ipcMain.handle('font-get-data-url', async (_event, fontId) => {
+        if (typeof fontId !== 'string' || fontId.length > 20) return { success: false, error: 'Invalid font ID' };
+        try {
+            const fontPath = fontManager.getFontFilePath(fontId);
+            if (!fontPath) return { success: false, error: 'Font not found' };
+            const buffer = fs.readFileSync(fontPath);
+            const entry = fontManager.listFonts().find(f => f.id === fontId);
+            const mimeMap = { ttf: 'font/ttf', otf: 'font/otf', woff: 'font/woff', woff2: 'font/woff2' };
+            const dataUrl = `data:${mimeMap[entry.format] || 'application/octet-stream'};base64,${buffer.toString('base64')}`;
+            return { success: true, dataUrl, familyName: entry.familyName, format: entry.format };
+        } catch (err) { return { success: false, error: err.message }; }
     });
 }
 
