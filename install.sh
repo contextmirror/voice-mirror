@@ -273,6 +273,28 @@ ensure_ffmpeg() {
     fi
 }
 
+# ─── Ensure audio system libs (needed for sounddevice/PortAudio) ──────
+ensure_audio_libs() {
+    if [[ "$PLATFORM" != "linux" ]]; then
+        return  # macOS/Windows bundle PortAudio in the Python wheel
+    fi
+
+    # Check if libportaudio is already available
+    if ldconfig -p 2>/dev/null | grep -q libportaudio; then
+        return
+    fi
+
+    step "Installing audio libraries..."
+
+    if command -v apt-get &>/dev/null; then
+        sudo apt-get install -y libportaudio2 >/dev/null 2>&1 && ok "PortAudio installed" || warn "Could not install libportaudio2"
+    elif command -v dnf &>/dev/null; then
+        sudo dnf install -y portaudio >/dev/null 2>&1 && ok "PortAudio installed" || warn "Could not install portaudio"
+    elif command -v pacman &>/dev/null; then
+        sudo pacman -S --noconfirm portaudio >/dev/null 2>&1 && ok "PortAudio installed" || warn "Could not install portaudio"
+    fi
+}
+
 # ─── Clone / update repo ──────────────────────────────────────────────
 install_repo() {
     step "Installing Voice Mirror..."
@@ -375,6 +397,7 @@ main() {
     ensure_node
     ensure_python
     ensure_ffmpeg
+    ensure_audio_libs
     install_repo
     install_deps
     link_cli

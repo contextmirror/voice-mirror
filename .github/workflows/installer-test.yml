@@ -179,16 +179,32 @@ jobs:
           CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/voice-mirror"
           test -f "$CONFIG_DIR/config.json" && echo "Config exists" || echo "WARN: No config (expected in non-interactive)"
 
-      - name: Run doctor (strict — failures visible)
+      - name: Verify CLI is linked
+        run: |
+          if command -v voice-mirror &>/dev/null; then
+            echo "voice-mirror CLI: $(voice-mirror --version 2>&1 || echo 'linked')"
+          else
+            echo "WARN: voice-mirror not on PATH (npm link may need sudo)"
+          fi
+
+      - name: Run doctor (fail on critical checks)
         working-directory: ${{ runner.temp }}/voice-mirror-full
         run: |
-          # Run doctor and capture exit code.
-          # Expected failures: TTS model (not downloaded), Claude CLI, Ollama
-          # Unexpected failures: Python, venv, pip requirements, MCP deps
           node cli/index.mjs doctor 2>&1 | tee doctor-output.txt
-          # Don't fail the job — doctor exits non-zero if optional things are missing.
-          # But print it prominently so we can see what's wrong.
           echo "--- Doctor output above ---"
+          # Fail if critical items are broken (Python, venv, pip, MCP deps)
+          if grep -q '✗ Python 3 not found' doctor-output.txt; then
+            echo "FATAL: Doctor reports Python missing" && exit 1
+          fi
+          if grep -q '✗ Python venv not found' doctor-output.txt; then
+            echo "FATAL: Doctor reports venv missing" && exit 1
+          fi
+          if grep -q '✗ pip requirements missing' doctor-output.txt; then
+            echo "FATAL: Doctor reports pip requirements missing" && exit 1
+          fi
+          if grep -q '✗ MCP server deps missing' doctor-output.txt; then
+            echo "FATAL: Doctor reports MCP deps missing" && exit 1
+          fi
 
       - name: Verify pip packages installed
         working-directory: ${{ runner.temp }}/voice-mirror-full
@@ -204,6 +220,8 @@ jobs:
           $VENV_PYTHON -c "import numpy; print(f'numpy {numpy.__version__}')"
           $VENV_PYTHON -c "import onnxruntime; print(f'onnxruntime {onnxruntime.__version__}')"
           $VENV_PYTHON -c "import psutil; print(f'psutil {psutil.__version__}')"
+          $VENV_PYTHON -c "import sounddevice; print(f'sounddevice {sounddevice.__version__}')"
+          $VENV_PYTHON -c "import pynput; print('pynput OK')"
 
       - name: Run unit tests
         working-directory: ${{ runner.temp }}/voice-mirror-full
@@ -249,13 +267,17 @@ jobs:
           $venvPython = "$dir\python\.venv\Scripts\python.exe"
           if (-not (Test-Path $venvPython)) { throw "venv python.exe missing" }
 
-      - name: Run doctor (strict — failures visible)
+      - name: Run doctor (fail on critical checks)
         shell: pwsh
         working-directory: ${{ runner.temp }}\voice-mirror-full
         run: |
-          node cli/index.mjs doctor 2>&1
+          node cli/index.mjs doctor 2>&1 | Tee-Object -FilePath doctor-output.txt
           Write-Host "--- Doctor output above ---"
-        continue-on-error: true
+          $doc = Get-Content doctor-output.txt -Raw
+          if ($doc -match 'Python 3 not found') { throw "Doctor: Python missing" }
+          if ($doc -match 'Python venv not found') { throw "Doctor: venv missing" }
+          if ($doc -match 'pip requirements missing') { throw "Doctor: pip requirements missing" }
+          if ($doc -match 'MCP server deps missing') { throw "Doctor: MCP deps missing" }
 
       - name: Verify pip packages installed
         shell: pwsh
@@ -277,6 +299,12 @@ jobs:
 
           & $venvPython -c "import psutil; print(f'psutil {psutil.__version__}')"
           if ($LASTEXITCODE -ne 0) { throw "psutil import failed" }
+
+          & $venvPython -c "import sounddevice; print(f'sounddevice {sounddevice.__version__}')"
+          if ($LASTEXITCODE -ne 0) { throw "sounddevice import failed" }
+
+          & $venvPython -c "import pynput; print('pynput OK')"
+          if ($LASTEXITCODE -ne 0) { throw "pynput import failed" }
 
       - name: Run unit tests
         working-directory: ${{ runner.temp }}\voice-mirror-full
@@ -319,11 +347,31 @@ jobs:
           test -d python/.venv
           test -f python/.venv/bin/python
 
-      - name: Run doctor (strict — failures visible)
+      - name: Verify CLI is linked
+        run: |
+          if command -v voice-mirror &>/dev/null; then
+            echo "voice-mirror CLI: $(voice-mirror --version 2>&1 || echo 'linked')"
+          else
+            echo "WARN: voice-mirror not on PATH (npm link may need sudo)"
+          fi
+
+      - name: Run doctor (fail on critical checks)
         working-directory: ${{ runner.temp }}/voice-mirror-full
         run: |
           node cli/index.mjs doctor 2>&1 | tee doctor-output.txt
           echo "--- Doctor output above ---"
+          if grep -q '✗ Python 3 not found' doctor-output.txt; then
+            echo "FATAL: Doctor reports Python missing" && exit 1
+          fi
+          if grep -q '✗ Python venv not found' doctor-output.txt; then
+            echo "FATAL: Doctor reports venv missing" && exit 1
+          fi
+          if grep -q '✗ pip requirements missing' doctor-output.txt; then
+            echo "FATAL: Doctor reports pip requirements missing" && exit 1
+          fi
+          if grep -q '✗ MCP server deps missing' doctor-output.txt; then
+            echo "FATAL: Doctor reports MCP deps missing" && exit 1
+          fi
 
       - name: Verify pip packages installed
         working-directory: ${{ runner.temp }}/voice-mirror-full
@@ -336,6 +384,8 @@ jobs:
           $VENV_PYTHON -c "import numpy; print(f'numpy {numpy.__version__}')"
           $VENV_PYTHON -c "import onnxruntime; print(f'onnxruntime {onnxruntime.__version__}')"
           $VENV_PYTHON -c "import psutil; print(f'psutil {psutil.__version__}')"
+          $VENV_PYTHON -c "import sounddevice; print(f'sounddevice {sounddevice.__version__}')"
+          $VENV_PYTHON -c "import pynput; print('pynput OK')"
 
       - name: Run unit tests
         working-directory: ${{ runner.temp }}/voice-mirror-full

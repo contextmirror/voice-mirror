@@ -65,8 +65,8 @@ describe('perf-monitor', () => {
             }
         });
         monitor.start();
-        // Wait for at least one sample (3s interval, give 4s)
-        await new Promise(r => setTimeout(r, 3500));
+        // Wait for at least one interval sample (3s interval, give 5s for CI margin)
+        await new Promise(r => setTimeout(r, 5000));
         assert.ok(stats.length >= 1, `Expected at least 1 sample, got ${stats.length}`);
         const s = stats[0];
         assert.strictEqual(typeof s.cpu, 'number');
@@ -78,7 +78,8 @@ describe('perf-monitor', () => {
         monitor = createPerfMonitor({ dataDir: tempDir });
         monitor.start();
         monitor.logEvent('test_event');
-        await new Promise(r => setTimeout(r, 3500));
+        // Wait for interval sample (3s) + async appendFile flush + CI margin
+        await new Promise(r => setTimeout(r, 5000));
         const logPath = path.join(tempDir, 'perf-log.csv');
         const content = fs.readFileSync(logPath, 'utf-8');
         assert.ok(content.includes('test_event'), 'CSV should contain tagged event');
