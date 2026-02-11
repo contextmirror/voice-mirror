@@ -178,9 +178,19 @@ describe('Settings enhancements - preload API', () => {
 });
 
 describe('Settings enhancements - HTML elements', () => {
-    const htmlSource = require('fs').readFileSync(
-        require('path').join(__dirname, '../../electron/overlay.html'), 'utf-8'
-    );
+    // Settings were refactored into template fragments — search both
+    // overlay.html and the settings template files.
+    const fs = require('fs');
+    const p = require('path');
+    const overlayHtml = fs.readFileSync(p.join(__dirname, '../../electron/overlay.html'), 'utf-8');
+    const templatesDir = p.join(__dirname, '../../electron/templates');
+    let templateHtml = '';
+    if (fs.existsSync(templatesDir)) {
+        for (const f of fs.readdirSync(templatesDir).filter(n => n.endsWith('.html'))) {
+            templateHtml += fs.readFileSync(p.join(templatesDir, f), 'utf-8');
+        }
+    }
+    const htmlSource = overlayHtml + templateHtml;
 
     it('should have start-with-system checkbox', () => {
         assert.ok(htmlSource.includes('id="start-with-system"'));
