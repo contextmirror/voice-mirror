@@ -524,10 +524,11 @@ function setAIStatus(text, active = true, autoClearMs = 0, source = 'idle') {
  */
 function stripAnsi(str) {
     return str
-        // CSI sequences: \x1b[ followed by optional prefix (?!>), params, and terminator
-        // Covers: SGR, cursor movement, DEC private modes (?25l, ?25h), erase, etc.
+        // CSI sequences: \x1b[ then ANY non-letter chars until terminating letter/~
+        // Permissive — handles all parameter formats including : subparams,
+        // ? prefix, 24-bit color, etc.
         // eslint-disable-next-line no-control-regex
-        .replace(/\x1b\[[?!>]?[0-9;]*[a-zA-Z~]/g, '')
+        .replace(/\x1b\[[^a-zA-Z~]*[a-zA-Z~]/g, '')
         // OSC sequences: \x1b] ... BEL or ST
         .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '')
         // Other 2-char escapes: charset selection, keypad modes, etc.
@@ -588,13 +589,14 @@ function parsePtyActivity(rawText) {
 
     // --- Claude Code built-in tools ---
     // Match tool names — flexible: "⏺ Read(" / "Read(" / any prefix before tool name
-    const builtinMatch = text.match(/(Read|Edit|Write|Bash|Glob|Grep|WebSearch|WebFetch|Task|NotebookEdit|TodoWrite|TodoRead)\s*\(/);
+    const builtinMatch = text.match(/(Read|Edit|Update|Write|Bash|Glob|Grep|WebSearch|WebFetch|Task|NotebookEdit|TodoWrite|TodoRead)\s*\(/);
     if (builtinMatch) {
         const names = {
-            Read: 'Reading file', Edit: 'Editing file', Write: 'Writing file',
-            Bash: 'Running command', Glob: 'Searching files', Grep: 'Searching code',
-            WebSearch: 'Searching the web', WebFetch: 'Fetching page', Task: 'Running task',
-            NotebookEdit: 'Editing notebook', TodoWrite: 'Updating todos', TodoRead: 'Reading todos'
+            Read: 'Reading file', Edit: 'Editing file', Update: 'Editing file',
+            Write: 'Writing file', Bash: 'Running command', Glob: 'Searching files',
+            Grep: 'Searching code', WebSearch: 'Searching the web', WebFetch: 'Fetching page',
+            Task: 'Running task', NotebookEdit: 'Editing notebook',
+            TodoWrite: 'Updating todos', TodoRead: 'Reading todos'
         };
         setPtyStatus(names[builtinMatch[1]] || builtinMatch[1], true);
         ptyRawBuffer = '';
@@ -663,7 +665,8 @@ function parsePtyActivity(rawText) {
     }
 
     // --- Prompt / waiting for input detection ---
-    if (text.includes('❯')) {
+    // Claude Code prompt is "❯ " or "> " at end of output
+    if (text.includes('❯') || /^>\s*$/m.test(text) || text.endsWith('> ')) {
         // Claude Code returned to prompt — force clear, bypass hold timer
         if (ptyActivityTimer) clearTimeout(ptyActivityTimer);
         statusHoldUntil = 0;
