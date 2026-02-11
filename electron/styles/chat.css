@@ -6,7 +6,7 @@
     z-index: 9999;
     background: rgba(0, 0, 0, 0.7);
     color: #8f8;
-    font-family: 'Cascadia Code', 'Fira Code', monospace;
+    font-family: var(--font-mono, 'Cascadia Code', 'Fira Code', monospace);
     font-size: 11px;
     padding: 2px 8px;
     border-radius: 4px;
@@ -264,7 +264,7 @@
 }
 
 .markdown-content code {
-    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-family: var(--font-mono, 'JetBrains Mono', 'Fira Code', monospace);
     font-size: 0.9em;
     background: rgba(0, 0, 0, 0.25);
     padding: 0.15em 0.4em;
@@ -427,7 +427,7 @@
 
 .tool-card-args {
     color: var(--muted);
-    font-family: 'SF Mono', 'JetBrains Mono', 'Fira Code', monospace;
+    font-family: var(--font-mono, 'SF Mono', 'JetBrains Mono', monospace);
     font-size: 11px;
     padding: 10px 14px;
     background: rgba(0, 0, 0, 0.15);
@@ -566,7 +566,7 @@
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
     color: var(--text);
-    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-family: var(--font-mono, 'JetBrains Mono', 'Fira Code', monospace);
     font-size: 0.85rem;
     padding: 8px 12px;
     resize: none;

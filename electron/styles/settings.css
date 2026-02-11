@@ -230,7 +230,7 @@
     color: white;
     padding: 8px 16px;
     font-size: 13px;
-    font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+    font-family: var(--font-mono, 'SF Mono', 'Monaco', monospace);
     cursor: pointer;
     min-width: 120px;
     text-align: center;
@@ -1189,7 +1189,7 @@
     border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 4px;
     padding: 3px 8px;
-    font-family: 'Cascadia Code', 'Fira Code', monospace;
+    font-family: var(--font-mono, 'Cascadia Code', 'Fira Code', monospace);
     font-size: 12px;
     color: #ccc;
     min-width: 120px;
