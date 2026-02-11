@@ -208,7 +208,7 @@ jobs:
           echo "=== Checking key packages ==="
           $VENV_PYTHON -c "import numpy; print(f'numpy {numpy.__version__}')"
           $VENV_PYTHON -c "import onnxruntime; print(f'onnxruntime {onnxruntime.__version__}')"
-          $VENV_PYTHON -c "import openwakeword; print(f'openwakeword {openwakeword.__version__}')"
+          $VENV_PYTHON -c "import openwakeword; print('openwakeword OK')"
           $VENV_PYTHON -c "import psutil; print(f'psutil {psutil.__version__}')"
           $VENV_PYTHON -c "import sounddevice; print(f'sounddevice {sounddevice.__version__}')"
           # pynput needs X/Wayland display to import — verify installed via pip
@@ -281,7 +281,7 @@ jobs:
           & $venvPython -c "import onnxruntime; print(f'onnxruntime {onnxruntime.__version__}')"
           if ($LASTEXITCODE -ne 0) { throw "onnxruntime import failed" }
 
-          & $venvPython -c "import openwakeword; print(f'openwakeword {openwakeword.__version__}')"
+          & $venvPython -c "import openwakeword; print('openwakeword OK')"
           if ($LASTEXITCODE -ne 0) { throw "openwakeword import failed" }
 
           & $venvPython -c "import psutil; print(f'psutil {psutil.__version__}')"
@@ -363,7 +363,7 @@ jobs:
           echo "=== Checking key packages ==="
           $VENV_PYTHON -c "import numpy; print(f'numpy {numpy.__version__}')"
           $VENV_PYTHON -c "import onnxruntime; print(f'onnxruntime {onnxruntime.__version__}')"
-          $VENV_PYTHON -c "import openwakeword; print(f'openwakeword {openwakeword.__version__}')"
+          $VENV_PYTHON -c "import openwakeword; print('openwakeword OK')"
           $VENV_PYTHON -c "import psutil; print(f'psutil {psutil.__version__}')"
           $VENV_PYTHON -c "import sounddevice; print(f'sounddevice {sounddevice.__version__}')"
           # pynput needs display server to import — verify installed via pip
