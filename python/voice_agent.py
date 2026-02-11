@@ -724,6 +724,13 @@ class VoiceMirror:
         """Main loop."""
         self.load_models()
 
+        # Pre-load STT model to avoid first-use delay
+        if self.stt_adapter and not self.stt_adapter.is_loaded:
+            try:
+                await self.stt_adapter.load()
+            except Exception as e:
+                print(f"⚠️ STT pre-load failed (will retry on first use): {e}")
+
         # Load voice config for device selection
         self._voice_config = {}
         try:
