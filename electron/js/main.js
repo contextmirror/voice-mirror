@@ -10,7 +10,7 @@ import { initXterm, handleAIOutput, updateAIStatus, toggleTerminal, startAI, sto
 import { initSettings, toggleSettings } from './settings.js';
 import { initNavigation, navigateTo, toggleSidebarCollapse } from './navigation.js';
 import { initBrowserPanel, navigateToBrowserPage } from './browser-panel.js';
-import { initChatInput } from './chat-input.js';
+import { initChatInput, setRecordingVisual } from './chat-input.js';
 import { initChatStore, autoSave } from './chat-store.js';
 import { blobToBase64, formatSize } from './utils.js';
 import { initOrbCanvas, setOrbState, destroyOrbCanvas } from './orb-canvas.js';
@@ -432,11 +432,13 @@ function handleVoiceEvent(data) {
             setOrbState('recording');
             statusIndicator.className = 'recording';
             statusText.textContent = 'Recording...';
+            setRecordingVisual(true);
             break;
         case 'processing':
             setOrbState('thinking');
             statusIndicator.className = 'thinking';
             statusText.textContent = 'Processing...';
+            setRecordingVisual(false);
             break;
         case 'thinking':
             setOrbState('thinking');
@@ -452,6 +454,7 @@ function handleVoiceEvent(data) {
             setOrbState('idle');
             statusIndicator.className = '';
             statusText.textContent = 'Listening...';
+            setRecordingVisual(false);
             break;
         case 'claude_message':
             // Claude responded via inbox — transition to idle after a short delay
@@ -463,6 +466,12 @@ function handleVoiceEvent(data) {
                     statusText.textContent = 'Listening...';
                 }
             }, 2000);
+            break;
+        case 'dictation_start':
+            setRecordingVisual(true);
+            break;
+        case 'dictation_stop':
+            setRecordingVisual(false);
             break;
         case 'mode_change':
             console.log('Mode changed to:', data.mode);

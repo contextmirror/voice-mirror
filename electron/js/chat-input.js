@@ -75,6 +75,165 @@ function saveChat() {
     URL.revokeObjectURL(url);
 }
 
+/**
+ * Show/hide the waveform overlay in the input bar during voice recording.
+ * Scrolling waveform: samples mic amplitude over time and pushes bars
+ * from right to left, building a waveform like a recording visualizer.
+ * Bar count adapts to container width on resize.
+ */
+const BAR_WIDTH = 2.5;     // px per bar
+const BAR_GAP = 2.5;       // px gap between bars
+const SAMPLE_INTERVAL_MS = 160; // How often to push a new bar
+let barCount = 0;
+let waveformEl;
+let barsContainer;
+let bars = [];
+let amplitudeHistory = [];
+let resizeObserver;
+let isRecording = false;
+
+// Web Audio state
+let audioCtx;
+let analyser;
+let micStream;
+let rafId;
+let sampleTimer;
+let timeDomainData;
+
+/** Calculate how many bars fit in the container. */
+function calcBarCount() {
+    if (!waveformEl) return 0;
+    const width = waveformEl.clientWidth - 24; // subtract padding (12px each side)
+    return Math.max(10, Math.floor(width / (BAR_WIDTH + BAR_GAP)));
+}
+
+/** Rebuild bar DOM elements and resize history to match new count. */
+function rebuildBars(newCount) {
+    if (newCount === barCount && bars.length === barCount) return;
+
+    const oldHistory = amplitudeHistory;
+    barCount = newCount;
+
+    // Resize history, keeping the most recent values (right side)
+    amplitudeHistory = new Array(barCount).fill(0);
+    if (oldHistory.length > 0) {
+        const copyLen = Math.min(oldHistory.length, barCount);
+        const srcStart = oldHistory.length - copyLen;
+        const dstStart = barCount - copyLen;
+        for (let i = 0; i < copyLen; i++) {
+            amplitudeHistory[dstStart + i] = oldHistory[srcStart + i];
+        }
+    }
+
+    // Rebuild DOM bars
+    if (!barsContainer) return;
+    barsContainer.innerHTML = '';
+    for (let i = 0; i < barCount; i++) {
+        const bar = document.createElement('div');
+        bar.className = 'waveform-bar';
+        barsContainer.appendChild(bar);
+    }
+    bars = Array.from(barsContainer.children);
+}
+
+function startAudioVisualizer() {
+    stopAudioVisualizer();
+
+    amplitudeHistory = new Array(barCount).fill(0);
+
+    const init = async () => {
+        try {
+            audioCtx = audioCtx || new AudioContext();
+            if (audioCtx.state === 'suspended') await audioCtx.resume();
+
+            micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const source = audioCtx.createMediaStreamSource(micStream);
+
+            analyser = audioCtx.createAnalyser();
+            analyser.fftSize = 256;
+            analyser.smoothingTimeConstant = 0.3;
+            source.connect(analyser);
+
+            timeDomainData = new Uint8Array(analyser.fftSize);
+
+            sampleTimer = setInterval(sampleAmplitude, SAMPLE_INTERVAL_MS);
+            drawLoop();
+        } catch (err) {
+            console.warn('[Waveform] Could not access microphone for visualizer:', err);
+        }
+    };
+    init();
+}
+
+function sampleAmplitude() {
+    if (!analyser) return;
+    analyser.getByteTimeDomainData(timeDomainData);
+
+    let sum = 0;
+    for (let i = 0; i < timeDomainData.length; i++) {
+        const v = (timeDomainData[i] - 128) / 128;
+        sum += v * v;
+    }
+    const rms = Math.sqrt(sum / timeDomainData.length);
+    const amplitude = Math.min(1, rms * 3);
+
+    amplitudeHistory.shift();
+    amplitudeHistory.push(amplitude);
+}
+
+function drawLoop() {
+    for (let i = 0; i < bars.length; i++) {
+        const value = amplitudeHistory[i] || 0;
+        const scale = 0.06 + value * 0.94;
+        bars[i].style.transform = `scaleY(${scale})`;
+    }
+    rafId = requestAnimationFrame(drawLoop);
+}
+
+function stopAudioVisualizer() {
+    if (sampleTimer) { clearInterval(sampleTimer); sampleTimer = null; }
+    if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+    if (micStream) {
+        for (const track of micStream.getTracks()) track.stop();
+        micStream = null;
+    }
+    analyser = null;
+    timeDomainData = null;
+}
+
+export function setRecordingVisual(active) {
+    if (!waveformEl) waveformEl = document.getElementById('voice-waveform');
+    if (!waveformEl) return;
+    if (!barsContainer) barsContainer = waveformEl.querySelector('.waveform-bars');
+
+    const inputRow = waveformEl.closest('#chat-input-row');
+    isRecording = active;
+
+    if (active) {
+        if (inputRow) inputRow.classList.add('recording');
+        waveformEl.classList.remove('hidden');
+
+        // Calculate bar count now that element is visible and has layout
+        rebuildBars(calcBarCount());
+
+        // Watch for resize
+        if (!resizeObserver) {
+            resizeObserver = new ResizeObserver(() => {
+                if (isRecording) rebuildBars(calcBarCount());
+            });
+        }
+        resizeObserver.observe(waveformEl);
+
+        for (const bar of bars) bar.style.transform = 'scaleY(0.06)';
+        startAudioVisualizer();
+    } else {
+        stopAudioVisualizer();
+        if (resizeObserver) resizeObserver.disconnect();
+        waveformEl.classList.add('hidden');
+        if (inputRow) inputRow.classList.remove('recording');
+    }
+}
+
 export function initChatInput() {
     textarea = document.getElementById('chat-input');
     sendBtn = document.getElementById('chat-send-btn');
