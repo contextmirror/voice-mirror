@@ -5,6 +5,33 @@ Format inspired by game dev patch notes — grouped by release, categorized by i
 
 ---
 
+## Patch 0.6.1 — "The Stylist" (2026-02-11)
+
+### New Features
+- **Claude Gray theme** — New warm neutral gray preset inspired by the Claude app (amber accent, cream text, true gray backgrounds)
+- **Message card customization** — New "Messages" section in Appearance settings with live preview of user + AI bubbles
+  - Bubble style presets: Rounded, Square, Pill
+  - Font size, padding, and avatar size sliders with real-time preview
+  - User and AI bubble color pickers (derives gradients from single color)
+  - Show/hide avatars toggle
+- **Custom font uploads** — Upload your own .ttf, .otf, .woff, or .woff2 fonts
+  - Fonts stored in app data directory with persistent manifest
+  - Magic-byte validation rejects non-font files
+  - Uploaded fonts appear in both UI and Terminal/Code font dropdowns
+  - Font management list with remove buttons
+  - 20-font limit, 10 MB max per file
+
+### Technical
+- New `font-manager.js` module (~255 lines) — font validation, atomic manifest writes, file copy with random ID prefix
+- 10 new `--msg-*` CSS variables in `theme-engine.js` derived from theme colors (user/AI backgrounds, borders, radii, font size, padding, avatar size)
+- `applyMessageCardOverrides()` function for applying saved message card settings on startup
+- Refactored `chat.css` message styling from hardcoded values to CSS custom properties with fallbacks
+- 5 new IPC handlers for font operations (upload, add, remove, list, get-data-url)
+- Font injection via base64 data URLs to avoid Electron `file://` security restrictions
+- `messageCard` config validation with bounds checking for all numeric fields
+
+---
+
 ## Patch 0.6.0 — "The Paintbrush" (2026-02-11)
 
 ### New Features
