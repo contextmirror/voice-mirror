@@ -157,6 +157,11 @@ contextBridge.exposeInMainWorld('voiceMirror', {
         // Listen for tool result events (when tool execution completes)
         onToolResult: (callback) => {
             ipcRenderer.on('tool-result', (event, data) => callback(data));
+        },
+
+        // Listen for MCP tool activity events (Claude Code file IPC watchers)
+        onToolActivity: (callback) => {
+            ipcRenderer.on('tool-activity', (event, data) => callback(data));
         }
     },
 

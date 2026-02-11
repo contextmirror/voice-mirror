@@ -178,6 +178,23 @@
 
                 <!-- Chat Input Bar -->
                 <div id="chat-input-bar">
+                    <!-- AI Activity Status Bar -->
+                    <div id="ai-status-bar">
+                        <span id="ai-status-icon">|&gt;</span>
+                        <span id="ai-status-text">Waiting for input</span>
+                        <div id="chat-scroll-buttons">
+                            <button class="chat-scroll-btn" id="scroll-to-top" title="Scroll to top">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="18 15 12 9 6 15"/>
+                                </svg>
+                            </button>
+                            <button class="chat-scroll-btn" id="scroll-to-bottom" title="Scroll to bottom">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="6 9 12 15 18 9"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
                     <div id="chat-input-row">
                         <textarea id="chat-input" placeholder="Type a message..." rows="1"></textarea>
                         <!-- Waveform overlay shown during voice recording -->

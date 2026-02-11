@@ -61,7 +61,7 @@ Write-Output "$($s.Bounds.Width)x$($s.Bounds.Height)"
  * @returns {Object} Screen capture watcher service instance
  */
 function createScreenCaptureWatcher(options = {}) {
-    const { dataDir, captureScreen } = options;
+    const { dataDir, captureScreen, onActivity } = options;
 
     let watcher = null;
 
@@ -109,6 +109,7 @@ function createScreenCaptureWatcher(options = {}) {
                 if (now - requestTime > 5000) return;
 
                 console.log('[ScreenCapture] Capture requested by Claude');
+                if (onActivity) onActivity('capture_screen');
 
                 // Get all displays from Electron's screen module
                 const displays = screen.getAllDisplays();

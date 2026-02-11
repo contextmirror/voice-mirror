@@ -460,6 +460,63 @@
     display: none;  /* Hidden - status badge shows success/error */
 }
 
+/* (spacer removed — scroll buttons moved to send column) */
+
+/* ========== AI Activity Status Bar ========== */
+#ai-status-bar {
+    padding: 2px 0 4px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.78rem;
+    color: var(--text);
+    opacity: 0.7;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex-shrink: 0;
+    height: 20px;
+}
+
+/* Scroll buttons — horizontal pair, right-aligned in status bar */
+#chat-scroll-buttons {
+    display: flex;
+    gap: 2px;
+    margin-left: auto;
+    flex-shrink: 0;
+}
+
+#ai-status-icon {
+    font-weight: bold;
+    color: var(--accent);
+    flex-shrink: 0;
+}
+
+#ai-status-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: opacity 0.15s ease-out;
+}
+
+#ai-status-text.shiny-text {
+    background: linear-gradient(
+        to right,
+        var(--text) 20%,
+        var(--accent) 40%,
+        var(--accent) 60%,
+        var(--text) 80%
+    );
+    background-size: 200% auto;
+    color: transparent;
+    -webkit-background-clip: text;
+    background-clip: text;
+    animation: ai-status-shine 2s linear infinite;
+}
+
+@keyframes ai-status-shine {
+    to { background-position: -200% center; }
+}
+
 /* ========== Chat Input Bar ========== */
 #chat-input-bar {
     padding: 10px 16px 8px;
@@ -474,6 +531,33 @@
     display: flex;
     align-items: flex-end;
     gap: 8px;
+}
+
+.chat-scroll-btn {
+    width: 22px;
+    height: 20px;
+    border-radius: var(--radius-sm);
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    opacity: 0.5;
+    transition: all var(--duration-fast) var(--ease-out);
+}
+
+.chat-scroll-btn:hover {
+    opacity: 1;
+    background: var(--bg-hover);
+    color: var(--text);
+}
+
+.chat-scroll-btn svg {
+    width: 14px;
+    height: 14px;
 }
 
 #chat-input {
@@ -568,6 +652,12 @@
     flex-shrink: 0;
 }
 
+.chat-action-btn.confirming {
+    opacity: 1;
+    background: var(--accent);
+    color: #fff;
+}
+
 /* ========== Voice Waveform Overlay ========== */
 #chat-input-row {
     position: relative;
@@ -585,7 +675,7 @@
     position: absolute;
     top: 0;
     left: 0;
-    right: 44px;  /* Leave room for send button (36px + 8px gap) */
+    right: 40px;  /* Leave room for send column (32px + 8px gap) */
     bottom: 0;
     display: flex;
     align-items: center;

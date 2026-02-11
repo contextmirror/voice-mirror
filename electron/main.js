@@ -612,13 +612,15 @@ app.whenReady().then(() => {
     // Initialize screen capture watcher service
     screenCaptureWatcherService = createScreenCaptureWatcher({
         dataDir: config.getDataDir(),
-        captureScreen: (options) => desktopCapturer.getSources(options)
+        captureScreen: (options) => desktopCapturer.getSources(options),
+        onActivity: (tool) => safeSend('tool-activity', { tool })
     });
 
     // Initialize browser watcher service
     browserWatcherService = createBrowserWatcher({
         dataDir: config.getDataDir(),
-        serperApiKey: SERPER_API_KEY
+        serperApiKey: SERPER_API_KEY,
+        onActivity: (tool) => safeSend('tool-activity', { tool })
     });
 
     // Initialize AI manager service

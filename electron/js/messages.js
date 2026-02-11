@@ -352,3 +352,21 @@ function truncateResult(result, maxLength) {
     if (result.length <= maxLength) return result;
     return result.slice(0, maxLength) + '...';
 }
+
+/**
+ * Initialize scroll-to-top / scroll-to-bottom buttons.
+ */
+export function initScrollButtons() {
+    const chatContainer = document.getElementById('chat-container');
+    const topBtn = document.getElementById('scroll-to-top');
+    const bottomBtn = document.getElementById('scroll-to-bottom');
+    if (!chatContainer || !topBtn || !bottomBtn) return;
+
+    topBtn.addEventListener('click', () => {
+        chatContainer.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+
+    bottomBtn.addEventListener('click', () => {
+        chatContainer.scrollTo({ top: chatContainer.scrollHeight, behavior: 'smooth' });
+    });
+}

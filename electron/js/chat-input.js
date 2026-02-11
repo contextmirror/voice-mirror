@@ -263,8 +263,31 @@ export function initChatInput() {
     // Send button
     sendBtn.addEventListener('click', sendMessage);
 
-    // Clear chat
-    clearBtn.addEventListener('click', clearChat);
+    // Clear chat — two-step confirm
+    let clearConfirmTimer = null;
+    clearBtn.addEventListener('click', () => {
+        if (clearBtn.classList.contains('confirming')) {
+            // Second click — actually clear
+            clearTimeout(clearConfirmTimer);
+            clearChat();
+            resetClearBtn();
+        } else {
+            // First click — switch to confirm state
+            clearBtn.classList.add('confirming');
+            clearBtn.querySelector('span').textContent = 'Confirm';
+            clearBtn.querySelector('svg').innerHTML = '<polyline points="20 6 9 17 4 12"/>';
+            clearConfirmTimer = setTimeout(resetClearBtn, 3000);
+        }
+    });
+
+    function resetClearBtn() {
+        clearBtn.classList.remove('confirming');
+        clearBtn.querySelector('span').textContent = 'Clear';
+        clearBtn.querySelector('svg').innerHTML =
+            '<polyline points="3 6 5 6 21 6"/>' +
+            '<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>' +
+            '<path d="M10 11v6"/><path d="M14 11v6"/>';
+    }
 
     // Save chat
     saveBtn.addEventListener('click', saveChat);

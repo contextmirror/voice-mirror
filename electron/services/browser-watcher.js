@@ -16,7 +16,7 @@ const path = require('path');
  * @returns {Object} Browser watcher service instance
  */
 function createBrowserWatcher(options = {}) {
-    const { dataDir, serperApiKey } = options;
+    const { dataDir, serperApiKey, onActivity } = options;
 
     let watcher = null;
     let browserModule = null;
@@ -73,6 +73,10 @@ function createBrowserWatcher(options = {}) {
                 if (now - requestTime > 5000) return;
 
                 console.log(`[BrowserWatcher] Request: ${request.action}`);
+                if (onActivity) {
+                    const toolMap = { search: 'browser_search', fetch: 'browser_fetch', navigate: 'browser_navigate', screenshot: 'browser_screenshot' };
+                    onActivity(toolMap[request.action] || `browser_${request.action}`);
+                }
 
                 let result;
                 const args = request.args || {};

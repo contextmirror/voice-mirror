@@ -33,10 +33,13 @@ function createUpdateChecker(options = {}) {
             if (local === remote) return null;
 
             const behindCount = await exec('git', ['rev-list', '--count', 'HEAD..origin/main']);
+            const behind = parseInt(behindCount, 10);
+            if (behind === 0) return null;
+
             const latestMsg = await exec('git', ['log', 'origin/main', '-1', '--format=%s']);
 
             const result = {
-                behind: parseInt(behindCount, 10),
+                behind,
                 currentHash: local.slice(0, 7),
                 remoteHash: remote.slice(0, 7),
                 latestCommit: latestMsg

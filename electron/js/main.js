@@ -5,7 +5,7 @@
 
 import { state } from './state.js';
 import { initMarkdown } from './markdown.js';
-import { addMessage, isDuplicate, copyMessage, addToolCallCard, addToolResultCard } from './messages.js';
+import { addMessage, isDuplicate, copyMessage, addToolCallCard, addToolResultCard, initScrollButtons } from './messages.js';
 import { initXterm, handleAIOutput, updateAIStatus, toggleTerminal, startAI, stopAI, updateProviderDisplay } from './terminal.js';
 import { initSettings, toggleSettings } from './settings.js';
 import { initNavigation, navigateTo, toggleSidebarCollapse } from './navigation.js';
@@ -381,6 +381,279 @@ function cancelImage() {
     statusText.textContent = 'Listening...';
 }
 
+// ========== AI Activity Status Bar ==========
+const aiStatusBar = document.getElementById('ai-status-bar');
+const aiStatusText = document.getElementById('ai-status-text');
+let aiStatusTimer = null;
+
+const TOOL_DISPLAY_NAMES = {
+    capture_screen: 'Capturing screen',
+    browser_search: 'Searching the web',
+    browser_fetch: 'Fetching page',
+    browser_navigate: 'Navigating browser',
+    browser_open: 'Opening tab',
+    browser_close_tab: 'Closing tab',
+    browser_focus: 'Focusing tab',
+    browser_tabs: 'Listing tabs',
+    browser_start: 'Starting browser',
+    browser_stop: 'Stopping browser',
+    browser_status: 'Checking browser',
+    browser_act: 'Interacting with page',
+    browser_click: 'Clicking element',
+    browser_type: 'Typing in browser',
+    browser_screenshot: 'Taking screenshot',
+    browser_snapshot: 'Reading page structure',
+    browser_console: 'Reading console',
+    browser_cookies: 'Managing cookies',
+    browser_storage: 'Managing storage',
+    browser_evaluate: 'Running script',
+    memory_search: 'Searching memory',
+    memory_get: 'Reading memory',
+    memory_remember: 'Saving to memory',
+    memory_forget: 'Forgetting memory',
+    memory_stats: 'Checking memory stats',
+    memory_flush: 'Flushing memory',
+    claude_listen: 'Listening for voice',
+    claude_send: 'Sending response',
+    claude_inbox: 'Reading inbox',
+    claude_status: 'Checking status',
+    get_diagnostic_logs: 'Reading diagnostics',
+    clone_voice: 'Cloning voice',
+    clear_voice_clone: 'Clearing voice clone',
+    list_voice_clones: 'Listing voice clones',
+    n8n_list_workflows: 'Listing workflows',
+    n8n_get_workflow: 'Reading workflow',
+    n8n_create_workflow: 'Creating workflow',
+    n8n_update_workflow: 'Updating workflow',
+    n8n_delete_workflow: 'Deleting workflow',
+    n8n_trigger_workflow: 'Triggering workflow',
+    n8n_search_nodes: 'Searching nodes',
+    n8n_get_node: 'Reading node',
+    web_search: 'Searching the web',
+    load_tools: 'Loading tools',
+    unload_tools: 'Unloading tools',
+    list_tool_groups: 'Listing tool groups',
+};
+
+/**
+ * Status priority levels — higher priority sources can override lower ones.
+ * MCP watcher events (concrete actions) outrank noisy PTY parsing.
+ * Voice events (from Python backend) take top priority.
+ */
+const STATUS_PRIORITY = { idle: 0, pty: 1, mcp: 2, voice: 3 };
+let currentStatusPriority = STATUS_PRIORITY.idle;
+let currentStatusSource = 'idle';
+
+/**
+ * Minimum display duration — prevents rapid flickering by holding a status
+ * on screen for at least this long before allowing changes.
+ */
+let statusHoldUntil = 0;
+const STATUS_HOLD_MS = 1200; // 1.2s minimum for meaningful statuses
+
+/**
+ * Set the AI activity status bar text.
+ * @param {string} text - Status text to display
+ * @param {boolean} active - Whether to show shimmer animation
+ * @param {number} [autoClearMs] - Auto-hide after this many ms (0 = don't auto-hide)
+ * @param {string} [source] - Source: 'idle', 'pty', or 'voice' (for priority)
+ */
+function setAIStatus(text, active = true, autoClearMs = 0, source = 'idle') {
+    if (!aiStatusBar || !aiStatusText) return;
+
+    const priority = STATUS_PRIORITY[source] ?? STATUS_PRIORITY.idle;
+    const now = Date.now();
+
+    // Don't let lower-priority sources override higher-priority active states
+    if (text && currentStatusPriority > priority && currentStatusSource !== 'idle') {
+        return;
+    }
+
+    // Respect minimum hold time — keep current status visible long enough to read.
+    // Only voice events (highest priority) can break through the hold.
+    if (text && now < statusHoldUntil && source !== 'voice' && priority <= currentStatusPriority) {
+        return;
+    }
+
+    if (aiStatusTimer) { clearTimeout(aiStatusTimer); aiStatusTimer = null; }
+
+    if (!text) {
+        // Don't clear to idle if we're still within the hold period
+        if (now < statusHoldUntil) {
+            aiStatusTimer = setTimeout(() => setAIStatus(null), statusHoldUntil - now + 50);
+            return;
+        }
+        aiStatusText.textContent = 'Waiting for input';
+        aiStatusText.classList.remove('shiny-text');
+        currentStatusPriority = STATUS_PRIORITY.idle;
+        currentStatusSource = 'idle';
+        return;
+    }
+
+    // Avoid redundant DOM updates for the same text
+    if (aiStatusText.textContent === text) {
+        // Still update timer if needed
+        if (autoClearMs > 0) {
+            aiStatusTimer = setTimeout(() => setAIStatus(null), autoClearMs);
+        }
+        return;
+    }
+
+    aiStatusText.textContent = text;
+    currentStatusPriority = priority;
+    currentStatusSource = source;
+
+    // Set hold time so the status stays readable
+    statusHoldUntil = now + STATUS_HOLD_MS;
+
+    if (active) {
+        aiStatusText.classList.add('shiny-text');
+    } else {
+        aiStatusText.classList.remove('shiny-text');
+    }
+
+    if (autoClearMs > 0) {
+        aiStatusTimer = setTimeout(() => setAIStatus(null), autoClearMs);
+    }
+}
+
+/**
+ * Strip ANSI escape codes from a string.
+ */
+function stripAnsi(str) {
+    // eslint-disable-next-line no-control-regex
+    return str.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '').replace(/\x1b\][^\x07]*\x07/g, '');
+}
+
+/**
+ * Parse Claude Code PTY output for activity status.
+ * PTY data arrives in small chunks, so we accumulate into a rolling buffer.
+ * Uses debouncing to prevent flickering between rapid state changes.
+ */
+let ptyActivityTimer = null;
+let ptyBuffer = '';
+const PTY_BUFFER_MAX = 3000;
+let lastPtyStatus = '';
+let ptyDebounceTimer = null;
+
+/**
+ * Debounced PTY status setter — prevents flickering from rapid PTY output.
+ */
+function setPtyStatus(text, active = true, autoClearMs = 0) {
+    if (text === lastPtyStatus) return; // Skip duplicates
+    lastPtyStatus = text;
+
+    if (ptyDebounceTimer) clearTimeout(ptyDebounceTimer);
+    ptyDebounceTimer = setTimeout(() => {
+        setAIStatus(text, active, autoClearMs, 'pty');
+    }, 300); // 300ms debounce — prevents rapid flickering from chunked PTY output
+}
+
+function parsePtyActivity(rawText) {
+    const text = stripAnsi(rawText);
+    ptyBuffer += text;
+    if (ptyBuffer.length > PTY_BUFFER_MAX) {
+        ptyBuffer = ptyBuffer.slice(-PTY_BUFFER_MAX);
+    }
+
+    // --- MCP tool calls ---
+    // Patterns: "• voice-mirror-electron - tool_name (MCP)" or "tool_name (MCP)"
+    const mcpMatch = ptyBuffer.match(/[•●]\s*\S+\s*[-–]\s*(\w+)\s*\(?MCP\)?/);
+    if (mcpMatch) {
+        const tool = mcpMatch[1];
+        const displayName = TOOL_DISPLAY_NAMES[tool] || formatToolName(tool);
+        setPtyStatus(displayName, true);
+        ptyBuffer = '';
+        if (ptyActivityTimer) clearTimeout(ptyActivityTimer);
+        ptyActivityTimer = setTimeout(() => setAIStatus(null), 15000);
+        return;
+    }
+
+    // --- Claude Code built-in tools ---
+    // Patterns: "⏺ Read(...)" / "Read file.js" / "⏺ Edit(...)" / "Bash(...)"
+    const builtinMatch = ptyBuffer.match(/[⏺+●]\s*(Read|Edit|Write|Bash|Glob|Grep|WebSearch|WebFetch|Task|NotebookEdit|TodoWrite|TodoRead)\b/);
+    if (builtinMatch) {
+        const names = {
+            Read: 'Reading file', Edit: 'Editing file', Write: 'Writing file',
+            Bash: 'Running command', Glob: 'Searching files', Grep: 'Searching code',
+            WebSearch: 'Searching the web', WebFetch: 'Fetching page', Task: 'Running task',
+            NotebookEdit: 'Editing notebook', TodoWrite: 'Updating todos', TodoRead: 'Reading todos'
+        };
+        setPtyStatus(names[builtinMatch[1]] || builtinMatch[1], true);
+        ptyBuffer = '';
+        if (ptyActivityTimer) clearTimeout(ptyActivityTimer);
+        ptyActivityTimer = setTimeout(() => setAIStatus(null), 10000);
+        return;
+    }
+
+    // --- Search/glob result counts ---
+    const searchMatch = text.match(/Searched for (\d+) pattern/i);
+    if (searchMatch) {
+        setPtyStatus(`Searched ${searchMatch[1]} patterns`, false, 3000);
+        ptyBuffer = '';
+        return;
+    }
+
+    // --- Thinking / running states ---
+    // Match Claude Code spinners: "Running…", "Thinking…", "Ionizing…", etc.
+    const stateMatch = text.match(/(Running|Ionizing|Thinking|Boondoggling|Crystallizing|Percolating|Synthesizing|Generating|Analyzing|Compiling|Processing|Evaluating|Reasoning|Planning|Reflecting)[….…]/i);
+    if (stateMatch) {
+        setPtyStatus(`${stateMatch[1]}...`, true);
+        if (ptyActivityTimer) clearTimeout(ptyActivityTimer);
+        ptyActivityTimer = setTimeout(() => setAIStatus(null), 15000);
+        return;
+    }
+
+    // "thought for X seconds" / "thought for Xs"
+    if (text.match(/thought for \d+/i)) {
+        setPtyStatus('Thinking...', true);
+        if (ptyActivityTimer) clearTimeout(ptyActivityTimer);
+        ptyActivityTimer = setTimeout(() => setAIStatus(null), 15000);
+        return;
+    }
+
+    // --- Streaming response indicator ---
+    // Only show "Responding..." for substantial text output with no tool markers.
+    // High threshold avoids false positives from tool result summaries.
+    if (text.length > 300 && !text.includes('⏺') && !text.includes('●') && !text.includes('MCP') && !text.includes('•')) {
+        setPtyStatus('Responding...', true);
+        if (ptyActivityTimer) clearTimeout(ptyActivityTimer);
+        ptyActivityTimer = setTimeout(() => setAIStatus(null), 5000);
+        return;
+    }
+
+    // --- Specific events ---
+    if (text.includes('Message sent in thread')) {
+        setPtyStatus('Message sent', false, 2000);
+        ptyBuffer = '';
+        return;
+    }
+
+    if (text.includes('Listening for your voice') || text.includes('listening for voice')) {
+        setPtyStatus('Listening for voice...', true);
+        if (ptyActivityTimer) clearTimeout(ptyActivityTimer);
+        ptyActivityTimer = setTimeout(() => setAIStatus(null), 600000); // Long timeout for listen
+        return;
+    }
+
+    // --- Prompt / waiting for input detection ---
+    if (text.includes('❯') || text.includes('$') && text.trim().endsWith('$')) {
+        // Claude Code returned to prompt
+        if (ptyActivityTimer) clearTimeout(ptyActivityTimer);
+        setAIStatus(null);
+        ptyBuffer = '';
+        return;
+    }
+}
+
+/**
+ * Format a raw tool name into a readable display string.
+ * e.g. "browser_screenshot" → "Browser screenshot"
+ */
+function formatToolName(name) {
+    return name.replace(/_/g, ' ').replace(/^\w/, c => c.toUpperCase());
+}
+
 /**
  * Handle voice events from Python backend
  */
@@ -433,28 +706,33 @@ function handleVoiceEvent(data) {
             statusIndicator.className = 'recording';
             statusText.textContent = 'Recording...';
             setRecordingVisual(true);
+            setAIStatus('Recording...', true, 0, 'voice');
             break;
         case 'processing':
             setOrbState('thinking');
             statusIndicator.className = 'thinking';
             statusText.textContent = 'Processing...';
             setRecordingVisual(false);
+            setAIStatus('Processing speech...', true, 0, 'voice');
             break;
         case 'thinking':
             setOrbState('thinking');
             statusIndicator.className = 'thinking';
             statusText.textContent = data.source ? `Asking ${data.source}...` : 'Thinking...';
+            setAIStatus(data.source ? `Asking ${data.source}...` : 'Thinking...', true, 0, 'voice');
             break;
         case 'speaking':
             setOrbState('speaking');
             statusIndicator.className = 'speaking';
             statusText.textContent = 'Speaking...';
+            setAIStatus('Speaking...', true, 0, 'voice');
             break;
         case 'idle':
             setOrbState('idle');
             statusIndicator.className = '';
             statusText.textContent = 'Listening...';
             setRecordingVisual(false);
+            setAIStatus(null, true, 0, 'voice');
             break;
         case 'claude_message':
             // Claude responded via inbox — transition to idle after a short delay
@@ -565,6 +843,9 @@ async function init() {
     // Initialize chat input bar (textarea, send/mic buttons, clear/save actions)
     initChatInput();
 
+    // Initialize scroll navigation buttons
+    initScrollButtons();
+
     // Initialize chat store (sidebar history, persistence)
     initChatStore();
 
@@ -651,19 +932,43 @@ async function init() {
         }
     });
 
-    // Listen for AI terminal output
-    window.voiceMirror.claude.onOutput(handleAIOutput);
+    // Listen for AI terminal output (+ parse for Claude Code activity)
+    window.voiceMirror.claude.onOutput((data) => {
+        handleAIOutput(data);
+        // Parse PTY stdout for Claude Code activity status
+        if (data.type === 'stdout' && state.currentProvider === 'claude') {
+            parsePtyActivity(data.text);
+        } else if (data.type === 'start') {
+            setAIStatus(`Starting ${state.currentProviderName || 'AI'}...`, true, 3000);
+        } else if (data.type === 'exit') {
+            setAIStatus(null);
+        }
+    });
 
-    // Listen for tool events (local LLM tool system)
+    // Listen for tool events (local LLM tool system) — status bar + existing logging
     window.voiceMirror.tools.onToolCall((data) => {
         console.log('[Tool Call]', data);
         window.voiceMirror.devlog('TOOL', 'tool-call', { tool: data.tool, text: JSON.stringify(data.args)?.slice(0, 200) });
+        const displayName = TOOL_DISPLAY_NAMES[data.tool] || `Running ${data.tool.replace(/_/g, ' ')}`;
+        setAIStatus(`${displayName}...`, true, 8000, 'mcp');
     });
 
     window.voiceMirror.tools.onToolResult((data) => {
         console.log('[Tool Result]', data);
         window.voiceMirror.devlog('TOOL', 'tool-result', { tool: data.tool, success: data.success, text: data.result?.slice(0, 200) });
+        const displayName = TOOL_DISPLAY_NAMES[data.tool] || data.tool.replace(/_/g, ' ');
+        setAIStatus(`${displayName} ${data.success ? 'done' : 'failed'}`, false, 2500, 'mcp');
     });
+
+    // Listen for MCP tool activity (Claude Code via file IPC watchers)
+    // These are concrete actions (screen capture, browser search) — use 'mcp' priority
+    // so they aren't overridden by noisy PTY output.
+    if (window.voiceMirror.tools.onToolActivity) {
+        window.voiceMirror.tools.onToolActivity((data) => {
+            const displayName = TOOL_DISPLAY_NAMES[data.tool] || data.tool.replace(/_/g, ' ');
+            setAIStatus(`${displayName}...`, true, 8000, 'mcp');
+        });
+    }
 
     // Listen for open-settings command from tray menu
     window.voiceMirror.onOpenSettings(() => {
