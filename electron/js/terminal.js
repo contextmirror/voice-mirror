@@ -6,6 +6,7 @@
 
 import { state } from './state.js';
 import { PROVIDER_ICON_CLASSES } from './settings.js';
+import { onTerminalThemeChanged } from './theme-engine.js';
 
 // xterm.js instance
 let term = null;
@@ -110,29 +111,14 @@ export async function initXterm() {
     term = new Terminal({
         cursorBlink: true,
         fontSize: 13,
-        fontFamily: "'SF Mono', 'Monaco', 'Consolas', 'Liberation Mono', monospace",
+        fontFamily: "'Cascadia Code', 'Fira Code', monospace",
         theme: {
-            background: '#0a0a12',
-            foreground: '#e0e0e0',
+            // Sensible fallback — will be overwritten by theme engine callback
+            background: '#0c0d10',
+            foreground: '#e4e4e7',
             cursor: '#667eea',
-            cursorAccent: '#0a0a12',
+            cursorAccent: '#0c0d10',
             selection: 'rgba(102, 126, 234, 0.3)',
-            black: '#1a1a2e',
-            red: '#f87171',
-            green: '#4ade80',
-            yellow: '#fbbf24',
-            blue: '#60a5fa',
-            magenta: '#c084fc',
-            cyan: '#22d3ee',
-            white: '#e0e0e0',
-            brightBlack: '#4a4a5e',
-            brightRed: '#fca5a5',
-            brightGreen: '#86efac',
-            brightYellow: '#fde047',
-            brightBlue: '#93c5fd',
-            brightMagenta: '#d8b4fe',
-            brightCyan: '#67e8f9',
-            brightWhite: '#ffffff'
         },
         scrollback: 1000,
         convertEol: true
@@ -140,6 +126,19 @@ export async function initXterm() {
 
     fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
+
+    // Register terminal theme callback — theme engine will push color + font updates
+    onTerminalThemeChanged((xtermTheme, fontMono) => {
+        if (!term) return;
+        term.options.theme = xtermTheme;
+        if (fontMono) {
+            term.options.fontFamily = fontMono;
+        }
+        // Re-fit after font/theme change to recalculate character metrics
+        if (fitAddon) {
+            try { fitAddon.fit(); } catch { /* not mounted yet */ }
+        }
+    });
 
     // Mount terminal to the appropriate container based on saved preference
     const mountContainer = state.terminalLocation === 'chat-bottom' ? xtermContainer : fullscreenContainer;

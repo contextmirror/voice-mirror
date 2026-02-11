@@ -258,6 +258,41 @@ export function resolveTheme(appearance = {}) {
     return { colors, fonts };
 }
 
+// ========== Terminal Theme Derivation ==========
+
+/**
+ * Derive an xterm.js theme object from the 10 key colors.
+ * Maps theme colors to terminal background, foreground, cursor, and ANSI palette.
+ * @param {{ bg, bgElevated, text, textStrong, muted, accent, ok, warn, danger, orbCore }} colors
+ * @returns {Object} xterm.js theme object
+ */
+export function deriveTerminalTheme(colors) {
+    const c = colors;
+    return {
+        background: c.bg,
+        foreground: c.text,
+        cursor: c.accent,
+        cursorAccent: c.bg,
+        selection: hexToRgba(c.accent, 0.3),
+        black: lighten(c.bg, 0.05),
+        red: c.danger,
+        green: c.ok,
+        yellow: c.warn,
+        blue: c.accent,
+        magenta: lighten(blend(c.accent, c.danger, 0.5), 0.1),
+        cyan: lighten(blend(c.accent, c.ok, 0.5), 0.1),
+        white: c.text,
+        brightBlack: c.muted,
+        brightRed: lighten(c.danger, 0.15),
+        brightGreen: lighten(c.ok, 0.15),
+        brightYellow: lighten(c.warn, 0.15),
+        brightBlue: lighten(c.accent, 0.15),
+        brightMagenta: lighten(blend(c.accent, c.danger, 0.5), 0.25),
+        brightCyan: lighten(blend(c.accent, c.ok, 0.5), 0.25),
+        brightWhite: c.textStrong
+    };
+}
+
 // ========== Application ==========
 
 // Callback for orb color updates (set by orb-canvas.js)
@@ -267,8 +302,15 @@ export function onOrbColorsChanged(callback) {
     _orbColorCallback = callback;
 }
 
+// Callback for terminal theme updates (set by terminal.js)
+let _terminalThemeCallback = null;
+
+export function onTerminalThemeChanged(callback) {
+    _terminalThemeCallback = callback;
+}
+
 /**
- * Apply a theme: set all CSS variables on :root and update orb colors.
+ * Apply a theme: set all CSS variables on :root, update orb colors, and update terminal.
  */
 export function applyTheme(colors, fonts = {}) {
     const vars = deriveTheme(colors, fonts);
@@ -279,6 +321,10 @@ export function applyTheme(colors, fonts = {}) {
 
     const orbColors = deriveOrbColors(colors);
     if (_orbColorCallback) _orbColorCallback(orbColors);
+
+    const termTheme = deriveTerminalTheme(colors);
+    const termFont = fonts.fontMono || PRESETS.dark.fonts.fontMono;
+    if (_terminalThemeCallback) _terminalThemeCallback(termTheme, termFont);
 }
 
 /**

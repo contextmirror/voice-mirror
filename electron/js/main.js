@@ -926,6 +926,12 @@ async function init() {
     // Initialize xterm terminal
     try {
         await initXterm();
+        // Re-apply theme to terminal now that it's mounted and listening
+        try {
+            const config = await window.voiceMirror.config.get();
+            const { colors: c, fonts: f } = resolveTheme(config.appearance);
+            applyThemeEngine(c, f);
+        } catch { /* theme already applied, terminal will use fallback */ }
     } catch (err) {
         console.error('[xterm] Failed to initialize:', err);
     }
