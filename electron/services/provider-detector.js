@@ -120,6 +120,114 @@ const CLOUD_PROVIDERS = {
 };
 
 /**
+ * Try to find and start Ollama if it's installed but not running.
+ * Searches common install locations on the current platform.
+ * @returns {Promise<boolean>} True if Ollama was started successfully
+ */
+async function tryStartOllama() {
+    const { execFile, execSync } = require('child_process');
+    const fs = require('fs');
+    const path = require('path');
+    const os = require('os');
+    const home = os.homedir();
+
+    // Build candidate list per platform
+    const candidates = [];
+
+    if (process.platform === 'win32') {
+        candidates.push(
+            // Standard installer locations
+            path.join(home, 'AppData', 'Local', 'Programs', 'Ollama', 'ollama app.exe'),
+            path.join(home, 'AppData', 'Local', 'Ollama', 'ollama app.exe'),
+            'C:\\Program Files\\Ollama\\ollama app.exe',
+            'C:\\Program Files (x86)\\Ollama\\ollama app.exe',
+        );
+        // Search all drive roots for Ollama directories
+        for (const drive of ['C:', 'D:', 'E:', 'F:', 'G:']) {
+            try {
+                if (!fs.existsSync(drive + '\\')) continue;
+                candidates.push(`${drive}\\Ollama\\ollama app.exe`);
+            } catch { /* drive not accessible */ }
+        }
+        // Try Windows `where` command to find ollama on PATH
+        try {
+            const found = execSync('where ollama 2>nul', { encoding: 'utf-8', timeout: 3000 }).trim();
+            if (found) {
+                for (const line of found.split(/\r?\n/)) {
+                    const trimmed = line.trim();
+                    if (trimmed && !candidates.includes(trimmed)) {
+                        candidates.push(trimmed);
+                        // Also check for "ollama app.exe" next to plain ollama.exe
+                        const appExe = path.join(path.dirname(trimmed), 'ollama app.exe');
+                        if (!candidates.includes(appExe)) candidates.push(appExe);
+                    }
+                }
+            }
+        } catch { /* not on PATH */ }
+    } else if (process.platform === 'darwin') {
+        candidates.push(
+            '/Applications/Ollama.app/Contents/MacOS/ollama',
+            '/usr/local/bin/ollama',
+            '/opt/homebrew/bin/ollama',
+            path.join(home, 'Applications', 'Ollama.app', 'Contents', 'MacOS', 'ollama'),
+        );
+    } else {
+        // Linux
+        candidates.push(
+            '/usr/local/bin/ollama',
+            '/usr/bin/ollama',
+            '/snap/bin/ollama',
+            path.join(home, '.local', 'bin', 'ollama'),
+        );
+    }
+
+    // Last resort: bare 'ollama' on PATH (all platforms)
+    candidates.push('ollama');
+
+    for (const exe of candidates) {
+        try {
+            // Check if the file exists (skip PATH-based 'ollama' — handled separately)
+            if (exe !== 'ollama' && !fs.existsSync(exe)) continue;
+
+            console.log(`[ProviderDetector] Found Ollama at: ${exe}`);
+
+            // Start detached so it survives if Voice Mirror exits
+            const isApp = exe.endsWith('app.exe') || exe.endsWith('Ollama.app/Contents/MacOS/ollama');
+            if (isApp) {
+                // "ollama app.exe" starts the tray app which includes the server
+                execFile(exe, [], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
+            } else {
+                // Plain 'ollama' binary needs 'serve' subcommand
+                execFile(exe, ['serve'], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
+            }
+
+            // Wait for server to come online (poll up to 10s)
+            for (let i = 0; i < 20; i++) {
+                await new Promise(r => setTimeout(r, 500));
+                try {
+                    const resp = await fetch('http://127.0.0.1:11434/', {
+                        signal: AbortSignal.timeout(2000)
+                    });
+                    if (resp.ok || resp.status < 500) {
+                        console.log(`[ProviderDetector] Ollama started successfully`);
+                        return true;
+                    }
+                } catch { /* not ready yet */ }
+            }
+
+            console.log(`[ProviderDetector] Ollama started but server not responding after 10s`);
+            return false;
+        } catch (err) {
+            // This candidate didn't work, try next
+            continue;
+        }
+    }
+
+    console.log(`[ProviderDetector] Ollama not found on this system`);
+    return false;
+}
+
+/**
  * Parse models from API response
  * All providers use OpenAI-compatible format: { data: [{ id: "model-name" }, ...] }
  */
@@ -194,6 +302,15 @@ async function detectLocalProvider(type, customEndpoint = null) {
         } else {
             console.log(`[ProviderDetector] ${config.name}: OFFLINE`);
             status.error = 'offline';
+
+            // Auto-start Ollama if it's installed but not running
+            if (type === 'ollama' && !customEndpoint) {
+                const started = await tryStartOllama();
+                if (started) {
+                    // Retry detection now that Ollama is running
+                    return detectLocalProvider(type, customEndpoint);
+                }
+            }
         }
     }
 
