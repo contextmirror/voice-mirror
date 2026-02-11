@@ -203,7 +203,7 @@ jobs:
           echo "=== Checking key packages ==="
           $VENV_PYTHON -c "import numpy; print(f'numpy {numpy.__version__}')"
           $VENV_PYTHON -c "import onnxruntime; print(f'onnxruntime {onnxruntime.__version__}')"
-          $VENV_PYTHON -c "import sounddevice; print(f'sounddevice {sounddevice.__version__}')"
+          $VENV_PYTHON -c "import psutil; print(f'psutil {psutil.__version__}')"
 
       - name: Run unit tests
         working-directory: ${{ runner.temp }}/voice-mirror-full
@@ -275,8 +275,8 @@ jobs:
           & $venvPython -c "import onnxruntime; print(f'onnxruntime {onnxruntime.__version__}')"
           if ($LASTEXITCODE -ne 0) { throw "onnxruntime import failed" }
 
-          & $venvPython -c "import sounddevice; print(f'sounddevice {sounddevice.__version__}')"
-          if ($LASTEXITCODE -ne 0) { throw "sounddevice import failed" }
+          & $venvPython -c "import psutil; print(f'psutil {psutil.__version__}')"
+          if ($LASTEXITCODE -ne 0) { throw "psutil import failed" }
 
       - name: Run unit tests
         working-directory: ${{ runner.temp }}\voice-mirror-full
@@ -335,7 +335,7 @@ jobs:
           echo "=== Checking key packages ==="
           $VENV_PYTHON -c "import numpy; print(f'numpy {numpy.__version__}')"
           $VENV_PYTHON -c "import onnxruntime; print(f'onnxruntime {onnxruntime.__version__}')"
-          $VENV_PYTHON -c "import sounddevice; print(f'sounddevice {sounddevice.__version__}')"
+          $VENV_PYTHON -c "import psutil; print(f'psutil {psutil.__version__}')"
 
       - name: Run unit tests
         working-directory: ${{ runner.temp }}/voice-mirror-full
