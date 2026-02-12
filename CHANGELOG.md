@@ -5,6 +5,23 @@ Format inspired by game dev patch notes — grouped by release, categorized by i
 
 ---
 
+## Patch 0.7.2 — "The Unblock" (2026-02-12)
+
+Fixes the long-standing issue where binding mouse side buttons to PTT/dictation would block the corresponding keyboard keys system-wide. Adopts the Discord/OBS approach: bound keys now pass through to other apps instead of being suppressed. Key-repeat flooding is still suppressed during hold, and dictation auto-cleans the stray character with a Backspace.
+
+### Fixed
+- **Keyboard keys no longer blocked by mouse side button bindings** — When gaming mice firmware-map side buttons to keyboard keys (e.g. "4", "5"), those keys were suppressed system-wide by pynput. Now bound keys pass through to other apps (Discord/OBS-style). Only key-repeat events are suppressed during hold to prevent character flooding
+- **Dictation stray character cleanup** — When a printable key (e.g. "5") is bound to dictation, the character that leaks through on keydown is automatically erased by a queued Backspace before the transcribed text is injected
+- **pynput implicit None suppression bug** — `_win32_kb_filter` and `_win32_mouse_filter` returned implicit `None` for non-matching events, which pynput treated as "suppress" — blocking ALL keyboard/mouse input system-wide when any key was bound
+- **Toggle-panel hotkey save corruption** — Settings save now reads `dataset.rawKey` first, preventing the accelerator string from being mangled by display formatting in `textContent`
+
+### Technical
+- `_win32_kb_filter` rewritten: callbacks (`_on_press`/`_on_release`) now handle trigger start/stop instead of the filter. Filter only suppresses repeat keydowns
+- New `_queue_dictation_backspace()` method sends Backspace via threaded pynput Controller 30ms after keydown
+- Windows 5-button mouse limit is an OS-level constraint (`mouhid.sys`). Buttons 6+ are firmware-remapped to keyboard keys by vendor drivers — indistinguishable from physical keypresses at every Windows API level. Per-device filtering requires kernel drivers (Interception) or hardware remappers. This is a semi-fix; a perfect solution would require per-device input filtering
+
+---
+
 ## Patch 0.7.1 — "The Streamline" (2026-02-12)
 
 Simplifies the AI provider picker by consolidating redundant options. OpenCode covers 75+ cloud providers with full MCP support, making individual cloud API entries unnecessary. The settings page now offers a clean three-category layout: CLI Agents (Claude Code, OpenCode), Local (Ollama, LM Studio, Jan), done. Also adds auto-install prompting for OpenCode, fixes hardcoded user name in voice prompts, and replaces the placeholder OpenCode icon with the official logo.
