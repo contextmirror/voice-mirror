@@ -327,15 +327,15 @@ export function updateAIProviderUI(provider) {
         contextLengthRow.style.display = LOCAL_PROVIDERS.includes(provider) ? 'flex' : 'none';
     }
 
-    // Tool profiles: only show for Claude Code
+    // Tool profiles: show for MCP CLI providers (Claude Code, OpenCode)
     const toolProfileSection = document.getElementById('tool-profile-section');
     if (toolProfileSection) {
-        toolProfileSection.style.display = provider === 'claude' ? 'block' : 'none';
+        toolProfileSection.style.display = CLI_PROVIDERS.includes(provider) ? 'block' : 'none';
     }
 
     // Update terminal profile badge
     updateTerminalProfileBadge(
-        provider === 'claude' ? (PROFILE_DISPLAY_NAMES[state.activeToolProfile] || 'Voice Assistant') : ''
+        CLI_PROVIDERS.includes(provider) ? (PROFILE_DISPLAY_NAMES[state.activeToolProfile] || 'Voice Assistant') : ''
     );
 
     // Set default endpoint for local providers
@@ -516,7 +516,7 @@ export async function saveSettings() {
         }
     }
 
-    // Tool profile updates (Claude Code only)
+    // Tool profile updates (MCP CLI providers)
     const toolProfileUpdates = getToolProfileUpdates();
     Object.assign(aiUpdates, toolProfileUpdates);
 
