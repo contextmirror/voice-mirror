@@ -1,14 +1,15 @@
 /**
- * terminal.js - xterm.js terminal + AI provider control
+ * terminal.js - ghostty-web terminal + AI provider control
  *
  * Model-agnostic terminal that supports Claude Code, Ollama, LM Studio, and other providers.
+ * Uses ghostty-web (Ghostty's VT parser compiled to WASM) as the terminal emulator.
  */
 
 import { state } from './state.js';
 import { PROVIDER_ICON_CLASSES } from './settings.js';
 import { onTerminalThemeChanged } from './theme-engine.js';
 
-// xterm.js instance
+// ghostty-web instance
 let term = null;
 let fitAddon = null;
 let resizeObserver = null;
@@ -49,24 +50,14 @@ function resizePtyIfChanged() {
 }
 
 /**
- * Safe fit: run FitAddon then shrink xterm by 1 column.
+ * Safe fit: run FitAddon to calculate and apply correct terminal dimensions.
  *
- * FitAddon calculates the maximum columns that fit the container, but
- * subpixel font rounding on Windows HiDPI, container padding measurement
- * differences, and scrollbar width can cause a 1-col overcount. This makes
- * the xterm canvas wider than its container, causing characters (especially
- * Claude Code's box-drawing UI) to visually overflow into the sidebar.
- *
- * By calling term.resize(cols-1, rows) after fitAddon.fit(), we shrink the
- * actual canvas — not just the PTY — so both agree on the safe column count.
+ * ghostty-web's canvas renderer handles subpixel metrics correctly,
+ * so no column adjustment is needed (unlike xterm.js which required -1 col).
  */
 function safeFit() {
     if (!fitAddon || !term) return;
     fitAddon.fit();
-    const safeCols = Math.max(1, term.cols - 1);
-    if (safeCols !== term.cols) {
-        term.resize(safeCols, term.rows);
-    }
 }
 
 /**
@@ -89,14 +80,24 @@ export async function initXterm() {
     terminalTitle = document.getElementById('terminal-title');
     terminalFullscreenTitle = document.getElementById('terminal-fullscreen-title');
 
-    // xterm.js loaded via script tags (UMD bundles expose on window)
-    const Terminal = window.Terminal;
-    const FitAddon = window.FitAddon.FitAddon;
-
-    if (!Terminal) {
-        console.error('[xterm] Terminal not loaded - check script tags');
+    // ghostty-web loaded via UMD script tag (exposes window.GhosttyWeb)
+    const GhosttyWeb = window.GhosttyWeb;
+    if (!GhosttyWeb) {
+        console.error('[ghostty-web] GhosttyWeb not loaded - check script tags');
         return;
     }
+
+    // Initialize WASM before creating any Terminal instances
+    try {
+        await GhosttyWeb.init();
+        console.log('[ghostty-web] WASM initialized');
+    } catch (err) {
+        console.error('[ghostty-web] WASM init failed:', err);
+        return;
+    }
+
+    const Terminal = GhosttyWeb.Terminal;
+    const FitAddon = GhosttyWeb.FitAddon;
 
     // Load saved terminal location preference
     try {
@@ -105,7 +106,7 @@ export async function initXterm() {
             state.terminalLocation = config.behavior.terminalLocation;
         }
     } catch (err) {
-        console.warn('[xterm] Failed to load terminal location preference:', err);
+        console.warn('[ghostty-web] Failed to load terminal location preference:', err);
     }
 
     term = new Terminal({
@@ -118,7 +119,7 @@ export async function initXterm() {
             foreground: '#e4e4e7',
             cursor: '#667eea',
             cursorAccent: '#0c0d10',
-            selection: 'rgba(102, 126, 234, 0.3)',
+            selectionBackground: 'rgba(102, 126, 234, 0.3)',
         },
         scrollback: 1000,
         convertEol: true
@@ -128,9 +129,16 @@ export async function initXterm() {
     term.loadAddon(fitAddon);
 
     // Register terminal theme callback — theme engine will push color + font updates
-    onTerminalThemeChanged((xtermTheme, fontMono) => {
+    onTerminalThemeChanged((termTheme, fontMono) => {
         if (!term) return;
-        term.options.theme = xtermTheme;
+        // ghostty-web v0.4.0: options.theme after open() logs a warning and
+        // doesn't apply. Work around by calling renderer.setTheme() directly.
+        if (term.renderer) {
+            term.renderer.setTheme(termTheme);
+        } else {
+            // Not mounted yet — set via options (applies on open())
+            term.options.theme = termTheme;
+        }
         if (fontMono) {
             term.options.fontFamily = fontMono;
         }
@@ -143,6 +151,55 @@ export async function initXterm() {
     // Mount terminal to the appropriate container based on saved preference
     const mountContainer = state.terminalLocation === 'chat-bottom' ? xtermContainer : fullscreenContainer;
     term.open(mountContainer);
+
+    // Wheel scroll — ghostty-web's built-in handler (on the container) doesn't fire
+    // reliably in Electron due to contenteditable + frameless-window quirks.
+    // Use a window-level capture handler with coordinate hit-testing.
+    window.addEventListener('wheel', (e) => {
+        if (!term || !term.wasmTerm) return;
+
+        // Coordinate-based hit test — more reliable than contains(e.target)
+        const container = state.terminalLocation === 'chat-bottom' ? xtermContainer : fullscreenContainer;
+        if (!container) return;
+        const rect = container.getBoundingClientRect();
+        if (e.clientX < rect.left || e.clientX > rect.right ||
+            e.clientY < rect.top || e.clientY > rect.bottom) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+
+        if (term.wasmTerm.isAlternateScreen()) {
+            if (term.wasmTerm.hasMouseTracking()) {
+                // TUI with mouse tracking (Bubble Tea apps like OpenCode):
+                // Send proper SGR mouse wheel events so the app scrolls its viewport,
+                // not arrow keys which navigate input history.
+                const button = e.deltaY < 0 ? 64 : 65; // 64=scroll up, 65=scroll down
+                const metrics = term.renderer?.getMetrics();
+                // Convert mouse pixel position to 1-based cell coordinates
+                const col = Math.max(1, Math.floor((e.clientX - rect.left) / (metrics?.width ?? 8)) + 1);
+                const row = Math.max(1, Math.floor((e.clientY - rect.top) / (metrics?.height ?? 16)) + 1);
+                const count = Math.max(1, Math.min(Math.abs(Math.round(e.deltaY / 33)), 5));
+                for (let i = 0; i < count; i++) {
+                    // SGR extended mouse format (mode 1006) — used by modern TUIs
+                    window.voiceMirror.claude.sendInput(`\x1b[<${button};${col};${row}M`);
+                }
+            } else {
+                // TUI without mouse tracking: fall back to arrow keys
+                const direction = e.deltaY > 0 ? '\x1b[B' : '\x1b[A';
+                const count = Math.max(1, Math.min(Math.abs(Math.round(e.deltaY / 33)), 5));
+                for (let i = 0; i < count; i++) {
+                    window.voiceMirror.claude.sendInput(direction);
+                }
+            }
+        } else {
+            // Normal mode: use ghostty-web's viewport scrolling
+            const lineHeight = term.renderer?.getMetrics()?.height ?? 20;
+            const deltaLines = Math.round(e.deltaY / lineHeight);
+            if (deltaLines !== 0) {
+                term.scrollLines(deltaLines);
+            }
+        }
+    }, { passive: false, capture: true });
 
     // Update visibility based on location
     if (state.terminalLocation === 'chat-bottom') {
@@ -158,16 +215,18 @@ export async function initXterm() {
         window.voiceMirror.claude.sendInput(data);
     });
 
-    // Handle Ctrl+V paste via Electron clipboard (xterm.js browser paste is blocked on Windows)
+    // Handle Ctrl+V paste via Electron clipboard (browser paste is blocked on Windows)
+    // ghostty-web semantics: return true = "handled, stop processing", false = "pass through"
+    // (this is inverted from xterm.js where true = "pass through")
     term.attachCustomKeyEventHandler((event) => {
-        if (event.type === 'keydown' && event.ctrlKey && event.key === 'v') {
+        if (event.ctrlKey && event.key === 'v') {
             const text = window.voiceMirror.readClipboard();
             if (text) {
                 window.voiceMirror.claude.sendInput(text);
             }
-            return false; // Prevent default handling
+            return true; // We handled paste — stop ghostty-web from processing
         }
-        return true;
+        return false; // Let ghostty-web handle all other keys normally
     });
 
     // Handle resize - suspend terminal rendering during active resize,
@@ -203,7 +262,7 @@ export async function initXterm() {
                         // (avoids duplicate SIGWINCH causing Claude Code to redraw its UI)
                         resizePtyIfChanged();
                         // Force re-render visible rows to clean up stale line artifacts
-                        term.refresh(0, term.rows - 1);
+                        if (term.refresh) term.refresh(0, term.rows - 1);
                         // Brief delay before showing terminal — gives the CLI
                         // time to process SIGWINCH and send redraw output
                         setTimeout(() => {
@@ -249,7 +308,7 @@ export async function initXterm() {
                 if (currentContainer && currentContainer.offsetParent !== null) {
                     safeFit();
                     resizePtyIfChanged();
-                    term.refresh(0, term.rows - 1);
+                    if (term.refresh) term.refresh(0, term.rows - 1);
                 }
             }
         }, delay);
@@ -267,7 +326,7 @@ export async function initXterm() {
     term.writeln(`\x1b[90mClick "Start" to launch ${providerName}...\x1b[0m`);
     term.writeln('');
 
-    console.log('[xterm] Initialized at:', state.terminalLocation);
+    console.log('[ghostty-web] Initialized at:', state.terminalLocation);
 }
 
 /**
@@ -322,7 +381,7 @@ export function minimizeTerminal() {
                     if (term.cols && term.rows) {
                         resizePtyIfChanged();
                     }
-                    term.refresh(0, term.rows - 1);
+                    if (term.refresh) term.refresh(0, term.rows - 1);
                 });
             }
         }
@@ -351,12 +410,12 @@ export function hideTerminal() {
  */
 export async function relocateTerminal(location) {
     if (!term || !term.element) {
-        console.warn('[xterm] Cannot relocate - terminal not initialized');
+        console.warn('[ghostty-web] Cannot relocate - terminal not initialized');
         return;
     }
 
     if (location === state.terminalLocation) {
-        console.log('[xterm] Already at location:', location);
+        console.log('[ghostty-web] Already at location:', location);
         return;
     }
 
@@ -405,9 +464,9 @@ export async function relocateTerminal(location) {
         await window.voiceMirror.config.set({
             behavior: { terminalLocation: location }
         });
-        console.log('[xterm] Relocated to:', location);
+        console.log('[ghostty-web] Relocated to:', location);
     } catch (err) {
-        console.error('[xterm] Failed to save terminal location:', err);
+        console.error('[ghostty-web] Failed to save terminal location:', err);
     }
 }
 

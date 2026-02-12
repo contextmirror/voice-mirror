@@ -273,7 +273,7 @@ export function deriveTerminalTheme(colors) {
         foreground: c.text,
         cursor: c.accent,
         cursorAccent: c.bg,
-        selection: hexToRgba(c.accent, 0.3),
+        selectionBackground: hexToRgba(c.accent, 0.3),
         black: lighten(c.bg, 0.05),
         red: c.danger,
         green: c.ok,
