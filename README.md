@@ -24,7 +24,7 @@
   <img src="https://img.shields.io/badge/node-%3E%3D18-339933" alt="Node.js">
   <img src="https://img.shields.io/badge/python-%3E%3D3.9-3776ab" alt="Python">
   <img src="https://img.shields.io/badge/MCP_tools-58-blueviolet" alt="MCP Tools">
-  <img src="https://img.shields.io/badge/AI_providers-15-orange" alt="AI Providers">
+  <img src="https://img.shields.io/badge/AI_providers-5_(75%2B_via_OpenCode)-orange" alt="AI Providers">
   <img src="https://img.shields.io/badge/tests-452_passing-brightgreen" alt="Tests">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
   <a href="https://discord.com/invite/JBpsSFB7EQ"><img src="https://img.shields.io/badge/Discord-Join%20us-5865F2?logo=discord&logoColor=white" alt="Discord"></a>
@@ -33,9 +33,9 @@
 ---
 
 ```
-Claude Code = Terminal + MCP Tools
-Voice Mirror = Eyes + Ears + Voice
-Combined = Full AI agent for your entire computer
+Claude Code / OpenCode = Terminal + MCP Tools
+Voice Mirror            = Eyes + Ears + Voice
+Combined                = Full AI agent for your entire computer
 ```
 
 ## Why Voice Mirror?
@@ -53,7 +53,7 @@ Voice Mirror is an always-on overlay that listens, sees your screen, executes co
 
 ## What Makes This Different
 
-- **Claude Code as a PTY-backed brain** — runs Claude Code inside Electron as a real terminal. Full MCP tool access, zero extra API cost beyond the CLI itself.
+- **Claude Code / OpenCode as PTY-backed brains** — runs Claude Code or OpenCode inside Electron as a real terminal. Full MCP tool access with 75+ models via OpenCode, zero extra API cost beyond the CLI itself.
 - **MCP as the agent backbone** — 58 tools across 10 dynamically-loaded groups (including 3 facade tools for voice-mode efficiency). Not a plugin system — a structured tool protocol with schema validation, gating, and hot-loading.
 - **Real browser automation** — not "search and summarize." Actual CDP-level click, type, navigate, screenshot, and DOM snapshot. Verified by a 102-test benchmark.
 - **Wayland-native overlay** — Rust layer-shell binary for proper always-on-top on Linux/Wayland, where Electron can't do it alone.
@@ -78,7 +78,7 @@ Capture your screen at any time — the AI sees what you see and can analyze err
 Full chat interface with message history, Slack-style grouped messages, markdown rendering, image paste/drop, and persistent chat sessions. AI activity status bar shows real-time provider state.
 
 ### Terminal Power
-Claude Code runs inside Voice Mirror with full MCP tool access. Execute commands, manage files, and automate workflows — all by voice.
+Claude Code or OpenCode runs inside Voice Mirror with full MCP tool access. Execute commands, manage files, and automate workflows — all by voice. OpenCode unlocks 75+ models (GPT, Gemini, Kimi, local Ollama, and more) through a single integration.
 
 ### 58 MCP Tools (10 groups, dynamically loaded)
 
@@ -112,27 +112,17 @@ Claude Code runs inside Voice Mirror with full MCP tool access. Execute commands
 
 ## AI Providers
 
-15 providers with automatic detection of local servers and environment API keys.
+5 built-in providers — 75+ models accessible through OpenCode. Local servers are auto-detected.
 
 | Provider | Type | Key Features |
 |----------|------|-------------|
-| **Claude Code** | CLI agent | MCP tools, vision, full terminal |
-| **OpenAI Codex** | CLI agent | OpenAI's CLI agent |
-| **Gemini CLI** | CLI agent | Google's CLI agent |
-| **Kimi CLI** | CLI agent | Moonshot's CLI agent with MCP |
-| **Ollama** | Local | Auto-detect, vision |
-| **LM Studio** | Local | Auto-detect |
-| **Jan** | Local | Auto-detect |
-| **OpenAI** | Cloud | GPT-4o, vision |
-| **Google Gemini** | Cloud | Vision |
-| **Grok (xAI)** | Cloud | Vision |
-| **Groq** | Cloud | Fast inference |
-| **Mistral** | Cloud | — |
-| **OpenRouter** | Cloud | Multi-model access |
-| **DeepSeek** | Cloud | — |
-| **Kimi (Moonshot)** | Cloud | Vision |
+| **Claude Code** | CLI agent | Anthropic's gold-standard CLI. MCP tools, vision, full terminal, `CLAUDE.md` ecosystem |
+| **OpenCode** | CLI agent | Universal gateway to 75+ models (GPT, Gemini, Kimi, Grok, Mistral, and more). Full MCP tool support. Auto-install from settings if not found |
+| **Ollama** | Local | Auto-detect, vision (llava), run models on your own hardware |
+| **LM Studio** | Local | Auto-detect, GUI-based local LLM runner |
+| **Jan** | Local | Auto-detect, open source local AI |
 
-API keys are **auto-detected** from environment variables (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc.) on startup.
+**Why only 5?** OpenCode supports 75+ cloud providers (OpenAI, Google, xAI, Groq, Mistral, OpenRouter, DeepSeek, Moonshot, and more) with full MCP tool calling — no need for individual API entries. Claude Code stays as the premium Anthropic experience. Local providers stay for offline / on-hardware inference.
 
 ---
 
@@ -173,7 +163,7 @@ npm start
 
 - **Node.js** 18+
 - **Python** 3.9+
-- **Claude Code CLI** (for Claude provider)
+- **Claude Code CLI** (for Claude provider) or **OpenCode** (for 75+ models — auto-install available from settings)
 - **ffmpeg** (for voice cloning)
 - **CUDA** (optional — GPU acceleration for Qwen3-TTS)
 
@@ -210,7 +200,7 @@ voice-mirror-electron/
 ├── electron/              # Electron app
 │   ├── main.js            # Window, tray, IPC orchestration
 │   ├── services/          # 16 service modules
-│   ├── providers/         # 5-file multi-AI provider system (15 providers)
+│   ├── providers/         # Multi-AI provider system (5 providers, 75+ via OpenCode)
 │   ├── browser/           # CDP browser automation (11 modules)
 │   ├── tools/             # Tool system for local LLMs (8 tools)
 │   ├── js/                # Renderer modules (13 files)
@@ -272,20 +262,12 @@ voice-mirror-electron/
 
 ## Environment Variables
 
-All cloud provider API keys are auto-detected from environment variables on startup:
-
 | Variable | Provider |
 |----------|----------|
-| `ANTHROPIC_API_KEY` | Claude (API) |
-| `OPENAI_API_KEY` | OpenAI |
-| `GOOGLE_API_KEY` | Google Gemini |
-| `GROQ_API_KEY` | Groq |
-| `MISTRAL_API_KEY` | Mistral |
-| `XAI_API_KEY` | Grok (xAI) |
-| `OPENROUTER_API_KEY` | OpenRouter |
-| `DEEPSEEK_API_KEY` | DeepSeek |
-| `MOONSHOT_API_KEY` | Kimi (Moonshot) |
+| `ANTHROPIC_API_KEY` | Claude Code |
 | `SERPER_API_KEY` | Web search (Serper.dev) |
+
+Cloud provider API keys (OpenAI, Google, xAI, etc.) are configured through OpenCode directly — see [OpenCode docs](https://opencode.ai/docs/providers/) for setup.
 
 ---
 
