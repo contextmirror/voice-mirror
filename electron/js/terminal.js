@@ -121,8 +121,7 @@ export async function initXterm() {
             cursorAccent: '#0c0d10',
             selectionBackground: 'rgba(102, 126, 234, 0.3)',
         },
-        scrollback: 1000,
-        convertEol: true
+        scrollback: 1000
     });
 
     fitAddon = new FitAddon();
@@ -151,6 +150,59 @@ export async function initXterm() {
     // Mount terminal to the appropriate container based on saved preference
     const mountContainer = state.terminalLocation === 'chat-bottom' ? xtermContainer : fullscreenContainer;
     term.open(mountContainer);
+
+    // Override ghostty-web's render loop to force full renders every frame.
+    // ghostty-web's default loop uses partial rendering (only dirty rows), but the
+    // WASM dirty tracking can miss rows during fast streaming output from TUI apps,
+    // causing characters to appear shifted/truncated. Full renders fix this at
+    // negligible cost on modern GPUs (~1920 cells/frame at 60fps).
+    if (term.animationFrameId) {
+        cancelAnimationFrame(term.animationFrameId);
+    }
+    const renderLoop = () => {
+        if (term && term.renderer && term.wasmTerm) {
+            term.renderer.render(
+                term.wasmTerm,
+                true,  // forceAll — always redraw every row
+                term.viewportY ?? 0,
+                term,
+                term.scrollbarOpacity ?? 1
+            );
+            // Track cursor movement for onCursorMove event
+            const cursor = term.wasmTerm.getCursor();
+            if (cursor.y !== term.lastCursorY) {
+                term.lastCursorY = cursor.y;
+                if (term.cursorMoveEmitter) {
+                    term.cursorMoveEmitter.fire();
+                }
+            }
+        }
+        term._voiceMirrorRafId = requestAnimationFrame(renderLoop);
+    };
+    term._voiceMirrorRafId = requestAnimationFrame(renderLoop);
+
+    // Fix DPI scaling bug in ghostty-web's Terminal.resize():
+    // renderer.resize() correctly sets canvas.width = cssWidth * DPI and ctx.scale(DPI),
+    // but Terminal.resize() then overwrites canvas.width/height WITHOUT DPI scaling,
+    // resetting the context transform. Patch resize to restore DPI after the original runs.
+    const origResize = term.resize.bind(term);
+    term.resize = (cols, rows) => {
+        origResize(cols, rows);
+        // After original resize, fix canvas dimensions with DPI scaling
+        if (term.renderer && term.canvas) {
+            const dpr = term.renderer.devicePixelRatio || window.devicePixelRatio || 1;
+            if (dpr !== 1) {
+                const metrics = term.renderer.getMetrics();
+                const cssW = metrics.width * cols;
+                const cssH = metrics.height * rows;
+                term.canvas.width = cssW * dpr;
+                term.canvas.height = cssH * dpr;
+                term.renderer.ctx.scale(dpr, dpr);
+                term.renderer.ctx.textBaseline = 'alphabetic';
+                term.renderer.ctx.textAlign = 'left';
+            }
+        }
+    };
 
     // Wheel scroll — ghostty-web's built-in handler (on the container) doesn't fire
     // reliably in Electron due to contenteditable + frameless-window quirks.
