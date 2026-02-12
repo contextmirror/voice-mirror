@@ -19,8 +19,8 @@ let lastPtyRows = 0;
 
 // DOM elements (initialized in initTerminal)
 let terminalContainer;      // Chat page bottom panel container
-let xtermContainer;         // Chat page xterm mount point
-let fullscreenContainer;    // Fullscreen page xterm mount point
+let terminalMount;          // Chat page terminal mount point
+let fullscreenMount;        // Fullscreen page terminal mount point
 let terminalStatus;
 let terminalStartBtn;
 let terminalBtn;
@@ -38,7 +38,7 @@ let terminalFullscreenTitle;
  * Prevents duplicate SIGWINCH signals that cause Claude Code CLI
  * to redraw its entire UI (header, prompt, etc.) on each resize.
  *
- * Uses term.cols directly — safeFit() already shrinks xterm by 1 col,
+ * Uses term.cols directly — safeFit() already fits the terminal,
  * so the PTY and canvas share the same safe column count.
  */
 function resizePtyIfChanged() {
@@ -53,7 +53,7 @@ function resizePtyIfChanged() {
  * Safe fit: run FitAddon to calculate and apply correct terminal dimensions.
  *
  * ghostty-web's canvas renderer handles subpixel metrics correctly,
- * so no column adjustment is needed (unlike xterm.js which required -1 col).
+ * so no column adjustment is needed (unlike xterm.js which required -1 col hack).
  */
 function safeFit() {
     if (!fitAddon || !term) return;
@@ -61,13 +61,13 @@ function safeFit() {
 }
 
 /**
- * Initialize xterm.js terminal
+ * Initialize ghostty-web terminal
  */
-export async function initXterm() {
+export async function initTerminal() {
     // Get DOM elements
     terminalContainer = document.getElementById('terminal-container');
-    xtermContainer = document.getElementById('xterm-container');
-    fullscreenContainer = document.getElementById('xterm-fullscreen-container');
+    terminalMount = document.getElementById('terminal-mount');
+    fullscreenMount = document.getElementById('terminal-fullscreen-mount');
     terminalStatus = document.getElementById('terminal-status');
     terminalStartBtn = document.getElementById('terminal-start');
     terminalBtn = document.querySelector('.terminal-btn');
@@ -148,7 +148,7 @@ export async function initXterm() {
     });
 
     // Mount terminal to the appropriate container based on saved preference
-    const mountContainer = state.terminalLocation === 'chat-bottom' ? xtermContainer : fullscreenContainer;
+    const mountContainer = state.terminalLocation === 'chat-bottom' ? terminalMount : fullscreenMount;
     term.open(mountContainer);
 
     // Override ghostty-web's render loop to force full renders every frame.
@@ -211,7 +211,7 @@ export async function initXterm() {
         if (!term || !term.wasmTerm) return;
 
         // Coordinate-based hit test — more reliable than contains(e.target)
-        const container = state.terminalLocation === 'chat-bottom' ? xtermContainer : fullscreenContainer;
+        const container = state.terminalLocation === 'chat-bottom' ? terminalMount : fullscreenMount;
         if (!container) return;
         const rect = container.getBoundingClientRect();
         if (e.clientX < rect.left || e.clientX > rect.right ||
@@ -269,7 +269,7 @@ export async function initXterm() {
 
     // Handle Ctrl+V paste via Electron clipboard (browser paste is blocked on Windows)
     // ghostty-web semantics: return true = "handled, stop processing", false = "pass through"
-    // (this is inverted from xterm.js where true = "pass through")
+    // (this is inverted from xterm.js — in ghostty-web true = "handled")
     term.attachCustomKeyEventHandler((event) => {
         if (event.ctrlKey && event.key === 'v') {
             const text = window.voiceMirror.readClipboard();
@@ -282,11 +282,11 @@ export async function initXterm() {
     });
 
     // Handle resize - suspend terminal rendering during active resize,
-    // then fit once when settled. This prevents xterm.js canvas repaints
+    // then fit once when settled. This prevents terminal canvas repaints
     // on every frame during drag-resize (major CPU savings).
     //
-    // Strategy (informed by xterm.js ecosystem research):
-    // - There is no xterm.js API to pause/freeze rendering
+    // Strategy:
+    // - There is no ghostty-web API to pause/freeze rendering
     // - Every PTY resize sends SIGWINCH which makes CLI apps (Claude Code) redraw
     // - XOFF/XON flow control was rejected upstream (breaks Windows + zsh)
     // - Our only lever: minimize the number of PTY resizes that fire
@@ -305,7 +305,7 @@ export async function initXterm() {
         resizeTimeout = setTimeout(() => {
             if (fitAddon && !state.terminalMinimized) {
                 // Only fit if the current container is visible
-                const currentContainer = state.terminalLocation === 'chat-bottom' ? xtermContainer : fullscreenContainer;
+                const currentContainer = state.terminalLocation === 'chat-bottom' ? terminalMount : fullscreenMount;
                 if (currentContainer.offsetParent !== null) {
                     // Use requestAnimationFrame to ensure layout is settled
                     requestAnimationFrame(() => {
@@ -356,7 +356,7 @@ export async function initXterm() {
     for (const delay of [1500, 3000, 5000]) {
         setTimeout(() => {
             if (fitAddon && term && !state.terminalMinimized) {
-                const currentContainer = state.terminalLocation === 'chat-bottom' ? xtermContainer : fullscreenContainer;
+                const currentContainer = state.terminalLocation === 'chat-bottom' ? terminalMount : fullscreenMount;
                 if (currentContainer && currentContainer.offsetParent !== null) {
                     safeFit();
                     resizePtyIfChanged();
@@ -471,17 +471,17 @@ export async function relocateTerminal(location) {
         return;
     }
 
-    const xtermElement = term.element;
-    const oldContainer = state.terminalLocation === 'chat-bottom' ? xtermContainer : fullscreenContainer;
-    const newContainer = location === 'chat-bottom' ? xtermContainer : fullscreenContainer;
+    const termElement = term.element;
+    const oldContainer = state.terminalLocation === 'chat-bottom' ? terminalMount : fullscreenMount;
+    const newContainer = location === 'chat-bottom' ? terminalMount : fullscreenMount;
 
     // Update resize observer to watch new container
     if (resizeObserver) {
         resizeObserver.unobserve(oldContainer);
     }
 
-    // Move the xterm DOM element to new container
-    newContainer.appendChild(xtermElement);
+    // Move the terminal DOM element to new container
+    newContainer.appendChild(termElement);
 
     // Update visibility of chat page terminal panel
     if (location === 'chat-bottom') {

@@ -650,7 +650,7 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    clip-path: inset(0);  /* Hard clip — prevents xterm canvas from painting outside */
+    clip-path: inset(0);  /* Hard clip — prevents terminal canvas from painting outside */
     min-width: 0; /* Allow flex item to shrink below content size */
     -webkit-app-region: drag;  /* Allow dragging window from empty space */
 }

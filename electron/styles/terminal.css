@@ -20,7 +20,7 @@
     height: 32px;
 }
 
-#terminal-container.minimized #xterm-container {
+#terminal-container.minimized #terminal-mount {
     display: none;
 }
 
@@ -29,7 +29,7 @@
 }
 
 /* Terminal canvas container (ghostty-web renders to <canvas>) */
-#xterm-container {
+#terminal-mount {
     flex: 1;
     overflow: hidden;
     padding: 4px;
@@ -173,7 +173,7 @@
     margin-left: 12px;
 }
 
-#xterm-fullscreen-container {
+#terminal-fullscreen-mount {
     flex: 1;
     overflow: hidden;
     padding: 8px;

@@ -595,7 +595,7 @@ function registerIpcHandlers(ctx) {
         };
     });
 
-    // PTY input/resize handlers for xterm.js
+    // PTY input/resize handlers for terminal
     // Routes to Claude PTY or OpenAI-compatible provider based on config
     ipcMain.handle('claude-pty-input', (event, data) => {
         const v = validators['claude-pty-input'](data);

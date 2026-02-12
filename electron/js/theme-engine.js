@@ -261,10 +261,10 @@ export function resolveTheme(appearance = {}) {
 // ========== Terminal Theme Derivation ==========
 
 /**
- * Derive an xterm.js theme object from the 10 key colors.
+ * Derive a ghostty-web theme object from the 10 key colors.
  * Maps theme colors to terminal background, foreground, cursor, and ANSI palette.
  * @param {{ bg, bgElevated, text, textStrong, muted, accent, ok, warn, danger, orbCore }} colors
- * @returns {Object} xterm.js theme object
+ * @returns {Object} ghostty-web theme object
  */
 export function deriveTerminalTheme(colors) {
     const c = colors;

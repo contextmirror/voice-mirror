@@ -126,15 +126,15 @@ contextBridge.exposeInMainWorld('voiceMirror', {
         // Get Claude process status
         getStatus: () => ipcRenderer.invoke('get-claude-status'),
 
-        // Listen for Claude terminal output (raw PTY data for xterm.js)
+        // Listen for Claude terminal output (raw PTY data for terminal)
         onOutput: (callback) => {
             ipcRenderer.on('claude-terminal', (event, data) => callback(data));
         },
 
-        // Send input to Claude PTY (keyboard input from xterm.js)
+        // Send input to Claude PTY (keyboard input from terminal)
         sendInput: (data) => ipcRenderer.invoke('claude-pty-input', data),
 
-        // Resize Claude PTY (when xterm.js resizes)
+        // Resize Claude PTY (when terminal resizes)
         resize: (cols, rows) => ipcRenderer.invoke('claude-pty-resize', cols, rows)
     },
 

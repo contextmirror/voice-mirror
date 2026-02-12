@@ -314,7 +314,7 @@ async function spawnClaude(options = {}) {
             // Drop output from a stale PTY session (killed but still flushing buffers)
             if (myGen !== spawnGeneration) return;
 
-            // Send raw data to xterm.js (preserves ANSI codes for proper rendering)
+            // Send raw data to terminal (preserves ANSI codes for proper rendering)
             onOutput(data);
 
             // Accumulate output to detect ready state
@@ -371,7 +371,7 @@ async function spawnClaude(options = {}) {
 }
 
 /**
- * Send raw input to the Claude PTY (for xterm.js keyboard input)
+ * Send raw input to the Claude PTY (keyboard passthrough from terminal)
  * Passes through keystrokes directly without modification
  */
 function sendRawInput(data) {

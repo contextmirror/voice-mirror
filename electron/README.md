@@ -53,7 +53,7 @@ electron/
 ├── js/                     # Renderer JavaScript (ES modules)
 │   ├── main.js             # App initialization
 │   ├── state.js            # Global state management
-│   ├── terminal.js         # xterm.js + AI control
+│   ├── terminal.js         # ghostty-web terminal + AI control
 │   ├── messages.js         # Chat UI & deduplication
 │   ├── navigation.js       # Sidebar + page routing
 │   ├── settings.js         # Settings UI
@@ -68,7 +68,7 @@ electron/
     ├── panel.css           # Expanded panel
     ├── sidebar.css         # Sidebar navigation
     ├── chat.css            # Chat messages
-    ├── terminal.css        # xterm.js styling
+    ├── terminal.css        # Terminal styling (ghostty-web canvas)
     ├── settings.css        # Settings page
     └── notifications.css   # Toast notifications
 ```
@@ -165,7 +165,7 @@ tail -f ~/.config/voice-mirror-electron/data/vmr.log
 | Package | Purpose |
 |---------|---------|
 | electron | Desktop framework |
-| xterm + addons | Terminal emulator |
+| ghostty-web | Terminal emulator (WASM) |
 | node-pty | PTY spawning |
 | marked + dompurify | Markdown rendering |
 | uiohook-napi | Global hotkeys |

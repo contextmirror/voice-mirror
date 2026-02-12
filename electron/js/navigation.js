@@ -84,7 +84,7 @@ export function navigateTo(page) {
         p.classList.toggle('active', pageId === page);
     });
 
-    // Special handling for terminal page - trigger resize for xterm.js
+    // Special handling for terminal page - trigger resize for ghostty-web
     if (page === 'terminal' || page === 'chat') {
         setTimeout(() => {
             window.dispatchEvent(new Event('resize'));

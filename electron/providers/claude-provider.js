@@ -110,7 +110,7 @@ class ClaudeProvider extends BaseProvider {
     }
 
     /**
-     * Send raw input (for xterm.js keyboard passthrough)
+     * Send raw input (keyboard passthrough from terminal)
      */
     sendRawInput(data) {
         claudeSpawner.sendRawInput(data);

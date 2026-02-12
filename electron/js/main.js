@@ -6,7 +6,7 @@
 import { state } from './state.js';
 import { initMarkdown } from './markdown.js';
 import { addMessage, isDuplicate, copyMessage, addToolCallCard, addToolResultCard, initScrollButtons } from './messages.js';
-import { initXterm, handleAIOutput, updateAIStatus, toggleTerminal, startAI, stopAI, updateProviderDisplay } from './terminal.js';
+import { initTerminal, handleAIOutput, updateAIStatus, toggleTerminal, startAI, stopAI, updateProviderDisplay } from './terminal.js';
 import { initSettings, toggleSettings } from './settings.js';
 import { initNavigation, navigateTo, toggleSidebarCollapse } from './navigation.js';
 import { initBrowserPanel, navigateToBrowserPage } from './browser-panel.js';
@@ -917,9 +917,9 @@ async function init() {
     // Initialize navigation (sidebar + page routing)
     initNavigation();
 
-    // Initialize xterm terminal
+    // Initialize terminal
     try {
-        await initXterm();
+        await initTerminal();
         // Re-apply theme to terminal now that it's mounted and listening
         try {
             const config = await window.voiceMirror.config.get();
@@ -927,7 +927,7 @@ async function init() {
             applyThemeEngine(c, f);
         } catch { /* theme already applied, terminal will use fallback */ }
     } catch (err) {
-        console.error('[xterm] Failed to initialize:', err);
+        console.error('[terminal] Failed to initialize:', err);
     }
 
     // Initialize browser panel
