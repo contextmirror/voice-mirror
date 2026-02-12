@@ -514,35 +514,44 @@ class GlobalHotkeyListener:
         return None
 
     def _win32_kb_filter(self, msg, data):
-        """Suppress registered keyboard hotkeys on Windows.
+        """Filter keyboard events on Windows — non-suppressed approach.
 
-        When suppress_event() is called, pynput skips its own _on_press/
-        _on_release callbacks. So we must handle trigger writing here.
+        Bound keys pass through to other apps (like Discord/OBS PTT).
+        Only key-repeat events are suppressed to prevent character flooding.
+
+        Since events are NOT suppressed, pynput fires _on_press/_on_release
+        callbacks which handle trigger start/stop.
         """
         has_kb = any(b["key_type"] == "keyboard" for b in self._bindings)
         if not has_kb:
             return True
 
-        # WM_KEYDOWN/WM_SYSKEYDOWN = press, WM_KEYUP/WM_SYSKEYUP = release
-        is_down = msg in (0x0100, 0x0104)
-        is_up = msg in (0x0101, 0x0105)
+        is_down = msg in (0x0100, 0x0104)  # WM_KEYDOWN / WM_SYSKEYDOWN
 
         for b in self._bindings:
             if b["key_type"] != "keyboard":
                 continue
             target_vk = self._get_target_vk(b["target_key"])
-            if target_vk is not None and data.vkCode == target_vk:
-                # Handle press/release directly (suppress_event skips callbacks)
-                with self._lock:
-                    if is_down and not b["active"]:
-                        b["active"] = True
-                        self._write_trigger(b["trigger_path"], "start")
-                    elif is_up and b["active"]:
-                        b["active"] = False
-                        self._write_trigger(b["trigger_path"], "stop")
+            if target_vk is None or data.vkCode != target_vk:
+                continue
+
+            # Suppress repeat keydowns (key already held) to prevent "444..." flood
+            if is_down and b["active"]:
                 self._kb_listener.suppress_event()
                 return
-        # Let non-matching keyboard events pass through (implicit None = suppress!)
+
+            # First keydown with a printable key on a dictation binding:
+            # queue a Backspace to delete the stray character
+            if is_down and not b["active"]:
+                if "dictation" in str(b["trigger_path"]):
+                    from pynput.keyboard import KeyCode as _KC
+                    if isinstance(b["target_key"], _KC) and b["target_key"].char:
+                        self._queue_dictation_backspace()
+
+            # Let first keydown + keyup pass through to other apps
+            # (pynput _on_press/_on_release callbacks handle trigger start/stop)
+            return True
+        # Non-matching event: let through
         return True
 
     def _win32_mouse_filter(self, msg, data):
@@ -593,6 +602,25 @@ class GlobalHotkeyListener:
                 return
         # Let non-matching mouse events pass through (implicit None = suppress!)
         return True
+
+    # ── Dictation cleanup ──────────────────────────────────────
+
+    def _queue_dictation_backspace(self):
+        """Send a Backspace after a brief delay to erase the stray character.
+
+        When a printable key (e.g. "5") is bound to dictation and we let
+        it pass through, the character gets typed into the focused app.
+        This fires a Backspace 30ms later to clean it up before the user
+        notices.
+        """
+        import time
+
+        def _send():
+            time.sleep(0.03)
+            from pynput.keyboard import Controller, Key
+            Controller().tap(Key.backspace)
+
+        threading.Thread(target=_send, daemon=True).start()
 
     # ── Trigger file ────────────────────────────────────────────
 
