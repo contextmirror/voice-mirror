@@ -80,6 +80,9 @@ class NotificationWatcher:
         msg_id, _ = self.inbox.get_latest_ai_message()
         self.inbox.last_seen_message_id = msg_id
 
+        # Track current provider to detect switches
+        last_provider_name = self._get_ai_provider_name()
+
         while True:
             try:
                 await asyncio.sleep(self.poll_interval)
@@ -87,6 +90,19 @@ class NotificationWatcher:
                 # Refresh provider config periodically in case user changed it
                 if self._refresh_provider:
                     self._refresh_provider()
+
+                # Detect provider switch — reseed last_seen to avoid speaking
+                # stale messages from the new provider's old inbox history
+                current_provider_name = self._get_ai_provider_name()
+                if current_provider_name != last_provider_name:
+                    print(f"📢 Provider switched ({last_provider_name} → {current_provider_name}), reseeding notification state")
+                    msg_id, _ = self.inbox.get_latest_ai_message()
+                    self.inbox.last_seen_message_id = msg_id
+                    last_provider_name = current_provider_name
+                    # Reset compaction state — old provider's compact is irrelevant
+                    self._awaiting_compact_resume = False
+                    self._compact_start_time = None
+                    continue
 
                 # Check for compaction events first (high priority)
                 compact_id, compact_event = self.inbox.check_compaction_event()
