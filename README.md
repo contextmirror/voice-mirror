@@ -25,7 +25,7 @@
   <img src="https://img.shields.io/badge/python-%3E%3D3.9-3776ab" alt="Python">
   <img src="https://img.shields.io/badge/MCP_tools-58-blueviolet" alt="MCP Tools">
   <img src="https://img.shields.io/badge/AI_providers-5_(75%2B_via_OpenCode)-orange" alt="AI Providers">
-  <img src="https://img.shields.io/badge/tests-452_passing-brightgreen" alt="Tests">
+  <img src="https://img.shields.io/badge/tests-490_passing-brightgreen" alt="Tests">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
   <a href="https://discord.com/invite/JBpsSFB7EQ"><img src="https://img.shields.io/badge/Discord-Join%20us-5865F2?logo=discord&logoColor=white" alt="Discord"></a>
 </p>

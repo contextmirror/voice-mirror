@@ -313,7 +313,7 @@ async function handleClaudeListen(args) {
         const instanceId = args?.instance_id;
         const fromSender = args?.from_sender;
         const threadFilter = args?.thread_id;
-        const timeoutSeconds = Math.min(args?.timeout_seconds || 60, 600);
+        const timeoutSeconds = Math.min(args?.timeout_seconds || 300, 600);
 
         if (!instanceId || !fromSender) {
             return {

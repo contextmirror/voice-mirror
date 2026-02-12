@@ -5,20 +5,51 @@ Format inspired by game dev patch notes — grouped by release, categorized by i
 
 ---
 
-## Patch 0.7.2 — "The Unblock" (2026-02-12)
+## v0.8.0 — "The Ghost in the Shell" (2026-02-12)
 
-Fixes the long-standing issue where binding mouse side buttons to PTT/dictation would block the corresponding keyboard keys system-wide. Adopts the Discord/OBS approach: bound keys now pass through to other apps instead of being suppressed. Key-repeat flooding is still suppressed during hold, and dictation auto-cleans the stray character with a Backspace.
+Replaces xterm.js with [ghostty-web](https://github.com/coder/ghostty-web) — Ghostty's VT parser compiled to WASM. The result: better TUI rendering for Claude Code and OpenCode, rock-solid provider switching with 4-layer output gating, and zero xterm.js dependencies. Also fixes the long-standing mouse keybind collision bug (Discord/OBS-style non-suppression), adds tool profile support for OpenCode, and bumps the MCP listen timeout to 5 minutes.
+
+### New Features
+- **ghostty-web terminal** — Full terminal emulation via Ghostty's WASM-compiled VT parser. Same API surface as xterm.js (`Terminal`, `FitAddon`) but with superior escape sequence handling and canvas rendering. Async WASM initialization, SGR mouse events for Bubble Tea TUI scroll support, and proper `customKeyEventHandler` semantics (inverted from xterm.js — `true` = "handled/stop")
+- **OpenCode tool profiles** — The Tool Profiles settings section (previously Claude Code only) now appears for all MCP CLI providers. OpenCode users get the same profile picker and tool group checkboxes as Claude Code
+- **AGENTS.md** — New instruction file for MCP-connected agents (OpenCode, Kimi, etc.). Documents project architecture, MCP tool groups, voice mode workflow, and security rules. Equivalent of `python/CLAUDE.md` for non-Claude providers
+
+### Improved
+- **Provider switch stability** — 4-layer output gating prevents old PTY output from bleeding into the new provider's terminal during rapid switching (Claude Code → Ollama → OpenCode → back):
+  1. Spawner-level generation counters (`claude-spawner.js`, `cli-spawner.js`) — stale PTY callbacks silently dropped
+  2. Main-process `outputGated` flag (`ai-manager.js`) — blocks all non-start events between stop and new provider start
+  3. Renderer-side generation check — catches any events that slip through layers 1-2
+  4. Aggressive `clearTerminal()` — ANSI clear sequences + explicit canvas wipe + viewport reset
+- **Thread-safe TTS playback** — `_play_audio()` uses a local process reference instead of reading `self._playback_process` directly, preventing `NoneType` crashes when another thread interrupts during provider switch
+- **Notification watcher provider awareness** — Reseeds `last_seen_message_id` when the AI provider changes, preventing old inbox messages from being spoken aloud on switch
+- **Clean TTS handoff** — `stop_speaking()` called before replacing the TTS adapter, ensuring no orphaned ffplay processes
+- **MCP listen timeout** — Default `claude_listen` timeout increased from 60s to 300s (5 minutes). Lock timeout updated to match (310s). Reduces premature voice loop disconnections during long pauses
 
 ### Fixed
 - **Keyboard keys no longer blocked by mouse side button bindings** — When gaming mice firmware-map side buttons to keyboard keys (e.g. "4", "5"), those keys were suppressed system-wide by pynput. Now bound keys pass through to other apps (Discord/OBS-style). Only key-repeat events are suppressed during hold to prevent character flooding
 - **Dictation stray character cleanup** — When a printable key (e.g. "5") is bound to dictation, the character that leaks through on keydown is automatically erased by a queued Backspace before the transcribed text is injected
 - **pynput implicit None suppression bug** — `_win32_kb_filter` and `_win32_mouse_filter` returned implicit `None` for non-matching events, which pynput treated as "suppress" — blocking ALL keyboard/mouse input system-wide when any key was bound
 - **Toggle-panel hotkey save corruption** — Settings save now reads `dataset.rawKey` first, preventing the accelerator string from being mangled by display formatting in `textContent`
+- **ghostty-web visual rendering glitch** — Overrode ghostty-web's default partial render loop with full-render (`forceAll: true`) to fix characters appearing shifted during fast streaming output from TUI apps
+
+### Removed
+- **xterm.js dependency** — Removed `xterm`, `xterm-addon-fit`, and `xterm-addon-web-links` from package.json (3 packages removed, 1 added)
+- **Dead xterm.js CSS** — Removed `.xterm`, `.xterm-viewport`, and related selectors (~54 lines)
+- **xterm naming throughout codebase** — Renamed HTML IDs (`xterm-container` → `terminal-mount`), JS variables (`xtermContainer` → `terminalMount`), functions (`initXterm` → `initTerminal`), and updated comments/logs across 13 files
 
 ### Technical
-- `_win32_kb_filter` rewritten: callbacks (`_on_press`/`_on_release`) now handle trigger start/stop instead of the filter. Filter only suppresses repeat keydowns
+- 26 files changed, +628/-183 lines across Electron frontend, Python backend, MCP server, and docs
+- ghostty-web loaded via UMD script tag (exposes `window.GhosttyWeb`), WASM initialized before first Terminal instance
+- DPI scaling monkey-patch fixes ghostty-web's `Terminal.resize()` overwriting canvas dimensions without DPI scaling
+- Window-level wheel scroll handler with coordinate hit-testing: SGR mouse events for TUI apps with mouse tracking, arrow key fallback for TUIs without, viewport scrolling for normal mode
+- `selection` → `selectionBackground` in theme objects (ghostty-web API difference)
+- `safeFit()` no longer subtracts 1 column — ghostty-web handles subpixel metrics correctly (no more HiDPI hack)
+- `clearTerminal()` pipeline: `term.reset()` → `\x1b[2J\x1b[3J\x1b[H` → canvas `fillRect` with identity transform → viewport reset
+- Generation counter pattern: monotonic counter bumped on spawn/stop, callbacks capture generation at closure time, `myGen !== spawnGeneration` gates stale events
+- `_win32_kb_filter` rewritten: callbacks (`_on_press`/`_on_release`) handle trigger start/stop instead of the filter. Filter only suppresses repeat keydowns
 - New `_queue_dictation_backspace()` method sends Backspace via threaded pynput Controller 30ms after keydown
-- Windows 5-button mouse limit is an OS-level constraint (`mouhid.sys`). Buttons 6+ are firmware-remapped to keyboard keys by vendor drivers — indistinguishable from physical keypresses at every Windows API level. Per-device filtering requires kernel drivers (Interception) or hardware remappers. This is a semi-fix; a perfect solution would require per-device input filtering
+- `LISTENER_LOCK_TIMEOUT_MS` updated from 70s to 310s to match new 300s default listen timeout
+- All 490 tests pass
 
 ---
 

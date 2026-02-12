@@ -12,7 +12,7 @@ const LISTENER_LOCK_PATH = require('path').join(HOME_DATA_DIR, 'listener_lock.js
 
 const STALE_TIMEOUT_MS = 2 * 60 * 1000;  // 2 minutes
 const AUTO_CLEANUP_HOURS = 24;
-const LISTENER_LOCK_TIMEOUT_MS = 70 * 1000;  // Lock expires after 70s
+const LISTENER_LOCK_TIMEOUT_MS = 310 * 1000;  // Lock expires after 310s (slightly longer than 300s default listen timeout)
 
 module.exports = {
     HOME_DATA_DIR,
