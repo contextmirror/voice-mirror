@@ -42,6 +42,7 @@ yarn-error.log*
 .context-mirror/
 .claude/
 .mcp.json
+opencode.json
 
 # Electron specific
 .electron/

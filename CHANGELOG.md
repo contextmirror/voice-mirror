@@ -5,6 +5,51 @@ Format inspired by game dev patch notes — grouped by release, categorized by i
 
 ---
 
+## Patch 0.7.0 — "The Gateway" (2026-02-12)
+
+Voice Mirror can now talk to **any AI model** — not just Claude. This release adds [OpenCode](https://opencode.ai) as a PTY-based AI provider, unlocking 75+ models (Kimi K2.5 Free, Gemini, GPT-4o, Ollama local models, and more) for voice interaction through a single integration. OpenCode supports MCP natively, so the full Voice Mirror tool suite (screen capture, memory, browser automation, n8n workflows) works out of the box with every model that supports tool calling.
+
+This is the first time Voice Mirror has spoken to a non-Claude model through the MCP voice loop.
+
+### New Features
+- **OpenCode AI provider** — Full PTY integration spawns OpenCode's TUI in the xterm.js terminal, identical to the Claude Code experience
+  - Appears in Settings > AI Provider under "CLI Agents (Terminal Access)" with an MCP badge
+  - Auto-configures `opencode.json` with Voice Mirror's MCP server (tool groups, enabled profiles)
+  - Merges with existing OpenCode config to preserve user's other MCP servers
+  - TUI renders in the embedded terminal — users see thinking, tool calls, and model output in real time
+  - Voice loop: speak > transcribe > inbox > model calls `claude_listen` > responds via `claude_send` > TTS speaks response
+- **75+ model support** — Any model available in OpenCode (Kimi K2.5 Free, Claude, Gemini, GPT-4o, Ollama, and more) can be used as a voice assistant with full MCP tool access
+- **OpenCode provider icon** — Orange gradient icon with code brackets SVG in the settings dropdown and sidebar
+
+### Improved
+- **MCP sender matching** — Python inbox polling now correctly identifies responses from any MCP-based CLI provider (OpenCode, Kimi CLI), not just Claude. All MCP tools use the `voice-claude` sender identity; the new `_sender_matches()` method handles this for all providers
+- **CLI model name display** — CLI providers (Claude Code, OpenCode, Kimi CLI) no longer show stale model names from previously selected providers. The display correctly shows "OpenCode" instead of "OpenCode (llama3.1)" when a model field was left over from Ollama
+- **Model identity in voice prompt** — OpenCode's voice mode prompt instructs the model to identify by its actual model name (e.g. "I'm Kimi K2.5 Free") instead of claiming to be Claude just because the MCP tools have "claude" in their names
+- **Terminal dimension passthrough** — PTY now spawns at the actual xterm.js dimensions instead of hardcoded 120x30 columns. Dimensions flow from the renderer through IPC to the PTY spawn call, reducing first-frame rendering artifacts for TUI apps like OpenCode's Bubble Tea interface
+- **Provider prefix stripping** — TTS now strips "OpenCode:" and "Kimi CLI:" prefixes from responses for cleaner speech output
+- **Duplicate chat message prevention** — For MCP-based CLI providers, the Python bridge no longer emits a duplicate `response` event (the InboxWatcher already handles chat messages from the MCP inbox)
+
+### Fixed
+- **Missing provider validation** — Added `kimi-cli`, `kimi`, and `opencode` to the IPC validator's `VALID_PROVIDERS` array (kimi-cli was missing since its initial addition)
+
+### Technical
+- 17 files changed (16 modified, 1 new SVG asset), ~318 lines added
+- New `configureOpenCodeMCP()` in `ai-manager.js` — writes `opencode.json` with `type: "local"`, `command: [array]`, `environment: {}`, and `enabled: true` (OpenCode's config format differs from Claude's `.mcp.json`)
+- New `startCLIAgent()` / `stopCLIAgent()` in `ai-manager.js` — generic PTY lifecycle for non-Claude CLI agents via `cli-spawner.js`
+- `ai-manager.js` resize/interrupt/isRunning/sendInput all route to `cliSpawner` alongside Claude-specific spawner
+- `MCP_CLI_PROVIDERS` frozenset in Python's `inbox.py` — shared constant for providers whose MCP tools always identify as "voice-claude"
+- `_CLI_MANAGED_MODEL_PROVIDERS` frozenset in Python's `config.py` — prevents stale model names in display
+- Provider registered across 8 modules: `cli-spawner.js`, `providers/index.js`, `ai-manager.js`, `ipc-handlers.js`, `ipc-validators.js`, `settings-ai.html`, `settings.js`, `settings.css`
+- `opencode.json` added to `.gitignore` (auto-generated MCP config, same as `.mcp.json`)
+- All 490 existing tests pass
+
+### Prerequisites
+- OpenCode must be installed separately: `npm install -g opencode-ai`
+- Only models with tool-calling support will work with the MCP voice loop (same requirement as Claude Code)
+- OpenCode model selection is done within OpenCode's own TUI (bottom status bar), not in Voice Mirror settings
+
+---
+
 ## Patch 0.6.2 — "Bulletproof" (2026-02-11)
 
 ### Improved

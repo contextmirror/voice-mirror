@@ -53,6 +53,12 @@ const CLI_CONFIGS = {
         args: [],
         readyPatterns: ['>', 'What', 'How can'],
         displayName: 'Kimi CLI'
+    },
+    opencode: {
+        command: 'opencode',
+        args: [],
+        readyPatterns: ['>', 'What', 'How can', 'help'],
+        displayName: 'OpenCode'
     }
 };
 

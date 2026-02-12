@@ -529,7 +529,9 @@ export async function startAI() {
         term.writeln(`\x1b[34m[Starting ${state.currentProviderName}...]\x1b[0m`);
     }
     try {
-        await window.voiceMirror.claude.start();
+        // Pass actual terminal dimensions so PTY spawns at the correct size
+        // (avoids TUI apps rendering at 120x30 then resizing)
+        await window.voiceMirror.claude.start(term?.cols, term?.rows);
     } catch (err) {
         if (term) {
             term.writeln(`\x1b[31m[Failed to start: ${err.message}]\x1b[0m`);

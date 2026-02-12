@@ -115,7 +115,7 @@ contextBridge.exposeInMainWorld('voiceMirror', {
     // Claude Code backend control
     claude: {
         // Start Claude Code backend
-        start: () => ipcRenderer.invoke('start-claude'),
+        start: (cols, rows) => ipcRenderer.invoke('start-claude', cols, rows),
 
         // Stop Claude Code backend
         stop: () => ipcRenderer.invoke('stop-claude'),

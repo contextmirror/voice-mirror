@@ -36,7 +36,7 @@ from providers.config import (
     get_ai_provider,
     strip_provider_prefix,
 )
-from providers.inbox import InboxManager
+from providers.inbox import MCP_CLI_PROVIDERS, InboxManager
 from providers.inbox import cleanup_inbox as _cleanup_inbox
 
 # Settings (includes STT configuration)
@@ -682,7 +682,13 @@ class VoiceMirror:
                 try:
                     response = await self.wait_for_claude_response(msg_id, timeout=90.0)
                     if response:
-                        print(f"💬 {self._ai_provider['name']}: {response}")
+                        provider_id = self._ai_provider.get('provider', '')
+                        if provider_id in MCP_CLI_PROVIDERS:
+                            # MCP providers: InboxWatcher handles chat UI, just log for debugging
+                            print(f"✅ {self._ai_provider['name']} responded ({len(response)} chars)")
+                        else:
+                            # Non-MCP providers: 💬 prefix triggers chat message via electron_bridge
+                            print(f"💬 {self._ai_provider['name']}: {response}")
                         clean_response = strip_provider_prefix(response)
                         await self.speak(clean_response)
                     else:

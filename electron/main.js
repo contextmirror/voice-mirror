@@ -356,9 +356,9 @@ async function sendImageToPython(imageData) {
 }
 
 // AI manager helper functions that delegate to aiManager service
-function startAIProvider() {
+function startAIProvider(cols, rows) {
     if (aiManager) {
-        return aiManager.start();
+        return aiManager.start(cols, rows);
     }
     return false;
 }

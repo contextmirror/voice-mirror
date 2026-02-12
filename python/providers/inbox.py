@@ -62,6 +62,10 @@ def cleanup_inbox(inbox_path: Path, max_age_hours: float = 2.0) -> int:
         return 0
 
 
+# MCP-based CLI providers that use claude_send (sender will be "voice-claude")
+MCP_CLI_PROVIDERS = frozenset(('claude', 'opencode', 'kimi-cli'))
+
+
 class InboxManager:
     """Manages MCP inbox communication."""
 
@@ -82,6 +86,21 @@ class InboxManager:
         self._last_message_time = 0.0
         self._last_seen_message_id = None
         self.awaiting_response = False  # True while wait_for_response() is active
+
+    @staticmethod
+    def _sender_matches(sender: str, provider_id: str) -> bool:
+        """Check if an inbox sender matches the expected AI provider.
+
+        MCP-based CLI providers (OpenCode, Kimi CLI) all use claude_send,
+        so the sender will be "voice-claude" regardless of the actual provider.
+        """
+        lower = sender.lower()
+        if provider_id in lower:
+            return True
+        # MCP CLI providers use claude_send → sender contains "claude"
+        if provider_id in MCP_CLI_PROVIDERS and "claude" in lower:
+            return True
+        return False
 
     def send(self, message: str) -> str | None:
         """
@@ -191,7 +210,7 @@ class InboxManager:
                 for msg in messages[my_msg_idx + 1:]:
                     sender = msg.get("from", "")
                     # Accept responses from the configured AI provider
-                    if provider_id in sender.lower() and msg.get("thread_id") == "voice-mirror":
+                    if self._sender_matches(sender, provider_id) and msg.get("thread_id") == "voice-mirror":
                         response = msg.get("message", "")
                         if response:
                             print(f"✅ Got response from {sender}")
@@ -263,7 +282,7 @@ class InboxManager:
             provider_id = ai_provider['provider']
             for msg in reversed(messages):
                 sender = msg.get("from", "")
-                if provider_id in sender.lower() and msg.get("thread_id") == "voice-mirror":
+                if self._sender_matches(sender, provider_id) and msg.get("thread_id") == "voice-mirror":
                     return msg.get("id"), msg.get("message", "")
 
             return None, None

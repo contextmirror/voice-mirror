@@ -9,7 +9,7 @@ const fs = require('fs');
 const { execFile } = require('child_process');
 const { validators } = require('./ipc-validators');
 const fontManager = require('./font-manager');
-const CLI_PROVIDERS = ['claude', 'codex', 'gemini-cli'];
+const CLI_PROVIDERS = ['claude', 'codex', 'gemini-cli', 'kimi-cli', 'opencode'];
 
 /**
  * Capture a specific display on Windows using PowerShell + .NET GDI+.
@@ -521,9 +521,9 @@ function registerIpcHandlers(ctx) {
     });
 
     // AI Provider backend IPC handlers (routes to Claude PTY or OpenAI-compatible API)
-    ipcMain.handle('start-claude', () => {
+    ipcMain.handle('start-claude', (event, cols, rows) => {
         if (!ctx.isAIProviderRunning()) {
-            const started = ctx.startAIProvider();
+            const started = ctx.startAIProvider(cols, rows);
             return { started };
         }
         return { started: false, reason: 'already running' };

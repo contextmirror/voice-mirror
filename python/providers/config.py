@@ -28,8 +28,13 @@ PROVIDER_DISPLAY_NAMES = {
     "groq": "Groq",
     "mistral": "Mistral",
     "openrouter": "OpenRouter",
-    "deepseek": "DeepSeek"
+    "deepseek": "DeepSeek",
+    "opencode": "OpenCode",
+    "kimi-cli": "Kimi CLI"
 }
+
+# CLI providers where the model is controlled by the CLI tool itself, not Voice Mirror
+_CLI_MANAGED_MODEL_PROVIDERS = frozenset(('claude', 'opencode', 'kimi-cli'))
 
 
 def get_ai_provider() -> dict:
@@ -47,7 +52,8 @@ def get_ai_provider() -> dict:
 
                 # Get display name
                 name = PROVIDER_DISPLAY_NAMES.get(provider_id, provider_id.title())
-                if model:
+                # CLI-managed providers control their own model — don't append stale model names
+                if model and provider_id not in _CLI_MANAGED_MODEL_PROVIDERS:
                     short_model = model.split(':')[0]
                     name = f"{name} ({short_model})"
 
@@ -71,7 +77,7 @@ def strip_provider_prefix(text: str) -> str:
     if not text:
         return text
     # Match provider names with optional model suffix in parentheses
-    pattern = r'^(?:Claude|Ollama|OpenAI|Gemini|Grok|Groq|Mistral|DeepSeek|LM Studio|Jan)(?:\s*\([^)]+\))?:\s*'
+    pattern = r'^(?:Claude|Ollama|OpenAI|Gemini|Grok|Groq|Mistral|DeepSeek|LM Studio|Jan|OpenCode|Kimi CLI)(?:\s*\([^)]+\))?:\s*'
     return re.sub(pattern, '', text, flags=re.IGNORECASE).strip()
 
 

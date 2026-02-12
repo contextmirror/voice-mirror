@@ -25,11 +25,12 @@ const PROVIDER_TYPES = {
     OPENROUTER: 'openrouter',
     DEEPSEEK: 'deepseek',
     KIMI: 'kimi',
-    KIMI_CLI: 'kimi-cli'
+    KIMI_CLI: 'kimi-cli',
+    OPENCODE: 'opencode'
 };
 
 // CLI agent providers (full terminal access, PTY-based)
-const CLI_PROVIDERS = ['claude', 'codex', 'gemini-cli', 'kimi-cli'];
+const CLI_PROVIDERS = ['claude', 'codex', 'gemini-cli', 'kimi-cli', 'opencode'];
 
 // Local providers (don't require API key)
 const LOCAL_PROVIDERS = ['ollama', 'lmstudio', 'jan'];
@@ -53,7 +54,8 @@ const PROVIDER_NAMES = {
     openrouter: 'OpenRouter',
     deepseek: 'DeepSeek',
     kimi: 'Kimi (Moonshot)',
-    'kimi-cli': 'Kimi CLI'
+    'kimi-cli': 'Kimi CLI',
+    opencode: 'OpenCode'
 };
 
 /**
@@ -67,8 +69,8 @@ function createProvider(type, config = {}) {
         return new ClaudeProvider(config);
     }
 
-    // CLI agent providers (Codex, Gemini CLI, Kimi CLI)
-    if (type === PROVIDER_TYPES.CODEX || type === PROVIDER_TYPES.GEMINI_CLI || type === PROVIDER_TYPES.KIMI_CLI) {
+    // CLI agent providers (Codex, Gemini CLI, Kimi CLI, OpenCode)
+    if (type === PROVIDER_TYPES.CODEX || type === PROVIDER_TYPES.GEMINI_CLI || type === PROVIDER_TYPES.KIMI_CLI || type === PROVIDER_TYPES.OPENCODE) {
         return new CLIProvider(type, config);
     }
 
@@ -173,6 +175,16 @@ function getProviderList() {
             isPTY: true,
             requiresApiKey: false,
             supportsVision: true,
+            supportsMCP: true
+        },
+        {
+            type: 'opencode',
+            name: 'OpenCode',
+            description: '75+ models via OpenCode CLI with MCP',
+            isLocal: false,
+            isPTY: true,
+            requiresApiKey: false,
+            supportsVision: false,
             supportsMCP: true
         },
         {

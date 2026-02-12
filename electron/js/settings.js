@@ -25,7 +25,8 @@ const PROVIDER_NAMES = {
     openrouter: 'OpenRouter',
     deepseek: 'DeepSeek',
     kimi: 'Kimi (Moonshot)',
-    'kimi-cli': 'Kimi CLI'
+    'kimi-cli': 'Kimi CLI',
+    opencode: 'OpenCode'
 };
 
 // Provider icon CSS classes (exported for sidebar provider display)
@@ -44,11 +45,12 @@ export const PROVIDER_ICON_CLASSES = {
     openrouter: 'provider-icon-openrouter',
     deepseek: 'provider-icon-deepseek',
     kimi: 'provider-icon-kimi',
-    'kimi-cli': 'provider-icon-kimi'
+    'kimi-cli': 'provider-icon-kimi',
+    opencode: 'provider-icon-opencode'
 };
 
 // CLI agent providers (PTY-based, full terminal access)
-const CLI_PROVIDERS = ['claude', 'codex', 'gemini-cli', 'kimi-cli'];
+const CLI_PROVIDERS = ['claude', 'codex', 'gemini-cli', 'kimi-cli', 'opencode'];
 
 // Local providers that can be auto-detected
 const LOCAL_PROVIDERS = ['ollama', 'lmstudio', 'jan'];
@@ -613,7 +615,8 @@ export async function saveSettings() {
 
         // Update provider display in terminal/sidebar
         let displayName = PROVIDER_NAMES[aiProvider] || aiProvider;
-        if (aiModel) {
+        // CLI providers manage their own model — don't append stale model names
+        if (aiModel && !CLI_PROVIDERS.includes(aiProvider)) {
             const shortModel = aiModel.split(':')[0];
             displayName = `${displayName} (${shortModel})`;
         }

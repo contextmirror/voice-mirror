@@ -875,11 +875,13 @@ async function init() {
             groq: 'Groq',
             mistral: 'Mistral',
             openrouter: 'OpenRouter',
-            deepseek: 'DeepSeek'
+            deepseek: 'DeepSeek',
+            opencode: 'OpenCode',
+            'kimi-cli': 'Kimi CLI'
         };
         let displayName = providerNames[provider] || provider;
-        // Only append model name for non-CLI providers (Claude Code doesn't use localModel)
-        const cliProviders = ['claude'];
+        // Only append model name for non-CLI providers (CLI tools manage their own model)
+        const cliProviders = ['claude', 'opencode', 'kimi-cli'];
         if (model && !cliProviders.includes(provider)) {
             const shortModel = model.split(':')[0];
             displayName = `${displayName} (${shortModel})`;

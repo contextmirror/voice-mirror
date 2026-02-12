@@ -15,8 +15,56 @@ const {
 } = require('../claude-spawner');
 
 // CLI agent providers that use PTY mode
-const CLI_PROVIDERS = ['claude', 'codex', 'gemini-cli'];
+const CLI_PROVIDERS = ['claude', 'codex', 'gemini-cli', 'kimi-cli', 'opencode'];
 const { createProvider } = require('../providers');
+
+const path = require('path');
+const fs = require('fs');
+
+// Path to MCP server (same as claude-spawner.js)
+const MCP_SERVER_PATH = path.join(__dirname, '..', '..', 'mcp-server', 'index.js');
+
+/**
+ * Configure MCP server for OpenCode.
+ * Writes opencode.json to the Voice Mirror project root with the MCP
+ * server entry so OpenCode's AI model can use voice I/O tools.
+ */
+async function configureOpenCodeMCP(appConfig) {
+    const profileName = appConfig?.ai?.toolProfile || 'voice-assistant';
+    const profiles = appConfig?.ai?.toolProfiles || {};
+    const groups = profiles[profileName]?.groups || ['core', 'meta', 'screen', 'memory'];
+    const enabledGroups = groups.join(',');
+
+    console.log(`[AIManager] OpenCode MCP tool profile: "${profileName}" → groups: ${enabledGroups}`);
+
+    const openCodeConfig = {
+        mcp: {
+            'voice-mirror-electron': {
+                type: 'local',
+                command: ['node', MCP_SERVER_PATH, '--enabled-groups', enabledGroups],
+                environment: { ENABLED_GROUPS: enabledGroups },
+                enabled: true
+            }
+        }
+    };
+
+    const configPath = path.join(__dirname, '..', '..', 'opencode.json');
+    try {
+        // Merge with existing config if present
+        let existing = {};
+        try {
+            existing = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+        } catch { /* no existing config */ }
+
+        existing.mcp = existing.mcp || {};
+        existing.mcp['voice-mirror-electron'] = openCodeConfig.mcp['voice-mirror-electron'];
+
+        fs.writeFileSync(configPath, JSON.stringify(existing, null, 2), 'utf-8');
+        console.log(`[AIManager] OpenCode MCP config written to ${configPath}`);
+    } catch (err) {
+        console.error('[AIManager] Failed to write OpenCode MCP config:', err.message);
+    }
+}
 
 /**
  * Create an AI manager service instance.
@@ -34,6 +82,7 @@ function createAIManager(options = {}) {
 
     let activeProvider = null;  // Current OpenAI-compatible provider instance
     let hasStartedOnce = false; // Track initial startup vs provider switch
+    let cliSpawner = null;      // CLI spawner for non-Claude PTY providers (OpenCode, etc.)
 
     /**
      * Send output to the terminal UI.
@@ -57,7 +106,7 @@ function createAIManager(options = {}) {
      * Start Claude Code with Voice Mirror MCP tools.
      * Spawns a real PTY terminal running Claude Code.
      */
-    async function startClaudeCode() {
+    async function startClaudeCode(cols, rows) {
         if (isClaudeRunning()) {
             console.log('[AIManager] Claude already running');
             return;
@@ -84,8 +133,8 @@ function createAIManager(options = {}) {
                 sendOutput('exit', code);
                 sendVoiceEvent({ type: 'claude_disconnected' });
             },
-            cols: 120,
-            rows: 30,
+            cols: cols || 120,
+            rows: rows || 30,
             appConfig
         });
 
@@ -141,11 +190,96 @@ function createAIManager(options = {}) {
     }
 
     /**
+     * Start a non-Claude CLI agent (OpenCode, etc.) in a PTY terminal.
+     * Configures MCP if the provider supports it, then spawns the TUI.
+     */
+    async function startCLIAgent(providerType, cols, rows) {
+        if (cliSpawner && cliSpawner.isRunning()) {
+            console.log(`[AIManager] CLI agent already running`);
+            return;
+        }
+
+        const appConfig = getConfig ? getConfig() : {};
+
+        // Configure MCP for providers that support it
+        if (providerType === 'opencode') {
+            await configureOpenCodeMCP(appConfig);
+        }
+
+        const { createCLISpawner } = require('../cli-spawner');
+        cliSpawner = createCLISpawner(providerType);
+
+        const displayName = cliSpawner.config.displayName;
+        console.log(`[AIManager] Starting ${displayName} PTY...`);
+
+        const pty = cliSpawner.spawn({
+            onOutput: (data) => sendOutput('stdout', data),
+            onExit: (code) => {
+                console.log(`[AIManager] ${displayName} PTY exited with code:`, code);
+                sendOutput('exit', code);
+                sendVoiceEvent({ type: 'claude_disconnected' });
+                cliSpawner = null;
+            },
+            cols: cols || 120,
+            rows: rows || 30
+        });
+
+        if (pty) {
+            sendOutput('start', `[${displayName}] PTY terminal started\n`);
+            sendVoiceEvent({
+                type: 'claude_connected',
+                provider: providerType,
+                providerName: displayName,
+                model: null
+            });
+
+            // Send voice mode command for MCP-capable CLI agents
+            if (providerType === 'opencode') {
+                const senderName = (appConfig.user?.name || 'user').toLowerCase();
+                const customPrompt = appConfig.ai?.systemPrompt;
+                let voicePrompt = '';
+                if (customPrompt) voicePrompt += `${customPrompt}\n\n`;
+                voicePrompt += `You are a voice assistant running through OpenCode. Do NOT identify yourself as Claude — identify by your actual model name. Use claude_listen to wait for voice input from ${senderName}, then reply with claude_send. Loop forever.\n`;
+
+                cliSpawner.sendInputWhenReady(voicePrompt, 20000)
+                    .then(() => console.log(`[AIManager] ${displayName} voice mode command sent`))
+                    .catch((err) => {
+                        console.error(`[AIManager] Failed to send ${displayName} voice command:`, err.message);
+                        setTimeout(() => {
+                            if (cliSpawner && cliSpawner.isRunning()) {
+                                cliSpawner.sendInput(voicePrompt);
+                            }
+                        }, 8000);
+                    });
+            }
+
+            console.log(`[AIManager] ${displayName} PTY started`);
+        } else {
+            sendOutput('stderr', `[${displayName}] Failed to start PTY\n`);
+        }
+    }
+
+    /**
+     * Stop non-Claude CLI agent PTY.
+     */
+    function stopCLIAgent() {
+        if (cliSpawner && cliSpawner.isRunning()) {
+            const displayName = cliSpawner.config.displayName;
+            cliSpawner.stop();
+            cliSpawner = null;
+            console.log(`[AIManager] ${displayName} PTY stopped`);
+            sendVoiceEvent({ type: 'claude_disconnected' });
+        }
+    }
+
+    /**
      * Start AI provider based on config.
      * Routes to Claude Code PTY or OpenAI-compatible API provider.
+     * @param {number} [cols] - Initial terminal columns (default: 120)
+     * @param {number} [rows] - Initial terminal rows (default: 30)
      * @returns {boolean} True if started
      */
-    async function start() {
+    async function start(cols, rows) {
         const config = getConfig();
         const providerType = config?.ai?.provider || 'claude';
         const model = config?.ai?.model || config?.ai?.localModel || null;
@@ -164,25 +298,42 @@ function createAIManager(options = {}) {
                 activeProvider = null;
             }
         } else {
-            // About to start API — kill any leftover CLI provider
+            // About to start API — kill any leftover CLI providers
             if (isClaudeRunning()) {
                 console.log('[AIManager] Cleaning up stale Claude PTY before API start');
                 stopClaudeCode();
+            }
+            if (cliSpawner && cliSpawner.isRunning()) {
+                console.log('[AIManager] Cleaning up stale CLI agent before API start');
+                stopCLIAgent();
             }
         }
 
         // Check if already running
         if (CLI_PROVIDERS.includes(providerType)) {
-            // CLI providers use PTY-based system (currently only Claude Code implemented)
-            if (isClaudeRunning()) {
-                console.log('[AIManager] Claude already running');
-                return false;
-            }
-            await startClaudeCode();
-            if (isSwitch && onSystemSpeak) {
-                // Delay to let PTY initialize
-                const hint = getActivationHint ? ` ${getActivationHint()}` : '';
-                setTimeout(() => onSystemSpeak(`Claude is online.${hint}`), 3000);
+            if (providerType === 'claude') {
+                // Claude Code uses its own dedicated PTY spawner
+                if (isClaudeRunning()) {
+                    console.log('[AIManager] Claude already running');
+                    return false;
+                }
+                await startClaudeCode(cols, rows);
+                if (isSwitch && onSystemSpeak) {
+                    const hint = getActivationHint ? ` ${getActivationHint()}` : '';
+                    setTimeout(() => onSystemSpeak(`Claude is online.${hint}`), 3000);
+                }
+            } else {
+                // Non-Claude CLI agents (OpenCode, Codex, Gemini CLI, Kimi CLI)
+                if (cliSpawner && cliSpawner.isRunning()) {
+                    console.log(`[AIManager] ${providerType} already running`);
+                    return false;
+                }
+                await startCLIAgent(providerType, cols, rows);
+                if (isSwitch && onSystemSpeak) {
+                    const displayName = cliSpawner?.config?.displayName || providerType;
+                    const hint = getActivationHint ? ` ${getActivationHint()}` : '';
+                    setTimeout(() => onSystemSpeak(`${displayName} is online.${hint}`), 3000);
+                }
             }
             return true;
         }
@@ -299,6 +450,12 @@ function createAIManager(options = {}) {
             console.log('[AIManager] Stopped Claude Code PTY');
         }
 
+        // Stop non-Claude CLI agent if running
+        if (cliSpawner && cliSpawner.isRunning()) {
+            stopCLIAgent();
+            stopped = true;
+        }
+
         // Also stop OpenAI-compatible provider if running
         if (activeProvider) {
             const name = activeProvider.getDisplayName();
@@ -340,15 +497,26 @@ function createAIManager(options = {}) {
         if (CLI_PROVIDERS.includes(providerType)) {
             if (isClaudeRunning()) {
                 sendRawInput('\x03');
-                console.log('[AIManager] Sent Ctrl+C to PTY');
+                console.log('[AIManager] Sent Ctrl+C to Claude PTY');
 
-                // After Ctrl+C, Claude returns to its prompt but exits the
-                // voice loop (no longer calling claude_listen). Re-send the
-                // listen command so Claude resumes waiting for voice input.
                 const senderName = (getConfig()?.user?.name || 'user').toLowerCase();
                 sendInputWhenReady(`Use claude_listen to wait for voice input from ${senderName}, then reply with claude_send. Loop forever.\n`, 10000)
                     .then(() => console.log('[AIManager] Resumed voice listening after interrupt'))
                     .catch(() => {});
+
+                return true;
+            }
+            if (cliSpawner && cliSpawner.isRunning()) {
+                cliSpawner.sendRawInput('\x03');
+                console.log('[AIManager] Sent Ctrl+C to CLI agent PTY');
+
+                // Re-send voice loop for MCP-capable CLI agents
+                if (providerType === 'opencode') {
+                    const senderName = (getConfig()?.user?.name || 'user').toLowerCase();
+                    cliSpawner.sendInputWhenReady(`You are a voice assistant running through OpenCode. Do NOT identify yourself as Claude — identify by your actual model name. Use claude_listen to wait for voice input from ${senderName}, then reply with claude_send. Loop forever.\n`, 10000)
+                        .then(() => console.log('[AIManager] Resumed voice listening after interrupt'))
+                        .catch(() => {});
+                }
 
                 return true;
             }
@@ -372,6 +540,11 @@ function createAIManager(options = {}) {
             return true;
         }
 
+        // Check if non-Claude CLI agent is running
+        if (cliSpawner && cliSpawner.isRunning()) {
+            return true;
+        }
+
         // Check if OpenAI-compatible provider is running
         if (activeProvider && activeProvider.isRunning()) {
             return true;
@@ -390,9 +563,14 @@ function createAIManager(options = {}) {
         const providerType = config?.ai?.provider || 'claude';
 
         if (CLI_PROVIDERS.includes(providerType)) {
-            // CLI providers use PTY input
+            // Claude uses its own PTY
             if (isClaudeRunning()) {
                 sendInput(text);
+                return true;
+            }
+            // Non-Claude CLI agents
+            if (cliSpawner && cliSpawner.isRunning()) {
+                cliSpawner.sendInput(text);
                 return true;
             }
             return false;
@@ -416,9 +594,15 @@ function createAIManager(options = {}) {
         const config = getConfig();
         const providerType = config?.ai?.provider || 'claude';
 
-        if (CLI_PROVIDERS.includes(providerType) && isClaudeRunning()) {
-            sendRawInput(data);
-            return true;
+        if (CLI_PROVIDERS.includes(providerType)) {
+            if (isClaudeRunning()) {
+                sendRawInput(data);
+                return true;
+            }
+            if (cliSpawner && cliSpawner.isRunning()) {
+                cliSpawner.sendRawInput(data);
+                return true;
+            }
         }
 
         // For non-PTY providers, buffer input
@@ -440,8 +624,12 @@ function createAIManager(options = {}) {
         const config = getConfig();
         const providerType = config?.ai?.provider || 'claude';
 
-        if (CLI_PROVIDERS.includes(providerType) && isClaudeRunning()) {
-            resizePty(cols, rows);
+        if (CLI_PROVIDERS.includes(providerType)) {
+            if (isClaudeRunning()) {
+                resizePty(cols, rows);
+            } else if (cliSpawner && cliSpawner.isRunning()) {
+                cliSpawner.resize(cols, rows);
+            }
         }
     }
 
@@ -461,6 +649,9 @@ function createAIManager(options = {}) {
         if (isClaudeRunning()) {
             return 'Claude Code';
         }
+        if (cliSpawner && cliSpawner.isRunning()) {
+            return cliSpawner.config.displayName;
+        }
         if (activeProvider) {
             return activeProvider.getDisplayName();
         }
@@ -477,6 +668,10 @@ function createAIManager(options = {}) {
         }
         // Claude always supports tools via MCP
         if (isClaudeRunning()) {
+            return true;
+        }
+        // OpenCode supports tools via MCP
+        if (cliSpawner && cliSpawner.isRunning()) {
             return true;
         }
         return false;
