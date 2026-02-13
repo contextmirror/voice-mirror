@@ -5,6 +5,34 @@ Format inspired by game dev patch notes — grouped by release, categorized by i
 
 ---
 
+## v0.8.4 — "God-File Guillotine" (2026-02-13)
+
+Split the 4 largest files in the codebase into focused modules and fixed two Ollama voice bugs.
+
+### Architecture — Renderer
+- **Split `main.js`** (1,308 → 574 lines): Extracted `image-handler.js` (296), `ai-status.js` (325), `voice-handler.js` (148) — each handles a distinct responsibility
+- **Split `settings.js`** (1,964 → 351 lines): Extracted `settings-ai.js` (786), `settings-voice.js` (313), `settings-appearance.js` (664) — one module per settings tab
+
+### Architecture — MCP Server
+- **Split `mcp-server/index.js`** (1,100 → 515 lines): Extracted `tool-groups.js` (587) containing all 9 tool group definitions
+- **Fixed 7 silent `catch` blocks** in `mcp-server/handlers/core.js` — now log errors with `[MCP Core]` tag
+- **Deduplicated file-based IPC** in `mcp-server/handlers/browser.js` — extracted `fileBasedRequest()` helper
+
+### Architecture — Python
+- **Extracted `_chunk_text()`** from `kokoro.py` and `qwen.py` into shared `tts/utils.py`
+- **Removed debug print** from `voice_agent.py` (`[IMPORT DEBUG] tts done`)
+
+### Fixed
+- **Ollama response lost** — `extractSpeakableResponse()` could strip all content from short responses, returning empty string which was falsy and discarded; added fallback pass that preserves lightly-cleaned content when aggressive filtering removes everything
+- **Ollama double-speak** — race condition between `voice_agent._wait_and_speak()` and `NotificationWatcher`: `awaiting_response` flag cleared before TTS started, letting the watcher speak the same response; added `speaking_response` flag that stays true until TTS finishes
+
+### Technical
+- 5 files modified for bug fixes, 17 files changed total for god-file splits
+- 519 tests passing (JS) + 7 Python double-speak tests passing
+- Version bump: 0.8.3 → 0.8.4
+
+---
+
 ## v0.8.3 — "Everything in Its Place" (2026-02-13)
 
 Final pass on file organization and path correctness. Moved remaining root-level files into their logical directories and fixed all path regressions from the moves.

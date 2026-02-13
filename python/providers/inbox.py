@@ -86,6 +86,7 @@ class InboxManager:
         self._last_message_time = 0.0
         self._last_seen_message_id = None
         self.awaiting_response = False  # True while wait_for_response() is active
+        self.speaking_response = False  # True while TTS is speaking a response (prevents double-speak)
 
     @staticmethod
     def _sender_matches(sender: str, provider_id: str) -> bool:

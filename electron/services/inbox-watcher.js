@@ -182,7 +182,7 @@ function createInboxWatcher(options = {}) {
                         }
 
                         captureProviderResponse(activeProvider, msg.message, _devlog, msg.image_data_url || null).then((response) => {
-                            if (response) {
+                            if (response !== null && response.length > 0) {
                                 const cleanedResponse = stripEchoedContent(response);
                                 writeResponseToInbox(contextMirrorDir, cleanedResponse, providerName, msg.id);
                                 if (onAssistantMessage) {
@@ -334,7 +334,8 @@ async function captureProviderResponse(provider, message, _devlog = () => {}, im
             clearInterval(checkInterval);
             if (timeoutHandle) clearTimeout(timeoutHandle);
             cleanup();
-            resolve(response || null);
+            // Preserve empty string distinct from null (empty = extraction failed, null = no output)
+            resolve(response !== null && response !== undefined ? response : null);
         }
 
         provider.onToolCall = (data) => {
@@ -598,6 +599,28 @@ function extractSpeakableResponse(output) {
             return '';
         } catch {
             // Not valid JSON, keep it
+        }
+    }
+
+    // Fallback: if aggressive filtering removed everything but input had substance,
+    // do a lighter cleanup pass (keeps the response speakable rather than losing it)
+    if (!cleaned && output.trim().length > 20) {
+        cleaned = output
+            .split('\n')
+            .map(l => l.trim())
+            .filter(t =>
+                t &&
+                !t.startsWith('>') &&
+                !t.startsWith('[Executing tool:') &&
+                !t.startsWith('[Tool ') &&
+                !t.startsWith('[Max tool') &&
+                !(t.startsWith('{') && t.endsWith('}'))
+            )
+            .join(' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+        if (cleaned) {
+            logger.info('[InboxWatcher]', `Extraction fallback used (${cleaned.length} chars)`);
         }
     }
 

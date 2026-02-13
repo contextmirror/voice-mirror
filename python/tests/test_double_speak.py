@@ -2,7 +2,8 @@
 Tests for the double-speak race condition fix.
 
 Verifies that the NotificationWatcher skips TTS when the voice_agent
-is actively waiting for a response (inbox.awaiting_response == True).
+is actively waiting for a response (inbox.awaiting_response == True)
+or speaking a response (inbox.speaking_response == True).
 """
 
 import asyncio
@@ -35,6 +36,10 @@ class TestInboxAwaitingResponse(unittest.TestCase):
     def test_awaiting_response_starts_false(self):
         inbox = self._make_inbox()
         self.assertFalse(inbox.awaiting_response)
+
+    def test_speaking_response_starts_false(self):
+        inbox = self._make_inbox()
+        self.assertFalse(inbox.speaking_response)
 
     def test_awaiting_response_set_during_wait(self):
         """awaiting_response should be True while wait_for_response is polling."""
@@ -103,6 +108,7 @@ class TestNotificationWatcherSkipsDuringAwait(unittest.TestCase):
         # Mock inbox
         mock_inbox = MagicMock()
         mock_inbox.awaiting_response = True
+        mock_inbox.speaking_response = False
         mock_inbox.last_seen_message_id = None
         mock_inbox.get_latest_ai_message.return_value = ("msg-new", "Test response")
         mock_inbox.check_compaction_event.return_value = (None, None)
@@ -141,12 +147,50 @@ class TestNotificationWatcherSkipsDuringAwait(unittest.TestCase):
         asyncio.run(run_test())
         self.assertFalse(speak_called, "TTS should NOT be called when inbox.awaiting_response is True")
 
+    def test_notification_watcher_skips_when_speaking(self):
+        """Verify no TTS when voice_agent is speaking a response (speaking_response=True)."""
+        from notifications import NotificationWatcher
+
+        mock_inbox = MagicMock()
+        mock_inbox.awaiting_response = False
+        mock_inbox.speaking_response = True
+        mock_inbox.last_seen_message_id = None
+        mock_inbox.get_latest_ai_message.return_value = ("msg-new", "Test response")
+        mock_inbox.check_compaction_event.return_value = (None, None)
+
+        mock_tts = MagicMock()
+        mock_tts.is_speaking = False
+        mock_tts.speak = AsyncMock()
+
+        watcher = NotificationWatcher(
+            inbox=mock_inbox,
+            tts=mock_tts,
+            poll_interval=0.1,
+            is_recording=lambda: False,
+            is_processing=lambda: False,
+            in_conversation=lambda: False,
+        )
+
+        async def run_test():
+            async def stop_after_delay():
+                await asyncio.sleep(0.5)
+                raise asyncio.CancelledError()
+
+            try:
+                await asyncio.gather(watcher.run(), stop_after_delay())
+            except asyncio.CancelledError:
+                pass
+
+        asyncio.run(run_test())
+        self.assertFalse(mock_tts.speak.called, "TTS should NOT be called when inbox.speaking_response is True")
+
     def test_notification_watcher_speaks_when_not_awaiting(self):
         """When awaiting_response is False, NotificationWatcher should speak normally."""
         from notifications import NotificationWatcher
 
         mock_inbox = MagicMock()
         mock_inbox.awaiting_response = False
+        mock_inbox.speaking_response = False
         mock_inbox.last_seen_message_id = None
         # First call returns None (initialization), subsequent calls return the new message
         mock_inbox.get_latest_ai_message.side_effect = [

@@ -694,11 +694,17 @@ class VoiceMirror:
                             # Non-MCP providers: 💬 prefix triggers chat message via electron_bridge
                             print(f"[CHAT] {self._ai_provider['name']}: {response}")
                         clean_response = strip_provider_prefix(response)
+                        # Guard against double-speak: keep flag set while TTS is active
+                        # (awaiting_response already cleared by wait_for_response, but
+                        # NotificationWatcher could poll before TTS sets is_speaking)
+                        self.inbox.speaking_response = True
                         await self.speak(clean_response)
                     else:
                         print(f"[TIMEOUT] No response from {self._ai_provider['name']} (timeout - this is normal if thinking)")
                 except Exception as e:
                     print(f"Error waiting for response: {e}")
+                finally:
+                    self.inbox.speaking_response = False
 
             asyncio.create_task(_wait_and_speak(msg_id))
         else:
