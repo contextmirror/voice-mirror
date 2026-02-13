@@ -13,7 +13,6 @@ electron/
 ├── claude-spawner.js       # Claude Code PTY spawning
 ├── cli-spawner.js          # CLI-based provider PTY spawning
 ├── ipc-validators.js       # IPC argument validation
-├── font-manager.js         # Font loading & management
 ├── overlay.html            # Main HTML (3 pages)
 │
 ├── window/                 # Window management

@@ -204,14 +204,13 @@ voice-mirror-electron/
 ├── electron/              # Electron app
 │   ├── main.js            # Window, tray, service orchestration
 │   ├── constants.js       # Shared constants (providers, endpoints, timeouts)
-│   ├── ipc/               # IPC handlers (6 modules: window, config, screen, ai, browser, misc)
+│   ├── ipc/               # IPC handlers (6 modules: window, config, screen, ai, misc, index)
 │   ├── lib/               # Shared utilities (file watcher, screen capture, path safety, ollama)
-│   ├── services/          # 15 service modules (standardised lifecycle: start/stop/isRunning)
+│   ├── services/          # 16 service modules (standardised lifecycle: start/stop/isRunning)
 │   ├── providers/         # Multi-AI provider system (5 providers, 75+ via OpenCode)
 │   ├── browser/           # CDP browser automation (9 modules)
 │   ├── tools/             # Tool system for local LLMs (4 tools)
-│   ├── js/                # Renderer modules (15 files)
-│   └── styles/            # CSS modules (10 files)
+│   └── renderer/          # Renderer JS (15 files) + CSS (10 files)
 ├── python/                # Voice backend (STT, TTS, wake word)
 ├── mcp-server/            # MCP server (58 tools, 10 groups)
 ├── wayland-orb/           # Rust native overlay (Linux/Wayland)
