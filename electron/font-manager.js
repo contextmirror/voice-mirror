@@ -241,14 +241,8 @@ function getFontFilePath(fontId) {
 
 module.exports = {
     init,
-    validateFontFile,
     addFont,
     removeFont,
     listFonts,
-    getFontFilePath,
-    // Exposed for testing
-    ALLOWED_EXTENSIONS,
-    MAX_FONT_SIZE,
-    MAX_FONTS,
-    FONT_SIGNATURES
+    getFontFilePath
 };

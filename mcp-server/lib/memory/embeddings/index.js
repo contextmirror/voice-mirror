@@ -169,28 +169,11 @@ function isLocalModelAvailable() {
     return fs.existsSync(modelPath);
 }
 
-/**
- * Get recommended provider based on available resources
- * @returns {'local' | 'openai' | 'gemini' | null}
- */
-function getRecommendedProvider() {
-    if (isLocalModelAvailable()) return 'local';
-    if (process.env.OPENAI_API_KEY) return 'openai';
-    if (process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY) return 'gemini';
-    return null;
-}
-
 // Export provider classes for direct access
 const LocalProvider = require('./local');
-const OpenAIProvider = require('./openai');
-const GeminiProvider = require('./gemini');
 
 module.exports = {
     createEmbeddingProvider,
     isLocalModelAvailable,
-    getRecommendedProvider,
-    // Provider classes
-    LocalProvider,
-    OpenAIProvider,
-    GeminiProvider
+    LocalProvider
 };

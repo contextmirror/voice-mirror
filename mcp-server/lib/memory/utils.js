@@ -132,20 +132,6 @@ function estimateTokens(text) {
 }
 
 /**
- * Debounce function calls
- * @param {Function} fn - Function to debounce
- * @param {number} ms - Delay in milliseconds
- * @returns {Function} Debounced function
- */
-function debounce(fn, ms) {
-    let timeout;
-    return function(...args) {
-        clearTimeout(timeout);
-        timeout = setTimeout(() => fn.apply(this, args), ms);
-    };
-}
-
-/**
  * Race a promise against a timeout
  * @param {Promise} promise - Promise to race
  * @param {number} ms - Timeout in milliseconds
@@ -246,7 +232,6 @@ module.exports = {
     getTodayDate,
     getCurrentTime,
     estimateTokens,
-    debounce,
     withTimeout,
     withRetry,
     RETRYABLE_PATTERN,

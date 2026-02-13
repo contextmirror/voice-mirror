@@ -99,36 +99,6 @@
     color: white;
 }
 
-#terminal-close {
-    margin-left: auto;
-    background: none;
-    border: none;
-    color: rgba(255, 255, 255, 0.4);
-    cursor: pointer;
-    font-size: 16px;
-    padding: 4px 8px;
-}
-
-#terminal-close:hover {
-    color: white;
-}
-
-/* ========== Legacy Terminal Output ========== */
-/* Kept for fallback */
-.terminal-line {
-    font-family: var(--font-mono, 'SF Mono', 'Monaco', monospace);
-    font-size: 12px;
-    line-height: 1.5;
-}
-
-.terminal-line.info {
-    color: #60a5fa;
-}
-
-.terminal-line.error {
-    color: #f87171;
-}
-
 /* ========== Fullscreen Terminal Page ========== */
 #terminal-fullscreen {
     flex: 1;

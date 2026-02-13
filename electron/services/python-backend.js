@@ -701,7 +701,5 @@ function startDockerServices() {
 
 module.exports = {
     createPythonBackend,
-    startDockerServices,
-    getPythonExecutable,
-    fileExists
+    startDockerServices
 };

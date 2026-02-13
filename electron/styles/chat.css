@@ -35,59 +35,6 @@
     height: 8px;
 }
 
-/* ========== Legacy Message Styles ========== */
-.message {
-    margin-bottom: 16px;
-    padding: 14px 18px;
-    border-radius: 12px;
-    max-width: 85%;
-    line-height: 1.5;
-    font-size: 14px;
-    position: relative;
-    animation: rise var(--duration-normal) var(--ease-out);
-    -webkit-app-region: no-drag;  /* Messages are interactive */
-}
-
-.message.user {
-    background: linear-gradient(135deg, rgba(102, 126, 234, 0.4) 0%, rgba(118, 75, 162, 0.35) 100%);
-    color: white;
-    margin-left: auto;
-    border: 1px solid rgba(102, 126, 234, 0.3);
-    box-shadow: 0 2px 12px rgba(102, 126, 234, 0.2);
-    border-radius: 16px 16px 4px 16px;
-}
-
-.message.assistant {
-    background: linear-gradient(135deg, rgba(17, 19, 24, 0.95) 0%, rgba(12, 13, 16, 0.95) 100%);
-    color: var(--text);
-    border-left: 3px solid var(--accent);
-    border-radius: 4px 16px 16px 16px;
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4),
-                inset 0 1px 0 rgba(255, 255, 255, 0.03);
-}
-
-.message.assistant::before {
-    content: '';
-    position: absolute;
-    left: -3px;
-    top: 0;
-    bottom: 0;
-    width: 3px;
-    background: linear-gradient(180deg, var(--accent) 0%, #764ba2 100%);
-    border-radius: 3px 0 0 3px;
-}
-
-/* Message streaming animation */
-.message.streaming {
-    border: 1px solid var(--border);
-    animation: pulsing-border 1.5s ease-out infinite;
-}
-
-@keyframes pulsing-border {
-    0%, 100% { border-color: var(--border); }
-    50% { border-color: var(--accent); }
-}
-
 /* ========== Message Groups (Slack-style) ========== */
 .message-group {
     display: flex;

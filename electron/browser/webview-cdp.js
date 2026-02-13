@@ -111,19 +111,6 @@ function onEvent(method, callback) {
     eventListeners.get(method).add(callback);
 }
 
-/**
- * Unsubscribe from a CDP event.
- * @param {string} method
- * @param {Function} callback
- */
-function offEvent(method, callback) {
-    const listeners = eventListeners.get(method);
-    if (listeners) {
-        listeners.delete(callback);
-        if (listeners.size === 0) eventListeners.delete(method);
-    }
-}
-
 // --- High-level page management ---
 
 /**
@@ -167,37 +154,6 @@ async function navigate(url, timeoutMs = 15000) {
             reject(err);
         });
     });
-}
-
-/**
- * Go back in history.
- */
-async function goBack() {
-    if (!guestContents) return;
-    const history = await sendCommand('Page.getNavigationHistory');
-    if (history.currentIndex > 0) {
-        const entry = history.entries[history.currentIndex - 1];
-        await sendCommand('Page.navigateToHistoryEntry', { entryId: entry.id });
-    }
-}
-
-/**
- * Go forward in history.
- */
-async function goForward() {
-    if (!guestContents) return;
-    const history = await sendCommand('Page.getNavigationHistory');
-    if (history.currentIndex < history.entries.length - 1) {
-        const entry = history.entries[history.currentIndex + 1];
-        await sendCommand('Page.navigateToHistoryEntry', { entryId: entry.id });
-    }
-}
-
-/**
- * Reload the page.
- */
-async function reload() {
-    await sendCommand('Page.reload');
 }
 
 /**
@@ -298,11 +254,7 @@ module.exports = {
     getWebContents,
     sendCommand,
     onEvent,
-    offEvent,
     navigate,
-    goBack,
-    goForward,
-    reload,
     getUrl,
     getTitle,
     captureScreenshot,

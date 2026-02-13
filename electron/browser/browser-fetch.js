@@ -132,5 +132,4 @@ async function fetchUrl(args = {}) {
 
 module.exports = {
     fetchUrl,
-    DEFAULT_MAX_CONTENT_LENGTH,
 };

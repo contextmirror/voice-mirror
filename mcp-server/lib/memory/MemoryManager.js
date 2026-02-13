@@ -17,7 +17,7 @@ const { createEmbeddingProvider, isLocalModelAvailable, LocalProvider } = requir
 const { hybridSearch, searchWithFallback } = require('./search/hybrid');
 const { searchKeyword } = require('./search/keyword');
 const { getMemoryDir, generateId, runWithConcurrency, sha256 } = require('./utils');
-const { findProjectTranscriptDir, listTranscriptFiles, extractTranscriptText } = require('./session-sync');
+
 
 /**
  * @typedef {Object} MemoryManagerConfig
@@ -282,49 +282,6 @@ class MemoryManager {
         }
 
         console.error(`[Memory] Indexed ${indexed} files (${pendingChunks.length} chunks), skipped ${skipped} unchanged`);
-    }
-
-    /**
-     * Sync Claude Code session transcripts into the index
-     * @param {string} [cwd] - Working directory to find project transcripts
-     */
-    async syncSessions(cwd) {
-        if (!this.store || !this.index) return;
-
-        const projectDir = cwd ? findProjectTranscriptDir(cwd) : null;
-        if (!projectDir) return;
-
-        const transcripts = await listTranscriptFiles(projectDir);
-        let indexed = 0;
-
-        for (const file of transcripts) {
-            const fileHash = `${file.size}-${file.mtime}`;
-            if (!this.index.needsReindex(file.path, fileHash)) continue;
-
-            try {
-                const { text } = await extractTranscriptText(file.path);
-                if (!text.trim()) continue;
-
-                // Chunk the transcript text
-                const chunks = Chunker.smartChunk(text, file.path, this.config.chunking);
-
-                // Delete old chunks for this file
-                this.index.deleteChunksForFile(file.path);
-
-                for (const chunk of chunks) {
-                    await this.indexChunk(file.path, chunk, 'volatile');
-                }
-
-                this.index.upsertFile(file.path, fileHash, file.mtime, file.size);
-                indexed++;
-            } catch (err) {
-                console.error(`[Memory] Session index error for ${path.basename(file.path)}: ${err.message}`);
-            }
-        }
-
-        if (indexed > 0) {
-            console.error(`[Memory] Indexed ${indexed} session transcripts`);
-        }
     }
 
     /**

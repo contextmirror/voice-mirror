@@ -403,26 +403,6 @@ export function setOrbState(state) {
     phaseStart = performance.now();
 }
 
-/**
- * Destroy the canvas renderer and stop animation.
- */
-export function destroyOrbCanvas() {
-    if (animFrame) {
-        cancelAnimationFrame(animFrame);
-        animFrame = null;
-    }
-    canvas = null;
-    ctx = null;
-}
-
-/**
- * Set the orb color palette. Pass null to revert to defaults.
- * @param {object|null} colors - Color config with borderRgb, centerRgb, edgeRgb, iconRgb, eyeRgb
- */
-export function setOrbColors(colors) {
-    currentOrbColors = colors;
-}
-
 export { renderOrb, DURATIONS };
 
 // Wire theme-engine callback at module level

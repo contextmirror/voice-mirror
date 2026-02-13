@@ -82,40 +82,8 @@ function createTrayService(options = {}) {
         return tray;
     }
 
-    /**
-     * Destroy the tray icon.
-     */
-    function destroy() {
-        if (tray) {
-            tray.destroy();
-            tray = null;
-            console.log('[Tray] System tray destroyed');
-        }
-    }
-
-    /**
-     * Get the tray instance.
-     * @returns {Tray|null} The tray instance or null
-     */
-    function getTray() {
-        return tray;
-    }
-
-    /**
-     * Update the tray tooltip.
-     * @param {string} tooltip - New tooltip text
-     */
-    function setTooltip(tooltip) {
-        if (tray) {
-            tray.setToolTip(tooltip);
-        }
-    }
-
     return {
-        create,
-        destroy,
-        getTray,
-        setTooltip
+        create
     };
 }
 

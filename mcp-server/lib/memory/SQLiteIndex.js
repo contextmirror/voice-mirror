@@ -108,46 +108,6 @@ class SQLiteIndex {
     }
 
     /**
-     * Delete file and its chunks
-     * @param {string} filePath
-     */
-    deleteFile(filePath) {
-        // Delete vectors for this file's chunks
-        if (this.vectorReady) {
-            try {
-                const chunkIds = this.db.prepare('SELECT id FROM chunks WHERE path = ?').all(filePath);
-                for (const { id } of chunkIds) {
-                    deleteVector(this.db, id);
-                }
-            } catch { /* vector table may not exist */ }
-        }
-
-        // Delete from FTS first
-        if (this.ftsAvailable) {
-            try {
-                this.db.prepare('DELETE FROM chunks_fts WHERE path = ?').run(filePath);
-            } catch {
-                // FTS might fail
-            }
-        }
-
-        // Delete chunks
-        this.db.prepare('DELETE FROM chunks WHERE path = ?').run(filePath);
-
-        // Delete file record
-        this.db.prepare('DELETE FROM files WHERE path = ?').run(filePath);
-    }
-
-    /**
-     * Get all tracked file paths
-     * @returns {string[]}
-     */
-    getTrackedFiles() {
-        const rows = this.db.prepare('SELECT path FROM files').all();
-        return rows.map(r => r.path);
-    }
-
-    /**
      * Insert or update a chunk
      * @param {Object} chunk
      * @param {string} chunk.id
@@ -317,55 +277,6 @@ class SQLiteIndex {
     }
 
     /**
-     * Batch check embedding cache
-     * @param {string} provider
-     * @param {string} model
-     * @param {string[]} textHashes
-     * @returns {Map<string, number[]>}
-     */
-    getCachedEmbeddingsBatch(provider, model, textHashes) {
-        const result = new Map();
-        if (textHashes.length === 0) return result;
-
-        // Process in batches to avoid SQLite parameter limits
-        const batchSize = 100;
-        for (let i = 0; i < textHashes.length; i += batchSize) {
-            const batch = textHashes.slice(i, i + batchSize);
-            const placeholders = batch.map(() => '?').join(', ');
-
-            const rows = this.db.prepare(`
-                SELECT text_hash, embedding FROM embedding_cache
-                WHERE provider = ? AND model = ? AND text_hash IN (${placeholders})
-            `).all(provider, model, ...batch);
-
-            for (const row of rows) {
-                result.set(row.text_hash, JSON.parse(row.embedding));
-            }
-        }
-
-        return result;
-    }
-
-    /**
-     * Prune old embedding cache entries
-     * @param {number} maxEntries - Maximum entries to keep
-     */
-    pruneEmbeddingCache(maxEntries = 10000) {
-        const count = this.db.prepare('SELECT COUNT(*) as c FROM embedding_cache').get().c;
-
-        if (count <= maxEntries) return;
-
-        const toDelete = count - maxEntries;
-        this.db.prepare(`
-            DELETE FROM embedding_cache WHERE rowid IN (
-                SELECT rowid FROM embedding_cache
-                ORDER BY updated_at ASC
-                LIMIT ?
-            )
-        `).run(toDelete);
-    }
-
-    /**
      * Get index statistics
      * @returns {Object}
      */
@@ -432,15 +343,6 @@ class SQLiteIndex {
             } catch { /* ignore */ }
         }
         dropAllData(this.db);
-    }
-
-    /**
-     * Run a transaction
-     * @param {Function} fn - Function to run in transaction
-     * @returns {*} Result of fn
-     */
-    transaction(fn) {
-        return this.db.transaction(fn)();
     }
 
     /**

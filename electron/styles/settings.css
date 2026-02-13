@@ -813,13 +813,6 @@
     background-image: url(../assets/icons/providers/gemini.svg);
 }
 
-.provider-icon-gemini-cli {
-    background: linear-gradient(135deg, #4285f4, #1a73e8);
-}
-.provider-icon-gemini-cli::before {
-    background-image: url(../assets/icons/providers/gemini.svg);
-}
-
 .provider-icon-ollama {
     background: linear-gradient(135deg, #f0f0f0, #d0d0d0);
 }
@@ -888,13 +881,6 @@
 }
 .provider-icon-opencode::before {
     background-image: url(../assets/icons/providers/opencode.svg);
-}
-
-.provider-icon-codex {
-    background: linear-gradient(135deg, #10a37f, #065f46);
-}
-.provider-icon-codex::before {
-    background-image: url(../assets/icons/providers/codex.svg);
 }
 
 /* ========== Provider Badge (inline pill next to name) ========== */

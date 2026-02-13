@@ -5,6 +5,49 @@ Format inspired by game dev patch notes — grouped by release, categorized by i
 
 ---
 
+## v0.8.1 — "Spring Cleaning" (2026-02-13)
+
+Deep codebase audit and cleanup: 7 agents scanned every source file for dead code, unused exports, unreachable paths, and tightening opportunities. A second pass caught cascading dead code created by the first round of removals. Three runtime bugs were also discovered and fixed.
+
+### Fixed
+- **Missing `os` import in main.js** — `startOllamaServer()` used `os.homedir()` without importing `os`, causing a crash on macOS/Linux Ollama path discovery
+- **Parentless dialogs in ipc-handlers.js** — Theme export/import and font upload dialogs called `ctx.getWindow()` (nonexistent) instead of `ctx.getMainWindow()`, resulting in dialogs with no parent window
+- **Broken config access in claude-spawner.js** — `getVoiceSystemPrompt()` called `config.get()` which doesn't exist; fixed to use `loadConfig()` properly
+
+### Removed
+- **12 dead files deleted** (~1,840 lines):
+  - `python/legacy/` entire folder (8 files) — old tool system with zero imports
+  - `electron/browser/browser-utils.js` — Playwright-era leftover, all functions duplicated locally
+  - `electron/browser/config.js` — Playwright browser-profile config, unused by webview architecture
+  - `electron/tools/handlers/web-search.js` — orphaned handler with no tool definition or wiring
+  - `electron/services/push-to-talk.js` — PTT fully handled by Python's GlobalHotkeyListener
+  - `mcp-server/lib/memory/SessionManager.js` — never instantiated
+  - `mcp-server/lib/memory/sync.js` — MemorySync file watcher, never instantiated
+  - `mcp-server/lib/memory/ConversationLogger.js` — never instantiated
+  - `mcp-server/lib/memory/session-sync.js` — only consumer was dead `syncSessions()` method
+  - `mcp-server/lib/memory/index.js`, `search/index.js` — barrel re-exports never imported
+  - Orphaned test files: `sync.test.js`, `session-sync.test.js`
+- **~75 dead exports/functions removed** across all modules:
+  - Electron core: `sendAIInput`, `isClaudeRunning`, `isClaudeAvailable`, `pttService` lifecycle, `updateCaptureButtonState`, unused window manager methods (`toggle`, `show`, `hide`, `isVisible`, `getPosition`, `setPosition`, `getBounds`, `setBounds`, `send`), unused tray methods (`destroy`, `getTray`, `setTooltip`), 6 dead config exports, dead font-manager test exports
+  - Renderer UI: entire tool card system (`addToolCallCard`, `addToolResultCard`, `getToolIcon`, `truncateResult`, `formatToolName`), `destroyOrbCanvas`, `setOrbColors`, `hideTerminal`, `getTerminalLocation`, `clearThemeOverrides`, `PRESET_NAMES`, dead `CLOUD_PROVIDERS_WITH_APIKEY` pathway, dead state properties (`terminalVisible`, `settingsVisible`)
+  - Services: `autoSelect`, `clearCache`, `getAllProviderConfigs`, `getDisplayName` from provider-detector; dead methods from inbox-watcher, perf-monitor, push-to-talk, uiohook-shared, logger, diagnostic-collector; dead exports from python-backend
+  - Browser: 9 dead re-exports from index.js, `trackError`/`isActive` from browser-controller, `offEvent`/`goBack`/`goForward`/`reload` from webview-cdp, `getStoredRefs`/`cachedRefsMode` from webview-actions
+  - Providers: 15 of 16 exports removed from providers/index.js (only `createProvider` kept), 6 dead base-provider methods + legacy callback system, 9 dead subclass overrides (`getType`, `isPTY`, `supportsMCP`), 7 dead openai-provider setter methods, dead claude-provider methods
+  - Tools: unused `getTool` import and dead `onToolCall`/`onToolResult`/`maxIterations` fields
+  - MCP: `syncSessions` from MemoryManager, `mergeSmallChunks` from Chunker, 5 dead SQLiteIndex methods, `searchVectorBatch`/`findMostSimilar` from vector search, `getRecommendedProvider` and class re-exports from embeddings, `debounce` from utils
+- **Dead CSS** (~70 lines): legacy `.message` styles, `.terminal-line` styles, `#terminal-close`, `.stagger-*` animation utilities, `.provider-icon-codex`, `.provider-icon-gemini-cli`
+- **Dead IPC channels**: `backend-response` (never sent), `toggle-perf-monitor` (no-op)
+- **Dead dependency**: removed `chokidar` from mcp-server/package.json (only used by deleted sync.js)
+- **Duplicate eslint entry**: removed duplicate `Notification: "readonly"` in eslint.config.js
+
+### Technical
+- 66 files changed, +75/-3,463 lines
+- All 477 tests passing after cleanup
+- Two-pass audit approach: first pass removed obvious dead code, second pass caught cascading dead code (e.g. push-to-talk.js orphaned after its import was removed)
+- Platform-specific code preserved: wayland-orb.js (Linux), input group escalation (Linux), cross-platform path resolution
+
+---
+
 ## v0.8.0 — "The Ghost in the Shell" (2026-02-12)
 
 Replaces xterm.js with [ghostty-web](https://github.com/coder/ghostty-web) — Ghostty's VT parser compiled to WASM. The result: better TUI rendering for Claude Code and OpenCode, rock-solid provider switching with 4-layer output gating, and zero xterm.js dependencies. Also fixes the long-standing mouse keybind collision bug (Discord/OBS-style non-suppression), adds tool profile support for OpenCode, and bumps the MCP listen timeout to 5 minutes.

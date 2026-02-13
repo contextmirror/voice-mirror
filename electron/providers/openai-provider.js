@@ -44,10 +44,6 @@ class OpenAIProvider extends BaseProvider {
         this.onToolResult = null;
     }
 
-    getType() {
-        return this.providerType;
-    }
-
     getDisplayName() {
         if (this.model) {
             // Shorten model name for display (e.g., "llama3.2:latest" -> "llama3.2")
@@ -55,18 +51,6 @@ class OpenAIProvider extends BaseProvider {
             return `${this.providerName} (${shortModel})`;
         }
         return this.providerName;
-    }
-
-    getLoadedModel() {
-        return this.model;
-    }
-
-    isPTY() {
-        return false;
-    }
-
-    supportsMCP() {
-        return false;  // OpenAI API doesn't support MCP tools natively
     }
 
     supportsVision() {
@@ -612,31 +596,6 @@ class OpenAIProvider extends BaseProvider {
     }
 
     /**
-     * Clear conversation history
-     */
-    clearHistory() {
-        this.messages = [];
-        this.currentToolIteration = 0;
-
-        // Re-add system prompt (use correct type for provider)
-        let systemPrompt = this.systemPrompt;
-        if (!systemPrompt && this.supportsTools()) {
-            if (this.supportsNativeTools()) {
-                systemPrompt = this.toolExecutor.getBasicPrompt();
-            } else {
-                systemPrompt = this.toolExecutor.getSystemPrompt();
-            }
-        }
-
-        if (systemPrompt) {
-            this.messages.push({
-                role: 'system',
-                content: systemPrompt
-            });
-        }
-    }
-
-    /**
      * Limit message history to prevent context overflow.
      * Keeps system message + last N messages.
      * When trimming, ensures assistant messages with tool_calls stay paired
@@ -659,42 +618,6 @@ class OpenAIProvider extends BaseProvider {
 
         this.messages = [...system, ...recent];
         console.log(`[OpenAIProvider] Trimmed history to ${this.messages.length} messages`);
-    }
-
-    /**
-     * Enable or disable tool support
-     */
-    setToolsEnabled(enabled) {
-        this.toolsEnabled = enabled;
-        console.log(`[OpenAIProvider] Tools ${enabled ? 'enabled' : 'disabled'}`);
-    }
-
-    /**
-     * Set the model to use
-     */
-    setModel(model) {
-        this.model = model;
-        console.log(`[OpenAIProvider] Model set to: ${model}`);
-    }
-
-    /**
-     * Set API key
-     */
-    setApiKey(apiKey) {
-        this.apiKey = apiKey;
-    }
-
-    /**
-     * Set system prompt
-     */
-    setSystemPrompt(prompt) {
-        this.systemPrompt = prompt;
-        // Update messages if already running
-        if (this.messages.length > 0 && this.messages[0].role === 'system') {
-            this.messages[0].content = prompt;
-        } else if (prompt) {
-            this.messages.unshift({ role: 'system', content: prompt });
-        }
     }
 
     /**
@@ -729,62 +652,6 @@ class OpenAIProvider extends BaseProvider {
         };
     }
 
-    /**
-     * Test connection to the provider
-     */
-    async testConnection() {
-        try {
-            const url = this.baseUrl + '/v1/models';
-            const headers = { 'Content-Type': 'application/json' };
-            if (this.apiKey) {
-                headers['Authorization'] = `Bearer ${this.apiKey}`;
-            }
-
-            const response = await fetch(url, {
-                method: 'GET',
-                headers,
-                signal: AbortSignal.timeout(5000)
-            });
-
-            return response.ok;
-        } catch {
-            return false;
-        }
-    }
-
-    /**
-     * Fetch available models from the provider
-     */
-    async fetchModels() {
-        try {
-            const url = this.baseUrl + '/v1/models';
-            const headers = { 'Content-Type': 'application/json' };
-            if (this.apiKey) {
-                headers['Authorization'] = `Bearer ${this.apiKey}`;
-            }
-
-            const response = await fetch(url, {
-                method: 'GET',
-                headers,
-                signal: AbortSignal.timeout(5000)
-            });
-
-            if (!response.ok) {
-                return [];
-            }
-
-            const data = await response.json();
-            if (data.data && Array.isArray(data.data)) {
-                return data.data.map(m => m.id).filter(Boolean);
-            }
-            if (data.models && Array.isArray(data.models)) {
-                return data.models.map(m => m.name || m.id).filter(Boolean);
-            }
-            return [];
-        } catch {
-            return [];
-        }
-    }
 }
 
 /**

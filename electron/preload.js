@@ -75,11 +75,6 @@ contextBridge.exposeInMainWorld('voiceMirror', {
     // Send image to Python backend for Claude vision
     sendImageToBackend: (imageData) => ipcRenderer.invoke('send-image', imageData),
 
-    // Listen for responses from backend
-    onBackendResponse: (callback) => {
-        ipcRenderer.on('backend-response', (event, data) => callback(data));
-    },
-
     // Listen for chat messages (transcriptions and responses)
     onChatMessage: (callback) => {
         ipcRenderer.on('chat-message', (event, data) => callback(data));

@@ -38,20 +38,6 @@ function _getDataDir() {
 const DATA_DIR = _getDataDir();
 const INBOX_PATH = path.join(DATA_DIR, 'inbox.json');
 
-/**
- * System prompt for Voice Mirror's Claude
- */
-function getVoiceSystemPrompt() {
-    try {
-        const config = require('./config');
-        const userName = config.get('user.name') || 'user';
-        return `Use claude_listen to wait for voice input from ${userName}, then reply with claude_send. Loop forever.`;
-    } catch {
-        return `Use claude_listen to wait for voice input from user, then reply with claude_send. Loop forever.`;
-    }
-}
-const VOICE_CLAUDE_SYSTEM = getVoiceSystemPrompt();
-
 let ptyProcess = null;
 let outputCallback = null;
 let readyCallbacks = [];
@@ -460,13 +446,6 @@ function sendInputWhenReady(text, timeout = 15000) {
 }
 
 /**
- * Check if Claude TUI is ready for input
- */
-function isClaudeReady() {
-    return isReady;
-}
-
-/**
  * Stop the Claude PTY process
  */
 function stopClaude() {
@@ -497,45 +476,6 @@ function resizePty(cols, rows) {
     }
 }
 
-/**
- * Write a response to the inbox (for manual/fallback use)
- */
-function writeResponseToInbox(message) {
-    // Ensure data directory exists
-    if (!fs.existsSync(DATA_DIR)) {
-        fs.mkdirSync(DATA_DIR, { recursive: true });
-    }
-
-    // Load existing messages
-    let data = { messages: [] };
-    if (fs.existsSync(INBOX_PATH)) {
-        try {
-            data = JSON.parse(fs.readFileSync(INBOX_PATH, 'utf-8'));
-            if (!data.messages) data.messages = [];
-        } catch {}
-    }
-
-    // Create new message
-    const newMessage = {
-        id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        from: 'voice-claude',
-        message: message,
-        timestamp: new Date().toISOString(),
-        read_by: [],
-        thread_id: 'voice-mirror'
-    };
-
-    data.messages.push(newMessage);
-
-    // Keep last 100 messages
-    if (data.messages.length > 100) {
-        data.messages = data.messages.slice(-100);
-    }
-
-    fs.writeFileSync(INBOX_PATH, JSON.stringify(data), 'utf-8');
-    return newMessage;
-}
-
 module.exports = {
     spawnClaude,
     stopClaude,
@@ -543,10 +483,6 @@ module.exports = {
     sendRawInput,
     sendInputWhenReady,
     isClaudeRunning,
-    isClaudeReady,
     resizePty,
-    configureMCPServer,
-    isClaudeAvailable,
-    writeResponseToInbox,
-    VOICE_CLAUDE_SYSTEM
+    isClaudeAvailable
 };

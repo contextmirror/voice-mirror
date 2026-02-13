@@ -39,10 +39,6 @@ function hasActiveTrace() {
     return activeTraceId !== null;
 }
 
-function getActiveTraceId() {
-    return activeTraceId;
-}
-
 function getTrace(traceId) {
     return traces.get(traceId);
 }
@@ -93,7 +89,6 @@ module.exports = {
     addStage,
     addActiveStage,
     hasActiveTrace,
-    getActiveTraceId,
     getTrace,
     endTrace,
     clearTrace

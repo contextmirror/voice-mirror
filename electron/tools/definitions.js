@@ -142,13 +142,6 @@ const tools = {
 };
 
 /**
- * Get tool definition by name
- */
-function getTool(name) {
-    return tools[name] || null;
-}
-
-/**
  * Get all tool definitions
  */
 function getAllTools() {
@@ -182,8 +175,6 @@ function validateArgs(toolName, args) {
 }
 
 module.exports = {
-    tools,
-    getTool,
     getAllTools,
     getToolNames,
     validateArgs

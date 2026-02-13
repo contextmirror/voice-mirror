@@ -15,7 +15,6 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "~1.0.0",
     "better-sqlite3": "~12.6.2",
-    "chokidar": "~3.6.0",
     "sqlite-vec": "~0.1.7-alpha.2"
   },
   "optionalDependencies": {

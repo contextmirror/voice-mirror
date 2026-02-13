@@ -20,7 +20,6 @@ function createPerfMonitor(options = {}) {
     let interval = null;
     let prevCpuUsage = null;
     let prevTime = null;
-    let pendingEvent = '';
     let logPath = null;
     const MAX_LOG_LINES = 10000;
 
@@ -34,7 +33,7 @@ function createPerfMonitor(options = {}) {
         // Write CSV header if file doesn't exist
         if (!fs.existsSync(logPath)) {
             fs.mkdirSync(dir, { recursive: true });
-            fs.writeFileSync(logPath, 'timestamp,cpu_pct,heap_mb,rss_mb,event\n');
+            fs.writeFileSync(logPath, 'timestamp,cpu_pct,heap_mb,rss_mb\n');
         }
 
         prevCpuUsage = process.cpuUsage();
@@ -58,14 +57,10 @@ function createPerfMonitor(options = {}) {
         const rssMb = (mem.rss / 1048576).toFixed(1);
         const cpuRounded = cpuPct.toFixed(1);
 
-        const event = pendingEvent || '';
-        pendingEvent = '';
-
         const stats = {
             cpu: parseFloat(cpuRounded),
             heap: parseFloat(heapMb),
-            rss: parseFloat(rssMb),
-            event
+            rss: parseFloat(rssMb)
         };
 
         // Send to renderer
@@ -75,7 +70,7 @@ function createPerfMonitor(options = {}) {
 
         // Append to CSV (fire and forget)
         const timestamp = new Date(now).toISOString();
-        const line = `${timestamp},${cpuRounded},${heapMb},${rssMb},${event}\n`;
+        const line = `${timestamp},${cpuRounded},${heapMb},${rssMb}\n`;
         fsPromises.appendFile(logPath, line).catch(() => {});
 
         // Rotate if needed (check every 100 samples ~5min)
@@ -98,14 +93,6 @@ function createPerfMonitor(options = {}) {
         } catch {}
     }
 
-    /**
-     * Tag the next sample with an event name.
-     * @param {string} name - Event name (e.g. 'provider_start:ollama')
-     */
-    function logEvent(name) {
-        pendingEvent = name;
-    }
-
     function stop() {
         if (interval) {
             clearInterval(interval);
@@ -118,7 +105,7 @@ function createPerfMonitor(options = {}) {
         return interval !== null;
     }
 
-    return { start, stop, logEvent, isRunning };
+    return { start, stop, isRunning };
 }
 
 module.exports = { createPerfMonitor };

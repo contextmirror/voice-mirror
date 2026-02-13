@@ -151,22 +151,6 @@ async function saveSidebarState() {
 }
 
 /**
- * Get current page
- * @returns {string} Current page name
- */
-export function getCurrentPage() {
-    return state.currentPage;
-}
-
-/**
- * Check if sidebar is collapsed
- * @returns {boolean} True if sidebar is collapsed
- */
-export function isSidebarCollapsed() {
-    return state.sidebarCollapsed;
-}
-
-/**
  * Show terminal context menu at position
  * @param {number} x - X coordinate
  * @param {number} y - Y coordinate

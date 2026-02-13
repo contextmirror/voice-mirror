@@ -9,7 +9,7 @@
  * NOTE: Uses Electron 28. The basic window works - tested 2026-01-24.
  */
 
-const { app, BrowserWindow, ipcMain, desktopCapturer, screen, globalShortcut, shell, powerMonitor } = require('electron');
+const { app, BrowserWindow, ipcMain, desktopCapturer, globalShortcut, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -19,11 +19,8 @@ const fs = require('fs');
 // when available, falling back to the Electron window on X11/non-Wayland.
 const config = require('./config');
 const { registerIpcHandlers } = require('./ipc-handlers');
-// CLI agent providers that use PTY mode (terminal-based)
-const CLI_PROVIDERS = ['claude', 'opencode'];
 // Note: claude-spawner and providers are now used via ai-manager service
 const { createLogger } = require('./services/logger');
-const { createPushToTalk } = require('./services/push-to-talk');
 const { createHotkeyManager } = require('./services/hotkey-manager');
 const uiohookShared = require('./services/uiohook-shared');
 const { createPythonBackend, startDockerServices } = require('./services/python-backend');
@@ -39,9 +36,6 @@ const { createWaylandOrb } = require('./services/wayland-orb');
 
 // File logging - uses logger service
 const logger = createLogger();
-
-// Push-to-talk service (initialized after app.whenReady with globalShortcut)
-let pttService = null;
 
 // Hotkey manager (dual-layer: uiohook + globalShortcut)
 let hotkeyManager = null;
@@ -209,10 +203,6 @@ function sendToPython(command) {
 function ensureLocalLLMRunning(providerName, config) {
     if (providerName !== 'ollama') return;
 
-    const { execSync, spawn: spawnDetached } = require('child_process');
-    const fs = require('fs');
-    const path = require('path');
-
     // Check if Ollama is already responding
     try {
         const endpoint = config?.ai?.endpoints?.ollama || 'http://127.0.0.1:11434';
@@ -233,8 +223,7 @@ async function startOllamaServer(config) {
     const { spawn: spawnDetached, execFile } = require('child_process');
     const { promisify } = require('util');
     const execFileAsync = promisify(execFile);
-    const path = require('path');
-    const fs = require('fs');
+    const os = require('os');
 
     // Find ollama executable (async to avoid blocking main thread)
     let ollamaPath = null;
@@ -379,23 +368,6 @@ function interruptAIProvider() {
     return false;
 }
 
-function sendAIInput(text) {
-    if (aiManager) {
-        return aiManager.sendTextInput(text);
-    }
-    return false;
-}
-
-// Helper to check if Claude is running (for backward compatibility in IPC handlers)
-function isClaudeRunning() {
-    return aiManager?.isClaudeRunning() || false;
-}
-
-// Helper to check if Claude CLI is available
-function isClaudeAvailable() {
-    return aiManager?.isClaudeAvailable() || false;
-}
-
 // Inbox watcher helper functions that delegate to inboxWatcherService
 function startInboxWatcher() {
     if (inboxWatcherService) {
@@ -461,9 +433,6 @@ if (isLinux) {
 app.whenReady().then(() => {
     // Initialize file logging
     logger.init();
-
-    // Initialize push-to-talk service (needs globalShortcut from app.whenReady)
-    pttService = createPushToTalk({ globalShortcut });
 
     // Load configuration
     appConfig = config.loadConfig();
@@ -935,13 +904,7 @@ app.on('before-quit', async () => {
         waylandOrb.stop();
     }
 
-    // Stop push-to-talk service
-    if (pttService) {
-        pttService.stop();
-        logger.log('APP', 'PTT service stopped');
-    }
-
-    // Stop shared uiohook (after PTT and hotkey manager are done)
+    // Stop shared uiohook (after hotkey manager is done)
     uiohookShared.stop();
 
     // Stop update checker

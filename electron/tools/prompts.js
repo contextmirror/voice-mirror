@@ -233,6 +233,5 @@ Keep responses concise (1-3 sentences) as they will be spoken aloud. No markdown
 
 module.exports = {
     getToolSystemPrompt,
-    getBasicSystemPrompt,
-    buildToolDocs
+    getBasicSystemPrompt
 };

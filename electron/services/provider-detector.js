@@ -396,73 +396,11 @@ class ProviderDetectorService {
     }
 
     /**
-     * Auto-select a provider based on saved preference or first available
-     * @param {Object} savedConfig - Saved AI configuration from config.js
-     * @returns {Promise<Object|null>} Selected provider status
-     */
-    async autoSelect(savedConfig = {}) {
-        const savedType = savedConfig.provider;
-        const savedModel = savedConfig.model;
-        const endpoints = savedConfig.endpoints || {};
-
-        // If Claude is selected, return it (no detection needed)
-        if (savedType === 'claude') {
-            return {
-                type: 'claude',
-                name: 'Claude Code',
-                online: true,  // Assume available (uses CLI)
-                models: [],
-                model: null
-            };
-        }
-
-        // Check if saved local provider is online
-        if (savedType && LOCAL_PROVIDERS[savedType]) {
-            const customEndpoint = endpoints[savedType] || null;
-            const status = await this.checkProvider(savedType, customEndpoint);
-
-            if (status.online) {
-                console.log(`[ProviderDetector] Using saved provider: ${status.name}`);
-
-                // Use saved model preference if available
-                if (savedModel && status.models.includes(savedModel)) {
-                    status.model = savedModel;
-                    console.log(`[ProviderDetector] Using saved model: ${savedModel}`);
-                } else if (status.model) {
-                    console.log(`[ProviderDetector] Using default model: ${status.model}`);
-                }
-
-                return status;
-            }
-        }
-
-        // Fall back to first available
-        console.log('[ProviderDetector] Saved provider offline or not set, scanning for alternatives...');
-        const first = await this.getFirstAvailable();
-
-        if (first) {
-            console.log(`[ProviderDetector] Auto-selected: ${first.name} (${first.model || 'default'})`);
-        } else {
-            console.log('[ProviderDetector] No local providers found');
-        }
-
-        return first;
-    }
-
-    /**
      * Get cached status without network call
      * @returns {Array} List of cached provider statuses
      */
     getCachedStatus() {
         return Array.from(this.cachedStatus.values());
-    }
-
-    /**
-     * Clear cache and force rescan on next getAvailable()
-     */
-    clearCache() {
-        this.cachedStatus.clear();
-        this.lastScan = 0;
     }
 
     /**
@@ -474,35 +412,6 @@ class ProviderDetectorService {
         return LOCAL_PROVIDERS[type] || CLOUD_PROVIDERS[type] || null;
     }
 
-    /**
-     * Get all provider configurations
-     * @returns {Object} All provider configs (local + cloud)
-     */
-    getAllProviderConfigs() {
-        return {
-            local: { ...LOCAL_PROVIDERS },
-            cloud: { ...CLOUD_PROVIDERS }
-        };
-    }
-
-    /**
-     * Get display name for a provider type
-     * @param {string} type - Provider type
-     * @param {string} model - Optional model name to include
-     * @returns {string} Display name
-     */
-    getDisplayName(type, model = null) {
-        const config = this.getProviderConfig(type);
-        const name = config?.name || type;
-
-        if (model) {
-            // Shorten model name for display (e.g., "llama3.2:latest" -> "llama3.2")
-            const shortModel = model.split(':')[0];
-            return `${name} (${shortModel})`;
-        }
-
-        return name;
-    }
 }
 
 /**

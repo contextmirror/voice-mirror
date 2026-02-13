@@ -194,7 +194,6 @@ function registerIpcHandlers(ctx) {
     });
 
     ipcMain.handle('quit-app', () => {
-        const { app } = require('electron');
         app.isQuitting = true;
         app.quit();
     });
@@ -811,7 +810,7 @@ function registerIpcHandlers(ctx) {
     // Theme export — save theme JSON to file
     ipcMain.handle('theme-export', async (_event, themeData) => {
         try {
-            const win = ctx.getWindow?.();
+            const win = ctx.getMainWindow();
             const { canceled, filePath } = await dialog.showSaveDialog(win, {
                 title: 'Export Theme',
                 defaultPath: `${(themeData.name || 'theme').replace(/[^a-zA-Z0-9_-]/g, '_')}.json`,
@@ -829,7 +828,7 @@ function registerIpcHandlers(ctx) {
     // Theme import — read theme JSON from file
     ipcMain.handle('theme-import', async () => {
         try {
-            const win = ctx.getWindow?.();
+            const win = ctx.getMainWindow();
             const { canceled, filePaths } = await dialog.showOpenDialog(win, {
                 title: 'Import Theme',
                 filters: [{ name: 'Theme Files', extensions: ['json'] }],
@@ -848,7 +847,7 @@ function registerIpcHandlers(ctx) {
     // ========== Custom Font Management ==========
 
     ipcMain.handle('font-upload', async () => {
-        const win = ctx.getWindow?.();
+        const win = ctx.getMainWindow();
         const { canceled, filePaths } = await dialog.showOpenDialog(win, {
             title: 'Upload Font',
             filters: [{ name: 'Font Files', extensions: ['ttf', 'otf', 'woff', 'woff2'] }],

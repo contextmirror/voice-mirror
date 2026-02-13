@@ -230,7 +230,7 @@ export async function autoSave() {
 /**
  * Format an ISO date string as a human-readable relative time.
  */
-export function formatRelativeTime(dateString) {
+function formatRelativeTime(dateString) {
     if (!dateString) return '';
 
     const now = Date.now();

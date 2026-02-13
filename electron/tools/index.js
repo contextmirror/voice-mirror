@@ -5,7 +5,7 @@
  * and returns results for injection back into the conversation.
  */
 
-const { getTool, getToolNames, validateArgs } = require('./definitions');
+const { getToolNames, validateArgs } = require('./definitions');
 const { getToolSystemPrompt, getBasicSystemPrompt } = require('./prompts');
 const handlers = require('./handlers');
 
@@ -56,9 +56,6 @@ function truncateText(text, maxChars) {
 class ToolExecutor {
     constructor(options = {}) {
         this.options = options;
-        this.maxIterations = options.maxIterations || 3;
-        this.onToolCall = options.onToolCall || null;  // Callback for UI updates
-        this.onToolResult = options.onToolResult || null;
     }
 
     /**

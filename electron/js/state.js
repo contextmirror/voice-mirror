@@ -13,10 +13,8 @@ export const state = {
     currentModel: null,             // Model ID (e.g., 'llama3.2:latest', 'gpt-4')
     detectedProviders: [],          // List of auto-detected local providers
     // Terminal state
-    terminalVisible: false,         // Whether terminal panel is visible on chat page
     terminalMinimized: false,
     terminalLocation: 'fullscreen', // 'fullscreen' | 'chat-bottom' - where terminal is displayed
-    settingsVisible: false,
     recordingKeybind: null,
     currentConfig: {},
     // Screenshot + voice workflow

@@ -216,50 +216,9 @@ function smartChunk(content, filePath, options = {}) {
     return chunkMarkdown(content, options);
 }
 
-/**
- * Merge small adjacent chunks
- * @param {Chunk[]} chunks - Array of chunks
- * @param {number} minTokens - Minimum tokens per chunk
- * @returns {Chunk[]}
- */
-function mergeSmallChunks(chunks, minTokens = 100) {
-    if (chunks.length <= 1) return chunks;
-
-    const result = [];
-    let current = null;
-
-    for (const chunk of chunks) {
-        if (!current) {
-            current = { ...chunk };
-            continue;
-        }
-
-        // Merge if current chunk is too small
-        if (current.tokens < minTokens) {
-            current = {
-                text: current.text + '\n' + chunk.text,
-                startLine: current.startLine,
-                endLine: chunk.endLine,
-                hash: sha256(current.text + '\n' + chunk.text),
-                tokens: current.tokens + chunk.tokens
-            };
-        } else {
-            result.push(current);
-            current = { ...chunk };
-        }
-    }
-
-    if (current) {
-        result.push(current);
-    }
-
-    return result;
-}
-
 module.exports = {
     chunkMarkdown,
     chunkConversationLog,
     smartChunk,
-    mergeSmallChunks,
     getOverlapLines
 };

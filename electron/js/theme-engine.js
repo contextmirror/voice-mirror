@@ -13,7 +13,7 @@ export function hexToRgb(hex) {
     return { r: parseInt(m[1], 16), g: parseInt(m[2], 16), b: parseInt(m[3], 16) };
 }
 
-export function rgbToHex(r, g, b) {
+function rgbToHex(r, g, b) {
     const c = (v) => Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, '0');
     return `#${c(r)}${c(g)}${c(b)}`;
 }
@@ -50,7 +50,7 @@ function hslToRgb(h, s, l) {
     };
 }
 
-export function lighten(hex, amount) {
+function lighten(hex, amount) {
     const { r, g, b } = hexToRgb(hex);
     const hsl = rgbToHsl(r, g, b);
     hsl.l = Math.min(1, hsl.l + amount);
@@ -58,7 +58,7 @@ export function lighten(hex, amount) {
     return rgbToHex(rgb.r, rgb.g, rgb.b);
 }
 
-export function darken(hex, amount) {
+function darken(hex, amount) {
     const { r, g, b } = hexToRgb(hex);
     const hsl = rgbToHsl(r, g, b);
     hsl.l = Math.max(0, hsl.l - amount);
@@ -66,7 +66,7 @@ export function darken(hex, amount) {
     return rgbToHex(rgb.r, rgb.g, rgb.b);
 }
 
-export function blend(hex1, hex2, t) {
+function blend(hex1, hex2, t) {
     const c1 = hexToRgb(hex1);
     const c2 = hexToRgb(hex2);
     return rgbToHex(
@@ -76,7 +76,7 @@ export function blend(hex1, hex2, t) {
     );
 }
 
-export function hexToRgba(hex, alpha) {
+function hexToRgba(hex, alpha) {
     const { r, g, b } = hexToRgb(hex);
     return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
@@ -170,7 +170,6 @@ export const PRESETS = {
     }
 };
 
-export const PRESET_NAMES = Object.keys(PRESETS);
 
 // ========== Derivation ==========
 
@@ -358,29 +357,6 @@ export function applyMessageCardOverrides(messageCard) {
     const chatContainer = document.getElementById('chat-container');
     if (chatContainer) {
         chatContainer.classList.toggle('chat-hide-avatars', messageCard.showAvatars === false);
-    }
-}
-
-/**
- * Clear all inline theme overrides, reverting to tokens.css defaults.
- */
-export function clearThemeOverrides() {
-    const props = [
-        '--bg', '--bg-accent', '--bg-elevated', '--bg-hover',
-        '--card', '--card-highlight',
-        '--text', '--text-strong', '--muted',
-        '--border', '--border-strong',
-        '--accent', '--accent-hover', '--accent-subtle', '--accent-glow',
-        '--ok', '--warn', '--danger',
-        '--shadow-sm', '--shadow-md', '--shadow-lg',
-        '--font-family', '--font-mono',
-        '--msg-font-size', '--msg-line-height', '--msg-padding', '--msg-avatar-size',
-        '--msg-user-bg', '--msg-user-border', '--msg-user-radius',
-        '--msg-ai-bg', '--msg-ai-border', '--msg-ai-radius',
-    ];
-    const root = document.documentElement;
-    for (const prop of props) {
-        root.style.removeProperty(prop);
     }
 }
 

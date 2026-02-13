@@ -14,10 +14,6 @@ class ClaudeProvider extends BaseProvider {
         this.ready = false;
     }
 
-    getType() {
-        return 'claude';
-    }
-
     getDisplayName() {
         return 'Claude Code';
     }
@@ -27,21 +23,6 @@ class ClaudeProvider extends BaseProvider {
      */
     static isAvailable() {
         return claudeSpawner.isClaudeAvailable();
-    }
-
-    /**
-     * Configure MCP server for Claude with tool profile from config
-     */
-    configureMCP(appConfig) {
-        claudeSpawner.configureMCPServer(appConfig);
-    }
-
-    isPTY() {
-        return true;
-    }
-
-    supportsMCP() {
-        return true;
     }
 
     supportsVision() {
@@ -134,19 +115,6 @@ class ClaudeProvider extends BaseProvider {
         return result;
     }
 
-    /**
-     * Write a response to the inbox (for fallback use)
-     */
-    writeResponseToInbox(message) {
-        return claudeSpawner.writeResponseToInbox(message);
-    }
-
-    /**
-     * Get the voice mode system prompt
-     */
-    static getVoiceSystemPrompt() {
-        return claudeSpawner.VOICE_CLAUDE_SYSTEM;
-    }
 }
 
 module.exports = { ClaudeProvider };

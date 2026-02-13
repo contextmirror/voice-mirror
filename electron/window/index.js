@@ -4,7 +4,7 @@
  */
 
 const { BrowserWindow, screen } = require('electron');
-const { execSync, execFileSync } = require('child_process');
+const { execFileSync } = require('child_process');
 const path = require('path');
 
 /**
@@ -322,19 +322,6 @@ function createWindowManager(options = {}) {
     }
 
     /**
-     * Toggle between expanded and collapsed states.
-     * @returns {boolean} New expanded state
-     */
-    function toggle() {
-        if (isExpanded) {
-            collapse();
-        } else {
-            expand();
-        }
-        return isExpanded;
-    }
-
-    /**
      * Get the main window instance.
      * @returns {BrowserWindow|null} The main window or null
      */
@@ -358,101 +345,13 @@ function createWindowManager(options = {}) {
         return getOrbSize();
     }
 
-    /**
-     * Show the window.
-     */
-    function show() {
-        mainWindow?.show();
-    }
-
-    /**
-     * Hide the window.
-     */
-    function hide() {
-        mainWindow?.hide();
-    }
-
-    /**
-     * Check if window is visible.
-     * @returns {boolean} True if visible
-     */
-    function isVisible() {
-        return mainWindow?.isVisible() || false;
-    }
-
-    /**
-     * Get window position.
-     * @returns {Object} { x, y } position
-     */
-    function getPosition() {
-        if (mainWindow) {
-            const [x, y] = mainWindow.getPosition();
-            return { x, y };
-        }
-        return { x: 0, y: 0 };
-    }
-
-    /**
-     * Set window position.
-     * @param {number} x - X coordinate
-     * @param {number} y - Y coordinate
-     */
-    function setPosition(x, y) {
-        if (mainWindow) {
-            const [width, height] = mainWindow.getSize();
-            const clamped = clampToVisibleArea(x, y, width, height);
-            mainWindow.setPosition(clamped.x, clamped.y);
-        }
-    }
-
-    /**
-     * Get window bounds.
-     * @returns {Object} Window bounds { x, y, width, height }
-     */
-    function getBounds() {
-        return mainWindow?.getBounds() || { x: 0, y: 0, width: 0, height: 0 };
-    }
-
-    /**
-     * Set window bounds.
-     * @param {Object} bounds - { x, y, width, height }
-     */
-    function setBounds(bounds) {
-        if (mainWindow) {
-            mainWindow.setBounds({
-                x: Math.round(bounds.x),
-                y: Math.round(bounds.y),
-                width: bounds.width,
-                height: bounds.height
-            });
-        }
-    }
-
-    /**
-     * Send a message to the renderer via webContents.
-     * @param {string} channel - IPC channel name
-     * @param {...any} args - Arguments to send
-     */
-    function send(channel, ...args) {
-        mainWindow?.webContents.send(channel, ...args);
-    }
-
     return {
         create,
         expand,
         collapse,
-        toggle,
         getWindow,
         getIsExpanded,
-        getCurrentOrbSize,
-        show,
-        hide,
-        isVisible,
-        getPosition,
-        setPosition,
-        getBounds,
-        setBounds,
-        send
+        getCurrentOrbSize
     };
 }
 

@@ -7,9 +7,6 @@
 
 const https = require('https');
 
-// API configuration
-const SERPER_API_URL = 'https://google.serper.dev/search';
-
 /**
  * Search using Serper.dev API.
  *

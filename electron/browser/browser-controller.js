@@ -183,16 +183,6 @@ function trackConsoleMessage(msg) {
     }
 }
 
-/**
- * Add an error to tracked state.
- */
-function trackError(err) {
-    consoleState.errors.push(err);
-    if (consoleState.errors.length > 200) {
-        consoleState.errors = consoleState.errors.slice(-200);
-    }
-}
-
 // ============================================
 // Cookie Operations
 // ============================================
@@ -352,13 +342,6 @@ async function clearStorage(opts = {}) {
     return { ok: true, type: storageType };
 }
 
-/**
- * Check if browser is currently active.
- */
-function isActive() {
-    return browserActive && cdp.isAttached();
-}
-
 module.exports = {
     ensureBrowserAvailable,
     stopBrowser,
@@ -369,8 +352,6 @@ module.exports = {
     actOnTab,
     screenshotTab,
     trackConsoleMessage,
-    trackError,
-    isActive,
     setupDialogListener,
     getDialogState,
     getCookies,

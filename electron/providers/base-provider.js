@@ -13,16 +13,6 @@ class BaseProvider extends EventEmitter {
         this.config = config;
         this.running = false;
         this.model = null;
-        this.onOutput = null;  // Callback for output events (legacy)
-        this.onExit = null;    // Callback for exit events (legacy)
-    }
-
-    /**
-     * Get the provider type identifier
-     * @returns {string} Provider type (e.g., 'claude', 'ollama')
-     */
-    getType() {
-        throw new Error('getType() must be implemented by subclass');
     }
 
     /**
@@ -31,14 +21,6 @@ class BaseProvider extends EventEmitter {
      */
     getDisplayName() {
         throw new Error('getDisplayName() must be implemented by subclass');
-    }
-
-    /**
-     * Get the currently loaded model
-     * @returns {string|null} Model identifier or null
-     */
-    getLoadedModel() {
-        return this.model;
     }
 
     /**
@@ -93,33 +75,12 @@ class BaseProvider extends EventEmitter {
     }
 
     /**
-     * Set output callback
-     * @param {Function} callback - Called with { type: string, text: string }
-     */
-    setOutputCallback(callback) {
-        this.onOutput = callback;
-    }
-
-    /**
-     * Set exit callback
-     * @param {Function} callback - Called with exit code
-     */
-    setExitCallback(callback) {
-        this.onExit = callback;
-    }
-
-    /**
      * Emit output event
      * @param {string} type - Event type ('stdout', 'stderr', 'start', 'exit')
      * @param {string} text - Output text
      */
     emitOutput(type, text) {
-        // Emit via EventEmitter (preferred)
         this.emit('output', { type, text });
-        // Also call legacy callback if set
-        if (this.onOutput) {
-            this.onOutput({ type, text });
-        }
     }
 
     /**
@@ -128,20 +89,7 @@ class BaseProvider extends EventEmitter {
      */
     emitExit(code) {
         this.running = false;
-        // Emit via EventEmitter (preferred)
         this.emit('exit', code);
-        // Also call legacy callback if set
-        if (this.onExit) {
-            this.onExit(code);
-        }
-    }
-
-    /**
-     * Check if provider supports MCP tools
-     * @returns {boolean}
-     */
-    supportsMCP() {
-        return false;
     }
 
     /**
@@ -152,13 +100,6 @@ class BaseProvider extends EventEmitter {
         return false;
     }
 
-    /**
-     * Check if this is a PTY-based provider (interactive terminal)
-     * @returns {boolean}
-     */
-    isPTY() {
-        return false;
-    }
 }
 
 module.exports = { BaseProvider };

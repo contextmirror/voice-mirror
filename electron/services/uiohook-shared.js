@@ -1,7 +1,7 @@
 /**
  * Shared uiohook-napi singleton.
  *
- * Both push-to-talk and hotkey-manager need uiohook, but calling
+ * Hotkey-manager needs uiohook, but calling
  * uIOhook.start() twice crashes. This module ensures a single instance.
  *
  * Includes health monitoring: canary listeners track last event time,
@@ -13,7 +13,6 @@ const { EventEmitter } = require('events');
 const emitter = new EventEmitter();
 
 let uIOhook = null;
-let UiohookKey = null;
 let started = false;
 let loadError = null;
 
@@ -29,7 +28,6 @@ const STALE_THRESHOLD_MS = 120000;  // 120s with no events = likely dead (avoid 
 try {
     const mod = require('uiohook-napi');
     uIOhook = mod.uIOhook;
-    UiohookKey = mod.UiohookKey;
     console.log('[uiohook-shared] uiohook-napi loaded successfully');
 } catch (err) {
     loadError = err;
@@ -132,9 +130,6 @@ function stop() {
 /** @returns {Object|null} The uIOhook instance or null */
 function getHook() { return uIOhook; }
 
-/** @returns {Object|null} UiohookKey enum or null */
-function getKey() { return UiohookKey; }
-
 /** @returns {boolean} Whether uiohook-napi loaded successfully */
 function isAvailable() { return uIOhook !== null; }
 
@@ -143,7 +138,6 @@ function isStarted() { return started; }
 
 module.exports = {
     ensureStarted, stop, restart,
-    getHook, getKey, isAvailable, isStarted,
-    on: emitter.on.bind(emitter),
-    off: emitter.off.bind(emitter)
+    getHook, isAvailable, isStarted,
+    on: emitter.on.bind(emitter)
 };

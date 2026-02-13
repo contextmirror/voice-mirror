@@ -24,14 +24,6 @@ function setSerperApiKey(apiKey) {
 }
 
 /**
- * Get current Serper API key.
- * @returns {string|null}
- */
-function getSerperApiKey() {
-    return serperApiKey;
-}
-
-/**
  * Search the web.
  *
  * Uses Serper.dev API if configured, otherwise falls back to webview scraping.
@@ -161,5 +153,4 @@ module.exports = {
     webSearch,
     browserSearch,
     setSerperApiKey,
-    getSerperApiKey,
 };

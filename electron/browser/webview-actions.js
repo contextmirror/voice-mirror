@@ -33,7 +33,6 @@ function toAIFriendlyError(err, ref) {
 
 /** @type {Object} Cached role refs from last snapshot */
 let cachedRefs = {};
-let cachedRefsMode = 'role';
 
 /**
  * Store refs from a snapshot for later resolution.
@@ -42,15 +41,6 @@ let cachedRefsMode = 'role';
  */
 function storeRefs(refs, mode = 'role') {
     cachedRefs = refs || {};
-    cachedRefsMode = mode;
-}
-
-/**
- * Get stored refs.
- * @returns {Object}
- */
-function getStoredRefs() {
-    return cachedRefs;
 }
 
 /**
@@ -847,6 +837,5 @@ module.exports = {
     dialogDismissAction,
     executeAction,
     storeRefs,
-    getStoredRefs,
     resolveRef
 };

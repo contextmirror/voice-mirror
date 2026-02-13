@@ -25,7 +25,6 @@ describe('perf-monitor', () => {
         monitor = createPerfMonitor({ dataDir: tempDir });
         assert.strictEqual(typeof monitor.start, 'function');
         assert.strictEqual(typeof monitor.stop, 'function');
-        assert.strictEqual(typeof monitor.logEvent, 'function');
         assert.strictEqual(typeof monitor.isRunning, 'function');
     });
 
@@ -53,7 +52,7 @@ describe('perf-monitor', () => {
         const logPath = path.join(tempDir, 'perf-log.csv');
         assert.ok(fs.existsSync(logPath), 'perf-log.csv should exist');
         const header = fs.readFileSync(logPath, 'utf-8').trim();
-        assert.strictEqual(header, 'timestamp,cpu_pct,heap_mb,rss_mb,event');
+        assert.strictEqual(header, 'timestamp,cpu_pct,heap_mb,rss_mb');
     });
 
     it('should send stats via safeSend callback', async () => {
@@ -72,17 +71,6 @@ describe('perf-monitor', () => {
         assert.strictEqual(typeof s.cpu, 'number');
         assert.strictEqual(typeof s.heap, 'number');
         assert.strictEqual(typeof s.rss, 'number');
-    });
-
-    it('logEvent should tag the next sample', async () => {
-        monitor = createPerfMonitor({ dataDir: tempDir });
-        monitor.start();
-        monitor.logEvent('test_event');
-        // Wait for interval sample (3s) + async appendFile flush + CI margin
-        await new Promise(r => setTimeout(r, 5000));
-        const logPath = path.join(tempDir, 'perf-log.csv');
-        const content = fs.readFileSync(logPath, 'utf-8');
-        assert.ok(content.includes('test_event'), 'CSV should contain tagged event');
     });
 
     it('double start should be safe', () => {

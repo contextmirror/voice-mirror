@@ -4,36 +4,14 @@
  * Central module for creating and managing AI provider instances.
  */
 
-const { BaseProvider } = require('./base-provider');
 const { ClaudeProvider } = require('./claude-provider');
 const { CLIProvider } = require('./cli-provider');
-const { OpenAIProvider, createOpenAIProvider } = require('./openai-provider');
+const { createOpenAIProvider } = require('./openai-provider');
 
-// Provider type constants
+// Provider type constants (only types with special handling)
 const PROVIDER_TYPES = {
     CLAUDE: 'claude',
-    OPENCODE: 'opencode',
-    OLLAMA: 'ollama',
-    LMSTUDIO: 'lmstudio',
-    JAN: 'jan'
-};
-
-// CLI agent providers (full terminal access, PTY-based)
-const CLI_PROVIDERS = ['claude', 'opencode'];
-
-// Local providers (don't require API key)
-const LOCAL_PROVIDERS = ['ollama', 'lmstudio', 'jan'];
-
-// Cloud providers (require API key) — cloud access now goes through OpenCode
-const CLOUD_PROVIDERS = [];
-
-// Provider display names
-const PROVIDER_NAMES = {
-    claude: 'Claude Code',
-    ollama: 'Ollama',
-    lmstudio: 'LM Studio',
-    jan: 'Jan',
-    opencode: 'OpenCode'
+    OPENCODE: 'opencode'
 };
 
 /**
@@ -56,141 +34,6 @@ function createProvider(type, config = {}) {
     return createOpenAIProvider(type, config);
 }
 
-/**
- * Get display name for a provider type
- * @param {string} type - Provider type
- * @param {string} model - Optional model name to include
- * @returns {string} Display name
- */
-function getProviderDisplayName(type, model = null) {
-    const baseName = PROVIDER_NAMES[type] || type;
-
-    if (model) {
-        // Shorten model name (e.g., "llama3.2:latest" -> "llama3.2")
-        const shortModel = model.split(':')[0];
-        return `${baseName} (${shortModel})`;
-    }
-
-    return baseName;
-}
-
-/**
- * Check if a provider type is local (no API key required)
- * @param {string} type - Provider type
- * @returns {boolean}
- */
-function isLocalProvider(type) {
-    return LOCAL_PROVIDERS.includes(type);
-}
-
-/**
- * Check if a provider type is cloud (requires API key)
- * @param {string} type - Provider type
- * @returns {boolean}
- */
-function isCloudProvider(type) {
-    return CLOUD_PROVIDERS.includes(type);
-}
-
-/**
- * Check if a provider type uses PTY (interactive terminal)
- * @param {string} type - Provider type
- * @returns {boolean}
- */
-function isPTYProvider(type) {
-    return CLI_PROVIDERS.includes(type);
-}
-
-/**
- * Get all provider types
- * @returns {Array} List of provider types
- */
-function getAllProviderTypes() {
-    return Object.values(PROVIDER_TYPES);
-}
-
-/**
- * Get provider info for settings UI
- * @returns {Array} List of provider info objects
- */
-function getProviderList() {
-    return [
-        {
-            type: 'claude',
-            name: 'Claude Code',
-            description: 'Full Claude Code CLI with MCP tools',
-            isLocal: false,
-            isPTY: true,
-            requiresApiKey: false,
-            supportsVision: true,
-            supportsMCP: true
-        },
-        {
-            type: 'opencode',
-            name: 'OpenCode',
-            description: '75+ models via OpenCode CLI with MCP',
-            isLocal: false,
-            isPTY: true,
-            requiresApiKey: false,
-            supportsVision: false,
-            supportsMCP: true
-        },
-        {
-            type: 'ollama',
-            name: 'Ollama',
-            description: 'Local LLM runtime',
-            isLocal: true,
-            isPTY: false,
-            requiresApiKey: false,
-            supportsVision: true,  // With llava
-            supportsMCP: false
-        },
-        {
-            type: 'lmstudio',
-            name: 'LM Studio',
-            description: 'Local LLM with GUI',
-            isLocal: true,
-            isPTY: false,
-            requiresApiKey: false,
-            supportsVision: true,
-            supportsMCP: false
-        },
-        {
-            type: 'jan',
-            name: 'Jan',
-            description: 'Open source AI assistant',
-            isLocal: true,
-            isPTY: false,
-            requiresApiKey: false,
-            supportsVision: false,
-            supportsMCP: false
-        },
-    ];
-}
-
 module.exports = {
-    // Classes
-    BaseProvider,
-    ClaudeProvider,
-    CLIProvider,
-    OpenAIProvider,
-
-    // Factory
-    createProvider,
-    createOpenAIProvider,
-
-    // Constants
-    PROVIDER_TYPES,
-    PROVIDER_NAMES,
-    CLI_PROVIDERS,
-    LOCAL_PROVIDERS,
-    CLOUD_PROVIDERS,
-
-    // Utilities
-    getProviderDisplayName,
-    isLocalProvider,
-    isCloudProvider,
-    isPTYProvider,
-    getAllProviderTypes,
-    getProviderList
+    createProvider
 };

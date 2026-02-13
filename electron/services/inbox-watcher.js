@@ -322,21 +322,12 @@ function createInboxWatcher(options = {}) {
         }
     }
 
-    /**
-     * Get the current count of displayed message IDs.
-     * @returns {number} Count of displayed message IDs
-     */
-    function getDisplayedMessageCount() {
-        return displayedMessageIds.size;
-    }
-
     return {
         start,
         stop,
         isRunning,
         addDisplayedMessageId,
-        clearProcessedUserMessageIds,
-        getDisplayedMessageCount
+        clearProcessedUserMessageIds
     };
 }
 

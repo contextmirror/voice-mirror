@@ -15,10 +15,6 @@ class CLIProvider extends BaseProvider {
         this._ready = false;
     }
 
-    getType() {
-        return this.cliType;
-    }
-
     getDisplayName() {
         return this.spawner.config.displayName;
     }
@@ -27,14 +23,6 @@ class CLIProvider extends BaseProvider {
         const cfg = CLI_CONFIGS[cliType];
         if (!cfg) return false;
         return isCLIAvailable(cfg.command);
-    }
-
-    isPTY() {
-        return true;
-    }
-
-    supportsMCP() {
-        return false;
     }
 
     supportsVision() {

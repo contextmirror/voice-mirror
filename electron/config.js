@@ -158,17 +158,6 @@ function getDataDir() {
 }
 
 /**
- * Ensure the data directory exists.
- */
-function ensureDataDir() {
-    const dataDir = getDataDir();
-    if (!fs.existsSync(dataDir)) {
-        fs.mkdirSync(dataDir, { recursive: true });
-    }
-    return dataDir;
-}
-
-/**
  * Ensure the config directory exists.
  */
 function ensureConfigDir() {
@@ -326,53 +315,19 @@ function getPlatformPaths() {
     };
 }
 
-/**
- * Get the autostart directory/registry path for this platform.
- * Note: Actual autostart implementation requires platform-specific code.
- */
-function getAutostartInfo() {
-    if (isWindows) {
-        return {
-            type: 'registry',
-            path: 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run',
-            key: 'VoiceMirror'
-        };
-    } else if (isMac) {
-        return {
-            type: 'launchAgent',
-            path: path.join(app.getPath('home'), 'Library', 'LaunchAgents'),
-            plist: 'com.voicemirror.app.plist'
-        };
-    } else {
-        // Linux - XDG autostart
-        const xdgConfigHome = process.env.XDG_CONFIG_HOME || path.join(app.getPath('home'), '.config');
-        return {
-            type: 'desktop',
-            path: path.join(xdgConfigHome, 'autostart'),
-            file: 'voice-mirror.desktop'
-        };
-    }
-}
-
 module.exports = {
     // Constants
-    DEFAULT_CONFIG,
     isWindows,
     isMac,
     isLinux,
 
     // Path helpers
     getConfigDir,
-    getConfigPath,
     getDataDir,
-    ensureConfigDir,
-    ensureDataDir,
     getPlatformPaths,
-    getAutostartInfo,
 
     // Config CRUD
     loadConfig,
-    saveConfigAsync,
     updateConfig,
     updateConfigAsync,
     resetConfig

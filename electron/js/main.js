@@ -5,7 +5,7 @@
 
 import { state } from './state.js';
 import { initMarkdown } from './markdown.js';
-import { addMessage, isDuplicate, copyMessage, addToolCallCard, addToolResultCard, initScrollButtons } from './messages.js';
+import { addMessage, isDuplicate, copyMessage, initScrollButtons } from './messages.js';
 import { initTerminal, handleAIOutput, updateAIStatus, toggleTerminal, startAI, stopAI, updateProviderDisplay } from './terminal.js';
 import { initSettings, toggleSettings } from './settings.js';
 import { initNavigation, navigateTo, toggleSidebarCollapse } from './navigation.js';
@@ -13,7 +13,7 @@ import { initBrowserPanel, navigateToBrowserPage } from './browser-panel.js';
 import { initChatInput, setRecordingVisual, setSendImageWithPrompt } from './chat-input.js';
 import { initChatStore, autoSave, triggerAutoName } from './chat-store.js';
 import { blobToBase64, formatSize } from './utils.js';
-import { initOrbCanvas, setOrbState, destroyOrbCanvas } from './orb-canvas.js';
+import { initOrbCanvas, setOrbState } from './orb-canvas.js';
 import { showToast, updateToast } from './notifications.js';
 import { resolveTheme, applyTheme as applyThemeEngine, applyMessageCardOverrides } from './theme-engine.js';
 
@@ -243,17 +243,16 @@ async function captureAndPreview(sourceId) {
     try {
         const dataUrl = await window.voiceMirror.captureScreen(sourceId);
         if (dataUrl) {
-            const base64 = dataUrl;
-            const sizeEstimate = Math.round((base64.length * 3) / 4);
+            const sizeEstimate = Math.round((dataUrl.length * 3) / 4);
 
             state.pendingImageData = {
-                base64: base64,
+                base64: dataUrl,
                 filename: 'screenshot.png',
                 size: sizeEstimate,
                 type: 'image/png'
             };
 
-            previewImage.src = base64;
+            previewImage.src = dataUrl;
             previewFilename.textContent = 'screenshot.png';
             previewSize.textContent = formatSize(sizeEstimate);
             imagePreview.classList.add('visible');

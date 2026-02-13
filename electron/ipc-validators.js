@@ -338,4 +338,4 @@ const validators = {
   }
 };
 
-module.exports = { validators, VALID_PROVIDERS, VALID_ACTIVATION_MODES, VALID_VOICE_MODES };
+module.exports = { validators, VALID_PROVIDERS };

@@ -148,26 +148,14 @@ function createLogger(options = {}) {
         }
     }
 
-    /**
-     * Get the path to the log file.
-     * @returns {string|null}
-     */
-    function getLogFilePath() {
-        return logFilePath;
-    }
-
     return {
         init,
         log,
         devlog,
-        close,
-        getLogFilePath,
-        levels: Object.keys(LOG_STYLES)
+        close
     };
 }
 
 module.exports = {
-    createLogger,
-    Colors,
-    LOG_STYLES
+    createLogger
 };

@@ -16,6 +16,7 @@ let resizeObserver = null;
 let resizeTimeout = null;  // For debouncing resize events
 let lastPtyCols = 0;       // Track last PTY size to avoid duplicate SIGWINCH
 let lastPtyRows = 0;
+let lastOutputTime = 0;    // Timestamp of last PTY output — used to switch render mode
 
 // DOM elements (initialized in initTerminal)
 let terminalContainer;      // Chat page bottom panel container
@@ -151,19 +152,21 @@ export async function initTerminal() {
     const mountContainer = state.terminalLocation === 'chat-bottom' ? terminalMount : fullscreenMount;
     term.open(mountContainer);
 
-    // Override ghostty-web's render loop to force full renders every frame.
-    // ghostty-web's default loop uses partial rendering (only dirty rows), but the
-    // WASM dirty tracking can miss rows during fast streaming output from TUI apps,
-    // causing characters to appear shifted/truncated. Full renders fix this at
-    // negligible cost on modern GPUs (~1920 cells/frame at 60fps).
+    // Override ghostty-web's render loop with adaptive rendering.
+    // ghostty-web's WASM dirty tracking can miss rows during fast streaming output,
+    // causing characters to appear shifted/truncated. We force full renders during
+    // active streaming (within 150ms of last PTY output) but use efficient partial
+    // renders during typing/idle for lower input latency.
     if (term.animationFrameId) {
         cancelAnimationFrame(term.animationFrameId);
     }
     const renderLoop = () => {
         if (term && term.renderer && term.wasmTerm) {
+            // Full renders during active streaming, partial renders when idle/typing
+            const streaming = (performance.now() - lastOutputTime) < 150;
             term.renderer.render(
                 term.wasmTerm,
-                true,  // forceAll — always redraw every row
+                streaming,  // forceAll only during active PTY output
                 term.viewportY ?? 0,
                 term,
                 term.scrollbarOpacity ?? 1
@@ -236,11 +239,12 @@ export async function initTerminal() {
                     window.voiceMirror.claude.sendInput(`\x1b[<${button};${col};${row}M`);
                 }
             } else {
-                // TUI without mouse tracking: fall back to arrow keys
-                const direction = e.deltaY > 0 ? '\x1b[B' : '\x1b[A';
-                const count = Math.max(1, Math.min(Math.abs(Math.round(e.deltaY / 33)), 5));
-                for (let i = 0; i < count; i++) {
-                    window.voiceMirror.claude.sendInput(direction);
+                // Alternate screen without mouse tracking (Claude Code, vim, etc.):
+                // Use terminal viewport scrolling — same approach as normal mode.
+                const lineHeight = term.renderer?.getMetrics()?.height ?? 20;
+                const deltaLines = Math.round(e.deltaY / lineHeight);
+                if (deltaLines !== 0) {
+                    term.scrollLines(deltaLines);
                 }
             }
         } else {
@@ -256,10 +260,8 @@ export async function initTerminal() {
     // Update visibility based on location
     if (state.terminalLocation === 'chat-bottom') {
         terminalContainer.classList.remove('hidden');
-        state.terminalVisible = true;
     } else {
         terminalContainer.classList.add('hidden');
-        state.terminalVisible = false;
     }
 
     // Send keyboard input to PTY
@@ -390,7 +392,6 @@ export function toggleTerminal() {
         terminalContainer.classList.remove('hidden');
         terminalContainer.classList.remove('minimized');
         state.terminalMinimized = false;
-        state.terminalVisible = true;
         // Refit terminal after layout settles
         requestAnimationFrame(() => {
             requestAnimationFrame(() => {
@@ -404,9 +405,8 @@ export function toggleTerminal() {
         });
     } else {
         terminalContainer.classList.add('hidden');
-        state.terminalVisible = false;
     }
-    if (terminalBtn) terminalBtn.classList.toggle('active', state.terminalVisible);
+    if (terminalBtn) terminalBtn.classList.toggle('active', !terminalContainer.classList.contains('hidden'));
 }
 
 /**
@@ -448,15 +448,6 @@ export function minimizeTerminal() {
 }
 
 /**
- * Hide terminal completely
- */
-export function hideTerminal() {
-    terminalContainer.classList.add('hidden');
-    state.terminalVisible = false;
-    if (terminalBtn) terminalBtn.classList.remove('active');
-}
-
-/**
  * Relocate terminal between fullscreen and chat-bottom views
  * @param {string} location - 'fullscreen' | 'chat-bottom'
  */
@@ -486,10 +477,8 @@ export async function relocateTerminal(location) {
     // Update visibility of chat page terminal panel
     if (location === 'chat-bottom') {
         terminalContainer.classList.remove('hidden');
-        state.terminalVisible = true;
     } else {
         terminalContainer.classList.add('hidden');
-        state.terminalVisible = false;
     }
 
     // Observe new container
@@ -520,14 +509,6 @@ export async function relocateTerminal(location) {
     } catch (err) {
         console.error('[ghostty-web] Failed to save terminal location:', err);
     }
-}
-
-/**
- * Get current terminal location
- * @returns {string} 'fullscreen' | 'chat-bottom'
- */
-export function getTerminalLocation() {
-    return state.terminalLocation;
 }
 
 /**
@@ -701,6 +682,10 @@ export function handleAIOutput(data) {
         return;
     }
 
+    // Track when PTY output arrives so the render loop can use full renders
+    // during streaming and efficient partial renders during typing/idle.
+    lastOutputTime = performance.now();
+
     switch (data.type) {
         case 'start':
             term.writeln(`\x1b[34m${data.text}\x1b[0m`);
@@ -789,8 +774,6 @@ window.startAI = startAI;
 window.stopAI = stopAI;
 window.toggleTerminal = toggleTerminal;
 window.minimizeTerminal = minimizeTerminal;
-window.hideTerminal = hideTerminal;
 window.relocateTerminal = relocateTerminal;
-window.getTerminalLocation = getTerminalLocation;
 window.updateProviderDisplay = updateProviderDisplay;
 window.clearTerminal = clearTerminal;

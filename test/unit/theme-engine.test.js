@@ -16,23 +16,20 @@ describe('theme-engine', () => {
         it('should export hexToRgb', () => {
             assert.ok(src.includes('export function hexToRgb'));
         });
-        it('should export rgbToHex', () => {
-            assert.ok(src.includes('export function rgbToHex'));
+        it('should define rgbToHex (internal)', () => {
+            assert.ok(src.includes('function rgbToHex'));
         });
-        it('should export lighten', () => {
-            assert.ok(src.includes('export function lighten'));
+        it('should define lighten (internal)', () => {
+            assert.ok(src.includes('function lighten'));
         });
-        it('should export darken', () => {
-            assert.ok(src.includes('export function darken'));
+        it('should define darken (internal)', () => {
+            assert.ok(src.includes('function darken'));
         });
-        it('should export blend', () => {
-            assert.ok(src.includes('export function blend'));
+        it('should define blend (internal)', () => {
+            assert.ok(src.includes('function blend'));
         });
         it('should export PRESETS', () => {
             assert.ok(src.includes('export const PRESETS'));
-        });
-        it('should export PRESET_NAMES', () => {
-            assert.ok(src.includes('export const PRESET_NAMES'));
         });
         it('should export deriveTheme', () => {
             assert.ok(src.includes('export function deriveTheme'));

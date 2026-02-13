@@ -58,9 +58,6 @@ const TTS_VOICES = {
     ]
 };
 
-// Cloud providers that need API keys (none — cloud access now goes through OpenCode)
-const CLOUD_PROVIDERS_WITH_APIKEY = [];
-
 // ========== Modular Tab System ==========
 // Add new tabs by adding an entry here + a matching data-tab div in overlay.html
 // + a template file at templates/settings-{id}.html
@@ -159,11 +156,9 @@ export function toggleSettings() {
         revertThemeIfUnsaved();
         stopOrbPreview();
         navigateTo('chat');
-        state.settingsVisible = false;
     } else {
         // Navigate to settings page
         navigateTo('settings');
-        state.settingsVisible = true;
         loadSettingsUI();
     }
 }
@@ -310,14 +305,8 @@ export function updateAIProviderUI(provider) {
     // Show/hide endpoint row for local providers
     endpointRow.style.display = LOCAL_PROVIDERS.includes(provider) ? 'flex' : 'none';
 
-    // Show/hide API key row for providers that need keys
-    const needsApiKey = CLOUD_PROVIDERS_WITH_APIKEY.includes(provider);
-    apikeyRow.style.display = needsApiKey ? 'flex' : 'none';
-
-    // Populate API key field with masked value + detected hint
-    if (needsApiKey) {
-        populateApiKeyField(provider);
-    }
+    // Hide API key row (cloud access goes through OpenCode)
+    apikeyRow.style.display = 'none';
 
     // Model row: hide for CLI providers (they use their own CLI), show for others
     modelRow.style.display = isCLI ? 'none' : 'flex';
@@ -504,16 +493,6 @@ export async function saveSettings() {
         aiUpdates.endpoints = {
             [aiProvider]: aiEndpoint
         };
-    }
-
-    // Handle API key for cloud providers
-    if (CLOUD_PROVIDERS_WITH_APIKEY.includes(aiProvider)) {
-        const apiKey = document.getElementById('ai-apikey').value;
-        if (apiKey) {
-            aiUpdates.apiKeys = {
-                [aiProvider]: apiKey
-            };
-        }
     }
 
     // Tool profile updates (MCP CLI providers)
@@ -1975,5 +1954,3 @@ window.saveSettings = saveSettings;
 window.resetSettings = resetSettings;
 window.loadSettingsUI = loadSettingsUI;
 window.scanProviders = scanProviders;
-window.updateAIProviderUI = updateAIProviderUI;
-window.updateTTSAdapterUI = updateTTSAdapterUI;
