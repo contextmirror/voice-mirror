@@ -72,7 +72,9 @@ function releaseListenerLock(instanceId) {
                 fs.unlinkSync(LISTENER_LOCK_PATH);
             }
         }
-    } catch {}
+    } catch (e) {
+        console.error('[MCP Core]', 'Failed to release listener lock:', e?.message || e);
+    }
 }
 
 /**
@@ -88,7 +90,9 @@ function refreshListenerLock(instanceId) {
                 fs.writeFileSync(LISTENER_LOCK_PATH, JSON.stringify(lock, null, 2), 'utf-8');
             }
         }
-    } catch {}
+    } catch (e) {
+        console.error('[MCP Core]', 'Failed to refresh listener lock:', e?.message || e);
+    }
 }
 
 /**
@@ -118,7 +122,9 @@ function updateHeartbeat(instanceId, status = 'active', currentTask) {
         }
 
         fs.writeFileSync(CLAUDE_STATUS_PATH, JSON.stringify(store, null, 2), 'utf-8');
-    } catch {}
+    } catch (e) {
+        console.error('[MCP Core]', 'Failed to update heartbeat:', e?.message || e);
+    }
 }
 
 // ============================================
@@ -150,7 +156,9 @@ async function handleClaudeSend(args) {
             try {
                 const data = JSON.parse(fs.readFileSync(CLAUDE_MESSAGES_PATH, 'utf-8'));
                 messages = data.messages || [];
-            } catch {}
+            } catch (e) {
+                console.error('[MCP Core]', 'Failed to read existing messages:', e?.message || e);
+            }
         }
 
         // Resolve thread ID
@@ -350,7 +358,9 @@ async function handleClaudeListen(args) {
                 const data = JSON.parse(fs.readFileSync(CLAUDE_MESSAGES_PATH, 'utf-8'));
                 (data.messages || []).forEach(m => existingIds.add(m.id));
             }
-        } catch {}
+        } catch (e) {
+            console.error('[MCP Core]', 'Failed to load existing message IDs:', e?.message || e);
+        }
 
         // Helper: check inbox for new messages from sender
         function checkForNewMessages() {
@@ -364,7 +374,8 @@ async function handleClaudeListen(args) {
                 }
                 const newMsgs = fromSenderMsgs.filter(m => !existingIds.has(m.id));
                 return newMsgs.length > 0 ? newMsgs[newMsgs.length - 1] : null;
-            } catch {
+            } catch (e) {
+                console.error('[MCP Core]', 'Failed to check for new messages:', e?.message || e);
                 return null;
             }
         }
@@ -399,8 +410,8 @@ async function handleClaudeListen(args) {
                         fileWatcher.on('error', () => {
                             // fs.watch failed, fall through to timeout
                         });
-                    } catch {
-                        // fs.watch unavailable, rely on timeout fallback
+                    } catch (e) {
+                        console.error('[MCP Core]', 'Failed to set up fs.watch, using polling fallback:', e?.message || e);
                     }
                 });
 

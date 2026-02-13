@@ -145,7 +145,7 @@ describe('MCP browser_act schema consistency', () => {
     const fs = require('fs');
     const path = require('path');
     const mcpSrc = fs.readFileSync(
-        path.join(__dirname, '../../mcp-server/index.js'), 'utf-8'
+        path.join(__dirname, '../../mcp-server/tool-groups.js'), 'utf-8'
     );
 
     it('MCP schema defines expression property for evaluate', () => {

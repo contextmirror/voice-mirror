@@ -2,38 +2,11 @@
 
 import asyncio
 import os
-import re
 from collections.abc import Callable
 from pathlib import Path
 
 from .base import TTSAdapter
-
-
-def _chunk_text(text: str, max_chars: int = 400) -> list[str]:
-    """Split text into chunks for interruptible TTS.
-
-    Splits on sentence boundaries first, then clause boundaries.
-    """
-    if len(text) <= max_chars:
-        return [text]
-
-    chunks = []
-    sentences = re.split(r'(?<=[.!?])\s+', text)
-
-    current = ''
-    for sentence in sentences:
-        if not sentence.strip():
-            continue
-        if current and len(current) + len(sentence) + 1 > max_chars:
-            chunks.append(current.strip())
-            current = sentence
-        else:
-            current = (current + ' ' + sentence).strip() if current else sentence
-
-    if current.strip():
-        chunks.append(current.strip())
-
-    return chunks if chunks else [text]
+from .utils import _chunk_text
 
 # Available preset speakers for CustomVoice model
 QWEN_SPEAKERS = [
