@@ -5,6 +5,32 @@ Format inspired by game dev patch notes — grouped by release, categorized by i
 
 ---
 
+## v0.8.5 — "Plug & Play" (2026-02-13)
+
+Plug-and-play TTS/STT engine selection with auto-install, 7 TTS engines and 5 STT engines.
+
+### New Feature — TTS/STT Engine Selection
+- **7 TTS engines**: Kokoro (local), Qwen3-TTS (local), Piper (local), Edge TTS (free cloud), OpenAI TTS (cloud), ElevenLabs (cloud), Custom API (OpenAI-compatible)
+- **5 STT engines**: Parakeet (local), Whisper (local), Faster-Whisper (local), OpenAI Whisper API (cloud), Custom API (OpenAI-compatible)
+- **Auto-install pip packages** — selecting an engine that requires a missing Python package prompts the user and installs it automatically
+- **Data-driven settings UI** — adapter registry drives conditional fields (API key, endpoint URL, model file picker) per engine
+- **Custom local model files** — native file picker for Piper `.onnx` voice files
+- **Hot-swap adapters** — switch TTS/STT engines in settings without restarting the app
+
+### Fixed
+- **TTS adapter hot-swap stale reference** — NotificationWatcher held a direct reference to the TTS adapter; switching engines in settings didn't affect background notifications. Now uses a getter callback so adapter swaps are always reflected
+- **TTS adapter reload after pip install** — adapter with `model=None` (failed load) wasn't rebuilt on settings save; now detects broken adapters and retries
+- **Dropdown optgroup white border** — `<optgroup>` labels in select dropdowns had no dark-theme styling, falling back to Chromium's default white background
+
+### Technical
+- Refactored TTS/STT factories to `**kwargs` pattern — adding new adapters never requires changing factory signatures
+- Added adapter metadata to base classes (`adapter_category`, `pip_package`, `requires_api_key`, etc.)
+- 7 new Python adapter files, `requirements-optional.txt` for optional pip packages
+- New IPC handlers: `check-pip-package`, `install-pip-package`, `browse-model-file`
+- 29 files changed (21 modified, 8 new), ~900 insertions
+
+---
+
 ## v0.8.4 — "God-File Guillotine" (2026-02-13)
 
 Split the 4 largest files in the codebase into focused modules and fixed two Ollama voice bugs.

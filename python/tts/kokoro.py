@@ -27,8 +27,10 @@ class KokoroAdapter(TTSAdapter):
     """TTS adapter using Kokoro ONNX for local synthesis."""
 
     adapter_type = "kokoro"
+    adapter_category = "local"
+    pip_package = "kokoro-onnx"
 
-    def __init__(self, voice: str | None = None):
+    def __init__(self, voice: str | None = None, **kwargs):
         """
         Initialize Kokoro adapter.
 

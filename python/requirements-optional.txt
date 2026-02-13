@@ -1,0 +1,10 @@
+# Optional TTS engines (install what you need)
+piper-tts>=2023.11.14
+edge-tts>=6.1.0
+openai>=1.0.0
+elevenlabs>=1.0.0
+httpx>=0.25.0
+
+# Optional STT engines
+openai-whisper>=20231117
+faster-whisper>=1.0.0

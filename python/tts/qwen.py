@@ -48,6 +48,8 @@ class QwenTTSAdapter(TTSAdapter):
     """
 
     adapter_type = "qwen"
+    adapter_category = "local"
+    pip_package = "qwen-tts"
 
     def __init__(
         self,
@@ -56,6 +58,7 @@ class QwenTTSAdapter(TTSAdapter):
         language: str = "Auto",
         ref_audio: str | None = None,
         ref_text: str | None = None,
+        **kwargs,
     ):
         """
         Initialize Qwen3-TTS adapter.

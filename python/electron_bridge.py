@@ -592,15 +592,29 @@ async def process_commands(agent):
                     if hotkey:
                         hotkey.update_key(ptt_key)
 
-                # Apply TTS settings changes immediately
+                # Apply TTS/STT settings changes immediately
                 voice_cfg = cfg.get("voice", {})
                 tts_adapter = voice_cfg.get("ttsAdapter")
                 tts_voice = voice_cfg.get("ttsVoice")
                 tts_model_size = voice_cfg.get("ttsModelSize")
-
                 tts_volume = voice_cfg.get("ttsVolume")
+                tts_api_key = voice_cfg.get("ttsApiKey")
+                tts_endpoint = voice_cfg.get("ttsEndpoint")
+                tts_model_path = voice_cfg.get("ttsModelPath")
+                stt_adapter = voice_cfg.get("sttAdapter") or voice_cfg.get("sttModel")
+                stt_api_key = voice_cfg.get("sttApiKey")
+                stt_endpoint = voice_cfg.get("sttEndpoint")
+                stt_model_name = voice_cfg.get("sttModelName")
 
-                if tts_adapter or tts_voice or tts_model_size or tts_volume is not None:
+                has_voice_changes = any([
+                    tts_adapter, tts_voice, tts_model_size,
+                    tts_volume is not None, tts_api_key is not None,
+                    tts_endpoint is not None, tts_model_path is not None,
+                    stt_adapter, stt_api_key is not None,
+                    stt_endpoint is not None, stt_model_name is not None,
+                ])
+
+                if has_voice_changes:
                     # Update voice_settings.json (read by voice_agent)
                     settings_path = get_data_dir() / "voice_settings.json"
                     try:
@@ -609,7 +623,7 @@ async def process_commands(agent):
                             with open(settings_path, encoding='utf-8') as f:
                                 voice_settings = json.load(f)
 
-                        # Update only the fields that were provided
+                        # Map camelCase -> snake_case, update only provided fields
                         if tts_adapter:
                             voice_settings["tts_adapter"] = tts_adapter
                         if tts_voice:
@@ -618,6 +632,20 @@ async def process_commands(agent):
                             voice_settings["tts_model_size"] = tts_model_size
                         if tts_volume is not None:
                             voice_settings["tts_volume"] = float(tts_volume)
+                        if tts_api_key is not None:
+                            voice_settings["tts_api_key"] = tts_api_key
+                        if tts_endpoint is not None:
+                            voice_settings["tts_endpoint"] = tts_endpoint
+                        if tts_model_path is not None:
+                            voice_settings["tts_model_path"] = tts_model_path
+                        if stt_adapter:
+                            voice_settings["stt_adapter"] = stt_adapter
+                        if stt_api_key is not None:
+                            voice_settings["stt_api_key"] = stt_api_key
+                        if stt_endpoint is not None:
+                            voice_settings["stt_endpoint"] = stt_endpoint
+                        if stt_model_name is not None:
+                            voice_settings["stt_model_name"] = stt_model_name
 
                         with open(settings_path, 'w', encoding='utf-8') as f:
                             json.dump(voice_settings, f, indent=2)
@@ -690,6 +718,11 @@ async def process_commands(agent):
             elif command == "stop":
                 emit_event("stopping", {})
                 break
+
+            elif command == "list_adapters":
+                from tts.factory import list_available_adapters as list_tts
+                from stt.factory import list_available_adapters as list_stt
+                emit_event("adapter_list", {"tts": list_tts(), "stt": list_stt()})
 
             elif command == "ping":
                 emit_event("pong", {})

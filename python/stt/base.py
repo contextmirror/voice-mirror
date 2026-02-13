@@ -13,6 +13,12 @@ class STTAdapter(ABC):
     the transcribe method.
     """
 
+    adapter_type: str = ""
+    adapter_category: str = "local"  # "local" or "cloud"
+    pip_package: str = ""
+    requires_api_key: bool = False
+    requires_endpoint: bool = False
+
     def __init__(self, model_name: str | None = None):
         """
         Initialize the STT adapter.

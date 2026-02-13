@@ -3,6 +3,9 @@
  *
  * TTS adapter/voice selection, STT model, audio device dropdowns,
  * activation mode, wake word, keybind recording.
+ *
+ * Uses data-driven ADAPTER_REGISTRY / STT_REGISTRY to dynamically
+ * show/hide conditional UI fields per adapter.
  */
 
 import { state } from './state.js';
@@ -10,29 +13,190 @@ import { formatKeybind } from './utils.js';
 import { createLog } from './log.js';
 const log = createLog('[Settings:Voice]');
 
-// TTS voice options by adapter
-const TTS_VOICES = {
-    kokoro: [
-        { value: 'af_bella', label: 'Bella (Female)' },
-        { value: 'af_nicole', label: 'Nicole (Female)' },
-        { value: 'af_sarah', label: 'Sarah (Female)' },
-        { value: 'am_adam', label: 'Adam (Male)' },
-        { value: 'am_michael', label: 'Michael (Male)' },
-        { value: 'bf_emma', label: 'Emma (British)' },
-        { value: 'bm_george', label: 'George (British)' }
-    ],
-    qwen: [
-        { value: 'Ryan', label: 'Ryan (Male)' },
-        { value: 'Vivian', label: 'Vivian (Female)' },
-        { value: 'Serena', label: 'Serena (Female)' },
-        { value: 'Dylan', label: 'Dylan (Male)' },
-        { value: 'Eric', label: 'Eric (Male)' },
-        { value: 'Aiden', label: 'Aiden (Male)' },
-        { value: 'Uncle_Fu', label: 'Uncle Fu (Male)' },
-        { value: 'Ono_Anna', label: 'Ono Anna (Female, Japanese)' },
-        { value: 'Sohee', label: 'Sohee (Female, Korean)' }
-    ]
+// ── TTS Adapter Registry (data-driven) ──────────────────────────────────────
+
+const ADAPTER_REGISTRY = {
+    kokoro: {
+        label: 'Kokoro (Local, fast, ~100MB)',
+        category: 'local',
+        voices: [
+            { value: 'af_bella', label: 'Bella (Female)' },
+            { value: 'af_nicole', label: 'Nicole (Female)' },
+            { value: 'af_sarah', label: 'Sarah (Female)' },
+            { value: 'af_sky', label: 'Sky (Female)' },
+            { value: 'am_adam', label: 'Adam (Male)' },
+            { value: 'am_michael', label: 'Michael (Male)' },
+            { value: 'bf_emma', label: 'Emma (British Female)' },
+            { value: 'bf_isabella', label: 'Isabella (British Female)' },
+            { value: 'bm_george', label: 'George (British Male)' },
+            { value: 'bm_lewis', label: 'Lewis (British Male)' }
+        ],
+        showModelSize: false,
+        showApiKey: false,
+        showEndpoint: false,
+        showModelPath: false
+    },
+    qwen: {
+        label: 'Qwen3-TTS (Local, voice cloning, ~3-7GB)',
+        category: 'local',
+        voices: [
+            { value: 'Ryan', label: 'Ryan (Male)' },
+            { value: 'Vivian', label: 'Vivian (Female)' },
+            { value: 'Serena', label: 'Serena (Female)' },
+            { value: 'Dylan', label: 'Dylan (Male)' },
+            { value: 'Eric', label: 'Eric (Male)' },
+            { value: 'Aiden', label: 'Aiden (Male)' },
+            { value: 'Uncle_Fu', label: 'Uncle Fu (Male)' },
+            { value: 'Ono_Anna', label: 'Ono Anna (Female, Japanese)' },
+            { value: 'Sohee', label: 'Sohee (Female, Korean)' }
+        ],
+        showModelSize: true,
+        modelSizes: [
+            { value: '0.6B', label: '0.6B (~1.5GB disk, ~2GB VRAM)' },
+            { value: '1.7B', label: '1.7B (~3.5GB disk, ~4GB VRAM)' }
+        ],
+        showApiKey: false,
+        showEndpoint: false,
+        showModelPath: false
+    },
+    piper: {
+        label: 'Piper (Local, lightweight, ~50MB)',
+        category: 'local',
+        pipPackage: 'piper-tts',
+        voices: [
+            { value: 'en_US-amy-medium', label: 'Amy (US Female)' },
+            { value: 'en_US-lessac-medium', label: 'Lessac (US Male)' },
+            { value: 'en_US-libritts_r-medium', label: 'LibriTTS (US)' },
+            { value: 'en_GB-cori-medium', label: 'Cori (British Female)' },
+            { value: 'en_GB-alan-medium', label: 'Alan (British Male)' }
+        ],
+        showModelSize: false,
+        showApiKey: false,
+        showEndpoint: false,
+        showModelPath: true,
+        modelPathHint: 'Optional: Browse to a custom Piper .onnx voice file'
+    },
+    edge: {
+        label: 'Edge TTS (Free cloud, Microsoft)',
+        category: 'cloud-free',
+        pipPackage: 'edge-tts',
+        voices: [
+            { value: 'en-US-AriaNeural', label: 'Aria (US Female)' },
+            { value: 'en-US-GuyNeural', label: 'Guy (US Male)' },
+            { value: 'en-US-JennyNeural', label: 'Jenny (US Female)' },
+            { value: 'en-GB-SoniaNeural', label: 'Sonia (British Female)' },
+            { value: 'en-GB-RyanNeural', label: 'Ryan (British Male)' },
+            { value: 'en-AU-NatashaNeural', label: 'Natasha (Australian Female)' }
+        ],
+        showModelSize: false,
+        showApiKey: false,
+        showEndpoint: false,
+        showModelPath: false
+    },
+    'openai-tts': {
+        label: 'OpenAI TTS (Cloud, API key required)',
+        category: 'cloud-paid',
+        pipPackage: 'openai',
+        voices: [
+            { value: 'alloy', label: 'Alloy' },
+            { value: 'echo', label: 'Echo' },
+            { value: 'fable', label: 'Fable' },
+            { value: 'onyx', label: 'Onyx' },
+            { value: 'nova', label: 'Nova' },
+            { value: 'shimmer', label: 'Shimmer' }
+        ],
+        showModelSize: false,
+        showApiKey: true,
+        apiKeyPlaceholder: 'sk-...',
+        showEndpoint: false,
+        showModelPath: false
+    },
+    elevenlabs: {
+        label: 'ElevenLabs (Cloud, premium)',
+        category: 'cloud-paid',
+        pipPackage: 'elevenlabs',
+        voices: [
+            { value: 'Rachel', label: 'Rachel' },
+            { value: 'Domi', label: 'Domi' },
+            { value: 'Bella', label: 'Bella' },
+            { value: 'Antoni', label: 'Antoni' },
+            { value: 'Josh', label: 'Josh' },
+            { value: 'Adam', label: 'Adam' }
+        ],
+        showModelSize: false,
+        showApiKey: true,
+        apiKeyPlaceholder: 'xi-...',
+        showEndpoint: false,
+        showModelPath: false
+    },
+    'custom-api': {
+        label: 'Custom API (OpenAI-compatible)',
+        category: 'cloud-custom',
+        voices: [
+            { value: 'default', label: 'Default' }
+        ],
+        showModelSize: false,
+        showApiKey: true,
+        apiKeyPlaceholder: 'API key (if required)',
+        showEndpoint: true,
+        endpointPlaceholder: 'https://your-server.com/v1',
+        showModelPath: false
+    }
 };
+
+// ── STT Adapter Registry ─────────────────────────────────────────────────────
+
+const STT_REGISTRY = {
+    parakeet: {
+        label: 'Parakeet (Fast, default)',
+        category: 'local',
+        showModelName: false,
+        showApiKey: false,
+        showEndpoint: false
+    },
+    whisper: {
+        label: 'Whisper (Accurate)',
+        category: 'local',
+        showModelName: true,
+        showApiKey: false,
+        showEndpoint: false
+    },
+    'faster-whisper': {
+        label: 'Faster-Whisper (GPU accelerated)',
+        category: 'local',
+        pipPackage: 'faster-whisper',
+        showModelName: true,
+        showApiKey: false,
+        showEndpoint: false
+    },
+    'openai-whisper-api': {
+        label: 'OpenAI Whisper API',
+        category: 'cloud-paid',
+        pipPackage: 'openai',
+        showModelName: false,
+        showApiKey: true,
+        showEndpoint: false
+    },
+    'custom-api-stt': {
+        label: 'Custom API (OpenAI-compatible)',
+        category: 'cloud-custom',
+        showModelName: false,
+        showApiKey: true,
+        showEndpoint: true
+    }
+};
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function showRow(id) {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'flex';
+}
+
+function hideRow(id) {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+}
 
 /**
  * Update UI based on activation mode
@@ -46,21 +210,60 @@ export function updateActivationModeUI(mode) {
 }
 
 /**
- * Update TTS adapter UI based on selected adapter
+ * Update TTS adapter UI based on selected adapter.
+ * Shows/hides conditional fields based on the registry entry.
  */
 export function updateTTSAdapterUI(adapter) {
-    const modelSizeRow = document.getElementById('tts-model-size-row');
-    const qwenHint = document.getElementById('tts-qwen-hint');
+    const reg = ADAPTER_REGISTRY[adapter] || ADAPTER_REGISTRY.kokoro;
     const voiceSelect = document.getElementById('tts-voice');
     const currentVoice = voiceSelect.value;
 
-    // Show/hide model size row and storage hint (only for Qwen)
-    const isQwen = adapter === 'qwen';
-    modelSizeRow.style.display = isQwen ? 'flex' : 'none';
-    if (qwenHint) qwenHint.style.display = isQwen ? 'block' : 'none';
+    // Show/hide conditional rows
+    reg.showModelSize ? showRow('tts-model-size-row') : hideRow('tts-model-size-row');
+    reg.showApiKey ? showRow('tts-api-key-row') : hideRow('tts-api-key-row');
+    reg.showEndpoint ? showRow('tts-endpoint-row') : hideRow('tts-endpoint-row');
+    reg.showModelPath ? showRow('tts-model-path-row') : hideRow('tts-model-path-row');
+
+    // Qwen hint
+    const qwenHint = document.getElementById('tts-qwen-hint');
+    if (qwenHint) qwenHint.style.display = adapter === 'qwen' ? 'block' : 'none';
+
+    // Model path hint
+    const modelPathHint = document.getElementById('tts-model-path-hint');
+    if (modelPathHint) modelPathHint.textContent = reg.modelPathHint || '';
+
+    // API key placeholder
+    const apiKeyInput = document.getElementById('tts-api-key');
+    if (apiKeyInput && reg.apiKeyPlaceholder) {
+        apiKeyInput.placeholder = reg.apiKeyPlaceholder;
+    }
+
+    // Endpoint placeholder
+    const endpointInput = document.getElementById('tts-endpoint');
+    if (endpointInput && reg.endpointPlaceholder) {
+        endpointInput.placeholder = reg.endpointPlaceholder;
+    }
+
+    // Populate model size dropdown if registry provides sizes
+    if (reg.showModelSize && reg.modelSizes) {
+        const sizeSelect = document.getElementById('tts-model-size');
+        if (sizeSelect) {
+            const currentSize = sizeSelect.value;
+            sizeSelect.innerHTML = '';
+            for (const size of reg.modelSizes) {
+                const option = document.createElement('option');
+                option.value = size.value;
+                option.textContent = size.label;
+                sizeSelect.appendChild(option);
+            }
+            if (reg.modelSizes.some(s => s.value === currentSize)) {
+                sizeSelect.value = currentSize;
+            }
+        }
+    }
 
     // Update voice options based on adapter
-    const voices = TTS_VOICES[adapter] || TTS_VOICES.kokoro;
+    const voices = reg.voices;
     voiceSelect.innerHTML = '';
     for (const voice of voices) {
         const option = document.createElement('option');
@@ -72,6 +275,18 @@ export function updateTTSAdapterUI(adapter) {
     // Try to preserve current voice if it exists in new adapter, otherwise use first
     const voiceExists = voices.some(v => v.value === currentVoice);
     voiceSelect.value = voiceExists ? currentVoice : voices[0].value;
+}
+
+/**
+ * Update STT adapter UI based on selected adapter.
+ * Shows/hides conditional fields based on the registry entry.
+ */
+export function updateSTTAdapterUI(adapter) {
+    const reg = STT_REGISTRY[adapter] || STT_REGISTRY.parakeet;
+
+    reg.showModelName ? showRow('stt-model-name-row') : hideRow('stt-model-name-row');
+    reg.showApiKey ? showRow('stt-api-key-row') : hideRow('stt-api-key-row');
+    reg.showEndpoint ? showRow('stt-endpoint-row') : hideRow('stt-endpoint-row');
 }
 
 /**
@@ -145,7 +360,7 @@ export async function loadVoiceSettingsUI() {
     document.getElementById('wake-word-sensitivity').value = state.currentConfig.wakeWord?.sensitivity || 0.5;
     document.getElementById('sensitivity-value').textContent = state.currentConfig.wakeWord?.sensitivity || 0.5;
 
-    // Voice settings
+    // TTS settings
     const ttsAdapter = state.currentConfig.voice?.ttsAdapter || 'kokoro';
     document.getElementById('tts-adapter').value = ttsAdapter;
     document.getElementById('tts-model-size').value = state.currentConfig.voice?.ttsModelSize || '0.6B';
@@ -155,10 +370,95 @@ export async function loadVoiceSettingsUI() {
     document.getElementById('speed-value').textContent = (state.currentConfig.voice?.ttsSpeed || 1.0) + 'x';
     document.getElementById('tts-volume').value = state.currentConfig.voice?.ttsVolume || 1.0;
     document.getElementById('volume-value').textContent = Math.round((state.currentConfig.voice?.ttsVolume || 1.0) * 100) + '%';
-    document.getElementById('stt-model').value = state.currentConfig.voice?.sttModel || 'parakeet';
+
+    // TTS extra fields
+    const apiKeyEl = document.getElementById('tts-api-key');
+    if (apiKeyEl) apiKeyEl.value = state.currentConfig.voice?.ttsApiKey || '';
+    const endpointEl = document.getElementById('tts-endpoint');
+    if (endpointEl) endpointEl.value = state.currentConfig.voice?.ttsEndpoint || '';
+    const modelPathEl = document.getElementById('tts-model-path');
+    if (modelPathEl) modelPathEl.value = state.currentConfig.voice?.ttsModelPath || '';
+
+    // STT settings
+    const sttAdapter = state.currentConfig.voice?.sttAdapter || state.currentConfig.voice?.sttModel || 'parakeet';
+    document.getElementById('stt-model').value = sttAdapter;
+    updateSTTAdapterUI(sttAdapter);
+
+    // STT extra fields
+    const sttModelNameEl = document.getElementById('stt-model-name');
+    if (sttModelNameEl) sttModelNameEl.value = state.currentConfig.voice?.sttModelName || '';
+    const sttApiKeyEl = document.getElementById('stt-api-key');
+    if (sttApiKeyEl) sttApiKeyEl.value = state.currentConfig.voice?.sttApiKey || '';
+    const sttEndpointEl = document.getElementById('stt-endpoint');
+    if (sttEndpointEl) sttEndpointEl.value = state.currentConfig.voice?.sttEndpoint || '';
 
     // Audio devices
     await loadAudioDevices();
+}
+
+/**
+ * Ensure required pip packages are installed for the selected TTS/STT adapters.
+ * Prompts the user for confirmation before installing.
+ * Returns true if all deps are satisfied, false if the user cancelled.
+ */
+export async function ensureAdapterDeps() {
+    const ttsAdapter = document.getElementById('tts-adapter').value;
+    const sttAdapter = document.getElementById('stt-model').value;
+
+    const ttsReg = ADAPTER_REGISTRY[ttsAdapter];
+    const sttReg = STT_REGISTRY[sttAdapter];
+
+    // Collect packages that need checking
+    const toCheck = [];
+    if (ttsReg?.pipPackage) toCheck.push({ name: ttsReg.pipPackage, adapter: ttsReg.label, type: 'TTS' });
+    if (sttReg?.pipPackage) toCheck.push({ name: sttReg.pipPackage, adapter: sttReg.label, type: 'STT' });
+
+    // Deduplicate (e.g. openai used by both TTS and STT)
+    const seen = new Set();
+    const unique = toCheck.filter(p => {
+        if (seen.has(p.name)) return false;
+        seen.add(p.name);
+        return true;
+    });
+
+    for (const pkg of unique) {
+        try {
+            const result = await window.voiceMirror.config.checkPipPackage(pkg.name);
+            if (result.success && result.installed) continue;
+
+            // Package not installed — ask user
+            const install = confirm(
+                `${pkg.type} engine "${pkg.adapter}" requires the "${pkg.name}" Python package.\n\n` +
+                `Install it now? This may take a moment.`
+            );
+            if (!install) return false;
+
+            // Show installing state
+            const saveBtn = document.querySelector('.settings-btn.primary');
+            const originalText = saveBtn?.textContent;
+            if (saveBtn) {
+                saveBtn.textContent = `Installing ${pkg.name}...`;
+                saveBtn.disabled = true;
+            }
+
+            try {
+                const installResult = await window.voiceMirror.config.installPipPackage(pkg.name);
+                if (!installResult.success) {
+                    alert(`Failed to install "${pkg.name}":\n${installResult.error}\n\nYou can install it manually: pip install ${pkg.name}`);
+                    return false;
+                }
+            } finally {
+                if (saveBtn) {
+                    saveBtn.textContent = originalText;
+                    saveBtn.disabled = false;
+                }
+            }
+        } catch (err) {
+            log.info(`Pip package check failed for ${pkg.name}:`, err);
+        }
+    }
+
+    return true;
 }
 
 /**
@@ -197,7 +497,14 @@ export function collectVoiceSaveData() {
             ttsModelSize: document.getElementById('tts-model-size').value,
             ttsSpeed: parseFloat(document.getElementById('tts-speed').value),
             ttsVolume: parseFloat(document.getElementById('tts-volume').value),
+            ttsApiKey: document.getElementById('tts-api-key')?.value || null,
+            ttsEndpoint: document.getElementById('tts-endpoint')?.value || null,
+            ttsModelPath: document.getElementById('tts-model-path')?.value || null,
             sttModel: document.getElementById('stt-model').value,
+            sttAdapter: document.getElementById('stt-model').value,
+            sttApiKey: document.getElementById('stt-api-key')?.value || null,
+            sttEndpoint: document.getElementById('stt-endpoint')?.value || null,
+            sttModelName: document.getElementById('stt-model-name')?.value || null,
             inputDevice: document.getElementById('audio-input-device').value || null,
             outputDevice: document.getElementById('audio-output-device').value || null
         }
@@ -221,6 +528,11 @@ export function initVoiceTab() {
         updateTTSAdapterUI(e.target.value);
     });
 
+    // STT adapter change handler
+    document.getElementById('stt-model').addEventListener('change', (e) => {
+        updateSTTAdapterUI(e.target.value);
+    });
+
     // Slider value displays
     document.getElementById('wake-word-sensitivity').addEventListener('input', (e) => {
         document.getElementById('sensitivity-value').textContent = e.target.value;
@@ -233,6 +545,30 @@ export function initVoiceTab() {
     document.getElementById('tts-volume').addEventListener('input', (e) => {
         document.getElementById('volume-value').textContent = Math.round(e.target.value * 100) + '%';
     });
+
+    // Model path Browse / Clear buttons
+    const browseBtn = document.getElementById('tts-model-path-browse');
+    const clearBtn = document.getElementById('tts-model-path-clear');
+    const modelPathInput = document.getElementById('tts-model-path');
+
+    if (browseBtn && modelPathInput) {
+        browseBtn.addEventListener('click', async () => {
+            try {
+                const result = await window.voiceMirror.config.browseModelFile('piper');
+                if (result.success && result.data) {
+                    modelPathInput.value = result.data;
+                }
+            } catch (err) {
+                log.info('Browse model file failed:', err);
+            }
+        });
+    }
+
+    if (clearBtn && modelPathInput) {
+        clearBtn.addEventListener('click', () => {
+            modelPathInput.value = '';
+        });
+    }
 
     // Keybind recording
     document.querySelectorAll('.keybind-input').forEach(btn => {

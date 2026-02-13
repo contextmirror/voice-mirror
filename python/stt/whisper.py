@@ -17,7 +17,11 @@ class WhisperAdapter(STTAdapter):
     Available models: tiny, base, small, medium, large
     """
 
-    def __init__(self, model_name: str | None = None):
+    adapter_type = "whisper"
+    adapter_category = "local"
+    pip_package = "openai-whisper"
+
+    def __init__(self, model_name: str | None = None, **kwargs):
         super().__init__(model_name or "base")
 
     async def load(self) -> bool:
@@ -83,7 +87,11 @@ class FasterWhisperAdapter(STTAdapter):
     Available models: tiny, base, small, medium, large-v2, large-v3
     """
 
-    def __init__(self, model_name: str | None = None):
+    adapter_type = "faster-whisper"
+    adapter_category = "local"
+    pip_package = "faster-whisper"
+
+    def __init__(self, model_name: str | None = None, **kwargs):
         super().__init__(model_name or "base")
         self.device = "auto"  # auto-detect CUDA or CPU
 

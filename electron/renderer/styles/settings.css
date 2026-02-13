@@ -173,6 +173,14 @@
     color: white;
 }
 
+.setting-row select optgroup {
+    background: #1a1a2e;
+    color: rgba(255, 255, 255, 0.5);
+    font-style: normal;
+    font-size: 12px;
+    font-weight: 600;
+}
+
 /* ========== Sliders ========== */
 .slider-container {
     display: flex;
@@ -600,6 +608,48 @@
 .setting-row input[type="text"]::placeholder,
 .setting-row input[type="password"]::placeholder {
     color: rgba(255, 255, 255, 0.3);
+}
+
+/* Input with side buttons (e.g., file picker) */
+.input-with-buttons {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.input-with-buttons input[type="text"] {
+    flex: 1;
+    min-width: 140px;
+}
+
+.btn-small {
+    padding: 6px 12px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 6px;
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+}
+
+.btn-small:hover {
+    background: rgba(255, 255, 255, 0.15);
+    border-color: #667eea;
+    color: white;
+}
+
+.btn-small.btn-subtle {
+    background: transparent;
+    border-color: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.btn-small.btn-subtle:hover {
+    background: rgba(239, 68, 68, 0.15);
+    border-color: rgba(239, 68, 68, 0.4);
+    color: #ef4444;
 }
 
 /* Vertical setting row (for textareas) */

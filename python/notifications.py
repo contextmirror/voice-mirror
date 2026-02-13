@@ -22,7 +22,7 @@ class NotificationWatcher:
     def __init__(
         self,
         inbox: "InboxManager",
-        tts: "TTSAdapter",
+        tts: "TTSAdapter | Callable[[], TTSAdapter]",
         poll_interval: float = 2.0,
         # State checkers (callbacks to check VoiceMirror state)
         is_recording: Callable[[], bool] = lambda: False,
@@ -41,7 +41,7 @@ class NotificationWatcher:
 
         Args:
             inbox: InboxManager instance
-            tts: TTSAdapter instance
+            tts: TTSAdapter instance or callable that returns current adapter
             poll_interval: How often to check for new messages (seconds)
             is_recording: Callback to check if currently recording
             is_processing: Callback to check if currently processing
@@ -53,7 +53,10 @@ class NotificationWatcher:
             on_speech_end: Callback when TTS ends (with enter_conversation_mode flag)
         """
         self.inbox = inbox
-        self.tts = tts
+        # Support both direct instance and getter callback so adapter
+        # hot-swaps (via refresh_tts_settings) are always reflected
+        self._tts_getter = tts if callable(tts) and not hasattr(tts, 'speak') else None
+        self._tts_direct = None if self._tts_getter else tts
         self.poll_interval = poll_interval
 
         # State checkers
@@ -71,6 +74,13 @@ class NotificationWatcher:
         # Internal compaction tracking
         self._awaiting_compact_resume = False
         self._compact_start_time = None
+
+    @property
+    def tts(self):
+        """Get the current TTS adapter (supports hot-swap via getter)."""
+        if self._tts_getter:
+            return self._tts_getter()
+        return self._tts_direct
 
     async def run(self):
         """Main notification watching loop."""

@@ -49,7 +49,16 @@ contextBridge.exposeInMainWorld('voiceMirror', {
         reset: () => ipcRenderer.invoke('reset-config'),
 
         // Get platform-specific paths and info
-        getPlatformInfo: () => ipcRenderer.invoke('get-platform-info')
+        getPlatformInfo: () => ipcRenderer.invoke('get-platform-info'),
+
+        // Browse for a model file (returns { success, data: filePath })
+        browseModelFile: (fileType) => ipcRenderer.invoke('browse-model-file', fileType),
+
+        // Check if a pip package is installed in the Python venv
+        checkPipPackage: (packageName) => ipcRenderer.invoke('check-pip-package', packageName),
+
+        // Install a pip package into the Python venv
+        installPipPackage: (packageName) => ipcRenderer.invoke('install-pip-package', packageName)
     },
 
     // Overlay (Wayland orb) controls

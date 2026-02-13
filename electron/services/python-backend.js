@@ -656,7 +656,15 @@ function createPythonBackend(options = {}) {
             if (voice.ttsAdapter) updates.tts_adapter = voice.ttsAdapter;
             if (voice.ttsVoice) updates.tts_voice = voice.ttsVoice;
             if (voice.ttsModelSize) updates.tts_model_size = voice.ttsModelSize;
+            if (voice.ttsVolume !== undefined) updates.tts_volume = voice.ttsVolume;
+            if (voice.ttsApiKey !== undefined) updates.tts_api_key = voice.ttsApiKey;
+            if (voice.ttsEndpoint !== undefined) updates.tts_endpoint = voice.ttsEndpoint;
+            if (voice.ttsModelPath !== undefined) updates.tts_model_path = voice.ttsModelPath;
             if (voice.sttModel) updates.stt_adapter = voice.sttModel;
+            if (voice.sttAdapter) updates.stt_adapter = voice.sttAdapter;
+            if (voice.sttApiKey !== undefined) updates.stt_api_key = voice.sttApiKey;
+            if (voice.sttEndpoint !== undefined) updates.stt_endpoint = voice.sttEndpoint;
+            if (voice.sttModelName !== undefined) updates.stt_model_name = voice.sttModelName;
 
             const merged = { ...existing, ...updates };
             await fsP.writeFile(settingsPath, JSON.stringify(merged, null, 2), 'utf-8');

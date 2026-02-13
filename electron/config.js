@@ -33,12 +33,19 @@ const DEFAULT_CONFIG = {
 
     // Voice settings
     voice: {
-        ttsAdapter: 'kokoro',    // 'kokoro' (default) or 'qwen' (voice cloning)
+        ttsAdapter: 'kokoro',    // 'kokoro', 'qwen', 'piper', 'edge', 'openai-tts', 'elevenlabs', 'custom-api'
         ttsVoice: 'af_bella',    // Voice ID (adapter-dependent)
         ttsModelSize: '0.6B',    // Qwen3-TTS model size: '0.6B' (faster) or '1.7B' (better quality)
         ttsSpeed: 1.0,
         ttsVolume: 1.0,          // Volume multiplier (0.1–2.0, 1.0 = 100%)
-        sttModel: 'parakeet',    // or 'whisper'
+        ttsApiKey: null,         // API key for cloud TTS
+        ttsEndpoint: null,       // Custom endpoint URL
+        ttsModelPath: null,      // Local model file path (Piper)
+        sttModel: 'parakeet',    // Legacy alias for sttAdapter
+        sttAdapter: 'parakeet',  // 'parakeet', 'whisper', 'faster-whisper', 'openai-whisper-api', 'custom-api-stt'
+        sttApiKey: null,         // API key for cloud STT
+        sttEndpoint: null,       // Custom STT endpoint URL
+        sttModelName: null,      // Specific model name (e.g. "large-v3")
         inputDevice: null,       // Audio input device name (null = system default)
         outputDevice: null       // Audio output device name (null = system default)
     },

@@ -32,11 +32,18 @@ def load_voice_settings() -> dict[str, Any]:
         "location": "United Kingdom",
         "timezone": "Europe/London",
         "units": "metric",
-        "stt_adapter": "parakeet",  # parakeet, whisper, faster-whisper
+        "stt_adapter": "parakeet",  # parakeet, whisper, faster-whisper, openai-whisper-api, custom-api-stt
         "stt_model": None,  # None = use adapter's default model
-        "tts_adapter": "kokoro",  # kokoro, qwen (future: piper, coqui, elevenlabs)
+        "stt_api_key": None,  # API key for cloud STT
+        "stt_endpoint": None,  # Custom STT endpoint URL
+        "stt_model_name": None,  # Specific model name (e.g. "large-v3")
+        "tts_adapter": "kokoro",  # kokoro, qwen, piper, edge, openai-tts, elevenlabs, custom-api
         "tts_voice": "af_bella",  # Voice ID (adapter-dependent)
         "tts_model_size": "0.6B",  # Qwen3-TTS model size: "0.6B" (faster, ~2GB VRAM) or "1.7B" (better quality, ~4GB VRAM)
+        "tts_volume": 1.0,  # Volume multiplier (0.1-2.0, 1.0 = 100%)
+        "tts_api_key": None,  # API key for cloud TTS
+        "tts_endpoint": None,  # Custom endpoint URL
+        "tts_model_path": None,  # Local model file path (Piper)
     }
 
     # Try to load cached settings first

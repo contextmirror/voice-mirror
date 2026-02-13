@@ -16,6 +16,11 @@ class TTSAdapter(ABC):
     """
 
     adapter_type: str = ""  # Override in subclasses: "kokoro", "qwen", etc.
+    adapter_category: str = "local"  # "local" or "cloud"
+    pip_package: str = ""  # pip install name
+    requires_api_key: bool = False
+    requires_endpoint: bool = False
+    supports_model_path: bool = False
 
     def __init__(self, voice: str | None = None):
         """

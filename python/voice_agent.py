@@ -151,16 +151,30 @@ class VoiceMirror:
         new_voice = settings.get("tts_voice")
         new_model_size = settings.get("tts_model_size", "0.6B")
 
-        # If adapter type changed, rebuild the entire TTS adapter
-        if self.tts and new_adapter != self.tts.adapter_type:
-            print(f"[RELOAD] TTS adapter changed: {self.tts.adapter_type} -> {new_adapter}")
+        # Collect extra kwargs for cloud/custom adapters
+        adapter_kwargs = {}
+        if settings.get("tts_api_key"):
+            adapter_kwargs["api_key"] = settings["tts_api_key"]
+        if settings.get("tts_endpoint"):
+            adapter_kwargs["endpoint"] = settings["tts_endpoint"]
+        if settings.get("tts_model_path"):
+            adapter_kwargs["model_path"] = settings["tts_model_path"]
+
+        # Rebuild the TTS adapter if: type changed, adapter is None, or model
+        # failed to load previously (e.g. pip package was just installed)
+        adapter_broken = self.tts is not None and getattr(self.tts, 'model', None) is None
+        need_rebuild = self.tts is None or new_adapter != self.tts.adapter_type or adapter_broken
+        if need_rebuild:
+            old_type = self.tts.adapter_type if self.tts else "none"
+            print(f"[RELOAD] TTS adapter changed: {old_type} -> {new_adapter}")
             # Stop any in-progress playback before replacing the adapter
+            if self.tts:
+                try:
+                    self.tts.stop_speaking()
+                except Exception:
+                    pass
             try:
-                self.tts.stop_speaking()
-            except Exception:
-                pass
-            try:
-                self.tts = create_tts_adapter(new_adapter, voice=new_voice, model_size=new_model_size)
+                self.tts = create_tts_adapter(new_adapter, voice=new_voice, model_size=new_model_size, **adapter_kwargs)
                 self.tts.volume = float(settings.get("tts_volume", 1.0))
                 self.tts.load()
                 print(f"[OK] TTS adapter reloaded: {new_adapter} (voice: {new_voice})")
@@ -213,6 +227,15 @@ class VoiceMirror:
         adapter_name = settings.get("stt_adapter", "parakeet")
         model_name = settings.get("stt_model", None)
 
+        # Collect extra STT kwargs for cloud/custom adapters
+        stt_kwargs = {}
+        if settings.get("stt_api_key"):
+            stt_kwargs["api_key"] = settings["stt_api_key"]
+        if settings.get("stt_endpoint"):
+            stt_kwargs["endpoint"] = settings["stt_endpoint"]
+        if settings.get("stt_model_name"):
+            stt_kwargs["model_name"] = settings["stt_model_name"]
+
         try:
             print(f"Loading STT adapter: {adapter_name}")
             if model_name:
@@ -220,7 +243,7 @@ class VoiceMirror:
             else:
                 print("  Using default model")
 
-            self.stt_adapter = create_stt_adapter(adapter_name, model_name)
+            self.stt_adapter = create_stt_adapter(adapter_name, model_name, **stt_kwargs)
 
             # Load the adapter (async, so we'll do it in the event loop later)
             # For now just create the instance
@@ -239,12 +262,21 @@ class VoiceMirror:
         tts_voice = settings.get("tts_voice", TTS_VOICE)
         tts_model_size = settings.get("tts_model_size", "0.6B")
 
+        # Collect extra TTS kwargs for cloud/custom adapters
+        tts_kwargs = {}
+        if settings.get("tts_api_key"):
+            tts_kwargs["api_key"] = settings["tts_api_key"]
+        if settings.get("tts_endpoint"):
+            tts_kwargs["endpoint"] = settings["tts_endpoint"]
+        if settings.get("tts_model_path"):
+            tts_kwargs["model_path"] = settings["tts_model_path"]
+
         try:
             print(f"Loading TTS adapter: {tts_adapter}")
             print(f"  Voice: {tts_voice}")
             if tts_adapter == "qwen":
                 print(f"  Model size: {tts_model_size}")
-            self.tts = create_tts_adapter(tts_adapter, voice=tts_voice, model_size=tts_model_size)
+            self.tts = create_tts_adapter(tts_adapter, voice=tts_voice, model_size=tts_model_size, **tts_kwargs)
         except ValueError as e:
             print(f"[WARN] {e}")
             print("   Falling back to kokoro")
@@ -869,7 +901,7 @@ class VoiceMirror:
 
                 notification_watcher = NotificationWatcher(
                     inbox=self.inbox,
-                    tts=self.tts,
+                    tts=lambda: self.tts,
                     poll_interval=NOTIFICATION_POLL_INTERVAL,
                     is_recording=lambda: self.audio_state.is_recording,
                     is_processing=lambda: self.audio_state.is_processing,

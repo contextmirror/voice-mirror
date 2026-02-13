@@ -18,7 +18,11 @@ class ParakeetAdapter(STTAdapter):
     Default model: nemo-parakeet-tdt-0.6b-v2
     """
 
-    def __init__(self, model_name: str | None = None):
+    adapter_type = "parakeet"
+    adapter_category = "local"
+    pip_package = "onnx-asr"
+
+    def __init__(self, model_name: str | None = None, **kwargs):
         super().__init__(model_name or "nemo-parakeet-tdt-0.6b-v2")
         self.supports_gpu = False
 

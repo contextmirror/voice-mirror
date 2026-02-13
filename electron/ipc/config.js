@@ -7,7 +7,9 @@
  */
 
 const { app, ipcMain, dialog } = require('electron');
+const path = require('path');
 const fs = require('fs');
+const { execFile } = require('child_process');
 const fontManager = require('../services/font-manager');
 const { CLI_PROVIDERS } = require('../constants');
 
@@ -191,6 +193,71 @@ function registerConfigHandlers(ctx, validators) {
             return { success: true, data: outputs };
         }
         return { success: true, data: [] };
+    });
+
+    // File picker for custom model files (e.g. Piper .onnx voices)
+    ipcMain.handle('browse-model-file', async (_event, fileType) => {
+        const filters = {
+            piper: [{ name: 'Piper Voice Models', extensions: ['onnx'] }]
+        };
+        const { canceled, filePaths } = await dialog.showOpenDialog(ctx.getMainWindow(), {
+            title: 'Select Model File',
+            filters: filters[fileType] || [{ name: 'Model Files', extensions: ['onnx', 'bin', 'pt'] }],
+            properties: ['openFile']
+        });
+        if (canceled || !filePaths?.length) return { success: false };
+        return { success: true, data: filePaths[0] };
+    });
+
+    // Check if a Python pip package is installed in the venv
+    ipcMain.handle('check-pip-package', async (_event, packageName) => {
+        if (typeof packageName !== 'string' || packageName.length > 100) {
+            return { success: false, error: 'Invalid package name' };
+        }
+        try {
+            const pythonDir = path.join(__dirname, '..', '..', 'python');
+            const isWindows = process.platform === 'win32';
+            const venvPython = isWindows
+                ? path.join(pythonDir, '.venv', 'Scripts', 'python.exe')
+                : path.join(pythonDir, '.venv', 'bin', 'python');
+            // Use pip show to check by package distribution name (handles name mismatches
+            // like piper-tts installing as "piper" module)
+            return await new Promise((resolve) => {
+                execFile(venvPython, ['-m', 'pip', 'show', packageName], { timeout: 15000 }, (err) => {
+                    resolve({ success: true, installed: !err });
+                });
+            });
+        } catch (err) {
+            return { success: false, error: err.message };
+        }
+    });
+
+    // Install a pip package into the Python venv
+    ipcMain.handle('install-pip-package', async (_event, packageName) => {
+        if (typeof packageName !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(packageName) || packageName.length > 100) {
+            return { success: false, error: 'Invalid package name' };
+        }
+        try {
+            const pythonDir = path.join(__dirname, '..', '..', 'python');
+            const isWindows = process.platform === 'win32';
+            const venvPython = isWindows
+                ? path.join(pythonDir, '.venv', 'Scripts', 'python.exe')
+                : path.join(pythonDir, '.venv', 'bin', 'python');
+            ctx.logger.info('[Config]', `Installing pip package: ${packageName}`);
+            return await new Promise((resolve) => {
+                execFile(venvPython, ['-m', 'pip', 'install', packageName], { timeout: 120000 }, (err, stdout, stderr) => {
+                    if (err) {
+                        ctx.logger.error('[Config]', `pip install ${packageName} failed:`, stderr || err.message);
+                        resolve({ success: false, error: stderr || err.message });
+                    } else {
+                        ctx.logger.info('[Config]', `pip install ${packageName} succeeded`);
+                        resolve({ success: true });
+                    }
+                });
+            });
+        } catch (err) {
+            return { success: false, error: err.message };
+        }
     });
 
     ipcMain.handle('reset-config', () => {

@@ -68,8 +68,19 @@
         <div class="setting-row">
             <label>TTS Engine</label>
             <select id="tts-adapter">
-                <option value="kokoro">Kokoro (Fast, ~100MB)</option>
-                <option value="qwen">Qwen3-TTS (Voice cloning, ~3-7GB download)</option>
+                <optgroup label="Local (runs on your machine)">
+                    <option value="kokoro">Kokoro (Local, fast, ~100MB)</option>
+                    <option value="qwen">Qwen3-TTS (Local, voice cloning, ~3-7GB)</option>
+                    <option value="piper">Piper (Local, lightweight, ~50MB)</option>
+                </optgroup>
+                <optgroup label="Cloud (free)">
+                    <option value="edge">Edge TTS (Free cloud, Microsoft)</option>
+                </optgroup>
+                <optgroup label="Cloud (API key required)">
+                    <option value="openai-tts">OpenAI TTS (Cloud, API key required)</option>
+                    <option value="elevenlabs">ElevenLabs (Cloud, premium)</option>
+                    <option value="custom-api">Custom API (OpenAI-compatible)</option>
+                </optgroup>
             </select>
         </div>
         <div class="setting-row" id="tts-model-size-row" style="display: none;">
@@ -82,17 +93,27 @@
         <p class="settings-hint" id="tts-qwen-hint" style="display: none;">
             Qwen3-TTS downloads models on first use (~3-7GB). Voice cloning requires both Base + CustomVoice models.
         </p>
+        <div class="setting-row" id="tts-api-key-row" style="display: none;">
+            <label>API Key</label>
+            <input type="password" id="tts-api-key" autocomplete="off" placeholder="sk-...">
+        </div>
+        <div class="setting-row" id="tts-endpoint-row" style="display: none;">
+            <label>Endpoint URL</label>
+            <input type="text" id="tts-endpoint" placeholder="https://your-server.com/v1">
+        </div>
+        <div class="setting-row" id="tts-model-path-row" style="display: none;">
+            <label>Model File</label>
+            <div class="input-with-buttons">
+                <input type="text" id="tts-model-path" placeholder="Path to .onnx voice file" readonly>
+                <button type="button" id="tts-model-path-browse" class="btn-small">Browse</button>
+                <button type="button" id="tts-model-path-clear" class="btn-small btn-subtle">Clear</button>
+            </div>
+            <p class="settings-hint" id="tts-model-path-hint"></p>
+        </div>
         <div class="setting-row" id="tts-voice-row">
             <label>TTS Voice</label>
             <select id="tts-voice">
-                <!-- Kokoro voices (default) -->
-                <option value="af_bella">Bella (Female)</option>
-                <option value="af_nicole">Nicole (Female)</option>
-                <option value="af_sarah">Sarah (Female)</option>
-                <option value="am_adam">Adam (Male)</option>
-                <option value="am_michael">Michael (Male)</option>
-                <option value="bf_emma">Emma (British)</option>
-                <option value="bm_george">George (British)</option>
+                <!-- Populated dynamically by settings-voice.js -->
             </select>
         </div>
         <div class="setting-row">
@@ -119,9 +140,35 @@
         <div class="setting-row">
             <label>STT Model</label>
             <select id="stt-model">
-                <option value="parakeet">Parakeet (Fast)</option>
-                <option value="whisper">Whisper (Accurate)</option>
+                <optgroup label="Local (runs on your machine)">
+                    <option value="parakeet">Parakeet (Fast, default)</option>
+                    <option value="whisper">Whisper (Accurate)</option>
+                    <option value="faster-whisper">Faster-Whisper (GPU accelerated)</option>
+                </optgroup>
+                <optgroup label="Cloud (API key required)">
+                    <option value="openai-whisper-api">OpenAI Whisper API</option>
+                    <option value="custom-api-stt">Custom API (OpenAI-compatible)</option>
+                </optgroup>
             </select>
+        </div>
+        <div class="setting-row" id="stt-model-name-row" style="display: none;">
+            <label>Model Size</label>
+            <select id="stt-model-name">
+                <option value="">Default</option>
+                <option value="tiny">Tiny (~75MB)</option>
+                <option value="base">Base (~150MB)</option>
+                <option value="small">Small (~500MB)</option>
+                <option value="medium">Medium (~1.5GB)</option>
+                <option value="large-v3">Large-v3 (~3GB)</option>
+            </select>
+        </div>
+        <div class="setting-row" id="stt-api-key-row" style="display: none;">
+            <label>API Key</label>
+            <input type="password" id="stt-api-key" autocomplete="off" placeholder="sk-...">
+        </div>
+        <div class="setting-row" id="stt-endpoint-row" style="display: none;">
+            <label>Endpoint URL</label>
+            <input type="text" id="stt-endpoint" placeholder="https://your-server.com/v1">
         </div>
     </div>
 </div>

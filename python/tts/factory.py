@@ -25,12 +25,40 @@ def _register_adapters():
     except ImportError:
         pass
 
-    # Future adapters can be added here:
-    # - piper: Fast, lightweight, offline
-    # - coqui: Voice cloning, expressive
-    # - elevenlabs: Cloud, highest quality
-    # - openai: Cloud, good quality
-    # - edge: Free Microsoft voices
+    # Piper - fast, lightweight, offline
+    try:
+        from .piper import PiperAdapter
+        ADAPTERS["piper"] = PiperAdapter
+    except ImportError:
+        pass
+
+    # Edge TTS - free Microsoft voices (cloud)
+    try:
+        from .edge import EdgeTTSAdapter
+        ADAPTERS["edge"] = EdgeTTSAdapter
+    except ImportError:
+        pass
+
+    # OpenAI TTS - paid cloud
+    try:
+        from .openai_tts import OpenAITTSAdapter
+        ADAPTERS["openai-tts"] = OpenAITTSAdapter
+    except ImportError:
+        pass
+
+    # ElevenLabs TTS - paid cloud
+    try:
+        from .elevenlabs import ElevenLabsAdapter
+        ADAPTERS["elevenlabs"] = ElevenLabsAdapter
+    except ImportError:
+        pass
+
+    # Custom API - OpenAI-compatible endpoint
+    try:
+        from .custom_api import CustomAPITTSAdapter
+        ADAPTERS["custom-api"] = CustomAPITTSAdapter
+    except ImportError:
+        pass
 
 
 # Register on module load
@@ -40,15 +68,15 @@ _register_adapters()
 def create_tts_adapter(
     adapter_name: str,
     voice: str | None = None,
-    model_size: str | None = None,
+    **kwargs,
 ) -> TTSAdapter:
     """
     Create a TTS adapter by name.
 
     Args:
-        adapter_name: Name of the adapter ("kokoro", "qwen", etc.)
+        adapter_name: Name of the adapter ("kokoro", "qwen", "piper", etc.)
         voice: Optional voice ID to use (adapter-dependent)
-        model_size: Optional model size for adapters that support it (e.g., "0.6B", "1.7B" for Qwen)
+        **kwargs: Additional adapter-specific options (e.g., model_size, api_key, endpoint)
 
     Returns:
         TTSAdapter instance
@@ -66,12 +94,7 @@ def create_tts_adapter(
         )
 
     adapter_class = ADAPTERS[adapter_name]
-
-    # Pass model_size to adapters that support it (e.g., Qwen)
-    if adapter_name == "qwen" and model_size:
-        return adapter_class(voice=voice, model_size=model_size)
-
-    return adapter_class(voice=voice)
+    return adapter_class(voice=voice, **kwargs)
 
 
 def list_available_adapters() -> list[str]:

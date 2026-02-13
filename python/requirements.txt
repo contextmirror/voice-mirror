@@ -35,3 +35,12 @@ psutil>=5.9.0,<6.0.0
 
 # Global hotkey (PTT) on Windows/macOS/X11
 pynput>=1.7.0,<2.0.0
+
+# Optional TTS/STT engines — see requirements-optional.txt
+# Install individual packages for additional adapters:
+#   pip install piper-tts        # Piper TTS (local, lightweight)
+#   pip install edge-tts         # Edge TTS (free Microsoft cloud)
+#   pip install openai           # OpenAI TTS + Whisper API (cloud)
+#   pip install elevenlabs       # ElevenLabs TTS (cloud, premium)
+#   pip install openai-whisper   # OpenAI Whisper STT (local)
+#   pip install faster-whisper   # Faster-Whisper STT (local, GPU)
