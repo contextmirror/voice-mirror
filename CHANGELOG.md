@@ -5,6 +5,36 @@ Format inspired by game dev patch notes — grouped by release, categorized by i
 
 ---
 
+## v0.8.3 — "Everything in Its Place" (2026-02-13)
+
+Final pass on file organization and path correctness. Moved remaining root-level files into their logical directories and fixed all path regressions from the moves.
+
+### File Moves
+- **Spawners to `providers/`**: Moved `claude-spawner.js` and `cli-spawner.js` from `electron/` into `electron/providers/` — colocated with the provider system that consumes them
+- **IPC validators to `ipc/`**: Moved `ipc-validators.js` from `electron/` into `electron/ipc/validators.js` — colocated with the IPC handler modules
+- All consumer imports updated across 6 files (ai-manager, claude-provider, cli-provider, ipc/index, ipc/misc, test)
+
+### Fixed
+- **Claude Code not spawning** — 6 `__dirname` paths in `claude-spawner.js` still pointed one level too shallow after the move to `providers/`; MCP server, python dir, and vendor paths all resolved to `electron/` instead of the project root
+- **Provider icons not loading** — 13 CSS `url()` paths in `settings.css` pointed to `../assets/` instead of `../../assets/` after the CSS moved from `electron/styles/` to `electron/renderer/styles/`
+
+### Code Improvements
+- **Deduplicated `_getConfigBase()`** in `cli-spawner.js` — replaced with `getDataDir()` from `platform-paths.js`
+- **Completed barrel files**: `browser/index.js` now exports all 20+ public APIs; `window/index.js` now exports `createTrayService`
+- **Added `isRunning()`** to `diagnostic-watcher.js` — matches standard service lifecycle pattern
+
+### Documentation
+- Added `README.md` to `electron/lib/`, `electron/tools/`, `electron/browser/`
+- Updated `electron/README.md` structure tree for all file moves
+- Fixed stale path references in `docs/ARCHITECTURE.md` and `docs/GHOSTTY-WEB-MIGRATION.md`
+
+### Technical
+- 18 files modified, 3 new files created
+- 519 tests passing, 0 failures
+- Zero root-level source files remain outside their domain directories
+
+---
+
 ## v0.8.2 — "World-Class Standards" (2026-02-13)
 
 Comprehensive code quality refactor across 8 phases: architecture decomposition, logging standardisation, error consistency, shared pattern extraction, service lifecycle unification, security hardening, and new tests. Executed by a coordinated team of 10 agents.
