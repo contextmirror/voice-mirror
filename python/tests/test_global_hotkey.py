@@ -1,8 +1,12 @@
 """Tests for GlobalHotkeyListener win32 event suppression."""
 
-import platform
+import sys
 import types
+from pathlib import Path
 from unittest.mock import MagicMock, patch
+
+# Ensure the python package root is on sys.path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import pytest
 

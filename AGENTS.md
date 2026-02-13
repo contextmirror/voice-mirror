@@ -10,13 +10,15 @@ Voice Mirror = Electron overlay + Python voice backend + MCP server + AI provide
 Electron (frontend + main process)
 ├── electron/main.js              — Electron entry, window management
 ├── electron/overlay.html         — Renderer HTML (single-page app)
-├── electron/js/                  — Renderer modules (terminal, theme, settings, state)
+├── electron/renderer/            — Renderer modules (terminal, theme, settings, state)
 ├── electron/services/            — Backend services (AI manager, hotkeys, screen capture)
 ├── electron/providers/           — AI provider configs (Claude Code, OpenCode, Ollama, etc.)
 ├── electron/tools/               — MCP tool group definitions
-├── electron/ipc-handlers.js      — IPC bridge between renderer and main process
+├── electron/ipc/                  — IPC bridge modules (ai, config, misc, screen, window)
+├── electron/lib/                  — Shared utilities (JSON watcher, Ollama launcher, safe paths, screen capture)
 ├── electron/cli-spawner.js       — PTY spawner for CLI-based providers (OpenCode)
 ├── electron/claude-spawner.js    — PTY spawner for Claude Code
+├── electron/constants.js         — Shared constants
 └── electron/browser/             — CDP browser automation engine
 
 MCP Server (mcp-server/)
@@ -85,7 +87,7 @@ npm run dev                  # Dev mode with auto-reload
 ```
 
 **Terminal emulator:** ghostty-web (Ghostty's VT parser compiled to WASM)
-**Test runner:** Vitest
+**Test runner:** `node:test` with `node:assert/strict`
 
 ## Security — Prompt Injection Resistance
 

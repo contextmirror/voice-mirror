@@ -5,7 +5,7 @@ const path = require('path');
 
 describe('Startup polish - provider flash fix', () => {
     const stateSource = fs.readFileSync(
-        path.join(__dirname, '../../electron/js/state.js'), 'utf-8'
+        path.join(__dirname, '../../electron/renderer/state.js'), 'utf-8'
     );
     const htmlSource = fs.readFileSync(
         path.join(__dirname, '../../electron/overlay.html'), 'utf-8'
@@ -102,7 +102,7 @@ describe('Startup polish - perf bar immediate sample', () => {
 
 describe('Startup polish - welcome message includes provider', () => {
     const mainSource = fs.readFileSync(
-        path.join(__dirname, '../../electron/js/main.js'), 'utf-8'
+        path.join(__dirname, '../../electron/renderer/main.js'), 'utf-8'
     );
 
     it('updateWelcomeMessage should reference provider name', () => {

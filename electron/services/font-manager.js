@@ -10,7 +10,7 @@ const path = require('path');
 const fs = require('fs');
 const fsPromises = fs.promises;
 const crypto = require('crypto');
-const { createLogger } = require('./services/logger');
+const { createLogger } = require('./logger');
 const logger = createLogger();
 
 // Magic bytes for font format validation

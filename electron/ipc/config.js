@@ -8,7 +8,7 @@
 
 const { app, ipcMain, dialog } = require('electron');
 const fs = require('fs');
-const fontManager = require('../font-manager');
+const fontManager = require('../services/font-manager');
 const { CLI_PROVIDERS } = require('../constants');
 
 /**

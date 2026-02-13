@@ -2,7 +2,7 @@ const { describe, it } = require('node:test');
 const assert = require('node:assert');
 
 /**
- * Tests for the provider display name logic from electron/js/main.js init().
+ * Tests for the provider display name logic from electron/renderer/main.js init().
  * Extracted here to verify that CLI providers (like Claude Code) don't show local model names.
  */
 

@@ -19,7 +19,7 @@ Comprehensive code quality refactor across 8 phases: architecture decomposition,
 - **Structured logger**: Extended `electron/services/logger.js` with level methods — `info()`, `warn()`, `error()`, `debug()` — each accepting a `[Tag]` parameter
 - **Full migration**: All 336 `console.log/error/warn` calls replaced with structured logger calls (main process) and `createLog()` wrapper (renderer) — zero raw console calls remain
 - **Debug gating**: `debug()` level only emits when `VOICE_MIRROR_DEBUG=1` environment variable is set
-- **Renderer logger**: New `electron/js/log.js` provides `createLog('[Tag]')` for renderer-side modules
+- **Renderer logger**: New `electron/renderer/log.js` provides `createLog('[Tag]')` for renderer-side modules
 - **ASCII-safe log output**: Replaced all emoji/Unicode icons with ASCII alternatives in both Electron logger and Python bridge — no more mojibake on Windows consoles
 
 ### Consistency

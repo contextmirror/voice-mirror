@@ -53,6 +53,9 @@ opencode.json
 test/browser-benchmark/
 test/benchmark/
 
+# Integration test reports (generated)
+test/integration/results/
+
 # Test coverage
 coverage/
 .nyc_output/

@@ -8,7 +8,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 
-const srcPath = path.join(__dirname, '..', '..', 'electron', 'js', 'theme-engine.js');
+const srcPath = path.join(__dirname, '..', '..', 'electron', 'renderer', 'theme-engine.js');
 const src = fs.readFileSync(srcPath, 'utf-8');
 
 describe('theme-engine', () => {

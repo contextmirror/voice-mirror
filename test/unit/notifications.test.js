@@ -11,8 +11,8 @@ const fs = require('fs');
 const path = require('path');
 
 describe('notifications', () => {
-    const notificationsPath = path.join(__dirname, '../../electron/js/notifications.js');
-    const cssPath = path.join(__dirname, '../../electron/styles/notifications.css');
+    const notificationsPath = path.join(__dirname, '../../electron/renderer/notifications.js');
+    const cssPath = path.join(__dirname, '../../electron/renderer/styles/notifications.css');
 
     describe('notifications.js file structure', () => {
         it('should exist', () => {
@@ -129,7 +129,7 @@ describe('notifications', () => {
     });
 
     describe('update notification integration', () => {
-        const mainJsPath = path.join(__dirname, '../../electron/js/main.js');
+        const mainJsPath = path.join(__dirname, '../../electron/renderer/main.js');
         const mainContent = fs.readFileSync(mainJsPath, 'utf-8');
 
         it('should use sidebar banner for update notifications', () => {

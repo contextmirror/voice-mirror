@@ -33,6 +33,29 @@ const { createTrayService } = require('./window/tray');
 const { createWindowManager } = require('./window');
 const { createWaylandOrb } = require('./services/wayland-orb');
 
+/*
+ * Service Initialization Order (inside app.whenReady)
+ * ───────────────────────────────────────────────────
+ *  1. Logger initialized (file logging)
+ *  2. Config loaded + API keys auto-detected from env
+ *  3. Window manager created (not yet showing)
+ *  4. Python backend created (not yet spawned)
+ *  5. Screen-capture, browser, AI-manager, inbox watchers created
+ *  6. IPC handlers registered
+ *  7. Wayland orb initialized (Linux only)
+ *  8. Window created + late requires: webview-cdp, browser-controller
+ *  9. Tray created; watchers started (screen-capture, inbox, browser)
+ * 10. Perf monitor + diagnostic watcher started
+ * 11. Hotkey manager started (uiohook + globalShortcut)
+ * 12. Update checker started
+ * 13. Docker services started (SearXNG, n8n)
+ * 14. Python backend spawned (STT/TTS/VAD)
+ * 15. AI provider started (after Python ready or 5 s fallback)
+ *
+ * Late requires (webview-cdp, browser-controller) exist because
+ * they need the main BrowserWindow to exist before loading.
+ */
+
 // File logging - uses logger service
 const logger = createLogger();
 

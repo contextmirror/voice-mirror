@@ -16,10 +16,10 @@ const fs = require('fs');
 const path = require('path');
 
 const terminalSource = fs.readFileSync(
-    path.join(__dirname, '../../electron/js/terminal.js'), 'utf-8'
+    path.join(__dirname, '../../electron/renderer/terminal.js'), 'utf-8'
 );
 const terminalCss = fs.readFileSync(
-    path.join(__dirname, '../../electron/styles/terminal.css'), 'utf-8'
+    path.join(__dirname, '../../electron/renderer/styles/terminal.css'), 'utf-8'
 );
 
 describe('Terminal resize debounce', () => {
