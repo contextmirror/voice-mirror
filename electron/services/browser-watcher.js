@@ -15,11 +15,10 @@ const logger = createLogger();
  * Create a browser watcher service instance.
  * @param {Object} options - Service options
  * @param {string} options.dataDir - Path to data directory
- * @param {string} options.serperApiKey - Serper.dev API key for web search
  * @returns {Object} Browser watcher service instance
  */
 function createBrowserWatcher(options = {}) {
-    const { dataDir, serperApiKey, onActivity } = options;
+    const { dataDir, onActivity } = options;
 
     let fileWatcher = null;
     let browserModule = null;
@@ -28,9 +27,6 @@ function createBrowserWatcher(options = {}) {
     function getBrowserModule() {
         if (!browserModule) {
             browserModule = require('../browser');
-            if (serperApiKey) {
-                browserModule.setSerperApiKey(serperApiKey);
-            }
         }
         return browserModule;
     }

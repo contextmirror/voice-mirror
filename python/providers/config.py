@@ -63,9 +63,9 @@ def get_ai_provider() -> dict:
                     "model": model
                 }
     except Exception as e:
-        print(f"⚠️ Could not read AI provider: {e}")
+        print(f"[WARN] Could not read AI provider: {e}")
 
-    print("⚠️ No AI provider configured, defaulting to Claude")
+    print("[WARN] No AI provider configured, defaulting to Claude")
     return {"provider": "claude", "name": "Claude", "model": None}
 
 
@@ -93,5 +93,5 @@ def get_activation_mode() -> str:
                 config = json.load(f)
                 return config.get("behavior", {}).get("activationMode", ActivationMode.WAKE_WORD)
     except Exception as e:
-        print(f"⚠️ Could not read activation mode: {e}")
+        print(f"[WARN] Could not read activation mode: {e}")
     return ActivationMode.WAKE_WORD

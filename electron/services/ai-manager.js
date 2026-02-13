@@ -37,7 +37,7 @@ async function configureOpenCodeMCP(appConfig) {
     const groups = profiles[profileName]?.groups || ['core', 'meta', 'screen', 'memory'];
     const enabledGroups = groups.join(',');
 
-    logger.info('[AIManager]', `OpenCode MCP tool profile: "${profileName}" → groups: ${enabledGroups}`);
+    logger.info('[AIManager]', `OpenCode MCP tool profile: "${profileName}" - groups: ${enabledGroups}`);
 
     const openCodeConfig = {
         mcp: {

@@ -63,7 +63,7 @@ async function configureMCPServer(appConfig) {
     const groups = profiles[profileName]?.groups || ['core', 'meta', 'screen', 'memory'];
     const enabledGroups = groups.join(',');
 
-    logger.info('[Claude Spawner]', `Tool profile: "${profileName}" → groups: ${enabledGroups}`);
+    logger.info('[Claude Spawner]', `Tool profile: "${profileName}" - groups: ${enabledGroups}`);
 
     const serverEntry = {
         command: 'node',

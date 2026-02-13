@@ -167,15 +167,15 @@ class QwenTTSAdapter(TTSAdapter):
                     x_vector_only_mode=False,
                 )
 
-            print(f"✅ Qwen3-TTS loaded (voice: {self.voice}, lang: {self.language})")
+            print(f"[OK] Qwen3-TTS loaded (voice: {self.voice}, lang: {self.language})")
             return True
 
         except ImportError:
-            print("❌ Qwen3-TTS not available - install with: pip install qwen-tts")
+            print("[ERR] Qwen3-TTS not available - install with: pip install qwen-tts")
             self.model = None
             return False
         except Exception as e:
-            print(f"⚠️ Failed to load Qwen3-TTS: {e}")
+            print(f"[WARN] Failed to load Qwen3-TTS: {e}")
             self.model = None
             return False
 
@@ -199,7 +199,7 @@ class QwenTTSAdapter(TTSAdapter):
             instruct: Optional style/emotion instruction (e.g., "speak warmly")
         """
         text = self.strip_markdown(text)
-        print(f"🔊 Speaking: {text[:50]}...")
+        print(f"[TTS] Speaking: {text[:50]}...")
 
         self._is_speaking = True
 
@@ -209,7 +209,7 @@ class QwenTTSAdapter(TTSAdapter):
         temp_files = []
         try:
             if self.model is None:
-                print("❌ Qwen3-TTS not loaded")
+                print("[ERR] Qwen3-TTS not loaded")
                 return
 
             if self._soundfile is None:
@@ -270,7 +270,7 @@ class QwenTTSAdapter(TTSAdapter):
                     pass
 
         except Exception as e:
-            print(f"❌ Qwen3-TTS error: {e}")
+            print(f"[ERR] Qwen3-TTS error: {e}")
         finally:
             # Clean up all temp audio files
             for f in temp_files:
@@ -313,7 +313,7 @@ class QwenTTSAdapter(TTSAdapter):
                 )
             return wavs[0], sr
         except Exception as e:
-            print(f"❌ Synthesis error: {e}")
+            print(f"[ERR] Synthesis error: {e}")
             return None, 0
 
     def set_voice_clone(self, ref_audio: str, ref_text: str) -> bool:
@@ -328,7 +328,7 @@ class QwenTTSAdapter(TTSAdapter):
             True if successful
         """
         if self.model is None:
-            print("❌ Model not loaded")
+            print("[ERR] Model not loaded")
             return False
 
         try:
@@ -336,7 +336,7 @@ class QwenTTSAdapter(TTSAdapter):
             # CustomVoice model doesn't support voice cloning
             current_model_name = self._get_model_name()
             if "CustomVoice" in current_model_name:
-                print("🔄 Switching from CustomVoice to Base model for voice cloning...")
+                print("[RELOAD] Switching from CustomVoice to Base model for voice cloning...")
                 self.ref_audio = ref_audio  # Set this so _get_model_name returns Base
                 self.ref_text = ref_text
 
@@ -352,10 +352,10 @@ class QwenTTSAdapter(TTSAdapter):
                 ref_text=ref_text,
                 x_vector_only_mode=False,
             )
-            print(f"✅ Voice clone prompt created from: {ref_audio}")
+            print(f"[OK] Voice clone prompt created from: {ref_audio}")
             return True
         except Exception as e:
-            print(f"❌ Failed to create voice clone: {e}")
+            print(f"[ERR] Failed to create voice clone: {e}")
             return False
 
     def _reload_for_cloning(self) -> bool:
@@ -365,7 +365,7 @@ class QwenTTSAdapter(TTSAdapter):
             from qwen_tts import Qwen3TTSModel
 
             model_name = self._get_model_name()  # Now returns Base model
-            print(f"📥 Loading Base model: {model_name}")
+            print(f"[LOAD] Loading Base model: {model_name}")
 
             # Determine device and dtype
             if torch.cuda.is_available():
@@ -402,11 +402,11 @@ class QwenTTSAdapter(TTSAdapter):
                 else:
                     raise
 
-            print("✅ Base model loaded for voice cloning")
+            print("[OK] Base model loaded for voice cloning")
             return True
 
         except Exception as e:
-            print(f"❌ Failed to reload model for cloning: {e}")
+            print(f"[ERR] Failed to reload model for cloning: {e}")
             return False
 
     def clear_voice_clone(self):
@@ -418,7 +418,7 @@ class QwenTTSAdapter(TTSAdapter):
 
         # If we were using voice cloning, reload CustomVoice model
         if was_cloning and self.model is not None:
-            print("🔄 Switching back to CustomVoice model...")
+            print("[RELOAD] Switching back to CustomVoice model...")
             self._reload_for_preset()
 
     def _reload_for_preset(self):
@@ -428,7 +428,7 @@ class QwenTTSAdapter(TTSAdapter):
             from qwen_tts import Qwen3TTSModel
 
             model_name = self._get_model_name()  # Now returns CustomVoice model
-            print(f"📥 Loading CustomVoice model: {model_name}")
+            print(f"[LOAD] Loading CustomVoice model: {model_name}")
 
             # Determine device and dtype
             if torch.cuda.is_available():
@@ -464,10 +464,10 @@ class QwenTTSAdapter(TTSAdapter):
                 else:
                     raise
 
-            print("✅ CustomVoice model loaded")
+            print("[OK] CustomVoice model loaded")
 
         except Exception as e:
-            print(f"❌ Failed to reload CustomVoice model: {e}")
+            print(f"[ERR] Failed to reload CustomVoice model: {e}")
 
     @property
     def name(self) -> str:

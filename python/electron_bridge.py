@@ -95,14 +95,14 @@ class Colors:
 
 # Log level colors and icons
 LOG_STYLES = {
-    'EVENT': (Colors.CYAN, '→'),
-    'VOICE': (Colors.MAGENTA, '🎤'),
-    'CLAUDE': (Colors.BLUE, '🤖'),
-    'TTS': (Colors.GREEN, '🔊'),
-    'ERROR': (Colors.RED, '✗'),
-    'WARN': (Colors.YELLOW, '⚠'),
-    'INFO': (Colors.WHITE, '•'),
-    'PYTHON': (Colors.DIM, '⚙'),
+    'EVENT': (Colors.CYAN, '->'),
+    'VOICE': (Colors.MAGENTA, '>'),
+    'CLAUDE': (Colors.BLUE, '>'),
+    'TTS': (Colors.GREEN, '>'),
+    'ERROR': (Colors.RED, 'x'),
+    'WARN': (Colors.YELLOW, '!'),
+    'INFO': (Colors.WHITE, '-'),
+    'PYTHON': (Colors.DIM, '#'),
 }
 
 # Events to skip logging (too noisy)
@@ -128,7 +128,7 @@ def write_log(level: str, message: str):
     """Write a color-coded log entry to the file."""
     if _log_file:
         timestamp = datetime.now().strftime('%H:%M:%S')
-        color, icon = LOG_STYLES.get(level, (Colors.WHITE, '•'))
+        color, icon = LOG_STYLES.get(level, (Colors.WHITE, '-'))
         # Write with color codes
         _log_file.write(f"{Colors.DIM}[{timestamp}]{Colors.RESET} {color}{icon} {message}{Colors.RESET}\n")
         _log_file.flush()
@@ -204,7 +204,7 @@ def emit_event(event: str, data: dict = None):
     elif event == 'ptt_start':
         write_log('PTT', "PTT start")
     elif event == 'ptt_stop':
-        write_log('PTT', "PTT stop → transcribing")
+        write_log('PTT', "PTT stop -> transcribing")
     elif event in ('starting', 'ready'):
         write_log('INFO', event.capitalize())
     else:
@@ -220,8 +220,8 @@ class ElectronOutputCapture:
 
     # Patterns to ignore completely (noisy debug output)
     IGNORE_PATTERNS = [
-        '🎤 Audio:',           # Audio level debug
-        '🔊 █',                # Audio level bar
+        '[MIC] Audio:',        # Audio level debug
+        '[TTS] #',             # Audio level bar
         'Audio status:',       # sounddevice status
     ]
 
@@ -290,19 +290,19 @@ class ElectronOutputCapture:
         # Speaking
         elif "Speaking:" in text:
             # Extract the text being spoken
-            spoken_text = text.replace("🔊 Speaking:", "").strip()
+            spoken_text = text.replace("[TTS] Speaking:", "").strip()
             emit_event("speaking_start", {"text": spoken_text})
         elif "Speaking done" in text:
             emit_event("speaking_end", {})
 
         # Transcription result
         elif "You said:" in text:
-            transcript = text.replace("📝 You said:", "").strip()
+            transcript = text.replace("[STT] You said:", "").strip()
             emit_event("transcription", {"text": transcript})
 
         # Response
-        elif text.startswith("💬 "):
-            response_text = text[2:].strip()
+        elif text.startswith("[CHAT] "):
+            response_text = text[len("[CHAT] "):].strip()
             emit_event("response", {"text": response_text})
 
         # Sent to inbox
@@ -325,34 +325,34 @@ class ElectronOutputCapture:
     def _colorize(self, text: str) -> str:
         """Add ANSI color codes based on message content."""
         # Wake word / listening
-        if "Wake word" in text or "👂 Listening" in text:
+        if "Wake word" in text or "[LISTEN] Listening" in text:
             return f"{Colors.MAGENTA}{text}{Colors.RESET}"
         # Recording
-        elif "🔴 Recording" in text or "Recording..." in text:
+        elif "[REC] Recording" in text or "Recording..." in text:
             return f"{Colors.BRIGHT_RED}{text}{Colors.RESET}"
         # Transcription
-        elif "📝 You said:" in text:
+        elif "[STT] You said:" in text:
             return f"{Colors.CYAN}{text}{Colors.RESET}"
         # Speaking / TTS
-        elif "🔊 Speaking" in text:
+        elif "[TTS] Speaking" in text:
             return f"{Colors.GREEN}{text}{Colors.RESET}"
         # AI response (Claude, Ollama, etc.)
-        elif text.startswith("💬 "):
+        elif text.startswith("[CHAT] "):
             return f"{Colors.BLUE}{text}{Colors.RESET}"
         # Sent to inbox
-        elif "📬 Sent to inbox" in text:
+        elif "[NOTIFY] Sent to inbox" in text:
             return f"{Colors.YELLOW}{text}{Colors.RESET}"
         # Waiting / processing
-        elif "⏳" in text:
+        elif "[WAIT]" in text:
             return f"{Colors.DIM}{text}{Colors.RESET}"
         # Mode changes
-        elif "🔄" in text or "Mode:" in text:
+        elif "[RELOAD]" in text or "Mode:" in text:
             return f"{Colors.BRIGHT_MAGENTA}{text}{Colors.RESET}"
         # Errors
-        elif "Error" in text or "✗" in text:
+        elif "Error" in text or "[ERR]" in text:
             return f"{Colors.BRIGHT_RED}{text}{Colors.RESET}"
         # Ready / success
-        elif "✅" in text or "Ready" in text:
+        elif "[OK]" in text or "Ready" in text:
             return f"{Colors.BRIGHT_GREEN}{text}{Colors.RESET}"
         # Conversation mode
         elif "Conversation mode" in text or "window" in text.lower():

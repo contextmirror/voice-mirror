@@ -44,10 +44,10 @@ class WakeWordProcessor:
             self.model = OWWModel(
                 wakeword_model_paths=[str(full_path)],
             )
-            print(f"✅ Wake word model loaded: {self.model_path}")
+            print(f"[OK] Wake word model loaded: {self.model_path}")
             return True
         except Exception as e:
-            print(f"⚠️ Failed to load wake word model: {e}")
+            print(f"[WARN] Failed to load wake word model: {e}")
             self.model = None
             return False
 

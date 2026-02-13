@@ -28,20 +28,20 @@ const Colors = {
 
 // Log level styles: [color, icon]
 const LOG_STYLES = {
-    'APP': [Colors.GREEN, '⚡'],
-    'CONFIG': [Colors.YELLOW, '⚙'],
-    'PYTHON': [Colors.MAGENTA, '🐍'],
-    'CLAUDE': [Colors.BLUE, '🤖'],
-    'EVENT': [Colors.CYAN, '→'],
-    'ERROR': [Colors.RED, '✗'],
-    'LOG': [Colors.WHITE, '•'],
+    'APP': [Colors.GREEN, '*'],
+    'CONFIG': [Colors.YELLOW, '#'],
+    'PYTHON': [Colors.MAGENTA, '>'],
+    'CLAUDE': [Colors.BLUE, '>'],
+    'EVENT': [Colors.CYAN, '>'],
+    'ERROR': [Colors.RED, 'x'],
+    'LOG': [Colors.WHITE, '-'],
     // Dev log categories
-    'UI': [Colors.BRIGHT_CYAN, '📱'],
-    'BACKEND': [Colors.BLUE, '📡'],
-    'TOOL': [Colors.BRIGHT_YELLOW, '⚡'],
-    'PTT': [Colors.MAGENTA, '🎤'],
-    'TTS': [Colors.GREEN, '🔊'],
-    'IPC': [Colors.DIM, '↔'],
+    'UI': [Colors.BRIGHT_CYAN, '>'],
+    'BACKEND': [Colors.BLUE, '>'],
+    'TOOL': [Colors.BRIGHT_YELLOW, '>'],
+    'PTT': [Colors.MAGENTA, '>'],
+    'TTS': [Colors.GREEN, '>'],
+    'IPC': [Colors.DIM, '>'],
 };
 
 // Category padding for aligned output
@@ -86,7 +86,7 @@ function createLogger(options = {}) {
     function log(level, message) {
         const now = new Date();
         const timestamp = now.toTimeString().slice(0, 8); // HH:MM:SS
-        const [color, icon] = LOG_STYLES[level] || [Colors.WHITE, '•'];
+        const [color, icon] = LOG_STYLES[level] || [Colors.WHITE, '-'];
         const cat = `[${level}]`.padEnd(CAT_PAD);
 
         const logLine = `${Colors.DIM}[${timestamp}]${Colors.RESET} ${color}${cat} ${icon} ${message}${Colors.RESET}`;
@@ -129,7 +129,7 @@ function createLogger(options = {}) {
         }
         if (data.source) parts.push(data.source);
         if (data.tool) parts.push(data.tool);
-        if (data.success !== undefined) parts.push(data.success ? '→ success' : '→ failed');
+        if (data.success !== undefined) parts.push(data.success ? '> success' : '> failed');
         if (data.duration !== undefined) parts.push(`(${data.duration}ms)`);
         if (data.chars !== undefined) parts.push(`(${data.chars} chars)`);
         if (data.reason) parts.push(`[${data.reason}]`);

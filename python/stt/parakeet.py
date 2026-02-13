@@ -36,11 +36,11 @@ class ParakeetAdapter(STTAdapter):
                 providers=["CPUExecutionProvider"]
             )
             self.supports_gpu = False
-            print("✅ Parakeet loaded (CPU mode)")
+            print("[OK] Parakeet loaded (CPU mode)")
             return True
 
         except ImportError:
-            print("❌ Parakeet STT not available - install with: pip install onnx-asr[gpu,hub]")
+            print("[ERR] Parakeet STT not available - install with: pip install onnx-asr[gpu,hub]")
             return False
 
     async def transcribe(self, audio_data: np.ndarray, sample_rate: int = 16000) -> str:
@@ -96,7 +96,7 @@ class ParakeetAdapter(STTAdapter):
                         pass
 
         except Exception as e:
-            print(f"❌ Parakeet STT error: {e}")
+            print(f"[ERR] Parakeet STT error: {e}")
             return ""
 
     @property

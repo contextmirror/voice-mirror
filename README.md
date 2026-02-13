@@ -208,7 +208,7 @@ voice-mirror-electron/
 │   ├── lib/               # Shared utilities (file watcher, screen capture, path safety, ollama)
 │   ├── services/          # 15 service modules (standardised lifecycle: start/stop/isRunning)
 │   ├── providers/         # Multi-AI provider system (5 providers, 75+ via OpenCode)
-│   ├── browser/           # CDP browser automation (10 modules)
+│   ├── browser/           # CDP browser automation (9 modules)
 │   ├── tools/             # Tool system for local LLMs (4 tools)
 │   ├── js/                # Renderer modules (15 files)
 │   └── styles/            # CSS modules (10 files)
@@ -271,7 +271,6 @@ voice-mirror-electron/
 | Variable | Provider |
 |----------|----------|
 | `ANTHROPIC_API_KEY` | Claude Code |
-| `SERPER_API_KEY` | Web search (Serper.dev) |
 
 Cloud provider API keys (OpenAI, Google, xAI, etc.) are configured through OpenCode directly — see [OpenCode docs](https://opencode.ai/docs/providers/) for setup.
 

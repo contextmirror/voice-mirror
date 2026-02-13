@@ -30,7 +30,7 @@ class NotificationWatcher:
         in_conversation: Callable[[], bool] = lambda: False,
         # Actions
         provider_refresh: Callable[[], None] | None = None,
-        get_listening_status: Callable[[], str] = lambda: "👂 Listening...",
+        get_listening_status: Callable[[], str] = lambda: "[LISTEN] Listening...",
         get_ai_provider_name: Callable[[], str] = lambda: "Claude",
         # TTS callbacks for state management
         on_speech_start: Callable[[], None] | None = None,
@@ -74,7 +74,7 @@ class NotificationWatcher:
 
     async def run(self):
         """Main notification watching loop."""
-        print("📢 Notification watcher started")
+        print("[NOTIFY] Notification watcher started")
 
         # Initialize with current latest message (don't speak old ones)
         msg_id, _ = self.inbox.get_latest_ai_message()
@@ -95,7 +95,7 @@ class NotificationWatcher:
                 # stale messages from the new provider's old inbox history
                 current_provider_name = self._get_ai_provider_name()
                 if current_provider_name != last_provider_name:
-                    print(f"📢 Provider switched ({last_provider_name} → {current_provider_name}), reseeding notification state")
+                    print(f"[NOTIFY] Provider switched ({last_provider_name} -> {current_provider_name}), reseeding notification state")
                     msg_id, _ = self.inbox.get_latest_ai_message()
                     self.inbox.last_seen_message_id = msg_id
                     last_provider_name = current_provider_name
@@ -111,7 +111,7 @@ class NotificationWatcher:
                     self._compact_start_time = time.time()
                     self.inbox.mark_compaction_read(compact_id)
                     provider_name = self._get_ai_provider_name()
-                    print(f"\n⏳ {provider_name} is reorganizing context... conversation will resume shortly")
+                    print(f"\n[WAIT] {provider_name} is reorganizing context... conversation will resume shortly")
                     # Optionally speak a brief notification
                     if not self.tts.is_speaking:
                         await self._speak("One moment, I'm reorganizing my thoughts.", enter_conversation_mode=False)
@@ -121,7 +121,7 @@ class NotificationWatcher:
                 if self._awaiting_compact_resume:
                     # Timeout after 60 seconds
                     if time.time() - self._compact_start_time > 60:
-                        print("⚠️ Compact resume timeout - AI may need a nudge")
+                        print("[WARN] Compact resume timeout - AI may need a nudge")
                         self._awaiting_compact_resume = False
                         continue
 
@@ -131,7 +131,7 @@ class NotificationWatcher:
                         self.inbox.last_seen_message_id = msg_id
                         self._awaiting_compact_resume = False
                         provider_name = self._get_ai_provider_name()
-                        print(f"\n✅ {provider_name} resumed after compaction!")
+                        print(f"\n[OK] {provider_name} resumed after compaction!")
                         clean_message = strip_provider_prefix(message)
                         await self._speak(clean_message, enter_conversation_mode=True)
                         print(f"\n{self._get_listening_status()}")
@@ -156,14 +156,14 @@ class NotificationWatcher:
                 if msg_id and msg_id != self.inbox.last_seen_message_id and message:
                     self.inbox.last_seen_message_id = msg_id
                     provider_name = self._get_ai_provider_name()
-                    print(f"\n📢 New notification from {provider_name}!")
+                    print(f"\n[NOTIFY] New notification from {provider_name}!")
                     # Strip provider prefix and speak (it's a notification)
                     clean_message = strip_provider_prefix(message)
                     await self._speak(clean_message, enter_conversation_mode=False)
                     print(f"\n{self._get_listening_status()}")
 
             except Exception as e:
-                print(f"⚠️ Notification watcher error: {e}")
+                print(f"[WARN] Notification watcher error: {e}")
                 await asyncio.sleep(5)  # Back off on error
 
     async def _speak(self, text: str, enter_conversation_mode: bool):

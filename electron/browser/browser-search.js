@@ -1,70 +1,23 @@
 /**
  * Web search implementation for Voice Mirror.
  *
- * Priority order:
- * 1. Serper.dev API (fast, reliable, if API key configured)
- * 2. Webview fallback (navigate embedded browser to search engine)
+ * Navigates the embedded webview to Google and extracts results via CDP.
  */
 
 const cdp = require('./webview-cdp');
-const { searchSerper } = require('./serper-search');
 const { formatResults } = require('./search-utils');
 const { createLogger } = require('../services/logger');
 const logger = createLogger();
 
-// Serper API key
-let serperApiKey = process.env.SERPER_API_KEY || '';
-
 /**
- * Set the Serper API key.
- * @param {string} apiKey
- */
-function setSerperApiKey(apiKey) {
-    serperApiKey = apiKey;
-    if (apiKey) {
-        logger.info('[Browser Search]', 'Serper API key configured');
-    }
-}
-
-/**
- * Search the web.
- *
- * Uses Serper.dev API if configured, otherwise falls back to webview scraping.
+ * Search the web via the embedded webview.
  *
  * @param {Object} args - Search arguments
  * @param {string} args.query - The search query
  * @param {number} [args.max_results=5] - Maximum results to return
- * @param {number} [args.timeout=30000] - Timeout in milliseconds
  * @returns {Promise<Object>} Search results
  */
 async function webSearch(args = {}) {
-    const { query, max_results = 5, timeout = 30000 } = args;
-
-    if (!query) {
-        return { ok: false, error: 'Search query is required' };
-    }
-
-    const maxResults = Math.min(Math.max(1, max_results), 10);
-
-    // Try Serper API first
-    if (serperApiKey) {
-        logger.info('[Browser Search]', 'Using Serper API...');
-        const serperResult = await searchSerper({
-            query,
-            apiKey: serperApiKey,
-            max_results: maxResults,
-            timeout: Math.min(timeout, 10000),
-        });
-
-        if (serperResult.ok) {
-            return serperResult;
-        }
-
-        logger.info('[Browser Search]', 'Serper failed:', serperResult.error);
-        logger.info('[Browser Search]', 'Falling back to webview...');
-    }
-
-    // Fallback: navigate webview to Google and scrape results
     return await browserSearch(args);
 }
 
@@ -133,5 +86,4 @@ async function browserSearch(args = {}) {
 module.exports = {
     webSearch,
     browserSearch,
-    setSerperApiKey,
 };

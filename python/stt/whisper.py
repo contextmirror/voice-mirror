@@ -31,14 +31,14 @@ class WhisperAdapter(STTAdapter):
                 None,
                 lambda: whisper.load_model(self.model_name)
             )
-            print(f"✅ Whisper loaded ({self.model_name})")
+            print(f"[OK] Whisper loaded ({self.model_name})")
             return True
 
         except ImportError:
-            print("❌ Whisper not available - install with: pip install openai-whisper")
+            print("[ERR] Whisper not available - install with: pip install openai-whisper")
             return False
         except Exception as e:
-            print(f"⚠️ Failed to load Whisper: {e}")
+            print(f"[WARN] Failed to load Whisper: {e}")
             return False
 
     async def transcribe(self, audio_data: np.ndarray, sample_rate: int = 16000) -> str:
@@ -64,7 +64,7 @@ class WhisperAdapter(STTAdapter):
             return text
 
         except Exception as e:
-            print(f"❌ Whisper STT error: {e}")
+            print(f"[ERR] Whisper STT error: {e}")
             return ""
 
     @property
@@ -106,7 +106,7 @@ class FasterWhisperAdapter(STTAdapter):
                     )
                 )
                 self.device = "cuda"
-                print(f"✅ Faster-Whisper loaded ({self.model_name}, GPU)")
+                print(f"[OK] Faster-Whisper loaded ({self.model_name}, GPU)")
                 return True
             except Exception:
                 # Fall back to CPU
@@ -120,14 +120,14 @@ class FasterWhisperAdapter(STTAdapter):
                     )
                 )
                 self.device = "cpu"
-                print(f"✅ Faster-Whisper loaded ({self.model_name}, CPU)")
+                print(f"[OK] Faster-Whisper loaded ({self.model_name}, CPU)")
                 return True
 
         except ImportError:
-            print("❌ Faster-Whisper not available - install with: pip install faster-whisper")
+            print("[ERR] Faster-Whisper not available - install with: pip install faster-whisper")
             return False
         except Exception as e:
-            print(f"⚠️ Failed to load Faster-Whisper: {e}")
+            print(f"[WARN] Failed to load Faster-Whisper: {e}")
             return False
 
     async def transcribe(self, audio_data: np.ndarray, sample_rate: int = 16000) -> str:
@@ -153,7 +153,7 @@ class FasterWhisperAdapter(STTAdapter):
             return text
 
         except Exception as e:
-            print(f"❌ Faster-Whisper STT error: {e}")
+            print(f"[ERR] Faster-Whisper STT error: {e}")
             return ""
 
     @property

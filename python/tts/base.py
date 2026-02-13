@@ -139,10 +139,10 @@ class TTSAdapter(ABC):
         """
         if voice in self.available_voices:
             self.voice = voice
-            print(f"🔊 TTS voice changed to: {voice}")
+            print(f"[TTS] TTS voice changed to: {voice}")
             return True
         else:
-            print(f"⚠️ Unknown voice: {voice}. Available: {', '.join(self.available_voices)}")
+            print(f"[WARN] Unknown voice: {voice}. Available: {', '.join(self.available_voices)}")
             return False
 
     @staticmethod

@@ -11,23 +11,25 @@ Comprehensive code quality refactor across 8 phases: architecture decomposition,
 
 ### Architecture
 - **Split `ipc-handlers.js`** (889 lines) into 6 focused modules under `electron/ipc/`: `window.js`, `config.js`, `screen.js`, `ai.js`, `misc.js`, and `index.js` — each handler group now lives in its own file
-- **Extracted `main.js` utilities**: `startOllamaServer()` → `electron/lib/ollama-launcher.js`, `syncVoiceSettingsToFile()` → python-backend service method, `ensureLocalLLMRunning()` → ai-manager service method (main.js reduced by ~160 lines)
+- **Extracted `main.js` utilities**: `startOllamaServer()` to `electron/lib/ollama-launcher.js`, `syncVoiceSettingsToFile()` to python-backend service method, `ensureLocalLLMRunning()` to ai-manager service method (main.js reduced by ~160 lines)
 - **Created `electron/lib/` directory** with shared utilities: `json-file-watcher.js` (factory for 3 watchers), `windows-screen-capture.js` (deduplicated from 2 files), `ollama-launcher.js`, `safe-path.js`
+- **Removed Serper.dev integration**: Deleted `serper-search.js` (152 lines) and all `SERPER_API_KEY` references — web search now uses webview-based Google scraping exclusively, no external API key required
 
 ### Logging
 - **Structured logger**: Extended `electron/services/logger.js` with level methods — `info()`, `warn()`, `error()`, `debug()` — each accepting a `[Tag]` parameter
 - **Full migration**: All 336 `console.log/error/warn` calls replaced with structured logger calls (main process) and `createLog()` wrapper (renderer) — zero raw console calls remain
 - **Debug gating**: `debug()` level only emits when `VOICE_MIRROR_DEBUG=1` environment variable is set
 - **Renderer logger**: New `electron/js/log.js` provides `createLog('[Tag]')` for renderer-side modules
+- **ASCII-safe log output**: Replaced all emoji/Unicode icons with ASCII alternatives in both Electron logger and Python bridge — no more mojibake on Windows consoles
 
 ### Consistency
 - **IPC response format**: All 57 IPC handlers now return `{ success: boolean, data?: any, error?: string }` — no more mixed `{ ok }`, plain values, or `null` returns
-- **Browser tool responses**: Unified to `{ ok: boolean, action: string, result?: any, error?: string }` across webview-actions, browser-fetch, browser-search, and serper-search
+- **Browser tool responses**: Unified to `{ ok: boolean, action: string, result?: any, error?: string }` across webview-actions, browser-fetch, and browser-search
 - **Service lifecycle**: All services now expose `start()`, `stop()`, `isRunning()` — renamed hotkey-manager's `init()`/`destroy()` and added `isRunning()` to all watchers
 
 ### Deduplication
 - **`electron/constants.js`**: Shared `CLI_PROVIDERS` and `DEFAULT_ENDPOINTS` — removed duplicate definitions from 6 files
-- **`electron/browser/search-utils.js`**: Extracted shared `formatResults()` from browser-search and serper-search
+- **`electron/browser/search-utils.js`**: Extracted shared `formatResults()` from browser-search
 - **`electron/lib/json-file-watcher.js`**: Factory replaces ~150 lines of duplicate watch-debounce-parse logic in each of the 3 watcher services
 - **Platform paths**: Consolidated `getDataDir()` to single source (`platform-paths.js`) — removed duplicate implementations from config.js and claude-spawner.js
 - **Trimmed over-exports**: webview-snapshot.js reduced from 8 to 2 exports, webview-actions.js from 17 to 5
@@ -39,18 +41,13 @@ Comprehensive code quality refactor across 8 phases: architecture decomposition,
 ### Tests
 - **42 new tests** across 6 files: `constants.test.js`, `safe-path.test.js`, `logger-levels.test.js`, `search-utils.test.js`, `json-file-watcher.test.js`, `service-lifecycle.test.js`
 - **Integration test scaffold**: New `test/integration/` directory with service lifecycle verification
-- **Test count**: 477 → 519 (0 failures, 2 skipped)
-
-### Documentation
-- **`docs/CODE-QUALITY-PLAN.md`**: Full 8-phase plan with rationale, dependencies, and verification steps
-- **`docs/FUTURE-IMPROVEMENTS.md`**: Out-of-scope items documented for future work (renderer framework, Python refactoring, secure credential storage, settings.js decomposition)
+- **Test count**: 477 -> 519 (0 failures, 2 skipped)
 
 ### Technical
-- 45 files modified, 11 new files created
-- +634 / -1,611 lines (net -977 lines)
+- 65 files modified, 11 new files created, 2 deleted
 - 519 tests passing, 0 failures
-- Structured logger calls: 6 → 338
-- Raw console calls: 336 → 0
+- Structured logger calls: 6 -> 338, raw console calls: 336 -> 0
+- All log icons ASCII-safe across Electron (JS) and Python backend
 
 ---
 

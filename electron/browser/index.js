@@ -7,7 +7,7 @@
  * Usage:
  *   const browser = require('./browser');
  *
- *   // Web search (Serper API primary, webview fallback)
+ *   // Web search (webview-based Google scraping)
  *   const results = await browser.webSearch({ query: 'weather today' });
  *
  *   // Fetch URL content
@@ -15,19 +15,12 @@
  */
 
 // Web search
-const {
-    webSearch,
-    setSerperApiKey,
-} = require('./browser-search');
+const { webSearch } = require('./browser-search');
 
 // URL fetching
 const { fetchUrl } = require('./browser-fetch');
 
 module.exports = {
-    // Main API
     webSearch,
     fetchUrl,
-
-    // Serper API configuration
-    setSerperApiKey,
 };

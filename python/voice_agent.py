@@ -123,11 +123,11 @@ class VoiceMirror:
         """Get the appropriate listening status message based on activation mode."""
         if self._activation_mode == ActivationMode.WAKE_WORD:
             wake_phrase = self._ai_provider.get('wakePhrase', 'Hey Claude')
-            return f"👂 Listening for '{wake_phrase}'..."
+            return f"[LISTEN] Listening for '{wake_phrase}'..."
         elif self._activation_mode == ActivationMode.PUSH_TO_TALK:
-            return "🎙️ Push-to-talk mode - press key to speak..."
+            return "[MIC] Push-to-talk mode - press key to speak..."
         else:
-            return "👂 Listening..."
+            return "[LISTEN] Listening..."
 
     def refresh_ai_provider(self):
         """
@@ -139,7 +139,7 @@ class VoiceMirror:
         new_provider = self._ai_provider.get('provider')
 
         if old_provider != new_provider:
-            print(f"🔄 AI Provider changed: {old_provider} -> {new_provider} ({self._ai_provider['name']})")
+            print(f"[RELOAD] AI Provider changed: {old_provider} -> {new_provider} ({self._ai_provider['name']})")
 
     def refresh_tts_settings(self):
         """
@@ -154,7 +154,7 @@ class VoiceMirror:
 
         # If adapter type changed, rebuild the entire TTS adapter
         if self.tts and new_adapter != self.tts.adapter_type:
-            print(f"🔄 TTS adapter changed: {self.tts.adapter_type} -> {new_adapter}")
+            print(f"[RELOAD] TTS adapter changed: {self.tts.adapter_type} -> {new_adapter}")
             # Stop any in-progress playback before replacing the adapter
             try:
                 self.tts.stop_speaking()
@@ -164,9 +164,9 @@ class VoiceMirror:
                 self.tts = create_tts_adapter(new_adapter, voice=new_voice, model_size=new_model_size)
                 self.tts.volume = float(settings.get("tts_volume", 1.0))
                 self.tts.load()
-                print(f"✅ TTS adapter reloaded: {new_adapter} (voice: {new_voice})")
+                print(f"[OK] TTS adapter reloaded: {new_adapter} (voice: {new_voice})")
             except Exception as e:
-                print(f"❌ Failed to reload TTS adapter: {e}")
+                print(f"[ERR] Failed to reload TTS adapter: {e}")
             return
 
         # Update volume
@@ -177,14 +177,14 @@ class VoiceMirror:
         # Same adapter, just update voice if changed
         if self.tts and new_voice and new_voice != self.tts.voice:
             if self.tts.set_voice(new_voice):
-                print(f"✅ TTS voice updated to: {new_voice}")
+                print(f"[OK] TTS voice updated to: {new_voice}")
 
     def load_models(self):
         """Load OpenWakeWord and Parakeet models."""
         # Clean up old inbox messages on startup
         removed = cleanup_inbox()
         if removed > 0:
-            print(f"🧹 Cleaned {removed} old message(s) from inbox")
+            print(f"[CLEAN] Cleaned {removed} old message(s) from inbox")
 
         # Get activation mode from Electron config
         self._activation_mode = get_activation_mode()
@@ -228,7 +228,7 @@ class VoiceMirror:
             print("  (First run may download model, please wait...)")
 
         except Exception as e:
-            print(f"❌ Failed to create STT adapter: {e}")
+            print(f"[ERR] Failed to create STT adapter: {e}")
             print("   Falling back to parakeet")
             try:
                 self.stt_adapter = create_stt_adapter("parakeet")
@@ -247,7 +247,7 @@ class VoiceMirror:
                 print(f"  Model size: {tts_model_size}")
             self.tts = create_tts_adapter(tts_adapter, voice=tts_voice, model_size=tts_model_size)
         except ValueError as e:
-            print(f"⚠️ {e}")
+            print(f"[WARN] {e}")
             print("   Falling back to kokoro")
             self.tts = create_tts_adapter("kokoro", voice=tts_voice)
 
@@ -255,7 +255,7 @@ class VoiceMirror:
         try:
             self.tts.load()
         except Exception as e:
-            print(f"⚠️ TTS failed to load: {e}")
+            print(f"[WARN] TTS failed to load: {e}")
             print("   Voice output will be unavailable. Run setup to fix.")
             self.tts = None
 
@@ -357,21 +357,21 @@ class VoiceMirror:
             VOICE_CLONE_REQUEST_PATH.unlink()
 
             action = request.get('action')
-            print(f"🎤 Voice clone request: {action}")
+            print(f"[MIC] Voice clone request: {action}")
 
             if action == 'clone':
                 await self._handle_voice_clone(request)
             elif action == 'clear':
                 await self._handle_voice_clone_clear()
             else:
-                print(f"⚠️ Unknown voice clone action: {action}")
+                print(f"[WARN] Unknown voice clone action: {action}")
 
         except json.JSONDecodeError:
             pass  # File might be partially written
         except FileNotFoundError:
             pass  # Already processed
         except Exception as e:
-            print(f"❌ Voice clone request error: {e}")
+            print(f"[ERR] Voice clone request error: {e}")
             self._write_voice_clone_response(False, str(e))
 
     async def _handle_voice_clone(self, request: dict):
@@ -394,7 +394,7 @@ class VoiceMirror:
 
         # Auto-transcribe if no transcript provided
         if not transcript:
-            print("🎤 Auto-transcribing reference audio...")
+            print("[MIC] Auto-transcribing reference audio...")
             try:
                 import soundfile as sf
                 audio_data, sr = sf.read(audio_path)
@@ -416,7 +416,7 @@ class VoiceMirror:
                 audio_data = audio_data.astype(np.float32)
 
                 transcript = await self.stt_adapter.transcribe(audio_data, SAMPLE_RATE)
-                print(f"📝 Transcription: \"{transcript}\"")
+                print(f"[STT] Transcription: \"{transcript}\"")
 
                 if not transcript or len(transcript.strip()) < 2:
                     self._write_voice_clone_response(
@@ -430,11 +430,11 @@ class VoiceMirror:
                 return
 
         # Set up voice clone
-        print(f"🎤 Setting up voice clone: {voice_name}")
+        print(f"[MIC] Setting up voice clone: {voice_name}")
         try:
             success = self.tts.set_voice_clone(audio_path, transcript)
             if success:
-                print(f"✅ Voice clone '{voice_name}' activated!")
+                print(f"[OK] Voice clone '{voice_name}' activated!")
                 self._write_voice_clone_response(True, transcript=transcript)
             else:
                 self._write_voice_clone_response(False, "Failed to create voice clone prompt")
@@ -445,7 +445,7 @@ class VoiceMirror:
         """Clear current voice clone."""
         if hasattr(self.tts, 'clear_voice_clone'):
             self.tts.clear_voice_clone()
-            print("✅ Voice clone cleared, using preset voice")
+            print("[OK] Voice clone cleared, using preset voice")
             self._write_voice_clone_response(True)
         else:
             self._write_voice_clone_response(True)  # No-op for adapters without cloning
@@ -475,7 +475,7 @@ class VoiceMirror:
             self.audio_state.is_listening = False
 
         def on_speech_end():
-            print("🔇 Speaking done")
+            print("[TTS] Speaking done")
             self.audio_state.is_listening = True
             self.wake_word.clear_buffer()
 
@@ -487,21 +487,21 @@ class VoiceMirror:
             if should_enter_conversation:
                 self.audio_state.in_conversation = True
                 self.audio_state.conversation_end_time = time.time() + CONVERSATION_WINDOW
-                print(f"💬 Conversation mode active ({CONVERSATION_WINDOW}s window - speak without wake word)")
+                print(f"[CHAT] Conversation mode active ({CONVERSATION_WINDOW}s window - speak without wake word)")
 
         await self.tts.speak(text, on_start=on_speech_start, on_end=on_speech_end)
 
     async def transcribe(self, audio_data: np.ndarray) -> str:
         """Transcribe audio using configured STT adapter."""
         if self.stt_adapter is None:
-            print("❌ No STT adapter available")
+            print("[ERR] No STT adapter available")
             return ""
 
         # Load adapter if not already loaded
         if not self.stt_adapter.is_loaded:
             loaded = await self.stt_adapter.load()
             if not loaded:
-                print("❌ Failed to load STT adapter")
+                print("[ERR] Failed to load STT adapter")
                 return ""
 
         # Transcribe using the adapter
@@ -509,14 +509,14 @@ class VoiceMirror:
             text = await self.stt_adapter.transcribe(audio_data, SAMPLE_RATE)
             return text
         except Exception as e:
-            print(f"❌ STT transcription error: {e}")
+            print(f"[ERR] STT transcription error: {e}")
             return ""
 
     def process_wake_word(self, audio_chunk: np.ndarray) -> bool:
         """Check for wake word in audio chunk. Returns True if detected."""
         detected, model_name, score = self.wake_word.process(audio_chunk)
         if detected:
-            print(f"\n🎤 Wake word detected! ({model_name}: {score:.2f})")
+            print(f"\n[MIC] Wake word detected! ({model_name}: {score:.2f})")
         return detected
 
     def audio_callback(self, indata, frames, time_info, status):
@@ -541,11 +541,11 @@ class VoiceMirror:
 
         # Print audio debug every ~1 second
         if self._audio_debug_counter % 60 == 0:
-            print(f"🎤 Audio: level={level:.4f}, energy={energy:.4f}, listening={self.audio_state.is_listening}")
+            print(f"[MIC] Audio: level={level:.4f}, energy={energy:.4f}, listening={self.audio_state.is_listening}")
 
         if level > 0.05:
             bars = int(level * 20)
-            print(f"🔊 {'█' * bars}", end="\r")
+            print(f"[TTS] {'#' * bars}", end="\r")
 
         audio = indata[:, 0].copy()  # Mono
 
@@ -555,13 +555,13 @@ class VoiceMirror:
             # Interrupt TTS if speaking
             if self.tts.is_speaking:
                 self.tts.stop_speaking()
-                print("🔇 TTS interrupted by PTT")
+                print("[TTS] TTS interrupted by PTT")
             self.audio_state.start_recording('ptt')
             self.audio_state._ptt_start_time = time.time()
-            print('🔴 Recording (PTT)... (speak now)')
+            print('[REC] Recording (PTT)... (speak now)')
         elif ptt_action == "stop" and self.audio_state.is_recording:
             # PTT released - process immediately (don't wait for silence)
-            print('⏹️ PTT released, processing...{"event": "recording_stop", "data": {}}')
+            print('[STOP] PTT released, processing...{"event": "recording_stop", "data": {}}')
             self.audio_state.is_recording = False
             self.audio_state.is_processing = True
             # Schedule processing (we're in audio callback, can't await here)
@@ -573,7 +573,7 @@ class VoiceMirror:
                 and self.audio_state.recording_source == 'ptt'
                 and hasattr(self.audio_state, '_ptt_start_time')):
             if time.time() - self.audio_state._ptt_start_time > 120:
-                print('⚠️ PTT recording timeout (120s), force-stopping')
+                print('[WARN] PTT recording timeout (120s), force-stopping')
                 self.audio_state.is_recording = False
                 self.audio_state.ptt_active = False
                 self.audio_state.is_processing = True
@@ -616,7 +616,7 @@ class VoiceMirror:
                     self.audio_state.in_conversation = False
                     if self._activation_mode == ActivationMode.WAKE_WORD:
                         wake_phrase = self._ai_provider.get('wakePhrase', 'Hey Claude')
-                        print(f"\n👂 Conversation window closed. Say '{wake_phrase}' to continue.")
+                        print(f"\n[LISTEN] Conversation window closed. Say '{wake_phrase}' to continue.")
                     else:
                         print(f"\n{self.get_listening_status()}")
                 else:
@@ -625,13 +625,13 @@ class VoiceMirror:
                     if is_speech:
                         self.audio_state.start_recording('follow_up')
                         self.audio_state.in_conversation = False  # Exit conversation mode once recording starts
-                        print(f"🔴 Recording follow-up... VAD={prob:.3f} (speak now)")
+                        print(f"[REC] Recording follow-up... VAD={prob:.3f} (speak now)")
             elif self._activation_mode == ActivationMode.WAKE_WORD and self.wake_word.is_loaded:
                 # Wake word mode - check for wake word
                 if self.process_wake_word(audio):
                     self.audio_state.start_recording('wake_word')
                     self.wake_word.reset()
-                    print("🔴 Recording (wake word)... (speak now)")
+                    print("[REC] Recording (wake word)... (speak now)")
 
         elif self.audio_state.is_recording and not self.audio_state.is_processing:
             # Record audio (thread-safe via AudioState)
@@ -654,25 +654,25 @@ class VoiceMirror:
         min_samples = int(0.4 * 16000)
         if len(audio_data) < min_samples:
             duration_ms = int(len(audio_data) / 16000 * 1000)
-            print(f"🗑️ Recording too short ({duration_ms}ms), discarding")
+            print(f"[SKIP] Recording too short ({duration_ms}ms), discarding")
             self.audio_state.is_processing = False
             return
 
         duration_ms_total = int(len(audio_data) / 16000 * 1000)
         peak = np.abs(audio_data).max()
-        print(f"🎙️ Recording: {duration_ms_total}ms, peak={peak:.4f}")
+        print(f"[MIC] Recording: {duration_ms_total}ms, peak={peak:.4f}")
 
-        print("⏳ Transcribing...")
+        print("[WAIT] Transcribing...")
 
         text = await self.transcribe(audio_data)
 
         # Filter out garbage transcriptions (single chars, very short, or common artifacts)
         if text and len(text.strip()) < 3:
-            print(f"🗑️ Ignoring short transcription: '{text}'")
+            print(f"[SKIP] Ignoring short transcription: '{text}'")
             return
 
         if text:
-            print(f"📝 You said: {text}")
+            print(f"[STT] You said: {text}")
 
             # Send to AI provider via inbox
             msg_id = self.send_to_inbox(text)
@@ -690,20 +690,20 @@ class VoiceMirror:
                         provider_id = self._ai_provider.get('provider', '')
                         if provider_id in MCP_CLI_PROVIDERS:
                             # MCP providers: InboxWatcher handles chat UI, just log for debugging
-                            print(f"✅ {self._ai_provider['name']} responded ({len(response)} chars)")
+                            print(f"[OK] {self._ai_provider['name']} responded ({len(response)} chars)")
                         else:
                             # Non-MCP providers: 💬 prefix triggers chat message via electron_bridge
-                            print(f"💬 {self._ai_provider['name']}: {response}")
+                            print(f"[CHAT] {self._ai_provider['name']}: {response}")
                         clean_response = strip_provider_prefix(response)
                         await self.speak(clean_response)
                     else:
-                        print(f"⏰ No response from {self._ai_provider['name']} (timeout - this is normal if thinking)")
+                        print(f"[TIMEOUT] No response from {self._ai_provider['name']} (timeout - this is normal if thinking)")
                 except Exception as e:
                     print(f"Error waiting for response: {e}")
 
             asyncio.create_task(_wait_and_speak(msg_id))
         else:
-            print("❌ No speech detected")
+            print("[ERR] No speech detected")
 
     async def process_dictation(self):
         """Process recorded audio for dictation (transcribe and inject text, no AI)."""
@@ -740,7 +740,7 @@ class VoiceMirror:
             try:
                 await self.stt_adapter.load()
             except Exception as e:
-                print(f"⚠️ STT pre-load failed (will retry on first use): {e}")
+                print(f"[WARN] STT pre-load failed (will retry on first use): {e}")
 
         # Load voice config for device selection
         self._voice_config = {}
@@ -756,8 +756,8 @@ class VoiceMirror:
         print("Voice Mirror - Ready")
         # Show activation mode info
         activation_display = {
-            ActivationMode.WAKE_WORD: "🎤 Wake Word",
-            ActivationMode.PUSH_TO_TALK: "🎙️ Push-to-Talk"
+            ActivationMode.WAKE_WORD: "[MIC] Wake Word",
+            ActivationMode.PUSH_TO_TALK: "[MIC] Push-to-Talk"
         }
         stt_name = self.stt_adapter.name if (self.stt_adapter and self.stt_adapter.is_loaded) else "lazy-load"
         tts_name = self.tts.name if (self.tts and self.tts.is_loaded) else "none"
@@ -802,7 +802,7 @@ class VoiceMirror:
                         break
 
         if input_device is not None:
-            print(f"   ✅ Input: {all_devices[input_device]['name']}")
+            print(f"   [OK] Input: {all_devices[input_device]['name']}")
         else:
             print("   Using default input device")
 
@@ -855,12 +855,12 @@ class VoiceMirror:
                     self.audio_state.is_listening = False
 
                 def on_notification_speech_end(enter_conversation_mode: bool):
-                    print("🔇 Speaking done")
+                    print("[TTS] Speaking done")
                     self.audio_state.is_listening = True
                     self.wake_word.clear_buffer()
                     if enter_conversation_mode:
                         self.audio_state.enter_conversation_mode(CONVERSATION_WINDOW)
-                        print(f"💬 Conversation mode active ({CONVERSATION_WINDOW}s window)")
+                        print(f"[CHAT] Conversation mode active ({CONVERSATION_WINDOW}s window)")
 
                 notification_watcher = NotificationWatcher(
                     inbox=self.inbox,
@@ -908,7 +908,7 @@ class VoiceMirror:
                             and self.audio_state.recording_source not in ('dictation', 'ptt')):
                         elapsed = time.time() - self.audio_state.last_speech_time
                         if elapsed >= SILENCE_TIMEOUT:
-                            print("⏹️ Silence detected, processing...")
+                            print("[STOP] Silence detected, processing...")
                             self.audio_state.is_recording = False
                             self.audio_state.is_processing = True
                             # Route dictation recordings to process_dictation (not AI)
@@ -921,10 +921,10 @@ class VoiceMirror:
                             # Only show status for conversational modes where context changes
                             if self.audio_state.in_conversation:
                                 remaining = max(0, self.audio_state.conversation_end_time - time.time())
-                                print(f"\n💬 Conversation active ({remaining:.1f}s) - speak without wake word...")
+                                print(f"\n[CHAT] Conversation active ({remaining:.1f}s) - speak without wake word...")
 
             except KeyboardInterrupt:
-                print("\n\n👋 Goodbye!")
+                print("\n\nGoodbye!")
             finally:
                 # Cancel notification watcher
                 if notification_task:
@@ -965,7 +965,7 @@ def cleanup_on_exit():
 
 def signal_handler(signum, frame):
     """Handle termination signals gracefully."""
-    print("\n👋 Shutting down Voice Mirror...")
+    print("\nShutting down Voice Mirror...")
     cleanup_on_exit()
     sys.exit(0)
 
@@ -982,5 +982,5 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("\n👋 Shutting down Voice Mirror...")
+        print("\nShutting down Voice Mirror...")
         cleanup_on_exit()

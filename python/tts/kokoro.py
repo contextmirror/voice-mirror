@@ -78,14 +78,14 @@ class KokoroAdapter(TTSAdapter):
             print("Loading Kokoro TTS model...")
             print("  (First run downloads model, please wait...)")
             self.model = Kokoro("kokoro-v1.0.onnx", "voices-v1.0.bin")
-            print(f"✅ Kokoro TTS loaded (voice: {self.voice})")
+            print(f"[OK] Kokoro TTS loaded (voice: {self.voice})")
             return True
         except ImportError:
-            print("❌ Kokoro TTS not available - install with: pip install kokoro-onnx")
+            print("[ERR] Kokoro TTS not available - install with: pip install kokoro-onnx")
             self.model = None
             return False
         except Exception as e:
-            print(f"⚠️ Failed to load Kokoro TTS: {e}")
+            print(f"[WARN] Failed to load Kokoro TTS: {e}")
             self.model = None
             return False
 
@@ -98,7 +98,7 @@ class KokoroAdapter(TTSAdapter):
         """Synthesize text and play audio using Kokoro with chunked streaming."""
         # Strip markdown before speaking
         text = self.strip_markdown(text)
-        print(f"🔊 Speaking: {text[:50]}...")
+        print(f"[TTS] Speaking: {text[:50]}...")
 
         self._is_speaking = True
 
@@ -108,7 +108,7 @@ class KokoroAdapter(TTSAdapter):
         temp_files = []
         try:
             if self.model is None:
-                print("❌ Kokoro TTS not loaded")
+                print("[ERR] Kokoro TTS not loaded")
                 return
 
             if self._soundfile is None:
@@ -167,7 +167,7 @@ class KokoroAdapter(TTSAdapter):
                     pass
 
         except Exception as e:
-            print(f"❌ Kokoro TTS error: {e}")
+            print(f"[ERR] Kokoro TTS error: {e}")
         finally:
             # Clean up all temp audio files
             for f in temp_files:

@@ -58,7 +58,7 @@ def cleanup_inbox(inbox_path: Path, max_age_hours: float = 2.0) -> int:
         return removed
 
     except Exception as e:
-        print(f"⚠️ Inbox cleanup failed: {e}")
+        print(f"[WARN] Inbox cleanup failed: {e}")
         return 0
 
 
@@ -117,7 +117,7 @@ class InboxManager:
             msg_hash = hash(message.strip().lower())
             now = time.time()
             if msg_hash == self._last_message_hash and (now - self._last_message_time) < 2.0:
-                print(f"⏭️  Skipping duplicate: {message[:30]}...")
+                print(f"[SKIP] Skipping duplicate: {message[:30]}...")
                 return None
 
             self._last_message_hash = msg_hash
@@ -152,7 +152,7 @@ class InboxManager:
             with open(self.inbox_path, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=2)
 
-            print(f"📬 Sent to inbox: {message[:50]}...")
+            print(f"[NOTIFY] Sent to inbox: {message[:50]}...")
             return msg["id"]
 
     async def wait_for_response(self, my_message_id: str, timeout: float = 60.0) -> str:
@@ -167,7 +167,7 @@ class InboxManager:
             Response text, or empty string on timeout
         """
         ai_provider = self._get_ai_provider()
-        print(f"⏳ Waiting for {ai_provider['name']} to respond...")
+        print(f"[WAIT] Waiting for {ai_provider['name']} to respond...")
 
         self.awaiting_response = True
         start_time = time.time()
@@ -213,12 +213,12 @@ class InboxManager:
                     if self._sender_matches(sender, provider_id) and msg.get("thread_id") == "voice-mirror":
                         response = msg.get("message", "")
                         if response:
-                            print(f"✅ Got response from {sender}")
+                            print(f"[OK] Got response from {sender}")
                             # Mark as seen so notification watcher doesn't repeat it
                             self._last_seen_message_id = msg.get("id")
                             return response
 
-        print("⏰ Timeout waiting for AI response")
+        print("[TIMEOUT] Timeout waiting for AI response")
         return ""
 
     def write_response(self, response: str):
@@ -254,7 +254,7 @@ class InboxManager:
             with open(self.inbox_path, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=2)
 
-            print("📬 Response saved to inbox")
+            print("[NOTIFY] Response saved to inbox")
 
     def get_latest_ai_message(self) -> tuple[str | None, str | None]:
         """
@@ -341,7 +341,7 @@ class InboxManager:
                 with open(self.inbox_path, 'w', encoding='utf-8') as f:
                     json.dump(data, f, indent=2)
             except Exception as e:
-                print(f"⚠️ Error marking compaction read: {e}")
+                print(f"[WARN] Error marking compaction read: {e}")
 
     @property
     def last_seen_message_id(self) -> str | None:

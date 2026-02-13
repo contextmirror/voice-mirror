@@ -275,10 +275,6 @@ function addDisplayedMessageId(id) {
     }
 }
 
-// Serper.dev API key for web search
-const SERPER_API_KEY = process.env.SERPER_API_KEY || '';
-if (!SERPER_API_KEY) logger.warn('[Main]', 'SERPER_API_KEY not set - web search will be unavailable');
-
 // Screen capture and browser watcher helper functions
 function startScreenCaptureWatcher() {
     if (screenCaptureWatcherService) {
@@ -477,7 +473,6 @@ app.whenReady().then(() => {
     // Initialize browser watcher service
     browserWatcherService = createBrowserWatcher({
         dataDir: config.getDataDir(),
-        serperApiKey: SERPER_API_KEY,
         onActivity: (tool) => safeSend('tool-activity', { tool })
     });
 
