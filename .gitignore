@@ -49,8 +49,9 @@ opencode.json
 .electron/
 *.asar
 
-# Tests (local only)
-test/
+# Benchmark (local testing only)
+test/browser-benchmark/
+test/benchmark/
 
 # Test coverage
 coverage/
