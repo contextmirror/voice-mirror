@@ -68,8 +68,7 @@ const DEFAULT_CONFIG = {
         hotkey: 'CommandOrControl+Shift+V',
         activationMode: 'wakeWord',  // 'wakeWord', 'pushToTalk'
         pttKey: 'MouseButton4',  // Push-to-talk key: MouseButton4, MouseButton5, or keyboard keys
-        dictationKey: 'MouseButton5',  // Dictation key: hold to record, release to type into focused window
-        terminalLocation: 'fullscreen'  // 'fullscreen' | 'chat-bottom' - where terminal is displayed
+        dictationKey: 'MouseButton5'  // Dictation key: hold to record, release to type into focused window
     },
 
     // Window position (remembered between sessions)

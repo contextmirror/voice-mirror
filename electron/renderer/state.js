@@ -14,7 +14,6 @@ export const state = {
     detectedProviders: [],          // List of auto-detected local providers
     // Terminal state
     terminalMinimized: false,
-    terminalLocation: 'fullscreen', // 'fullscreen' | 'chat-bottom' - where terminal is displayed
     recordingKeybind: null,
     currentConfig: {},
     // Screenshot + voice workflow

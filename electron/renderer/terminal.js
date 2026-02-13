@@ -102,16 +102,6 @@ export async function initTerminal() {
     const Terminal = GhosttyWeb.Terminal;
     const FitAddon = GhosttyWeb.FitAddon;
 
-    // Load saved terminal location preference
-    try {
-        const config = await window.voiceMirror.config.get();
-        if (config.behavior?.terminalLocation) {
-            state.terminalLocation = config.behavior.terminalLocation;
-        }
-    } catch (err) {
-        log.warn('Failed to load terminal location preference:', err);
-    }
-
     term = new Terminal({
         cursorBlink: true,
         fontSize: 13,
@@ -150,9 +140,8 @@ export async function initTerminal() {
         }
     });
 
-    // Mount terminal to the appropriate container based on saved preference
-    const mountContainer = state.terminalLocation === 'chat-bottom' ? terminalMount : fullscreenMount;
-    term.open(mountContainer);
+    // Mount terminal to the fullscreen container
+    term.open(fullscreenMount);
 
     // Override ghostty-web's render loop with adaptive rendering.
     // ghostty-web's WASM dirty tracking can miss rows during fast streaming output,
@@ -216,7 +205,7 @@ export async function initTerminal() {
         if (!term || !term.wasmTerm) return;
 
         // Coordinate-based hit test — more reliable than contains(e.target)
-        const container = state.terminalLocation === 'chat-bottom' ? terminalMount : fullscreenMount;
+        const container = fullscreenMount;
         if (!container) return;
         const rect = container.getBoundingClientRect();
         if (e.clientX < rect.left || e.clientX > rect.right ||
@@ -259,12 +248,8 @@ export async function initTerminal() {
         }
     }, { passive: false, capture: true });
 
-    // Update visibility based on location
-    if (state.terminalLocation === 'chat-bottom') {
-        terminalContainer.classList.remove('hidden');
-    } else {
-        terminalContainer.classList.add('hidden');
-    }
+    // Chat-bottom terminal panel is unused — always hidden
+    terminalContainer.classList.add('hidden');
 
     // Send keyboard input to PTY
     term.onData((data) => {
@@ -309,7 +294,7 @@ export async function initTerminal() {
         resizeTimeout = setTimeout(() => {
             if (fitAddon && !state.terminalMinimized) {
                 // Only fit if the current container is visible
-                const currentContainer = state.terminalLocation === 'chat-bottom' ? terminalMount : fullscreenMount;
+                const currentContainer = fullscreenMount;
                 if (currentContainer.offsetParent !== null) {
                     // Use requestAnimationFrame to ensure layout is settled
                     requestAnimationFrame(() => {
@@ -360,7 +345,7 @@ export async function initTerminal() {
     for (const delay of [1500, 3000, 5000]) {
         setTimeout(() => {
             if (fitAddon && term && !state.terminalMinimized) {
-                const currentContainer = state.terminalLocation === 'chat-bottom' ? terminalMount : fullscreenMount;
+                const currentContainer = fullscreenMount;
                 if (currentContainer && currentContainer.offsetParent !== null) {
                     safeFit();
                     resizePtyIfChanged();
@@ -382,7 +367,7 @@ export async function initTerminal() {
     term.writeln(`\x1b[90mClick "Start" to launch ${providerName}...\x1b[0m`);
     term.writeln('');
 
-    log.info('Initialized at:', state.terminalLocation);
+    log.info('Initialized');
 }
 
 /**
@@ -447,70 +432,6 @@ export function minimizeTerminal() {
         terminalContainer.removeEventListener('transitionend', onTransitionEnd);
         terminalContainer.classList.remove('transitioning');
     }, 300);
-}
-
-/**
- * Relocate terminal between fullscreen and chat-bottom views
- * @param {string} location - 'fullscreen' | 'chat-bottom'
- */
-export async function relocateTerminal(location) {
-    if (!term || !term.element) {
-        log.warn('Cannot relocate - terminal not initialized');
-        return;
-    }
-
-    if (location === state.terminalLocation) {
-        log.info('Already at location:', location);
-        return;
-    }
-
-    const termElement = term.element;
-    const oldContainer = state.terminalLocation === 'chat-bottom' ? terminalMount : fullscreenMount;
-    const newContainer = location === 'chat-bottom' ? terminalMount : fullscreenMount;
-
-    // Update resize observer to watch new container
-    if (resizeObserver) {
-        resizeObserver.unobserve(oldContainer);
-    }
-
-    // Move the terminal DOM element to new container
-    newContainer.appendChild(termElement);
-
-    // Update visibility of chat page terminal panel
-    if (location === 'chat-bottom') {
-        terminalContainer.classList.remove('hidden');
-    } else {
-        terminalContainer.classList.add('hidden');
-    }
-
-    // Observe new container
-    if (resizeObserver) {
-        resizeObserver.observe(newContainer);
-    }
-
-    // Update state
-    state.terminalLocation = location;
-
-    // Refit terminal to new container size after layout settles
-    // Double rAF ensures browser has completed layout recalculation
-    requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-            if (fitAddon) {
-                safeFit();
-                resizePtyIfChanged();
-            }
-        });
-    });
-
-    // Save preference to config
-    try {
-        await window.voiceMirror.config.set({
-            behavior: { terminalLocation: location }
-        });
-        log.info('Relocated to:', location);
-    } catch (err) {
-        log.error('Failed to save terminal location:', err);
-    }
 }
 
 /**
@@ -781,6 +702,5 @@ window.startAI = startAI;
 window.stopAI = stopAI;
 window.toggleTerminal = toggleTerminal;
 window.minimizeTerminal = minimizeTerminal;
-window.relocateTerminal = relocateTerminal;
 window.updateProviderDisplay = updateProviderDisplay;
 window.clearTerminal = clearTerminal;
