@@ -74,7 +74,7 @@ function registerMiscHandlers(ctx, validators) {
         if (typeof command !== 'string' || command.length > 50) {
             return { success: false, error: 'Invalid command' };
         }
-        const { isCLIAvailable } = require('../cli-spawner');
+        const { isCLIAvailable } = require('../providers/cli-spawner');
         return { success: true, data: { available: isCLIAvailable(command) } };
     });
 

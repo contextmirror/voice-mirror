@@ -12,7 +12,7 @@ const {
     isClaudeRunning,
     isClaudeAvailable,
     resizePty
-} = require('../claude-spawner');
+} = require('../providers/claude-spawner');
 
 const { CLI_PROVIDERS } = require('../constants');
 const { createProvider } = require('../providers');
@@ -217,7 +217,7 @@ function createAIManager(options = {}) {
             await configureOpenCodeMCP(appConfig);
         }
 
-        const { createCLISpawner } = require('../cli-spawner');
+        const { createCLISpawner } = require('../providers/cli-spawner');
         cliSpawner = createCLISpawner(providerType);
 
         const displayName = cliSpawner.config.displayName;

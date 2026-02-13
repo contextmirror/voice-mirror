@@ -155,4 +155,8 @@ function stop() {
     }
 }
 
-module.exports = { start, stop };
+function isRunning() {
+    return watcher !== null;
+}
+
+module.exports = { start, stop, isRunning };

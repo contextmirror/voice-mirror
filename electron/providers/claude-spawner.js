@@ -8,8 +8,8 @@
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const { getDataDir: _getDataDir } = require('./services/platform-paths');
-const { createLogger } = require('./services/logger');
+const { getDataDir: _getDataDir } = require('../services/platform-paths');
+const { createLogger } = require('../services/logger');
 const logger = createLogger();
 
 // Path to MCP server

@@ -6,7 +6,7 @@
  */
 
 const { BaseProvider } = require('./base-provider');
-const claudeSpawner = require('../claude-spawner');
+const claudeSpawner = require('./claude-spawner');
 const { createLogger } = require('../services/logger');
 const logger = createLogger();
 

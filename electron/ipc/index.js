@@ -3,7 +3,7 @@
  * Delegates to sub-modules organized by domain.
  */
 
-const { validators } = require('../ipc-validators');
+const { validators } = require('./validators');
 const { registerWindowHandlers } = require('./window');
 const { registerConfigHandlers } = require('./config');
 const { registerScreenHandlers } = require('./screen');

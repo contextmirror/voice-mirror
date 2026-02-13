@@ -5,7 +5,7 @@
  */
 
 const { BaseProvider } = require('./base-provider');
-const { createCLISpawner, isCLIAvailable, CLI_CONFIGS } = require('../cli-spawner');
+const { createCLISpawner, isCLIAvailable, CLI_CONFIGS } = require('./cli-spawner');
 
 class CLIProvider extends BaseProvider {
     constructor(cliType, config = {}) {

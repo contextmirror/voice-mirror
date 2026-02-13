@@ -357,7 +357,11 @@ function createWindowManager(options = {}) {
     };
 }
 
+// Tray service — used by main.js
+const { createTrayService } = require('./tray');
+
 module.exports = {
     createWindowManager,
-    clampToVisibleArea
+    clampToVisibleArea,
+    createTrayService,
 };

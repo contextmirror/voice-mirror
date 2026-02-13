@@ -1,6 +1,6 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const { validators, VALID_PROVIDERS } = require('../../electron/ipc-validators');
+const { validators, VALID_PROVIDERS } = require('../../electron/ipc/validators');
 
 describe('set-window-position', () => {
     const v = validators['set-window-position'];

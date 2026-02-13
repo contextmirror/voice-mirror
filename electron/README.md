@@ -10,9 +10,6 @@ electron/
 ├── preload.js              # Security bridge (contextBridge)
 ├── config.js               # Cross-platform configuration
 ├── constants.js            # Shared constants
-├── claude-spawner.js       # Claude Code PTY spawning
-├── cli-spawner.js          # CLI-based provider PTY spawning
-├── ipc-validators.js       # IPC argument validation
 ├── overlay.html            # Main HTML (3 pages)
 │
 ├── window/                 # Window management
@@ -21,6 +18,7 @@ electron/
 │
 ├── ipc/                    # IPC bridge modules
 │   ├── index.js            # IPC registration entry point
+│   ├── validators.js       # IPC argument validation
 │   ├── ai.js               # AI provider IPC handlers
 │   ├── config.js           # Configuration IPC handlers
 │   ├── misc.js             # Miscellaneous IPC handlers
@@ -54,7 +52,9 @@ electron/
 │   ├── index.js            # Provider factory
 │   ├── base-provider.js    # Abstract base class
 │   ├── claude-provider.js  # Claude Code PTY wrapper
+│   ├── claude-spawner.js   # Claude Code PTY spawning
 │   ├── cli-provider.js     # Generic CLI provider wrapper
+│   ├── cli-spawner.js      # CLI-based provider PTY spawning
 │   └── openai-provider.js  # OpenAI-compatible wrapper
 │
 ├── browser/                # Web browser integration (CDP-based)
