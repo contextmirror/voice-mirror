@@ -52,8 +52,6 @@ export function initBrowserPanel() {
         updateUrlBar(e.url);
         if (e.url && e.url !== 'about:blank') {
             showWebview(true);
-            // Auto-switch to browser page when navigation happens
-            navigateTo('browser');
         }
     });
 
@@ -80,7 +78,6 @@ export function initBrowserPanel() {
             if (data.url && data.url !== 'about:blank') {
                 showWebview(true);
                 updateUrlBar(data.url);
-                navigateTo('browser');
             } else if (data.stopped) {
                 showWebview(false);
             }
