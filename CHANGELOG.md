@@ -5,6 +5,21 @@ Format inspired by game dev patch notes — grouped by release, categorized by i
 
 ---
 
+## v0.9.2 — "Self-Healing Updater" (2026-02-14)
+
+Complete rewrite of the update system — it now heals broken git state before updating and verifies success after.
+
+### Changed
+- **Self-healing pre-flight checks** — Before updating, the updater now automatically detects and fixes: stale `index.lock` files, stuck merges/rebases/cherry-picks, detached HEAD, wrong branch, and leftover auto-stashes from previously failed updates
+- **Hard reset instead of stash/pull/pop** — Replaced the fragile stash → pull → pop workflow with `git reset --hard origin/main`. No more merge conflicts, no more broken repos. End-users don't have local commits to preserve, so this is always safe
+- **Always runs npm install** — Previously only ran when `package.json` changed in the diff. Now always runs to catch previously failed installs, corrupted `node_modules`, or missing native rebuilds
+- **Post-flight verification** — After updating, verifies HEAD matches the target hash and critical files (`electron/main.js`, `package.json`) exist
+- **npm install failure is non-fatal** — If `npm install` fails, the update still reports success (git reset already landed). The app will likely still work if no packages changed
+- **npm install timeout increased** — From 180s to 300s (5 minutes) for slow connections
+- **Last-resort recovery** — If the update itself fails, tries `git reset --hard HEAD` + `git clean -fd` to leave the repo in a usable state
+
+---
+
 ## v0.9.1 — "Update Fix" (2026-02-14)
 
 Fix the in-app update system that was causing blank terminals and broken repos on Windows.
