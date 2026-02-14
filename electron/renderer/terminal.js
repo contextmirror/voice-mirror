@@ -19,6 +19,10 @@ let resizeTimeout = null;  // For debouncing resize events
 let lastPtyCols = 0;       // Track last PTY size to avoid duplicate SIGWINCH
 let lastPtyRows = 0;
 let lastOutputTime = 0;    // Timestamp of last PTY output — used to switch render mode
+let lastForceRenderTime = 0; // Timestamp of last forceAll render
+let pendingOutput = '';    // Batched PTY output — flushed once per render frame
+let scrollLocked = false;  // True while user is viewing scrollback history
+let lastWheelTime = 0;     // Timestamp of last user wheel event — used for scroll lock timeout
 
 // DOM elements (initialized in initTerminal)
 let terminalContainer;      // Chat page bottom panel container
@@ -143,21 +147,67 @@ export async function initTerminal() {
     // Mount terminal to the fullscreen container
     term.open(fullscreenMount);
 
-    // Override ghostty-web's render loop with adaptive rendering.
-    // ghostty-web's WASM dirty tracking can miss rows during fast streaming output,
-    // causing characters to appear shifted/truncated. We force full renders during
-    // active streaming (within 150ms of last PTY output) but use efficient partial
-    // renders during typing/idle for lower input latency.
+    // Override ghostty-web's render loop with batched output + periodic forceAll.
+    //
+    // Problems solved:
+    // 1. Batching: PTY output arrives in many small chunks between frames. Writing
+    //    each chunk immediately means the WASM buffer is partially updated when the
+    //    renderer reads it, causing flickering. We batch all chunks and flush once
+    //    per frame BEFORE rendering, so the buffer is always in a consistent state.
+    //
+    // 2. Periodic forceAll: ghostty-web's dirty tracking can miss rows during fast
+    //    streaming. We do a full render every 250ms (not every frame) to catch misses
+    //    without the flickering that per-frame forceAll causes.
+    //
+    // 3. Scroll lock: ghostty-web's write() auto-scrolls to bottom when viewportY > 0.
+    //    We monkey-patch scrollToBottom() to be a no-op while the user is viewing
+    //    scrollback history. The lock auto-releases after 5s of no wheel activity.
     if (term.animationFrameId) {
         cancelAnimationFrame(term.animationFrameId);
     }
+
+    // Monkey-patch scrollToBottom for scroll lock support.
+    // Without this, every write() from Claude Code's status bar updates would
+    // snap the viewport to the bottom, making it impossible to read scrollback.
+    const origScrollToBottom = term.scrollToBottom.bind(term);
+    term.scrollToBottom = () => {
+        if (scrollLocked) return;
+        origScrollToBottom();
+    };
+
     const renderLoop = () => {
         if (term && term.renderer && term.wasmTerm) {
-            // Full renders during active streaming, partial renders when idle/typing
-            const streaming = (performance.now() - lastOutputTime) < 150;
+            const now = performance.now();
+
+            // Auto-release scroll lock after 5s of no wheel activity
+            if (scrollLocked && (now - lastWheelTime) > 5000) {
+                scrollLocked = false;
+                // Scroll to bottom now that lock is released
+                origScrollToBottom();
+            }
+
+            // Flush batched PTY output — all chunks written in one go so the
+            // WASM buffer is fully updated before the renderer reads it.
+            if (pendingOutput) {
+                term.write(pendingOutput);
+                pendingOutput = '';
+                lastOutputTime = now;
+            }
+
+            // Periodic forceAll: full render every 250ms during streaming,
+            // dirty-line tracking for all other frames. This catches any
+            // rows that the WASM dirty tracker missed without the flickering
+            // that per-frame forceAll causes.
+            const streaming = (now - lastOutputTime) < 150;
+            let forceAll = false;
+            if (streaming && (now - lastForceRenderTime) > 250) {
+                forceAll = true;
+                lastForceRenderTime = now;
+            }
+
             term.renderer.render(
                 term.wasmTerm,
-                streaming,  // forceAll only during active PTY output
+                forceAll,
                 term.viewportY ?? 0,
                 term,
                 term.scrollbarOpacity ?? 1
@@ -198,18 +248,42 @@ export async function initTerminal() {
         }
     };
 
-    // Wheel scroll — ghostty-web handles most cases natively:
-    //   Normal mode: smooth viewport scrolling through scrollback history
-    //   Alternate screen (no mouse tracking): sends arrow keys to PTY (Claude Code, vim)
+    // Wheel scroll handling — three modes:
     //
-    // We only override for TUI apps with mouse tracking (OpenCode, Bubble Tea apps)
-    // which need SGR mouse wheel events instead of arrow keys.
+    // 1. Normal mode: ghostty-web handles viewport scrollback natively.
+    //    We track scroll direction for scroll lock (prevents auto-scroll-to-bottom
+    //    from fighting with user's scroll-up).
+    //
+    // 2. Alternate screen WITHOUT mouse tracking (Claude Code, vim):
+    //    ghostty-web sends arrow keys to PTY natively. No override needed.
+    //
+    // 3. Alternate screen WITH mouse tracking (OpenCode, Bubble Tea apps):
+    //    We override to send SGR mouse wheel events instead of arrow keys.
     term.attachCustomWheelEventHandler((e) => {
         if (!term.wasmTerm) return false;
-        if (!term.wasmTerm.isAlternateScreen()) return false;
+
+        const isAlt = term.wasmTerm.isAlternateScreen();
+
+        // Track wheel activity for scroll lock timeout
+        lastWheelTime = performance.now();
+
+        if (!isAlt) {
+            // Normal mode: enable scroll lock when user scrolls up,
+            // release when they scroll back to bottom.
+            if (e.deltaY < 0) {
+                // Scrolling up — lock to prevent write() from snapping back
+                scrollLocked = true;
+            } else if (e.deltaY > 0 && (term.viewportY ?? 0) <= 1) {
+                // Scrolling down and near/at bottom — release lock
+                scrollLocked = false;
+            }
+            return false; // let ghostty-web handle the actual viewport scroll
+        }
+
+        // Alternate screen without mouse tracking — ghostty sends arrow keys natively
         if (!term.wasmTerm.hasMouseTracking()) return false;
 
-        // TUI with mouse tracking: send SGR mouse wheel events
+        // Alternate screen WITH mouse tracking: send SGR mouse wheel events
         const metrics = term.renderer?.getMetrics();
         const rect = fullscreenMount?.getBoundingClientRect();
         if (!rect) return false;
@@ -581,10 +655,6 @@ export function handleAIOutput(data) {
         return;
     }
 
-    // Track when PTY output arrives so the render loop can use full renders
-    // during streaming and efficient partial renders during typing/idle.
-    lastOutputTime = performance.now();
-
     switch (data.type) {
         case 'start':
             term.writeln(`\x1b[34m${data.text}\x1b[0m`);
@@ -600,22 +670,24 @@ export function handleAIOutput(data) {
             });
             break;
         case 'stdout':
-            // Write raw PTY data directly (includes ANSI codes)
-            term.write(data.text);
-            break;
         case 'tui':
-            // TUI dashboard render output — same as stdout but uses separate
-            // type so InboxWatcher can ignore it (only captures 'stdout')
-            term.write(data.text);
-            break;
         case 'stderr':
-            // stderr also gets written as raw data
-            term.write(data.text);
+            // Batch PTY output — flushed once per render frame in the render loop.
+            // Writing immediately caused flickering: the WASM buffer was partially
+            // updated when the renderer read it between chunks.
+            pendingOutput += data.text;
             break;
         case 'exit':
+            // Flush any remaining output before the exit message
+            if (pendingOutput) {
+                term.write(pendingOutput);
+                pendingOutput = '';
+            }
             term.writeln('');
             term.writeln(`\x1b[33m[Process exited with code ${data.code}]\x1b[0m`);
             updateAIStatus(false);
+            // Release scroll lock on exit
+            scrollLocked = false;
             break;
     }
 }
@@ -625,6 +697,13 @@ export function handleAIOutput(data) {
  */
 export function clearTerminal() {
     if (!term) return;
+
+    // Flush any pending output and release scroll lock before reset
+    if (pendingOutput) {
+        term.write(pendingOutput);
+        pendingOutput = '';
+    }
+    scrollLocked = false;
 
     // Full reset: creates a fresh WASM terminal and clears the renderer canvas.
     // This discards all state including alternate screen buffers and scrollback.

@@ -5,6 +5,16 @@ Format inspired by game dev patch notes — grouped by release, categorized by i
 
 ---
 
+## v0.9.3 — "Flicker Fix" (2026-02-14)
+
+Fix terminal flickering and auto-scroll-to-bottom issue in Claude Code terminal.
+
+### Fixed
+- **Terminal flickering during Claude Code output** — The render loop was forcing a full terminal redraw (all rows) on every frame (~60fps) during streaming output. This exposed timing-dependent artifacts when the WASM buffer was partially updated between PTY chunks. Now batches all PTY output and flushes once per render frame, so the buffer is always in a consistent state when rendered. Full redraws reduced to every 250ms (4fps) as a safety net for missed dirty rows
+- **Can't scroll up in terminal — auto-snaps to bottom** — ghostty-web's `write()` calls `scrollToBottom()` whenever the viewport isn't at the bottom. Since Claude Code's status bar updates arrive constantly, any attempt to scroll up was immediately undone. Added a scroll lock: when the user scrolls up, auto-scroll-to-bottom is suppressed. The lock auto-releases after 5 seconds of no wheel activity, or when the user scrolls back to the bottom
+
+---
+
 ## v0.9.2 — "Self-Healing Updater" (2026-02-14)
 
 Complete rewrite of the update system — it now heals broken git state before updating and verifies success after.
