@@ -5,6 +5,22 @@ Format inspired by game dev patch notes — grouped by release, categorized by i
 
 ---
 
+## v0.8.7 — "Full Screen" (2026-02-14)
+
+Fix terminal sizing bug that caused all AI providers (Claude Code, Ollama TUI, OpenCode) to render squished in the top-left corner instead of filling the terminal area.
+
+### Fixed
+- **Terminal stuck at default size** — `resizeObserver.observe(mountContainer)` referenced an undefined variable (`mountContainer` was never declared), causing a silent crash that prevented the ResizeObserver from ever firing. The terminal never fit itself to the container and stayed at ghostty-web's internal defaults. Fixed to observe `fullscreenMount` — the actual terminal mount point
+- **TUI dashboard ignoring terminal dimensions** — `activeProvider.spawn()` was called without passing `cols`/`rows`, so the TUI renderer always defaulted to 120x30 regardless of actual terminal size
+- **Auto-start ignoring terminal dimensions** — Initial app startup and `start-all` IPC handler both called `startAIProvider()` without passing the last known terminal dimensions. Now all three startup paths (auto-start, manual start, start-all) use stored dimensions from the renderer's resize events
+
+### Technical
+- Root cause: the ResizeObserver crash at line 329 of `terminal.js` was caught by a try-catch in `renderer/main.js`, silently breaking all code after it — including the initial `safeFit()`, the deferred re-fit cycles (1.5s/3s/5s), and the welcome banner
+- 4 files changed: `terminal.js` (resize observer fix), `ai-manager.js` (pass dims to spawn), `main.js` (pass stored dims on auto-start), `ipc/ai.js` (pass stored dims on start-all)
+- 519 tests passing
+
+---
+
 ## v0.8.6 — "Dashboard" (2026-02-13)
 
 TUI dashboard for local models — replaces the blank terminal canvas with a rich ANSI-rendered dashboard when using Ollama, LM Studio, Jan, and other OpenAI-compatible providers.

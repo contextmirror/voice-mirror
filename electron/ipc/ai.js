@@ -182,7 +182,11 @@ function registerAIHandlers(ctx, validators) {
     // Start both Voice + AI provider together
     ipcMain.handle('start-all', () => {
         if (!ctx.getPythonBackend()?.isRunning()) ctx.startPythonVoiceMirror();
-        if (!ctx.isAIProviderRunning()) ctx.startAIProvider();
+        if (!ctx.isAIProviderRunning()) {
+            // Use last known terminal dimensions so TUI renders at correct size
+            const dims = ctx._getLastTermDims ? ctx._getLastTermDims() : {};
+            ctx.startAIProvider(dims.cols, dims.rows);
+        }
         return { success: true };
     });
 

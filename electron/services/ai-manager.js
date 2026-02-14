@@ -413,8 +413,8 @@ function createAIManager(options = {}) {
             );
         }
 
-        // Start the provider
-        activeProvider.spawn().then(() => {
+        // Start the provider (pass terminal dimensions so TUI renders at correct size)
+        activeProvider.spawn({ cols, rows }).then(() => {
             sendOutput('start', `[${activeProvider.getDisplayName()}] Ready\n`);
             sendVoiceEvent({
                 type: 'claude_connected',

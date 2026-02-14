@@ -326,7 +326,7 @@ export async function initTerminal() {
             }
         }, 300);  // 300ms debounce — absorbs brief pauses during drag-resize
     });
-    resizeObserver.observe(mountContainer);
+    resizeObserver.observe(fullscreenMount);
 
     // Initial fit after layout settles
     // Double rAF ensures browser has completed initial layout

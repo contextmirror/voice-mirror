@@ -565,8 +565,8 @@ app.whenReady().then(() => {
         log: logger
     });
 
-    // Register all IPC handlers
-    registerIpcHandlers({
+    // Register all IPC handlers (keep reference for _getLastTermDims access)
+    const ipcCtx = {
         getMainWindow: () => mainWindow,
         getAppConfig: () => appConfig,
         setAppConfig: (cfg) => { appConfig = cfg; },
@@ -591,7 +591,8 @@ app.whenReady().then(() => {
         getInboxWatcherService: () => inboxWatcherService,
         getUpdateChecker: () => updateChecker,
         logger
-    });
+    };
+    registerIpcHandlers(ipcCtx);
 
     // Initialize native Wayland overlay orb before creating window
     // so we know whether to start the Electron window hidden
@@ -762,7 +763,9 @@ app.whenReady().then(() => {
             if (aiStarted) return;
             aiStarted = true;
             try {
-                startAIProvider();
+                // Use last known terminal dimensions so TUI renders at correct size
+                const dims = ipcCtx._getLastTermDims ? ipcCtx._getLastTermDims() : {};
+                startAIProvider(dims.cols, dims.rows);
             } catch (err) {
                 logger.error('[Voice Mirror]', 'Failed to start AI provider:', err.message);
             }
