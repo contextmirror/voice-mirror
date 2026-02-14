@@ -11,12 +11,15 @@ const path = require('path');
 function createUpdateChecker(options = {}) {
     const { safeSend, log, appDir } = options;
     const gitDir = appDir || path.join(__dirname, '..', '..');
+    const isWin = process.platform === 'win32';
     let checkInterval = null;
     let startupTimeout = null;
 
-    function exec(cmd, args) {
+    function exec(cmd, args, timeoutMs = 30000) {
+        // On Windows, npm/npx must use .cmd extension with execFile
+        const resolvedCmd = (isWin && (cmd === 'npm' || cmd === 'npx')) ? cmd + '.cmd' : cmd;
         return new Promise((resolve, reject) => {
-            execFile(cmd, args, { cwd: gitDir, timeout: 30000 }, (err, stdout) => {
+            execFile(resolvedCmd, args, { cwd: gitDir, timeout: timeoutMs }, (err, stdout) => {
                 if (err) reject(err);
                 else resolve(stdout.trim());
             });
@@ -79,7 +82,7 @@ function createUpdateChecker(options = {}) {
 
             if (needsInstall) {
                 if (safeSend) safeSend('update-status', { status: 'installing' });
-                await exec('npm', ['install', '--no-audit', '--no-fund']);
+                await exec('npm', ['install', '--no-audit', '--no-fund'], 180000);
             }
 
             // Restore stashed changes
@@ -87,7 +90,16 @@ function createUpdateChecker(options = {}) {
                 try {
                     await exec('git', ['stash', 'pop']);
                 } catch (popErr) {
-                    if (log) log('APP', `Stash pop had conflicts — local changes saved in stash: ${popErr.message}`);
+                    // Stash pop failed (merge conflict). Clean up the conflicted state
+                    // so the repo isn't left broken. The stash is preserved since pop failed.
+                    if (log) log('APP', `Stash pop conflict — discarding local changes, keeping upstream: ${popErr.message}`);
+                    try {
+                        await exec('git', ['checkout', '--', '.']);  // discard conflicted files
+                        await exec('git', ['clean', '-fd']);         // remove untracked leftovers
+                        await exec('git', ['stash', 'drop']);        // drop the stale stash
+                    } catch (cleanupErr) {
+                        if (log) log('APP', `Stash cleanup failed: ${cleanupErr.message}`);
+                    }
                 }
             }
 
@@ -102,11 +114,18 @@ function createUpdateChecker(options = {}) {
             }
             return { success: true, needsPip };
         } catch (err) {
-            // Restore stashed changes on failure
+            // Pull itself failed — try to restore stashed changes and clean up
             if (stashed) {
                 try {
                     await exec('git', ['stash', 'pop']);
-                } catch (_) { /* stash stays for manual recovery */ }
+                } catch (_) {
+                    // Pop also failed — force clean state
+                    try {
+                        await exec('git', ['checkout', '--', '.']);
+                        await exec('git', ['clean', '-fd']);
+                        await exec('git', ['stash', 'drop']);
+                    } catch (__) { /* last resort: stash stays for manual recovery */ }
+                }
             }
             if (safeSend) safeSend('update-status', { status: 'error', message: err.message });
             return { success: false, error: err.message };
