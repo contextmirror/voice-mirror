@@ -145,9 +145,9 @@ export function stopOrbPreview() {
 async function importTheme() {
     try {
         const result = await window.voiceMirror.theme.import();
-        if (!result) return; // User cancelled
+        if (!result || !result.success) return; // User cancelled or failed
 
-        const validation = validateImportData(result);
+        const validation = validateImportData(result.data);
         if (!validation.valid) {
             alert('Invalid theme file: ' + validation.error);
             return;
