@@ -198,55 +198,31 @@ export async function initTerminal() {
         }
     };
 
-    // Wheel scroll — ghostty-web's built-in handler (on the container) doesn't fire
-    // reliably in Electron due to contenteditable + frameless-window quirks.
-    // Use a window-level capture handler with coordinate hit-testing.
-    window.addEventListener('wheel', (e) => {
-        if (!term || !term.wasmTerm) return;
+    // Wheel scroll — ghostty-web handles most cases natively:
+    //   Normal mode: smooth viewport scrolling through scrollback history
+    //   Alternate screen (no mouse tracking): sends arrow keys to PTY (Claude Code, vim)
+    //
+    // We only override for TUI apps with mouse tracking (OpenCode, Bubble Tea apps)
+    // which need SGR mouse wheel events instead of arrow keys.
+    term.attachCustomWheelEventHandler((e) => {
+        if (!term.wasmTerm) return false;
+        if (!term.wasmTerm.isAlternateScreen()) return false;
+        if (!term.wasmTerm.hasMouseTracking()) return false;
 
-        // Coordinate-based hit test — more reliable than contains(e.target)
-        const container = fullscreenMount;
-        if (!container) return;
-        const rect = container.getBoundingClientRect();
-        if (e.clientX < rect.left || e.clientX > rect.right ||
-            e.clientY < rect.top || e.clientY > rect.bottom) return;
+        // TUI with mouse tracking: send SGR mouse wheel events
+        const metrics = term.renderer?.getMetrics();
+        const rect = fullscreenMount?.getBoundingClientRect();
+        if (!rect) return false;
 
-        e.preventDefault();
-        e.stopPropagation();
-
-        if (term.wasmTerm.isAlternateScreen()) {
-            if (term.wasmTerm.hasMouseTracking()) {
-                // TUI with mouse tracking (Bubble Tea apps like OpenCode):
-                // Send proper SGR mouse wheel events so the app scrolls its viewport,
-                // not arrow keys which navigate input history.
-                const button = e.deltaY < 0 ? 64 : 65; // 64=scroll up, 65=scroll down
-                const metrics = term.renderer?.getMetrics();
-                // Convert mouse pixel position to 1-based cell coordinates
-                const col = Math.max(1, Math.floor((e.clientX - rect.left) / (metrics?.width ?? 8)) + 1);
-                const row = Math.max(1, Math.floor((e.clientY - rect.top) / (metrics?.height ?? 16)) + 1);
-                const count = Math.max(1, Math.min(Math.abs(Math.round(e.deltaY / 33)), 5));
-                for (let i = 0; i < count; i++) {
-                    // SGR extended mouse format (mode 1006) — used by modern TUIs
-                    window.voiceMirror.claude.sendInput(`\x1b[<${button};${col};${row}M`);
-                }
-            } else {
-                // Alternate screen without mouse tracking (Claude Code, vim, etc.):
-                // Use terminal viewport scrolling — same approach as normal mode.
-                const lineHeight = term.renderer?.getMetrics()?.height ?? 20;
-                const deltaLines = Math.round(e.deltaY / lineHeight);
-                if (deltaLines !== 0) {
-                    term.scrollLines(deltaLines);
-                }
-            }
-        } else {
-            // Normal mode: use ghostty-web's viewport scrolling
-            const lineHeight = term.renderer?.getMetrics()?.height ?? 20;
-            const deltaLines = Math.round(e.deltaY / lineHeight);
-            if (deltaLines !== 0) {
-                term.scrollLines(deltaLines);
-            }
+        const button = e.deltaY < 0 ? 64 : 65; // 64=scroll up, 65=scroll down
+        const col = Math.max(1, Math.floor((e.clientX - rect.left) / (metrics?.width ?? 8)) + 1);
+        const row = Math.max(1, Math.floor((e.clientY - rect.top) / (metrics?.height ?? 16)) + 1);
+        const count = Math.max(1, Math.min(Math.abs(Math.round(e.deltaY / 33)), 5));
+        for (let i = 0; i < count; i++) {
+            window.voiceMirror.claude.sendInput(`\x1b[<${button};${col};${row}M`);
         }
-    }, { passive: false, capture: true });
+        return true; // handled — don't let ghostty-web send arrow keys
+    });
 
     // Chat-bottom terminal panel is unused — always hidden
     terminalContainer.classList.add('hidden');
