@@ -142,8 +142,9 @@ contextBridge.exposeInMainWorld('voiceMirror', {
         resize: (cols, rows) => ipcRenderer.invoke('claude-pty-resize', cols, rows)
     },
 
-    // Clipboard access (for terminal paste on Windows)
+    // Clipboard access (for terminal copy/paste)
     readClipboard: () => clipboard.readText(),
+    writeClipboard: (text) => clipboard.writeText(text),
 
     // Browser panel control
     browser: {

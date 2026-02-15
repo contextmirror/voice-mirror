@@ -306,10 +306,26 @@ export async function initTerminal() {
         window.voiceMirror.claude.sendInput(data);
     });
 
-    // Handle Ctrl+V paste via Electron clipboard (browser paste is blocked on Windows)
+    // Custom keyboard shortcuts — intercept before ghostty-web processes them.
     // ghostty-web semantics: return true = "handled, stop processing", false = "pass through"
     // (this is inverted from xterm.js — in ghostty-web true = "handled")
     term.attachCustomKeyEventHandler((event) => {
+        // Ctrl+C: copy selected text to clipboard, or interrupt if nothing selected
+        // Matches Windows Terminal / VS Code behavior — users can highlight code
+        // and Ctrl+C to copy without interrupting the running process.
+        if (event.ctrlKey && event.key === 'c' && !event.shiftKey && !event.altKey) {
+            if (term.hasSelection()) {
+                const selected = term.getSelection();
+                if (selected) {
+                    window.voiceMirror.writeClipboard(selected);
+                    term.clearSelection();
+                }
+                return true; // Copied — don't send interrupt
+            }
+            return false; // No selection — let ghostty-web send \x03 (interrupt)
+        }
+
+        // Ctrl+V: paste from clipboard (browser paste is blocked on Windows)
         if (event.ctrlKey && event.key === 'v') {
             const text = window.voiceMirror.readClipboard();
             if (text) {
@@ -317,6 +333,7 @@ export async function initTerminal() {
             }
             return true; // We handled paste — stop ghostty-web from processing
         }
+
         return false; // Let ghostty-web handle all other keys normally
     });
 
