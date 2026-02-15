@@ -127,7 +127,7 @@ function registerMiscHandlers(ctx, validators) {
             try {
                 const https = require('https');
                 return new Promise((resolve) => {
-                    const req = https.get(`https://registry.npmjs.org/${encodeURIComponent(pkg).replace('%40', '@')}/latest`, { timeout: 10000 }, (res) => {
+                    const req = https.get(`https://registry.npmjs.org/${encodeURIComponent(pkg).replaceAll('%40', '@')}/latest`, { timeout: 10000 }, (res) => {
                         let data = '';
                         res.on('data', chunk => { data += chunk; });
                         res.on('end', () => {
