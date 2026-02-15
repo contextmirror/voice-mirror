@@ -9,8 +9,13 @@ Format inspired by game dev patch notes — grouped by release, categorized by i
 
 Security hardening across the entire app and upgrade from Electron 28 to Electron 40.
 
+### New
+
+- **First-launch disclaimer screen** — New users see a full-screen security warning before they can use the app: "This app gives AI agents full terminal access to your computer. It can read, write, and execute anything your user account can." Users must click "I Understand & Accept" to proceed. Declining quits the app. Shows once, acceptance saved to config. Includes GitHub, bug report, and star links
+
 ### Security
 
+- **Prompt injection guardrails strengthened** — Added two new defense sections to `CLAUDE.md`: tool-chaining attack prevention (blocks untrusted content from triggering tool call sequences) and memory poisoning defense (prevents attacker-controlled text from being stored as behavioral instructions that replay in future sessions)
 - **Content Security Policy** — Both `overlay.html` and `log-viewer.html` now enforce strict CSP rules. Only local scripts, styles, fonts, and images are allowed. No external origins can load resources into the app. The log viewer uses an even tighter `default-src 'none'` policy
 - **API keys redacted from renderer** — The `get-config` IPC handler now masks API key values before sending them to the renderer (e.g. `sk-proj-abc...xyz` becomes `sk-p...xyz1`). Full keys stay in the main process only. The settings UI shows masked placeholders — typing a new key saves it, leaving the field empty preserves the existing key
 - **PTY environment filtered** — Spawned terminal processes (Claude Code, OpenCode, etc.) no longer inherit the full `process.env`. A new `filtered-env.js` module allowlists only essential variables: PATH, HOME, shell config, temp dirs, and provider API key prefixes (ANTHROPIC_, CLAUDE_, OLLAMA_, OPENAI_, GEMINI_, MISTRAL_, GROQ_, XAI_, OPENROUTER_, DEEPSEEK_, MOONSHOT_)
