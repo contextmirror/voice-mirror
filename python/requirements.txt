@@ -20,7 +20,7 @@ anthropic>=0.40.0,<1.0.0
 
 # ONNX Runtime — pin <1.24 to avoid "escapes model directory" error
 # with HuggingFace cache symlinks (ORT 1.24 security tightening).
-onnxruntime>=1.19.0,<1.24.0
+onnxruntime>=1.19.0,<1.25.0
 
 # Local STT (Parakeet) — hub for HuggingFace model downloads
 # Note: [gpu] extra removed — it pulls onnxruntime-gpu which conflicts
