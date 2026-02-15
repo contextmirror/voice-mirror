@@ -5,6 +5,33 @@ Format inspired by game dev patch notes — grouped by release, categorized by i
 
 ---
 
+## v0.9.5 — "Dependency Dashboard" (2026-02-15)
+
+Developer tooling improvements: expanded Dependencies tab, terminal startup polish, and UX fixes.
+
+### New
+
+- **Dependencies tab: 3 sections** — The developer Dependencies tab (gated behind `advanced.showDependencies`) now tracks everything the app depends on:
+  - **Packages** — npm cards for ghostty-web, OpenCode, and Claude Code with individual Update buttons and an "Update All" button that runs updates sequentially
+  - **System** — Read-only diagnostic cards for Node.js (version), Python (venv version), Ollama (installed/not found), ffmpeg (installed/not found)
+  - **Python Environment** — Shows all outdated pip packages in a scrollable table with an "Update All" button that runs `pip install -r requirements.txt --upgrade`
+  - All 3 sections check in parallel via `Promise.all` for speed
+
+### Improved
+
+- **Terminal tab hidden until ready** — The terminal sidebar tab is now hidden on startup and revealed only after ghostty-web WASM loads and the terminal mounts. Prevents visual glitches when clicking the tab before rendering completes
+- **"Starting..." welcome banner** — Terminal welcome message now shows "Starting Claude Code..." instead of "Click Start" during auto-start, since auto-start is the default behavior
+
+### Technical
+- New IPC: `update-pip-packages` runs pip upgrade in Python venv with 5-minute timeout
+- `claude-code` added to dependency update allowlist (`@anthropic-ai/claude-code@latest`, global)
+- `check-dependency-versions` returns `{ npm, system, pip }` response shape
+- New renderer functions: `updateSystemCard()`, `updatePipSection()`, `handleNpmUpdateAll()`, `handlePipUpdateAll()`, `escapeHtml()`
+- 36 new source-inspection tests for Dependencies tab (IPC, preload, HTML, renderer, CSS)
+- 568 tests passing (566 pass, 2 skipped, 0 failures)
+
+---
+
 ## v0.9.4 — "Lockdown" (2026-02-15)
 
 Security hardening across the entire app and upgrade from Electron 28 to Electron 40.
