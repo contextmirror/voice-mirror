@@ -5,6 +5,37 @@ Format inspired by game dev patch notes — grouped by release, categorized by i
 
 ---
 
+## v0.9.4 — "Lockdown" (2026-02-15)
+
+Security hardening across the entire app and upgrade from Electron 28 to Electron 40.
+
+### Security
+
+- **Content Security Policy** — Both `overlay.html` and `log-viewer.html` now enforce strict CSP rules. Only local scripts, styles, fonts, and images are allowed. No external origins can load resources into the app. The log viewer uses an even tighter `default-src 'none'` policy
+- **API keys redacted from renderer** — The `get-config` IPC handler now masks API key values before sending them to the renderer (e.g. `sk-proj-abc...xyz` becomes `sk-p...xyz1`). Full keys stay in the main process only. The settings UI shows masked placeholders — typing a new key saves it, leaving the field empty preserves the existing key
+- **PTY environment filtered** — Spawned terminal processes (Claude Code, OpenCode, etc.) no longer inherit the full `process.env`. A new `filtered-env.js` module allowlists only essential variables: PATH, HOME, shell config, temp dirs, and provider API key prefixes (ANTHROPIC_, CLAUDE_, OLLAMA_, OPENAI_, GEMINI_, MISTRAL_, GROQ_, XAI_, OPENROUTER_, DEEPSEEK_, MOONSHOT_)
+- **Google Fonts bundled locally** — Replaced CDN links to `fonts.googleapis.com` with 26 locally bundled woff2 font files (~710KB). The app no longer makes any external network requests on startup. 8 font families included: Inter, Roboto, Open Sans, Poppins, Ubuntu, Fira Code, JetBrains Mono, Source Code Pro
+- **PowerShell screen capture hardened** — The `displayIndex` parameter is now validated as a non-negative integer, and `outputPath` is properly escaped for PowerShell single-quoted strings, preventing potential injection if values ever came from untrusted input
+
+### Upgraded
+
+- **Electron 28.3.3 → 40.4.1** — Chromium 120 → 134 (2+ years of browser security patches), Node.js 18 → 22. Only one breaking API change: the `console-message` event now uses an event object instead of positional arguments
+- **electron-builder 25 → 26** — Updated to support Electron 40's build headers
+
+### Improved
+
+- **Update system handles major Electron upgrades** — When `npm install` fails during an update (common on Windows where the running Electron binary is locked), the updater writes a `.pending-install` marker. On next app launch, it detects the marker and completes the install automatically. Users see "Restart to finish update" instead of a silent failure. Retries up to 3 times before giving up with a log message
+- **Update banner shows install failures** — The `installFailed` flag is now surfaced to the user. Previously the banner showed "Restart to apply" even when npm install had failed, leading to a restart with incomplete dependencies
+
+### Technical
+- New files: `electron/lib/filtered-env.js`, `electron/renderer/styles/fonts.css`, `electron/assets/fonts/` (26 woff2 files)
+- `console-message` event handler updated for Electron 35+ API (event object instead of positional args)
+- CSP allows `'wasm-unsafe-eval'` for ghostty-web WASM terminal and `data:` in `connect-src` for embedded WASM binary loading
+- `isRedactedKey()` detection prevents masked placeholder values from being saved back to config
+- Pending-install marker stores timestamp and retry count, auto-removed after 3 failures
+
+---
+
 ## v0.9.3 — "Flicker Fix" (2026-02-14)
 
 Fix terminal flickering and auto-scroll-to-bottom issue in Claude Code terminal.
