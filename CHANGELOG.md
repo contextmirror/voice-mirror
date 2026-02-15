@@ -32,12 +32,17 @@ Security hardening across the entire app and upgrade from Electron 28 to Electro
 - **Update system handles major Electron upgrades** — When `npm install` fails during an update (common on Windows where the running Electron binary is locked), the updater writes a `.pending-install` marker. On next app launch, it detects the marker and completes the install automatically. Users see "Restart to finish update" instead of a silent failure. Retries up to 3 times before giving up with a log message
 - **Update banner shows install failures** — The `installFailed` flag is now surfaced to the user. Previously the banner showed "Restart to apply" even when npm install had failed, leading to a restart with incomplete dependencies
 
+### Fixed
+
+- **npm commands fail on Node 22 (EINVAL)** — Node 22 (bundled with Electron 40) changed `execFile` behavior on Windows: calling `.cmd` scripts like `npm.cmd` directly now throws `EINVAL`. The v0.9.1 fix of appending `.cmd` to npm commands actually became the problem. Fixed by using `shell: true` instead, which lets the OS resolve npm correctly on all platforms. Affected: dependency checker, dependency updater, CLI installer, and the git-based update system
+
 ### Technical
 - New files: `electron/lib/filtered-env.js`, `electron/renderer/styles/fonts.css`, `electron/assets/fonts/` (26 woff2 files)
 - `console-message` event handler updated for Electron 35+ API (event object instead of positional args)
 - CSP allows `'wasm-unsafe-eval'` for ghostty-web WASM terminal and `data:` in `connect-src` for embedded WASM binary loading
 - `isRedactedKey()` detection prevents masked placeholder values from being saved back to config
 - Pending-install marker stores timestamp and retry count, auto-removed after 3 failures
+- Node 22 compatibility audit: codebase is clean. One minor note: `crypto.createHash('md5')` in webview-snapshot.js shows a deprecation warning but remains functional
 
 ---
 
