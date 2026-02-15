@@ -12,6 +12,9 @@ Security hardening across the entire app and upgrade from Electron 28 to Electro
 ### New
 
 - **First-launch disclaimer screen** — New users see a full-screen security warning before they can use the app: "This app gives AI agents full terminal access to your computer. It can read, write, and execute anything your user account can." Users must click "I Understand & Accept" to proceed. Declining quits the app. Shows once, acceptance saved to config. Includes GitHub, bug report, and star links
+- **Ctrl+C copies selected text** — When text is selected in the terminal, Ctrl+C copies it to the clipboard instead of interrupting the running process. Matches Windows Terminal / VS Code behavior. When nothing is selected, Ctrl+C still sends the interrupt as normal
+- **Dashboard mode remembers state** — The app now restores the window mode (orb or dashboard) it was in when closed. Panel size was already saved — now the expanded/collapsed state persists too, so users don't have to re-expand every launch
+- **Security badges** — Added OpenSSF Scorecard (GitHub Action, runs weekly), Snyk (dependency vulnerability scanning), and Socket.dev (supply chain attack detection) badges to README
 
 ### Security
 
@@ -31,6 +34,8 @@ Security hardening across the entire app and upgrade from Electron 28 to Electro
 
 - **Update system handles major Electron upgrades** — When `npm install` fails during an update (common on Windows where the running Electron binary is locked), the updater writes a `.pending-install` marker. On next app launch, it detects the marker and completes the install automatically. Users see "Restart to finish update" instead of a silent failure. Retries up to 3 times before giving up with a log message
 - **Update banner shows install failures** — The `installFailed` flag is now surfaced to the user. Previously the banner showed "Restart to apply" even when npm install had failed, leading to a restart with incomplete dependencies
+- **Updater concurrency guard** — Prevents parallel `applyUpdate()` calls if the user double-clicks the Update button. Second call returns immediately instead of racing with git operations
+- **Pending-install marker moved to userData** — The retry marker now lives in `%APPDATA%` instead of `node_modules/`, so it survives `npm install` failures, `node_modules` deletion, and `git clean`. Includes migration from the old location for existing users
 
 ### Fixed
 
@@ -43,6 +48,10 @@ Security hardening across the entire app and upgrade from Electron 28 to Electro
 - `isRedactedKey()` detection prevents masked placeholder values from being saved back to config
 - Pending-install marker stores timestamp and retry count, auto-removed after 3 failures
 - Node 22 compatibility audit: codebase is clean. One minor note: `crypto.createHash('md5')` in webview-snapshot.js shows a deprecation warning but remains functional
+- `writeClipboard()` added to preload contextBridge for terminal copy support
+- `config.window.expanded` persists dashboard mode across sessions
+- OpenSSF Scorecard GitHub Action: `.github/workflows/scorecard.yml`
+- README badges updated: version 0.9.4, Electron 40; added screenshots (dashboard + orb states)
 
 ---
 
