@@ -26,6 +26,8 @@ on:
     - cron: '0 3 * * *'
   workflow_dispatch:
 
+permissions: read-all
+
 concurrency:
   group: installer-${{ github.ref }}
   cancel-in-progress: true
@@ -40,19 +42,21 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Run install.sh (update mode)
         run: |
           chmod +x install.sh
           bash install.sh \
-            --dir "${{ github.workspace }}" \
-            --branch "${{ github.head_ref || github.ref_name }}" \
-            --repo "https://github.com/${{ github.repository }}.git" \
+            --dir "$GITHUB_WORKSPACE" \
+            --branch "$BRANCH" \
+            --repo "https://github.com/${REPO}.git" \
             --skip-setup \
             --non-interactive
         env:
           DEBIAN_FRONTEND: noninteractive
+          BRANCH: ${{ github.head_ref || github.ref_name }}
+          REPO: ${{ github.repository }}
 
       - name: Verify npm dependencies installed
         run: |
@@ -71,17 +75,20 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Run install.sh (update mode)
         run: |
           chmod +x install.sh
           bash install.sh \
-            --dir "${{ github.workspace }}" \
-            --branch "${{ github.head_ref || github.ref_name }}" \
-            --repo "https://github.com/${{ github.repository }}.git" \
+            --dir "$GITHUB_WORKSPACE" \
+            --branch "$BRANCH" \
+            --repo "https://github.com/${REPO}.git" \
             --skip-setup \
             --non-interactive
+        env:
+          BRANCH: ${{ github.head_ref || github.ref_name }}
+          REPO: ${{ github.repository }}
 
       - name: Verify npm dependencies installed
         run: |
@@ -100,17 +107,20 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Run install.ps1 (update mode)
         shell: pwsh
         run: |
-          $env:VM_DIR = "${{ github.workspace }}"
-          $env:VM_BRANCH = "${{ github.head_ref || github.ref_name }}"
-          $env:VM_REPO = "https://github.com/${{ github.repository }}.git"
+          $env:VM_DIR = $env:GITHUB_WORKSPACE
+          $env:VM_BRANCH = $env:BRANCH
+          $env:VM_REPO = "https://github.com/$env:REPO.git"
           $env:VM_SKIP_SETUP = "1"
           $env:VM_NON_INTERACTIVE = "1"
           & .\install.ps1
+        env:
+          BRANCH: ${{ github.head_ref || github.ref_name }}
+          REPO: ${{ github.repository }}
 
       - name: Verify npm dependencies installed
         shell: pwsh
@@ -138,19 +148,21 @@ jobs:
 
     steps:
       - name: Checkout (installer script only)
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           path: source
 
       - name: Run install.sh (fresh clone, full setup)
         run: |
           bash source/install.sh \
-            --dir "${{ runner.temp }}/voice-mirror-full" \
-            --branch "${{ github.head_ref || github.ref_name }}" \
-            --repo "https://github.com/${{ github.repository }}.git" \
+            --dir "$RUNNER_TEMP/voice-mirror-full" \
+            --branch "$BRANCH" \
+            --repo "https://github.com/${REPO}.git" \
             --non-interactive
         env:
           DEBIAN_FRONTEND: noninteractive
+          BRANCH: ${{ github.head_ref || github.ref_name }}
+          REPO: ${{ github.repository }}
 
       - name: Verify installation structure
         working-directory: ${{ runner.temp }}/voice-mirror-full
@@ -224,23 +236,26 @@ jobs:
 
     steps:
       - name: Checkout (installer script only)
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           path: source
 
       - name: Run install.ps1 (fresh clone, full setup)
         shell: pwsh
         run: |
-          $env:VM_DIR = "${{ runner.temp }}\voice-mirror-full"
-          $env:VM_BRANCH = "${{ github.head_ref || github.ref_name }}"
-          $env:VM_REPO = "https://github.com/${{ github.repository }}.git"
+          $env:VM_DIR = "$env:RUNNER_TEMP\voice-mirror-full"
+          $env:VM_BRANCH = $env:BRANCH
+          $env:VM_REPO = "https://github.com/$env:REPO.git"
           $env:VM_NON_INTERACTIVE = "1"
           & .\source\install.ps1
+        env:
+          BRANCH: ${{ github.head_ref || github.ref_name }}
+          REPO: ${{ github.repository }}
 
       - name: Verify installation structure
         shell: pwsh
         run: |
-          $dir = "${{ runner.temp }}\voice-mirror-full"
+          $dir = "$env:RUNNER_TEMP\voice-mirror-full"
           Write-Host "=== Checking core files ==="
           if (-not (Test-Path "$dir\node_modules")) { throw "node_modules missing" }
           if (-not (Test-Path "$dir\mcp-server\node_modules")) { throw "mcp-server\node_modules missing" }
@@ -303,24 +318,27 @@ jobs:
 
     steps:
       - name: Checkout (installer script only)
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           path: source
 
       # macos-latest ships Python 3.14 which is too new for onnxruntime 1.23.x.
       # Pin to 3.12 until ORT catches up. The installer still creates its own venv.
       - name: Setup Python 3.12
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: '3.12'
 
       - name: Run install.sh (fresh clone, full setup)
         run: |
           bash source/install.sh \
-            --dir "${{ runner.temp }}/voice-mirror-full" \
-            --branch "${{ github.head_ref || github.ref_name }}" \
-            --repo "https://github.com/${{ github.repository }}.git" \
+            --dir "$RUNNER_TEMP/voice-mirror-full" \
+            --branch "$BRANCH" \
+            --repo "https://github.com/${REPO}.git" \
             --non-interactive
+        env:
+          BRANCH: ${{ github.head_ref || github.ref_name }}
+          REPO: ${{ github.repository }}
 
       - name: Verify installation structure
         working-directory: ${{ runner.temp }}/voice-mirror-full
