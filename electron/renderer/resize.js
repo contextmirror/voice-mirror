@@ -25,10 +25,10 @@ export function initResize() {
             e.preventDefault();
             e.stopPropagation();
 
-            // Extract direction from class (resize-n, resize-se, etc.)
-            const match = edge.className.match(/resize-(nw|ne|sw|se|n|s|e|w)/);
-            if (!match) return;
-            const dir = match[1];
+            // Determine direction from classList (avoids regex matching "resize-edge")
+            const dirs = ['nw', 'ne', 'sw', 'se', 'n', 's', 'e', 'w'];
+            const dir = dirs.find(d => edge.classList.contains(`resize-${d}`));
+            if (!dir) return;
 
             // Tell main process to start polling cursor and resizing
             window.voiceMirror.startResize(dir);
