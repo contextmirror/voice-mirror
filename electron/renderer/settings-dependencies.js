@@ -215,7 +215,8 @@ async function handlePipUpdateAll() {
             if (summaryEl) setBadge(summaryEl, 'up-to-date', 'Updated!');
             setTimeout(() => checkVersions(), 1000);
         } else {
-            if (summaryEl) setBadge(summaryEl, 'error', 'Update failed');
+            const msg = result.error ? `Failed: ${result.error}` : 'Update failed';
+            if (summaryEl) setBadge(summaryEl, 'error', msg.length > 60 ? msg.slice(0, 57) + '...' : msg);
             log.error('Pip update failed:', result.error);
         }
     } catch (err) {

@@ -339,7 +339,7 @@ function registerMiscHandlers(ctx, validators) {
         });
     });
 
-    // Pip package upgrade handler
+    // Pip package upgrade handler — stops Python first to release DLL locks
     ipcMain.handle('update-pip-packages', async () => {
         const { execFile } = require('child_process');
         const pythonDir = path.join(__dirname, '..', '..', 'python');
@@ -356,19 +356,39 @@ function registerMiscHandlers(ctx, validators) {
             return { success: false, error: 'requirements.txt not found' };
         }
 
-        return new Promise((resolve) => {
+        // Stop Python backend to release DLL locks (onnxruntime, psutil, etc.)
+        const pythonBackend = ctx.getPythonBackend();
+        const wasRunning = pythonBackend?.isRunning();
+        if (wasRunning) {
+            ctx.logger.info('[Dep Update]', 'Stopping Python backend for pip upgrade...');
+            pythonBackend.stop();
+            // Wait for process to fully exit before pip install
+            await new Promise(r => setTimeout(r, 2000));
+        }
+
+        const result = await new Promise((resolve) => {
             execFile(venvPython, ['-m', 'pip', 'install', '-r', reqFile, '--upgrade'], {
-                timeout: 300000, windowsHide: true, cwd: pythonDir
-            }, (err, _stdout, stderr) => {
+                timeout: 300000, windowsHide: true, cwd: pythonDir, shell: true
+            }, (err, stdout, stderr) => {
                 if (err) {
+                    const hint = stderr?.match(/ERROR: .*/)?.[0] || err.message;
                     ctx.logger.error('[Dep Update]', 'pip upgrade failed:', err.message);
-                    resolve({ success: false, error: err.message, stderr: stderr?.slice(0, 500) });
+                    if (stderr) ctx.logger.error('[Dep Update]', 'stderr:', stderr.slice(0, 500));
+                    resolve({ success: false, error: hint.slice(0, 200) });
                 } else {
                     ctx.logger.info('[Dep Update]', 'pip packages upgraded successfully');
                     resolve({ success: true });
                 }
             });
         });
+
+        // Restart Python backend if it was running before
+        if (wasRunning) {
+            ctx.logger.info('[Dep Update]', 'Restarting Python backend...');
+            ctx.startPythonVoiceMirror();
+        }
+
+        return result;
     });
 
     // Image handling - send to Python backend
