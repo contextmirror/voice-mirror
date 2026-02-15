@@ -38,13 +38,13 @@ jobs:
 
       - name: Install setuptools for node-gyp (Linux)
         if: runner.os == 'Linux'
-        run: pip install setuptools
+        run: pip install setuptools==78.1.0
 
       - name: Install root dependencies
-        run: npm install
+        run: npm ci
 
       - name: Install MCP server dependencies
-        run: npm install
+        run: npm ci
         working-directory: mcp-server
 
       - name: Run unit tests

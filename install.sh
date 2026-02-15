@@ -332,24 +332,14 @@ install_deps() {
     step "Installing dependencies..."
 
     cd "$INSTALL_DIR"
-    # Use npm ci to install from the lockfile for reproducible, pinned builds.
-    # Falls back to npm install if no lockfile exists (e.g. first-time clone
-    # before a lockfile was committed).
-    if [[ -f "package-lock.json" ]]; then
-        npm ci 2>&1 | tail -1
-    else
-        npm install 2>&1 | tail -1
-    fi
+    # Use npm ci for reproducible, pinned builds from the committed lockfile.
+    npm ci 2>&1 | tail -1
     ok "npm dependencies installed"
 
     # MCP server
     if [[ -d "mcp-server" ]]; then
         cd mcp-server
-        if [[ -f "package-lock.json" ]]; then
-            npm ci 2>&1 | tail -1
-        else
-            npm install 2>&1 | tail -1
-        fi
+        npm ci 2>&1 | tail -1
         cd ..
         ok "MCP server dependencies installed"
     fi
