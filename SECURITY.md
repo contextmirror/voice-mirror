@@ -48,6 +48,6 @@ Voice Mirror implements the following security controls:
 
 This project is monitored by:
 
-- [OpenSSF Scorecard](https://securityscorecards.dev/viewer/?uri=github.com/contextmirror/voice-mirror-electron)
+- [OpenSSF Scorecard](https://scorecard.dev/viewer/?uri=github.com/contextmirror/voice-mirror-electron)
 - [Snyk](https://snyk.io/test/github/contextmirror/voice-mirror-electron)
 - [Socket.dev](https://socket.dev)

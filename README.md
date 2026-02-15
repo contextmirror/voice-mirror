@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <a href="https://securityscorecards.dev/viewer/?uri=github.com/contextmirror/voice-mirror-electron"><img src="https://api.securityscorecards.dev/projects/github.com/contextmirror/voice-mirror-electron/badge" alt="OpenSSF Scorecard"></a>
+  <a href="https://scorecard.dev/viewer/?uri=github.com/contextmirror/voice-mirror-electron"><img src="https://api.scorecard.dev/projects/github.com/contextmirror/voice-mirror-electron/badge" alt="OpenSSF Scorecard"></a>
   <a href="https://snyk.io/test/github/contextmirror/voice-mirror-electron"><img src="https://snyk.io/test/github/contextmirror/voice-mirror-electron/badge.svg" alt="Snyk"></a>
   <a href="https://github.com/contextmirror/voice-mirror-electron"><img src="https://img.shields.io/badge/Socket-monitored-5539cc?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0id2hpdGUiIGQ9Ik0xMiAyQzYuNDggMiAyIDYuNDggMiAxMnM0LjQ4IDEwIDEwIDEwIDEwLTQuNDggMTAtMTBTMTcuNTIgMiAxMiAyem0wIDE4Yy00LjQyIDAtOC0zLjU4LTgtOHMzLjU4LTggOC04IDggMy41OCA4IDgtMy41OCA4LTggOHoiLz48L3N2Zz4=" alt="Socket"></a>
 </p>
