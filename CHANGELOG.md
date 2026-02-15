@@ -57,6 +57,7 @@ Security hardening across the entire app and upgrade from Electron 28 to Electro
 
 ### Fixed
 
+- **Dashboard window resize restored** — Electron 40's `transparent: true` permanently disables native OS resize handles on frameless windows (documented limitation). Added custom CSS resize edges (8 invisible hit zones at all edges and corners) with a Pointer Capture API–driven resize handler. The renderer captures the pointer on drag start so `pointermove`/`pointerup` events fire even if the cursor leaves the window — no main-process polling intervals, no race conditions. Resize updates are throttled via `requestAnimationFrame` and sent as fire-and-forget IPC for smooth ~60fps resizing. Panel dimensions are saved to config after each resize operation
 - **npm commands fail on Node 22 (EINVAL)** — Node 22 (bundled with Electron 40) changed `execFile` behavior on Windows: calling `.cmd` scripts like `npm.cmd` directly now throws `EINVAL`. The v0.9.1 fix of appending `.cmd` to npm commands actually became the problem. Fixed by using `shell: true` instead, which lets the OS resolve npm correctly on all platforms. Affected: dependency checker, dependency updater, CLI installer, and the git-based update system
 - **Scorecard badge URL** — Updated from deprecated `securityscorecards.dev` to `scorecard.dev` in README and SECURITY.md
 - **Socket badge** — Replaced broken dynamic badge with static shields.io badge
@@ -71,9 +72,11 @@ Security hardening across the entire app and upgrade from Electron 28 to Electro
 - Node 22 compatibility audit: codebase is clean. One minor note: `crypto.createHash('md5')` in webview-snapshot.js shows a deprecation warning but remains functional
 - `writeClipboard()` added to preload contextBridge for terminal copy support
 - `config.window.expanded` persists dashboard mode across sessions
+- New file: `electron/renderer/resize.js` — Pointer Capture API resize handler for frameless transparent window
+- Resize IPC: `get-window-bounds` (invoke), `set-window-bounds` (send, fire-and-forget), `save-window-bounds` (invoke)
 - OpenSSF Scorecard GitHub Action: `.github/workflows/scorecard.yml`
 - README badges updated: version 0.9.4, Electron 40; added screenshots (dashboard + orb states)
-- 523 tests passing (521 pass, 2 skipped, 0 failures)
+- 568 tests passing (566 pass, 2 skipped, 0 failures)
 
 ---
 
