@@ -253,6 +253,19 @@ function createUpdateChecker(options = {}) {
      */
     async function completePendingInstall() {
         const markerPath = getMarkerPath();
+
+        // Migration: move marker from old location (node_modules/) to new (userData/)
+        // so existing users with a pending install from a previous version aren't skipped.
+        const oldMarkerPath = path.join(gitDir, 'node_modules', '.pending-install');
+        if (!fs.existsSync(markerPath) && fs.existsSync(oldMarkerPath)) {
+            try {
+                const content = fs.readFileSync(oldMarkerPath, 'utf8');
+                fs.writeFileSync(markerPath, content);
+                fs.unlinkSync(oldMarkerPath);
+                if (log) log('APP', 'Migrated pending-install marker from node_modules to userData');
+            } catch (_) { /* migration is best-effort */ }
+        }
+
         if (!fs.existsSync(markerPath)) return false;
 
         // Check retry count — give up after 3 attempts to avoid repeated startup delays
