@@ -13,7 +13,7 @@
     "download-model": "node scripts/download-model.js"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "~1.0.0",
+    "@modelcontextprotocol/sdk": "~1.26.0",
     "better-sqlite3": "~12.6.2",
     "sqlite-vec": "~0.1.7-alpha.2"
   },
