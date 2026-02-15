@@ -368,6 +368,110 @@ function registerMiscHandlers(ctx, validators) {
         }
     });
 
+    // Uninstall — remove shortcuts, npm link, optionally config
+    ipcMain.handle('run-uninstall', async (_event, keepConfig) => {
+        const os = require('os');
+        const platform = os.platform();
+        const homedir = os.homedir();
+
+        const removed = [];
+        const errors = [];
+
+        // 1. Remove desktop shortcut(s)
+        try {
+            if (platform === 'win32') {
+                // Windows: find Desktop via registry fallback
+                const desktopCandidates = [
+                    path.join(homedir, 'Desktop'),
+                    path.join(homedir, 'OneDrive', 'Desktop'),
+                    path.join(homedir, 'OneDrive - Personal', 'Desktop'),
+                ];
+                for (const dir of desktopCandidates) {
+                    const lnk = path.join(dir, 'Voice Mirror.lnk');
+                    if (fs.existsSync(lnk)) {
+                        fs.unlinkSync(lnk);
+                        removed.push(`Shortcut: ${lnk}`);
+                    }
+                }
+            } else if (platform === 'darwin') {
+                const shortcut = path.join(homedir, 'Desktop', 'Voice Mirror.command');
+                if (fs.existsSync(shortcut)) {
+                    fs.unlinkSync(shortcut);
+                    removed.push(`Shortcut: ${shortcut}`);
+                }
+            } else {
+                // Linux
+                const desktopFile = path.join(homedir, 'Desktop', 'voice-mirror.desktop');
+                if (fs.existsSync(desktopFile)) {
+                    fs.unlinkSync(desktopFile);
+                    removed.push(`Shortcut: ${desktopFile}`);
+                }
+                const appsEntry = path.join(homedir, '.local', 'share', 'applications', 'voice-mirror.desktop');
+                if (fs.existsSync(appsEntry)) {
+                    fs.unlinkSync(appsEntry);
+                    removed.push(`App entry: ${appsEntry}`);
+                }
+            }
+        } catch (err) {
+            errors.push(`Shortcut removal: ${err.message}`);
+        }
+
+        // 2. Remove npm global link
+        try {
+            const { execFileSync } = require('child_process');
+            execFileSync('npm', ['unlink', '-g', 'voice-mirror'], {
+                timeout: 15000,
+                windowsHide: true,
+                shell: true,
+                stdio: 'ignore',
+            });
+            removed.push('npm global link');
+        } catch {
+            // May not be linked — not an error
+        }
+
+        // 3. Remove config directory (unless keeping)
+        if (!keepConfig) {
+            try {
+                const configDir = path.dirname(app.getPath('userData'));
+                const vmConfigDir = path.join(configDir, 'voice-mirror-electron');
+                // Fallback: app.getPath('userData') might already be the right dir
+                const actualDir = fs.existsSync(vmConfigDir) ? vmConfigDir : app.getPath('userData');
+                if (fs.existsSync(actualDir)) {
+                    fs.rmSync(actualDir, { recursive: true, force: true });
+                    removed.push(`Config: ${actualDir}`);
+                }
+            } catch (err) {
+                errors.push(`Config removal: ${err.message}`);
+            }
+        }
+
+        // 4. Remove FFmpeg (Windows only — installed by our installer)
+        if (platform === 'win32') {
+            try {
+                const localAppData = process.env.LOCALAPPDATA || path.join(homedir, 'AppData', 'Local');
+                const ffmpegDir = path.join(localAppData, 'Programs', 'ffmpeg');
+                if (fs.existsSync(ffmpegDir)) {
+                    fs.rmSync(ffmpegDir, { recursive: true, force: true });
+                    removed.push(`FFmpeg: ${ffmpegDir}`);
+                }
+            } catch (err) {
+                errors.push(`FFmpeg removal: ${err.message}`);
+            }
+        }
+
+        const installDir = path.join(__dirname, '..', '..');
+        ctx.logger.info('[Uninstall]', `Removed: ${removed.join(', ') || 'nothing'}`);
+        if (errors.length) ctx.logger.error('[Uninstall]', `Errors: ${errors.join('; ')}`);
+
+        return {
+            success: true,
+            removed,
+            errors,
+            installDir,
+        };
+    });
+
     // Update checker
     ipcMain.handle('apply-update', async () => {
         const checker = ctx.getUpdateChecker?.();

@@ -1656,3 +1656,20 @@
     max-width: 400px;
     margin: 0 auto;
 }
+
+/* ========== Danger Button (Uninstall) ========== */
+.btn-danger {
+    background: rgba(239, 68, 68, 0.15);
+    border: 1px solid rgba(239, 68, 68, 0.4);
+    border-radius: 6px;
+    color: #ef4444;
+    padding: 8px 20px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-danger:hover {
+    background: rgba(239, 68, 68, 0.25);
+    border-color: rgba(239, 68, 68, 0.6);
+}

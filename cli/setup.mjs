@@ -501,7 +501,7 @@ async function runDependencySetup(config) {
  * Handles OneDrive redirection (Windows), XDG (Linux), and standard paths.
  * @returns {string|null} Desktop path or null if not found
  */
-function findDesktopFolder() {
+export function findDesktopFolder() {
     const os = platform();
     const home = homedir();
 

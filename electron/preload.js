@@ -217,6 +217,9 @@ contextBridge.exposeInMainWorld('voiceMirror', {
     minimizeWindow: () => ipcRenderer.invoke('minimize-window'),
     quitApp: () => ipcRenderer.invoke('quit-app'),
 
+    // Uninstall
+    runUninstall: (keepConfig) => ipcRenderer.invoke('run-uninstall', !!keepConfig),
+
     // Dev logging — renderer → main process → vmr.log
     devlog: (category, action, data) => ipcRenderer.send('devlog', category, action, data),
 

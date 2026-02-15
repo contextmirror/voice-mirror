@@ -56,6 +56,19 @@ program
     });
 
 program
+    .command('uninstall')
+    .description('Remove Voice Mirror from your system')
+    .option('--keep-config', 'Preserve configuration files for future reinstall')
+    .option('--non-interactive', 'Skip prompts (remove everything except config)')
+    .action(async (opts) => {
+        const { runUninstall } = await import('./uninstall.mjs');
+        await runUninstall({
+            keepConfig: opts.keepConfig,
+            nonInteractive: opts.nonInteractive,
+        });
+    });
+
+program
     .command('start')
     .description('Launch Voice Mirror')
     .option('--dev', 'Development mode')

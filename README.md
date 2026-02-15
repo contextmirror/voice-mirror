@@ -181,6 +181,25 @@ npm start
 - **ffmpeg** (for voice cloning)
 - **CUDA** (optional — GPU acceleration for Qwen3-TTS)
 
+### Uninstall
+
+**Linux / macOS:**
+```bash
+bash uninstall.sh
+```
+
+**Windows (PowerShell):**
+```powershell
+.\uninstall.ps1
+```
+
+Or from within the app:
+```bash
+voice-mirror uninstall
+```
+
+Removes shortcuts, npm link, and optionally config/data. Does not remove Node.js, Python, or Git.
+
 ---
 
 ## Keyboard Shortcuts

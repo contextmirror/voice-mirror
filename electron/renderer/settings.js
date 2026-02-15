@@ -371,8 +371,43 @@ export async function initSettings() {
     initDependenciesTab();
 }
 
+// ========== Uninstall ==========
+
+/**
+ * Show uninstall confirmation and trigger uninstall process.
+ */
+async function showUninstallConfirm() {
+    const confirmed = confirm(
+        'This will remove Voice Mirror from your system:\n\n' +
+        '- Desktop shortcuts\n' +
+        '- CLI global link\n' +
+        '- Configuration data (you will be asked)\n\n' +
+        'The app will close. Continue?'
+    );
+    if (!confirmed) return;
+
+    const keepConfig = !confirm(
+        'Do you want to REMOVE your configuration and data?\n\n' +
+        'Click OK to remove everything.\n' +
+        'Click Cancel to keep config for future reinstall.'
+    );
+
+    try {
+        const result = await window.voiceMirror.runUninstall(keepConfig);
+        if (result.success) {
+            alert('Voice Mirror has been uninstalled.\n\nTo complete removal, delete the install directory:\n' + (result.installDir || ''));
+            window.voiceMirror.quitApp();
+        } else {
+            alert('Uninstall failed: ' + (result.error || 'Unknown error'));
+        }
+    } catch (err) {
+        alert('Uninstall failed: ' + err.message);
+    }
+}
+
 // Expose functions globally for onclick handlers in HTML templates
 window.toggleSettings = toggleSettings;
 window.saveSettings = saveSettings;
 window.resetSettings = resetSettings;
 window.loadSettingsUI = loadSettingsUI;
+window.showUninstallConfirm = showUninstallConfirm;
