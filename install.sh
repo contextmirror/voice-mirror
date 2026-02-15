@@ -111,7 +111,10 @@ ensure_node() {
             winget install --id OpenJS.NodeJS.LTS --accept-source-agreements --accept-package-agreements
         elif command -v choco &>/dev/null; then
             info "Using Chocolatey..."
-            choco install nodejs-lts -y
+            # Pin to major version for reproducibility; Chocolatey resolves the
+            # latest patch within this range, which is acceptable since we verify
+            # the installed version below.
+            choco install nodejs-lts --version=22.14.0 -y
         elif command -v scoop &>/dev/null; then
             info "Using Scoop..."
             scoop install nodejs-lts
@@ -126,6 +129,10 @@ ensure_node() {
         # NodeSource
         info "Using NodeSource installer..."
         if command -v curl &>/dev/null; then
+            # Scorecard: this curl-pipe-bash cannot be pinned to a hash because
+            # the NodeSource setup script is a dynamic installer that configures
+            # apt/dnf/yum repositories and changes with each release. The URL is
+            # pinned to the major version (22.x) and served over HTTPS.
             curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
             if command -v apt-get &>/dev/null; then
                 sudo apt-get install -y nodejs
@@ -175,7 +182,9 @@ ensure_python() {
             winget install --id Python.Python.3.12 --accept-source-agreements --accept-package-agreements
         elif command -v choco &>/dev/null; then
             info "Using Chocolatey..."
-            choco install python3 -y
+            # Pin to specific version for reproducibility; the installed version
+            # is verified below.
+            choco install python3 --version=3.12.9 -y
         elif command -v scoop &>/dev/null; then
             info "Using Scoop..."
             scoop install python
@@ -218,7 +227,9 @@ ensure_git() {
             if command -v winget &>/dev/null; then
                 winget install --id Git.Git --accept-source-agreements --accept-package-agreements
             elif command -v choco &>/dev/null; then
-                choco install git -y
+                # Pin to specific version for reproducibility; the installed
+                # version is verified below.
+                choco install git --version=2.47.1.2 -y
             else
                 fail "Install Git from https://git-scm.com/download/win"
                 exit 1
@@ -321,13 +332,24 @@ install_deps() {
     step "Installing dependencies..."
 
     cd "$INSTALL_DIR"
-    npm install 2>&1 | tail -1
+    # Use npm ci to install from the lockfile for reproducible, pinned builds.
+    # Falls back to npm install if no lockfile exists (e.g. first-time clone
+    # before a lockfile was committed).
+    if [[ -f "package-lock.json" ]]; then
+        npm ci 2>&1 | tail -1
+    else
+        npm install 2>&1 | tail -1
+    fi
     ok "npm dependencies installed"
 
     # MCP server
     if [[ -d "mcp-server" ]]; then
         cd mcp-server
-        npm install 2>&1 | tail -1
+        if [[ -f "package-lock.json" ]]; then
+            npm ci 2>&1 | tail -1
+        else
+            npm install 2>&1 | tail -1
+        fi
         cd ..
         ok "MCP server dependencies installed"
     fi
