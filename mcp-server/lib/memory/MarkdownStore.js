@@ -330,7 +330,7 @@ class MarkdownStore {
                 currentTier = null; // Unknown section
             } else if (currentTier && line.startsWith('- ')) {
                 // Extract memory text, removing timestamp comment
-                const memory = line.slice(2).replace(/\s*<!--.*-->/, '').trim();
+                const memory = line.slice(2).replace(/\s*<!--[\s\S]*?-->/g, '').trim();
                 if (memory) {
                     tiers[currentTier].push(memory);
                 }
@@ -364,7 +364,7 @@ class MarkdownStore {
             } else if (currentTier && line.startsWith('- ')) {
                 const timestampMatch = line.match(/<!--\s*(\d{4}-\d{2}-\d{2}T[\d:.]+Z?)\s*-->/);
                 const savedAt = timestampMatch ? new Date(timestampMatch[1]) : null;
-                const text = line.slice(2).replace(/\s*<!--.*-->/, '').trim();
+                const text = line.slice(2).replace(/\s*<!--[\s\S]*?-->/g, '').trim();
                 if (text) {
                     tiers[currentTier].push({ text, savedAt, lineIndex: i });
                 }
@@ -426,7 +426,7 @@ class MarkdownStore {
         const newLines = lines.filter(line => {
             if (!line.startsWith('- ')) return true;
 
-            const memory = line.slice(2).replace(/\s*<!--.*-->/, '').trim();
+            const memory = line.slice(2).replace(/\s*<!--[\s\S]*?-->/g, '').trim();
             if (memory.toLowerCase() === normalizedTarget) {
                 deleted = true;
                 return false;

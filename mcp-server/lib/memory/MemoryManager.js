@@ -482,7 +482,7 @@ class MemoryManager {
                 const lines = chunk.text.split('\n');
                 const memoryLine = lines.find(l => l.startsWith('- '));
                 if (memoryLine) {
-                    content = memoryLine.slice(2).replace(/\s*<!--.*-->/, '').trim();
+                    content = memoryLine.slice(2).replace(/\s*<!--[\s\S]*?-->/g, '').trim();
                 }
             }
         }

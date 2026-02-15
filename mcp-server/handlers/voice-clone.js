@@ -45,8 +45,10 @@ async function handleCloneVoice(args) {
 
             try {
                 // Try yt-dlp first (handles YouTube, SoundCloud, etc.)
-                if (audioUrl.includes('youtube.com') || audioUrl.includes('youtu.be') ||
-                    audioUrl.includes('soundcloud.com') || audioUrl.includes('vimeo.com')) {
+                const mediaDomains = ['youtube.com', 'youtu.be', 'soundcloud.com', 'vimeo.com'];
+                const urlHostname = new URL(audioUrl).hostname;
+                const isMediaSite = mediaDomains.some(d => urlHostname === d || urlHostname.endsWith('.' + d));
+                if (isMediaSite) {
                     execFileSync('yt-dlp', [
                         '-x', '--audio-format', 'wav',
                         '-o', `${downloadPath}.%(ext)s`,

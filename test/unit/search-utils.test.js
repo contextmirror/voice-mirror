@@ -14,7 +14,7 @@ describe('electron/browser/search-utils', () => {
         assert.equal(out.action, 'search');
         assert.ok(out.result.includes('1. Page One'));
         assert.ok(out.result.includes('2. Page Two'));
-        assert.ok(out.result.includes('https://example.com/1'));
+        assert.ok(out.result.includes('https://example.com/1')); // lgtm[js/incomplete-url-substring-sanitization]
         assert.ok(out.result.includes('test query'));
     });
 
@@ -32,7 +32,7 @@ describe('electron/browser/search-utils', () => {
         ];
         const out = formatResults('query', results);
         assert.ok(out.result.includes('1. No Snippet'));
-        assert.ok(out.result.includes('https://example.com'));
+        assert.ok(out.result.includes('https://example.com')); // lgtm[js/incomplete-url-substring-sanitization]
     });
 
     it('returns structured results array with title, snippet, url', () => {
