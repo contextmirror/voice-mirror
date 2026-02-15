@@ -251,17 +251,34 @@ function registerMiscHandlers(ctx, validators) {
                     results.python = { version: null, error: 'Not found' };
                 }
 
-                // Ollama
-                results.ollama = { installed: isCLIAvailable('ollama') };
-
-                // ffmpeg
+                // Ollama — extract version from `ollama --version`
                 try {
-                    const found = await new Promise((resolve) => {
-                        execFile('ffmpeg', ['-version'], { timeout: 5000, windowsHide: true }, (err) => {
-                            resolve(!err);
+                    const ollamaVersion = await new Promise((resolve) => {
+                        execFile('ollama', ['--version'], { timeout: 5000, windowsHide: true, shell: true }, (err, stdout) => {
+                            if (err) return resolve(null);
+                            const match = stdout.match(/(\d+\.\d+\.\d+)/);
+                            resolve(match ? match[1] : null);
                         });
                     });
-                    results.ffmpeg = { installed: found };
+                    results.ollama = ollamaVersion
+                        ? { installed: true, version: ollamaVersion }
+                        : { installed: isCLIAvailable('ollama') };
+                } catch {
+                    results.ollama = { installed: false };
+                }
+
+                // ffmpeg — extract version from `ffmpeg -version`
+                try {
+                    const ffmpegVersion = await new Promise((resolve) => {
+                        execFile('ffmpeg', ['-version'], { timeout: 5000, windowsHide: true }, (err, stdout) => {
+                            if (err) return resolve(null);
+                            const match = stdout.match(/ffmpeg version (\d+\.\d+\.\d+)/);
+                            resolve(match ? match[1] : null);
+                        });
+                    });
+                    results.ffmpeg = ffmpegVersion
+                        ? { installed: true, version: ffmpegVersion }
+                        : { installed: false };
                 } catch {
                     results.ffmpeg = { installed: false };
                 }
