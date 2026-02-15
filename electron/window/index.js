@@ -68,7 +68,7 @@ function createWindowManager(options = {}) {
      */
     function getPanelWidth() {
         const config = getConfig();
-        return Math.max(config?.appearance?.panelWidth || 400, 300);
+        return config?.appearance?.panelWidth || 400;
     }
 
     /**
@@ -77,7 +77,7 @@ function createWindowManager(options = {}) {
      */
     function getPanelHeight() {
         const config = getConfig();
-        return Math.max(config?.appearance?.panelHeight || 500, 400);
+        return config?.appearance?.panelHeight || 500;
     }
 
     /**
