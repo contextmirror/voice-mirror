@@ -19,10 +19,16 @@
 </p>
 
 <p align="center">
+  <a href="https://securityscorecards.dev/viewer/?uri=github.com/contextmirror/voice-mirror-electron"><img src="https://api.securityscorecards.dev/projects/github.com/contextmirror/voice-mirror-electron/badge" alt="OpenSSF Scorecard"></a>
+  <a href="https://snyk.io/test/github/contextmirror/voice-mirror-electron"><img src="https://snyk.io/test/github/contextmirror/voice-mirror-electron/badge.svg" alt="Snyk"></a>
+  <a href="https://socket.dev/npm/package/voice-mirror-electron"><img src="https://socket.dev/api/badge/npm/package/voice-mirror-electron" alt="Socket"></a>
+</p>
+
+<p align="center">
   <img src="https://img.shields.io/badge/status-alpha-orange" alt="Alpha">
-  <img src="https://img.shields.io/badge/version-0.8.2-blue" alt="Version">
+  <img src="https://img.shields.io/badge/version-0.9.4-blue" alt="Version">
   <img src="https://img.shields.io/badge/platform-Linux%20%7C%20Windows%20%7C%20macOS-blue" alt="Platform">
-  <img src="https://img.shields.io/badge/electron-28.3.3-47848f" alt="Electron">
+  <img src="https://img.shields.io/badge/electron-40-47848f" alt="Electron">
   <img src="https://img.shields.io/badge/node-%3E%3D18-339933" alt="Node.js">
   <img src="https://img.shields.io/badge/python-%3E%3D3.9-3776ab" alt="Python">
   <img src="https://img.shields.io/badge/MCP_tools-58-blueviolet" alt="MCP Tools">
@@ -33,6 +39,14 @@
 </p>
 
 > **Alpha Release** — Voice Mirror is in active development. Core features work and are tested across all platforms, but expect rough edges. Bug reports and feedback welcome via [GitHub Issues](https://github.com/contextmirror/voice-mirror-electron/issues) or [Discord](https://discord.com/invite/JBpsSFB7EQ).
+
+<p align="center">
+  <img src="assets/screenshots/dashboard.png" alt="Voice Mirror Dashboard" width="800">
+</p>
+
+<p align="center">
+  <img src="assets/screenshots/orb-states.png" alt="Orb States — Idle, Human Speaks, AI Thinks, AI Speaks, Dictation" width="800">
+</p>
 
 ---
 
