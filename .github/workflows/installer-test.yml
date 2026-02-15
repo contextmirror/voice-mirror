@@ -40,7 +40,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Run install.sh (update mode)
         run: |
@@ -71,7 +71,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Run install.sh (update mode)
         run: |
@@ -100,7 +100,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Run install.ps1 (update mode)
         shell: pwsh
@@ -138,7 +138,7 @@ jobs:
 
     steps:
       - name: Checkout (installer script only)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           path: source
 
@@ -224,7 +224,7 @@ jobs:
 
     steps:
       - name: Checkout (installer script only)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           path: source
 
@@ -303,7 +303,7 @@ jobs:
 
     steps:
       - name: Checkout (installer script only)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           path: source
 
