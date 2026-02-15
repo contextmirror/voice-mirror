@@ -52,6 +52,10 @@ function updateCard(prefix, info) {
     if (info.updateAvailable) {
         setBadge(badgeEl, 'update-available', 'Update available');
         updateBtn.style.display = '';
+    } else if (!info.installed) {
+        // CLI exists on PATH but version couldn't be determined
+        setBadge(badgeEl, 'up-to-date', 'Installed');
+        updateBtn.style.display = 'none';
     } else {
         setBadge(badgeEl, 'up-to-date', 'Up to date');
         updateBtn.style.display = 'none';

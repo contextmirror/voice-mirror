@@ -157,6 +157,20 @@ function registerMiscHandlers(ctx, validators) {
             });
         }
 
+        // Helper: get CLI version via --version flag (fallback when npm list fails)
+        async function getCLIVersion(command) {
+            return new Promise((resolve) => {
+                execFile(command, ['--version'], {
+                    timeout: 10000, windowsHide: true, shell: true
+                }, (err, stdout) => {
+                    if (err) return resolve(null);
+                    // Parse version from output like "1.2.4" or "claude v2.1.42" or "Python 3.11.0"
+                    const match = stdout.trim().match(/v?(\d+\.\d+\.\d+)/);
+                    resolve(match ? match[1] : null);
+                });
+            });
+        }
+
         // Helper: check global CLI package
         async function checkGlobalCLI(command, npmPkg, registryPkg) {
             try {
@@ -166,7 +180,11 @@ function registerMiscHandlers(ctx, validators) {
                     const latest = await fetchLatest(registryPkg);
                     return { installed: null, latest, updateAvailable: false, notInstalled: true };
                 }
-                const installed = await getGlobalNpmVersion(npmPkg);
+                // Try npm global list first, fall back to --version flag
+                let installed = await getGlobalNpmVersion(npmPkg);
+                if (!installed) {
+                    installed = await getCLIVersion(command);
+                }
                 const latest = await fetchLatest(registryPkg);
                 return {
                     installed,
