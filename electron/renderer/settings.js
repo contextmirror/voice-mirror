@@ -105,16 +105,6 @@ function initSettingsTabs() {
     const initialTab = SETTINGS_TABS.find(t => t.id === savedTab) ? savedTab : SETTINGS_TABS[0].id;
     switchSettingsTab(initialTab);
 
-    // Icon card click -> smooth scroll to section
-    document.querySelectorAll('.settings-card[data-scroll-to]').forEach(card => {
-        card.addEventListener('click', () => {
-            const targetId = card.dataset.scrollTo;
-            const target = document.getElementById(targetId);
-            if (target) {
-                target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }
-        });
-    });
 }
 
 /**
