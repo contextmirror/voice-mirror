@@ -197,6 +197,9 @@ async function init() {
             const { colors: c, fonts: f } = resolveTheme(config.appearance);
             applyThemeEngine(c, f);
         } catch { /* theme already applied, terminal will use fallback */ }
+        // Reveal the terminal sidebar tab now that ghostty-web is ready
+        const navTerminal = document.getElementById('nav-terminal');
+        if (navTerminal) navTerminal.style.display = '';
     } catch (err) {
         log.error('Failed to initialize terminal:', err);
     }
