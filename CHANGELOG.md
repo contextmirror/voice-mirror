@@ -34,8 +34,9 @@ Security hardening across the entire app and upgrade from Electron 28 to Electro
 - **PowerShell screen capture hardened** — The `displayIndex` parameter is now validated as a non-negative integer, and `outputPath` is properly escaped for PowerShell single-quoted strings, preventing potential injection if values ever came from untrusted input
 - **OpenSSF Scorecard improved from 3.1 to 5.1** — Pinned all GitHub Action versions to commit SHAs, added `permissions: read-all` to workflows, fixed script injection vulnerability in installer-test.yml
 - **GitHub Actions workflow hardening** — Moved `${{ github.head_ref }}` from `run:` blocks to `env:` blocks to prevent script injection; Dependabot configured for npm, pip, and GitHub Actions
-- **CodeQL SAST findings resolved** — Fixed issues flagged by initial static analysis scan
-- **@modelcontextprotocol/sdk** updated to ^1.26.0 for security patches
+- **CodeQL SAST findings resolved** — Fixed all issues flagged by initial static analysis scan: HTML comment regex used `<!--.*-->` which missed multi-line comments and left partial `<!--` on repeated occurrences (changed to `<!--[\s\S]*?-->/g`); URL validation in voice-clone handler used `string.includes('youtube.com')` which could be bypassed via query params (now parses hostname with `new URL()`); pinned `github/codeql-action` to SHA (v3.32.3) for supply chain security
+- **@modelcontextprotocol/sdk** updated from ~1.0.0 to ^1.26.0 — resolves CVE-2025-66414 (DNS rebinding), CVE-2026-0621 (ReDoS), and GHSA-345p-7cg4-v4c7 (cross-client data leak via shared transport reuse)
+- **Removed unused optional dependencies** — `openai` and `@google/generative-ai` were listed in mcp-server optionalDependencies but never imported (both embedding providers use raw `https` requests). Removing eliminates unnecessary attack surface and silences Dependabot alerts for packages that weren't in use
 
 ### Upgraded
 
