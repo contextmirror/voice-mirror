@@ -13,8 +13,8 @@ Developer tooling improvements: expanded Dependencies tab, terminal startup poli
 
 - **Dependencies tab: 3 sections** — The developer Dependencies tab (gated behind `advanced.showDependencies`) now tracks everything the app depends on:
   - **Packages** — npm cards for ghostty-web, OpenCode, and Claude Code with individual Update buttons and an "Update All" button that runs updates sequentially
-  - **System** — Read-only diagnostic cards for Node.js (version), Python (venv version), Ollama (installed/not found), ffmpeg (installed/not found)
-  - **Python Environment** — Shows all outdated pip packages in a scrollable table with an "Update All" button that runs `pip install -r requirements.txt --upgrade`
+  - **System** — Read-only diagnostic cards showing actual version numbers: Node.js (e.g. 24.13.0), Python (3.11.0), Ollama (0.15.6), ffmpeg (8.0.1)
+  - **Python Environment** — Shows all outdated pip packages (including transitive deps) in a scrollable table with an "Update All" button
   - All 3 sections check in parallel via `Promise.all` for speed
 
 ### Improved
@@ -22,11 +22,21 @@ Developer tooling improvements: expanded Dependencies tab, terminal startup poli
 - **Terminal tab hidden until ready** — The terminal sidebar tab is now hidden on startup and revealed only after ghostty-web WASM loads and the terminal mounts. Prevents visual glitches when clicking the tab before rendering completes
 - **"Starting..." welcome banner** — Terminal welcome message now shows "Starting Claude Code..." instead of "Click Start" during auto-start, since auto-start is the default behavior
 
+### Fixed
+
+- **Claude Code version detection** — Claude Code installed via the standalone installer (not npm) showed `--` for version. Now falls back to `claude --version` when `npm list -g` returns nothing
+- **Pip "Update All" DLL lock on Windows** — onnxruntime and psutil DLLs were locked by the running Python process, causing `Access is denied`. Now auto-stops the Python backend before upgrading and restarts it after
+- **Pip "Update All" path with spaces** — `shell: true` split `E:\Projects\Voice Mirror Electron` at the space; removed since `execFile` calls python.exe directly
+- **Pip "Update All" only upgraded direct deps** — `pip install -r requirements.txt --upgrade` left transitive deps (filelock, rdflib, setuptools, etc.) untouched. Now queries `pip list --outdated` first and upgrades those specific packages
+- **Ollama and ffmpeg showed "Available" instead of version** — Now parses `ollama --version` and `ffmpeg -version` to show actual version numbers (e.g. 0.15.6, 8.0.1)
+
 ### Technical
-- New IPC: `update-pip-packages` runs pip upgrade in Python venv with 5-minute timeout
+- New IPC: `update-pip-packages` stops Python, queries outdated packages, upgrades them, restarts Python
 - `claude-code` added to dependency update allowlist (`@anthropic-ai/claude-code@latest`, global)
 - `check-dependency-versions` returns `{ npm, system, pip }` response shape
+- `getCLIVersion()` helper: runs `<command> --version` and parses semver from stdout
 - New renderer functions: `updateSystemCard()`, `updatePipSection()`, `handleNpmUpdateAll()`, `handlePipUpdateAll()`, `escapeHtml()`
+- Pip error messages now surface the actual `ERROR:` line in the UI badge
 - 36 new source-inspection tests for Dependencies tab (IPC, preload, HTML, renderer, CSS)
 - 568 tests passing (566 pass, 2 skipped, 0 failures)
 
