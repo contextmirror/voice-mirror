@@ -34,10 +34,21 @@ class ParakeetAdapter(STTAdapter):
 
             print(f"Loading Parakeet STT model ({self.model_name})...")
 
+            # Use a local directory for model storage to avoid ONNX Runtime 1.24+
+            # "escapes model directory" error on Windows.  HuggingFace Hub's default
+            # cache uses symlinks; when ORT resolves them, the .onnx.data external
+            # file appears to "escape" the model directory.  Passing `path=` makes
+            # onnx_asr download via snapshot_download(local_dir=...) which stores
+            # real files without symlinks.
+            model_cache = os.path.join(
+                os.path.expanduser("~"), ".cache", "voice-mirror", "models", self.model_name
+            )
+
             # Load with CPU provider (CUDA/Blackwell sm_120 not yet supported in ONNX Runtime)
             # RTX 50xx series requires custom builds or future ONNX Runtime versions
             self.model = onnx_asr.load_model(
                 self.model_name,
+                path=model_cache,
                 providers=["CPUExecutionProvider"]
             )
             self.supports_gpu = False

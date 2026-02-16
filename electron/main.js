@@ -384,12 +384,9 @@ app.whenReady().then(() => {
         startHidden: () => waylandOrb?.isAvailable() || false,
         onWindowStateChanged: () => {
             if (hotkeyManager) hotkeyManager.reRegisterAll();
-            // Ensure uiohook is alive after window state change (for toggle hotkey)
-            const uiohookShared = require('./services/uiohook-shared');
-            if (uiohookShared.isAvailable() && !uiohookShared.isStarted()) {
-                logger.info('[Voice Mirror]', 'uiohook not running after window state change, restarting');
-                uiohookShared.restart();
-            }
+            // uiohook recovery is handled by the hotkey manager's own health check
+            // and deferred startup timer. Force-starting here during the startup
+            // burst defeats the deferral and causes mouse lag.
         }
     });
 

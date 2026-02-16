@@ -223,8 +223,10 @@ function createHotkeyManager(options = {}) {
                     registerGlobalShortcut(binding);
                 }
             }
-            // Also check if uiohook died and hasn't auto-recovered
-            if (uiohookShared.isAvailable() && !uiohookShared.isStarted()) {
+            // Also check if uiohook died and hasn't auto-recovered.
+            // Skip if the deferred startup hasn't fired yet — don't force-start
+            // uiohook early (causes mouse lag during startup burst).
+            if (!_uiohookDeferTimer && uiohookShared.isAvailable() && !uiohookShared.isStarted()) {
                 log('HOTKEY', 'Health check: uiohook not started, forcing restart');
                 uiohookShared.restart();
             }
@@ -303,7 +305,7 @@ function createHotkeyManager(options = {}) {
             accelerator,
             callback,
             parsed,
-            uiohookActive: uiohookShared.isAvailable() && parsed.keycode !== null,
+            uiohookActive: parsed.keycode !== null,  // actual availability checked when uiohook activates
             globalShortcutActive: false,
             lastTriggered: 0,
         };
