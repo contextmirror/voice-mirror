@@ -230,6 +230,58 @@
     color: var(--danger);
 }
 
+/* ========== Chat Context Menu ========== */
+.context-menu {
+    position: fixed;
+    z-index: 10000;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 4px 0;
+    min-width: 140px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.context-menu.hidden {
+    display: none;
+}
+
+.context-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 6px 12px;
+    background: none;
+    border: none;
+    color: var(--text);
+    font-size: 13px;
+    cursor: pointer;
+    text-align: left;
+}
+
+.context-menu-item:hover {
+    background: var(--bg-hover);
+}
+
+.context-menu-item svg {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+}
+
+/* Inline rename input in chat list */
+.chat-rename-input {
+    width: 100%;
+    background: var(--bg-elevated);
+    color: var(--text);
+    border: 1px solid var(--accent);
+    border-radius: var(--radius-sm);
+    padding: 2px 4px;
+    font-size: 13px;
+    outline: none;
+}
+
 /* Collapsed sidebar: hide chats section */
 #sidebar.collapsed #sidebar-chats {
     display: none;
