@@ -574,30 +574,31 @@ export function updateProviderDisplay(providerName, providerType = 'claude', mod
     state.currentProviderName = providerName;
     state.currentModel = model;
 
-    // Update sidebar nav sub-label (main label stays "Terminal")
-    if (navProviderName) {
-        navProviderName.textContent = providerName;
-    }
-    if (navProviderIcon) {
-        navProviderIcon.className = 'provider-icon';
+    // Use cached elements when available, falling back to getElementById.
+    // This is needed because the first call from init() happens before initTerminal()
+    // assigns the cached variables — without the fallback, DOM elements keep their
+    // HTML defaults (e.g. "Claude Code") until the claude_connected event fires.
+    const nameEl = navProviderName || document.getElementById('nav-provider-name');
+    if (nameEl) nameEl.textContent = providerName;
+
+    const iconEl = navProviderIcon || document.getElementById('nav-provider-icon');
+    if (iconEl) {
+        iconEl.className = 'provider-icon';
         const iconClass = PROVIDER_ICON_CLASSES[providerType];
-        if (iconClass) navProviderIcon.classList.add(iconClass);
+        if (iconClass) iconEl.classList.add(iconClass);
     }
 
     // Update terminal header titles (with terminal icon)
     const titleText = `⌘ ${providerName}`;
-    if (terminalTitle) {
-        terminalTitle.textContent = titleText;
-    }
-    if (terminalFullscreenTitle) {
-        terminalFullscreenTitle.textContent = titleText;
-    }
+    const titleEl = terminalTitle || document.getElementById('terminal-title');
+    if (titleEl) titleEl.textContent = titleText;
+
+    const fsTitleEl = terminalFullscreenTitle || document.getElementById('terminal-fullscreen-title');
+    if (fsTitleEl) fsTitleEl.textContent = titleText;
 
     // Update nav button tooltip
-    const navTerminal = document.getElementById('nav-terminal');
-    if (navTerminal) {
-        navTerminal.setAttribute('data-tooltip', providerName);
-    }
+    const navEl = document.getElementById('nav-terminal');
+    if (navEl) navEl.setAttribute('data-tooltip', providerName);
 
     log.info(`Provider display updated: ${providerName} (${providerType}${model ? ', model: ' + model : ''})`);
 }
