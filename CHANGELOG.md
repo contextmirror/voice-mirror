@@ -5,6 +5,66 @@ Format inspired by game dev patch notes — grouped by release, categorized by i
 
 ---
 
+## v0.9.6 — "Performance Sweep" (2026-02-16)
+
+Full-stack performance and memory optimization across all 5 subsystems: Electron main process, renderer/UI, MCP server, Python voice backend, and AI providers/browser automation. 49 files changed, 81 issues addressed.
+
+### Performance — Startup
+
+- **STT/TTS models deferred to first use** — Parakeet (~600MB) and Kokoro TTS (~338MB) no longer load at startup. They lazy-load on first transcription/speech, cutting ~940MB from initial memory and saving 5–15 seconds of startup time. Wake word and VAD still load eagerly (needed immediately)
+- **uiohook-napi native module deferred** — The native keyboard/mouse hook binary now loads lazily on first use instead of blocking the require chain at startup (saves 50–200ms)
+- **Event-driven Python ready detection** — Replaced 300ms polling interval with direct event callback from the Python `ready` event. Eliminates ~15–20 timer callbacks during startup
+- **WASM/UMD scripts deferred** — Added `defer` to ghostty-web, marked, and DOMPurify script tags in overlay.html. No longer blocks initial render
+
+### Performance — Runtime
+
+- **Orb canvas pauses when invisible** — The 60fps per-pixel animation loop now stops when the panel is expanded and the orb is hidden. Saves ~240ms/sec of CPU. Resumes automatically when collapsed back to orb
+- **MCP embeddings stored as BLOB** — Changed from JSON text (5–10x slower) to Float32Array binary BLOB storage. Includes automatic migration for existing databases
+- **Incremental memory re-indexing** — `remember()` and `forget()` now use hash-based diff to only embed new/changed chunks instead of re-chunking and re-embedding the entire MEMORY.md
+- **Batch flush operations** — `flushBeforeCompaction()` now collects all items, does a single file read/write, then re-indexes once (was N reads + N writes + N re-indexes)
+- **SQLite transaction wrapping** — `upsertChunk()` and `deleteChunksForFile()` now run in explicit transactions, reducing WAL syncs from dozens to one per batch
+- **TUI streaming render cache** — `streamToken()` now only re-wraps the last line instead of the entire buffer. Non-stream chat lines are cached and reused
+- **CDP load detection** — Replaced hard-coded 2.5–3s `setTimeout` waits after browser navigation with proper `Page.loadEventFired` CDP events + 500ms settle time
+- **fs.watch for file-based IPC** — Browser, screen capture, and voice clone handlers now use `fs.watch()` with timeout fallback instead of 200ms polling loops
+- **Debounced config saves** — Window position saves during orb drag now debounce at 500ms instead of writing to disk on every frame
+- **Async chat persistence** — All 5 chat handlers (list, load, save, delete, rename) converted from synchronous to async file I/O
+- **Async inbox writes** — `writeResponseToInbox` and `clearProcessedUserMessageIds` converted to async
+- **VAD ring buffer** — Replaced `np.concatenate` on every 80ms audio chunk with list accumulation and single concat when enough data is available
+- **Wake word length tracking** — Replaced `sum(len(chunk) for chunk in buffer)` on every audio frame with an incremental counter
+- **Audio level computation deferred** — `np.abs().max()` and `.mean()` now only compute every 60th frame (~1/sec) instead of every callback
+- **Spinner interval reduced** — TUI tool spinner changed from 80ms to 150ms (still smooth, halves render calls)
+
+### Performance — Memory
+
+- **Base64 images stripped from old messages** — OpenAI provider now replaces `image_url` content in messages beyond the last 4 with `[image]` text. Prevents 20MB+ of base64 accumulating in vision sessions
+- **Screenshot buffer deduplication** — `screenshotAction()` now returns only base64 (CDP native format) instead of both base64 AND a redundant Buffer copy
+- **AX tree TTL cache** — `getAccessibilityTree()` results are cached for 2 seconds, avoiding redundant full-tree fetches on complex pages
+- **DOM growth capped** — Log viewer capped at 2,000 lines, chat messages capped at 200 groups. Oldest entries removed automatically
+- **In-memory message array** — `autoSave()` now reads from an in-memory array instead of scraping the DOM with `querySelectorAll` + `innerText` on every message
+- **PTY output buffer freed** — Output buffer used for ready detection is now cleared immediately after provider is ready
+
+### Fixed
+
+- **Logger singleton** — `createLogger()` now returns a shared instance. Previously 14+ services each created orphan loggers that never got `init()`, silently losing all file log output
+- **Overlay enforcer scope** — The `setAlwaysOnTop` enforcer now runs on all platforms (needed after provider switches on Windows) but the `xdotool` subprocess call is Linux-only and async
+- **uiohook lazy-load race** — `getHook()` now triggers the lazy module load, fixing a race where the hotkey health check would force-restart uiohook 10 seconds after startup
+- **Chat context menu** — Added missing CSS for the right-click rename context menu (position, z-index, background, shadow). Removed duplicate Delete option (X button is better UX)
+- **MCP config caching** — Claude spawner now hashes the MCP config and skips file writes when unchanged between spawns
+- **File I/O removed from audio callback** — Push-to-talk and dictation trigger file checks moved from the real-time audio thread to the main async loop
+- **Parakeet STT uses BytesIO** — Transcription now tries in-memory WAV via `io.BytesIO` before falling back to temp files
+- **Win32 clipboard via ctypes** — Dictation text injection on Windows now uses Win32 API directly instead of spawning a PowerShell process (~200ms → ~1ms)
+
+### Technical
+
+- **Caching improvements** — n8n API key, `toOpenAITools()` result, status line `existsSync` checks, config reads (mtime-based), MCP spawn config hash, AX tree (TTL), fallback vector embeddings (Map)
+- **Pre-compiled patterns** — Tool group keywords compiled to single regex, Python regexes moved to module-scope constants, `buildFilteredEnv` prefixes computed once at load
+- **Cleanup** — `DESTRUCTIVE_TOOLS` Set moved to module scope, `structuredClone` replaces `JSON.parse(JSON.stringify())`, env spread copy removed from wayland-orb spawn, `mousemove` removed from uiohook canary listeners, PerfMonitor uses buffered writes with deterministic rotation, diagnostic-collector `require` hoisted to module level, preload IPC listeners return unsubscribe functions, inbox.json periodic cleanup + max cap of 100 messages
+- **DOM hidden element cap** — Browser fetch `getComputedStyle` scan limited to first 500 elements
+- **Console state hysteresis** — Browser console message array only slices when length exceeds 550 (avoids new array on every push)
+- 568 tests passing (566 pass, 2 skipped, 0 failures)
+
+---
+
 ## v0.9.5 — "Dependency Dashboard" (2026-02-15)
 
 Developer tooling improvements: expanded Dependencies tab, terminal startup polish, and UX fixes.
