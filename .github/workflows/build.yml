@@ -70,7 +70,9 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libasound2-dev libclang-dev cmake pkg-config libx11-dev
+          sudo apt-get install -y libasound2-dev libclang-dev cmake pkg-config \
+            libx11-dev libxi-dev libxcursor-dev libxrandr-dev libxinerama-dev \
+            libxext-dev libxfixes-dev libxtst-dev libxft-dev
 
       # Windows: install LLVM for whisper-rs (libclang)
       - name: Install LLVM (Windows)
