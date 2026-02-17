@@ -5,6 +5,36 @@ Format inspired by game dev patch notes — grouped by release, categorized by i
 
 ---
 
+## v0.9.8 — "Polished Chrome" (2026-02-17)
+
+New custom titlebar with full window controls, a complete theme overhaul making all UI areas respond to theme presets, and several persistence fixes.
+
+### Added
+
+- **Custom titlebar with window controls** — Replaced the old sidebar-header window controls with a full-width draggable titlebar containing collapse-to-orb, minimize, maximize, and close buttons with SVG icons. Panel layout restructured: column (titlebar on top, panel-body row below)
+- **Maximize/restore window support** — Manual implementation for transparent frameless windows (Electron's native `maximize()` doesn't work with these on Windows). Fills the nearest display's work area; restores to previous bounds on toggle. State persists across app restarts via config
+- **`--chrome` CSS variable** — New theme-derived variable (`blend(bg, bgElevated, 0.65)`) for sidebar and titlebar backgrounds, giving consistent chrome styling across all themes
+- **6 new derived theme variables** — `--ok-subtle`, `--ok-glow`, `--warn-subtle`, `--danger-subtle`, `--danger-glow` for status indicator backgrounds and glows, all derived from theme colors
+
+### Fixed
+
+- **Maximize button not responding** — The `maximizeWindow()` function was defined in an ES module (`type="module"`) but never assigned to `window.*`, so the HTML `onclick` handler couldn't find it. Other buttons (collapse, minimize, close) worked because they were already exported to `window`
+- **Titlebar buttons invisible on Black theme** — `.win-btn` used `var(--text-muted)` which doesn't exist in the theme engine (the variable is `--muted`). Buttons inherited black from the browser default, invisible against dark backgrounds
+- **~80 hardcoded colors replaced with theme variables** — All UI areas (titlebar, sidebar, chat, terminal, browser, settings) now respond to theme changes. Replaced hardcoded hex/rgba values across 8 CSS files with theme CSS variables (`--accent`, `--ok`, `--danger`, `--warn`, `--bg-elevated`, etc.)
+- **Black theme status indicators were grayscale** — `ok: #c0c0c0`, `warn: #a0a0a0`, `danger: #ffffff` made status dots indistinguishable from text. Changed to `ok: #4ade80` (bright green), `warn: #bfa86f` (muted amber), `danger: #bf6f6f` (muted red)
+- **Black theme chrome too gray** — `bgElevated` lowered from `#181818` to `#0e0e0e` so sidebar/titlebar blend to near-black (`~#090909`)
+- **Browser view used undefined CSS variables** — `browser.css` referenced `var(--color-surface-elevated)`, `var(--color-text-primary)`, etc. which don't exist. Migrated to standard theme variables (`--bg-elevated`, `--text-strong`, etc.)
+- **Font selections not persisting across restarts** — `buildAppearanceSaveData()` only saved fonts when they differed from the active preset (`fontsCustomized ? currentFonts : null`). When `null` was saved, `resolveTheme()` fell back to preset defaults on next launch. Now always saves current font values explicitly
+
+### Technical
+- `window/index.js`: `toggleMaximize()` with manual `setBounds()` to work area, `isManualMaximized` state tracking, config persistence via `updateConfig({ window: { maximized } })`
+- `theme-engine.js`: `deriveTheme()` now produces 38 CSS variables (was 31). Black theme preset updated with functional semantic colors
+- `settings-appearance.js`: Removed `fontsCustomized` gate — fonts always saved explicitly
+- 9 files changed across theme overhaul, plus overlay.html restructured for titlebar layout
+- 37 theme-engine tests passing
+
+---
+
 ## v0.9.7 — "Smooth Startup" (2026-02-17)
 
 Eliminates system-wide mouse cursor lag on startup, removes the uiohook-napi dependency entirely, and fixes several startup-related bugs (Claude Code flash, Parakeet ONNX crash, first-recording freeze).
