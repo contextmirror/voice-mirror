@@ -56,6 +56,7 @@ mod inner {
         #[allow(dead_code)]
         model_dir: PathBuf,
         voice: Mutex<String>,
+        speed: f32,
         interrupted: AtomicBool,
         session: Mutex<ort::session::Session>,
         voices: HashMap<String, VoiceData>,
@@ -63,7 +64,7 @@ mod inner {
     }
 
     impl KokoroTts {
-        pub fn new(model_dir: &Path) -> anyhow::Result<Self> {
+        pub fn new(model_dir: &Path, speed: Option<f32>) -> anyhow::Result<Self> {
             let model_path = model_dir.join("kokoro-v1.0.onnx");
             let voices_path = model_dir.join("voices-v1.0.bin");
 
@@ -95,6 +96,7 @@ mod inner {
             Ok(Self {
                 model_dir: model_dir.to_path_buf(),
                 voice: Mutex::new("af_bella".to_string()),
+                speed: speed.unwrap_or(1.0),
                 interrupted: AtomicBool::new(false),
                 session: Mutex::new(session),
                 voices,
@@ -225,7 +227,7 @@ mod inner {
             ))?;
             let speed_tensor = ort::value::Tensor::from_array((
                 vec![1i64],
-                vec![1.0f32].into_boxed_slice(),
+                vec![self.speed].into_boxed_slice(),
             ))?;
 
             let mut session = self.session.lock().unwrap();
@@ -532,7 +534,7 @@ mod inner {
     }
 
     impl KokoroTts {
-        pub fn new(model_dir: &Path) -> anyhow::Result<Self> {
+        pub fn new(model_dir: &Path, _speed: Option<f32>) -> anyhow::Result<Self> {
             warn!(
                 model_dir = %model_dir.display(),
                 "Kokoro TTS requested but onnx feature is disabled"

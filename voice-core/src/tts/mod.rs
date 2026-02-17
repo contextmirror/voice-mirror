@@ -37,11 +37,12 @@ pub fn create_tts_engine(
     voice: Option<&str>,
     api_key: Option<&str>,
     _endpoint: Option<&str>,
+    speed: Option<f32>,
 ) -> anyhow::Result<Box<dyn TtsEngine>> {
     match adapter {
         "kokoro" => {
             let model_dir = data_dir.join("models").join("kokoro");
-            match kokoro::KokoroTts::new(&model_dir) {
+            match kokoro::KokoroTts::new(&model_dir, speed) {
                 Ok(mut engine) => {
                     if let Some(v) = voice {
                         engine.set_voice(v);

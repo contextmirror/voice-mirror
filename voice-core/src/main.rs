@@ -201,12 +201,14 @@ async fn main() {
     let tts_api_key = voice_settings.tts_api_key.as_deref();
     let tts_endpoint = voice_settings.tts_endpoint.as_deref();
 
+    let tts_speed = voice_settings.tts_speed.map(|s| s as f32);
     let tts_engine = match tts::create_tts_engine(
         tts_adapter_name,
         &data_dir,
         tts_voice,
         tts_api_key,
         tts_endpoint,
+        tts_speed,
     ) {
         Ok(engine) => {
             info!(adapter = tts_adapter_name, name = engine.name(), "TTS engine initialized");
@@ -444,7 +446,8 @@ async fn main() {
     info!("Voice core shutting down");
 }
 
-/// Run STT on recorded audio and emit transcription event.
+/// Run STT on recorded audio, emit transcription, send to inbox,
+/// poll for AI response, and auto-speak the response.
 async fn run_stt_and_emit(app_state: &Arc<Mutex<AppState>>, audio: Vec<f32>) {
     if audio.is_empty() {
         return;
@@ -468,50 +471,91 @@ async fn run_stt_and_emit(app_state: &Arc<Mutex<AppState>>, audio: Vec<f32>) {
         return;
     };
 
-    match engine.transcribe(&audio).await {
+    let transcription = match engine.transcribe(&audio).await {
         Ok(text) => {
             let text = text.trim().to_string();
-            if !text.is_empty() {
+            if text.is_empty() {
+                info!("STT returned empty transcription");
+                None
+            } else {
                 info!(text = %text, "Transcription result");
                 emit_event(&VoiceEvent::Transcription {
                     text: text.clone(),
                 });
-
-                // Send to inbox for AI processing
-                let msg_id = {
-                    let app = app_state.lock().unwrap();
-                    if let Some(ref inbox) = app.inbox {
-                        match inbox.send(&text) {
-                            Ok(id) => id,
-                            Err(e) => {
-                                warn!("Failed to send to inbox: {}", e);
-                                None
-                            }
-                        }
-                    } else {
-                        None
-                    }
-                };
-
-                if let Some(ref id) = msg_id {
-                    emit_event(&VoiceEvent::SentToInbox {
-                        message: text,
-                        msg_id: Some(id.clone()),
-                    });
-                }
-            } else {
-                info!("STT returned empty transcription");
+                Some(text)
             }
         }
         Err(e) => {
             error!("STT transcription failed: {}", e);
             emit_error(&format!("STT failed: {}", e));
+            None
         }
-    }
+    };
 
     // Put the engine back
-    let mut app = app_state.lock().unwrap();
-    app.stt_engine = Some(engine);
+    {
+        let mut app = app_state.lock().unwrap();
+        app.stt_engine = Some(engine);
+    }
+
+    // Send transcription to inbox and poll for AI response + auto-speak
+    if let Some(text) = transcription {
+        let msg_id = {
+            let app = app_state.lock().unwrap();
+            if let Some(ref inbox) = app.inbox {
+                match inbox.send(&text) {
+                    Ok(id) => id,
+                    Err(e) => {
+                        warn!("Failed to send to inbox: {}", e);
+                        None
+                    }
+                }
+            } else {
+                None
+            }
+        };
+
+        if let Some(ref id) = msg_id {
+            emit_event(&VoiceEvent::SentToInbox {
+                message: text,
+                msg_id: Some(id.clone()),
+            });
+
+            // Poll for AI response and auto-speak it
+            let inbox = {
+                let mut app = app_state.lock().unwrap();
+                app.inbox.take()
+            };
+
+            if let Some(inbox) = inbox {
+                match inbox.wait_for_response(id, None).await {
+                    Ok(Some(response)) => {
+                        emit_event(&VoiceEvent::Response {
+                            text: response.clone(),
+                            source: "inbox".to_string(),
+                            msg_id: Some(id.clone()),
+                        });
+                        // Put inbox back before speaking
+                        {
+                            let mut app = app_state.lock().unwrap();
+                            app.inbox = Some(inbox);
+                        }
+                        // Auto-speak the AI response
+                        speak_text(app_state, &response).await;
+                        return;
+                    }
+                    Ok(None) => {
+                        warn!("Inbox poll timed out for {}", id);
+                    }
+                    Err(e) => {
+                        warn!("Inbox poll error: {}", e);
+                    }
+                }
+                let mut app = app_state.lock().unwrap();
+                app.inbox = Some(inbox);
+            }
+        }
+    }
 }
 
 /// Speak text via TTS (used for both system_speak and auto-speaking responses).
