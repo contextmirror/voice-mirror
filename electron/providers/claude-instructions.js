@@ -60,6 +60,9 @@ const TOOL_GROUP_DOCS = {
  * @returns {string} The system prompt text
  */
 function buildClaudeInstructions({ userName = 'User', enabledGroups = '', appVersion = '' } = {}) {
+    // Lowercase userName to match voice-core's sender_name convention
+    const normalizedName = (userName || 'user').toLowerCase();
+
     // Build tool docs for enabled groups
     const groups = enabledGroups.split(',').map(g => g.trim()).filter(Boolean);
     const toolDocs = groups
@@ -80,7 +83,7 @@ Tools are organized into groups. Use list_tool_groups to see all groups and load
 ${toolDocs}
 
 ## Voice Mode Workflow
-1. Call claude_listen with instance_id: "voice-claude", from_sender: "${userName}", and timeout_seconds: 600
+1. Call claude_listen with instance_id: "voice-claude", from_sender: "${normalizedName}", and timeout_seconds: 600
 2. Wait for a voice message to arrive
 3. Process the request
 4. Call claude_send with instance_id: "voice-claude" and your response (it will be spoken aloud)

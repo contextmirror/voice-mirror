@@ -43,7 +43,9 @@ const DEDUP_WINDOW_SECS: f64 = 2.0;
 const POLL_INTERVAL: Duration = Duration::from_millis(100);
 
 /// Default timeout for waiting on responses.
-const DEFAULT_TIMEOUT: Duration = Duration::from_secs(60);
+/// Must be long enough for Claude to receive the message via claude_listen,
+/// process it, and call claude_send. 5 minutes handles most cases.
+const DEFAULT_TIMEOUT: Duration = Duration::from_secs(300);
 
 // ---------------------------------------------------------------------------
 // JSON schema
