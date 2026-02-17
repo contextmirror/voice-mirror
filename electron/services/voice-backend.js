@@ -281,9 +281,23 @@ function createVoiceBackend(options = {}) {
         });
 
         voiceProcess.stderr.on('data', (data) => {
-            const msg = data.toString().trim();
-            logger.error('[Voice]', 'stderr:', msg);
-            if (log) log('VOICE', `stderr: ${msg}`);
+            const text = data.toString().trim();
+            if (!text) return;
+            // Parse each line individually — tracing may batch multiple lines
+            for (const msg of text.split('\n')) {
+                const line = msg.trim();
+                if (!line) continue;
+                if (line.includes(' ERROR ')) {
+                    logger.error('[Voice]', 'stderr:', line);
+                    if (log) log('ERROR', line);
+                } else if (line.includes(' WARN ')) {
+                    logger.warn('[Voice]', 'stderr:', line);
+                    if (log) log('WARN', line);
+                } else {
+                    logger.info('[VOICE]', line);
+                    if (log) log('VOICE', line);
+                }
+            }
         });
 
         voiceProcess.on('error', (err) => {

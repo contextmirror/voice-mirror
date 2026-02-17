@@ -65,3 +65,11 @@ impl AudioPlayer {
         self.playing.load(Ordering::SeqCst)
     }
 }
+
+// SAFETY: OutputStream is marked !Send due to a PhantomData<*mut ()> in cpal's
+// platform abstraction.  On Windows (WASAPI) the underlying COM handles are
+// apartment-threaded but we only access them from the thread that owns the
+// AudioPlayer (the main/tokio thread), so sending the *struct* across threads
+// is safe as long as we don't call into the stream from multiple threads
+// simultaneously — which our Mutex<AppState> guarantees.
+unsafe impl Send for AudioPlayer {}
