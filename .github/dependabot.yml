@@ -18,11 +18,14 @@ updates:
     labels:
       - "dependencies"
 
-  # GitHub Actions
-  - package-ecosystem: "github-actions"
-    directory: "/"
+  # Rust/Cargo dependencies (voice-core)
+  - package-ecosystem: "cargo"
+    directory: "/voice-core"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 3
     labels:
       - "dependencies"
+
+  # GitHub Actions — not tracked here (we pin to commit SHAs for
+  # Scorecard compliance; version bumps are handled manually).
