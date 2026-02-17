@@ -246,9 +246,9 @@ export async function saveSettings() {
         return;
     }
 
-    // Ensure required pip packages are installed for selected adapters
+    // Check adapter dependencies (no-op after Rust migration)
     const depsOk = await ensureAdapterDeps();
-    if (!depsOk) return; // User cancelled installation
+    if (!depsOk) return;
 
     // Collect data from sub-modules
     const voiceData = collectVoiceSaveData();

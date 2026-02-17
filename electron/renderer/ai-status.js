@@ -60,7 +60,7 @@ export const TOOL_DISPLAY_NAMES = {
 /**
  * Status priority levels — higher priority sources can override lower ones.
  * MCP watcher events (concrete actions) outrank noisy PTY parsing.
- * Voice events (from Python backend) take top priority.
+ * Voice events (from voice backend) take top priority.
  */
 const STATUS_PRIORITY = { idle: 0, pty: 1, mcp: 2, voice: 3 };
 let currentStatusPriority = STATUS_PRIORITY.idle;

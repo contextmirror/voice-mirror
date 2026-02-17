@@ -9,7 +9,7 @@ on:
       - cli/**
       - package.json
       - mcp-server/package.json
-      - python/requirements.txt
+      - voice-core/**
       - .github/workflows/installer-test.yml
   pull_request:
     branches: [main]
@@ -19,10 +19,10 @@ on:
       - cli/**
       - package.json
       - mcp-server/package.json
-      - python/requirements.txt
+      - voice-core/**
       - .github/workflows/installer-test.yml
   schedule:
-    # Nightly at 03:00 UTC — catches upstream breakage (e.g. pip, node-gyp)
+    # Nightly at 03:00 UTC — catches upstream breakage (e.g. npm, node-gyp)
     - cron: '0 3 * * *'
   workflow_dispatch:
 
@@ -136,11 +136,10 @@ jobs:
       - name: Run unit tests
         run: npm test
 
-  # ─── Full setup tests: no --skip-setup, tests Python venv + pip ────
+  # ─── Full setup tests: no --skip-setup, tests full dependency chain ──
   # These run setup wizard in non-interactive mode to test the full
   # dependency chain that real users hit. Skips model downloads (too large
-  # for CI) but tests everything else: Python detection, venv creation,
-  # pip install, MCP server deps, config write.
+  # for CI) but tests everything else: voice-core check, MCP deps, config write.
 
   full-setup-linux:
     runs-on: ubuntu-latest
@@ -172,9 +171,8 @@ jobs:
           test -d mcp-server/node_modules
           test -f electron/main.js
 
-          echo "=== Checking Python venv ==="
-          test -d python/.venv
-          test -f python/.venv/bin/python || test -f python/.venv/Scripts/python.exe
+          echo "=== Checking voice-core source ==="
+          test -d voice-core
 
           echo "=== Checking config was created ==="
           CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/voice-mirror"
@@ -193,38 +191,10 @@ jobs:
         run: |
           node cli/index.mjs doctor 2>&1 | tee doctor-output.txt
           echo "--- Doctor output above ---"
-          # Fail if critical items are broken (Python, venv, pip, MCP deps)
-          if grep -q '✗ Python 3 not found' doctor-output.txt; then
-            echo "FATAL: Doctor reports Python missing" && exit 1
-          fi
-          if grep -q '✗ Python venv not found' doctor-output.txt; then
-            echo "FATAL: Doctor reports venv missing" && exit 1
-          fi
-          if grep -q '✗ pip requirements missing' doctor-output.txt; then
-            echo "FATAL: Doctor reports pip requirements missing" && exit 1
-          fi
+          # Fail if critical items are broken (MCP deps)
           if grep -q '✗ MCP server deps missing' doctor-output.txt; then
             echo "FATAL: Doctor reports MCP deps missing" && exit 1
           fi
-
-      - name: Verify pip packages installed
-        working-directory: ${{ runner.temp }}/voice-mirror-full
-        run: |
-          VENV_PYTHON="python/.venv/bin/python"
-          echo "=== Python version ==="
-          $VENV_PYTHON --version
-
-          echo "=== Installed packages ==="
-          $VENV_PYTHON -m pip list --format=columns | head -30
-
-          echo "=== Checking key packages ==="
-          $VENV_PYTHON -c "import numpy; print(f'numpy {numpy.__version__}')"
-          $VENV_PYTHON -c "import onnxruntime; print(f'onnxruntime {onnxruntime.__version__}')"
-          $VENV_PYTHON -c "import openwakeword; print('openwakeword OK')"
-          $VENV_PYTHON -c "import psutil; print(f'psutil {psutil.__version__}')"
-          $VENV_PYTHON -c "import sounddevice; print(f'sounddevice {sounddevice.__version__}')"
-          # pynput needs X/Wayland display to import — verify installed via pip
-          $VENV_PYTHON -m pip show pynput | head -2
 
       - name: Run unit tests
         working-directory: ${{ runner.temp }}/voice-mirror-full
@@ -261,10 +231,8 @@ jobs:
           if (-not (Test-Path "$dir\mcp-server\node_modules")) { throw "mcp-server\node_modules missing" }
           if (-not (Test-Path "$dir\electron\main.js")) { throw "electron\main.js missing" }
 
-          Write-Host "=== Checking Python venv ==="
-          if (-not (Test-Path "$dir\python\.venv")) { throw "Python venv missing" }
-          $venvPython = "$dir\python\.venv\Scripts\python.exe"
-          if (-not (Test-Path $venvPython)) { throw "venv python.exe missing" }
+          Write-Host "=== Checking voice-core source ==="
+          if (-not (Test-Path "$dir\voice-core")) { throw "voice-core directory missing" }
 
       - name: Run doctor (fail on critical checks)
         shell: pwsh
@@ -273,40 +241,7 @@ jobs:
           node cli/index.mjs doctor 2>&1 | Tee-Object -FilePath doctor-output.txt
           Write-Host "--- Doctor output above ---"
           $doc = Get-Content doctor-output.txt -Raw
-          if ($doc -match 'Python 3 not found') { throw "Doctor: Python missing" }
-          if ($doc -match 'Python venv not found') { throw "Doctor: venv missing" }
-          if ($doc -match 'pip requirements missing') { throw "Doctor: pip requirements missing" }
           if ($doc -match 'MCP server deps missing') { throw "Doctor: MCP deps missing" }
-
-      - name: Verify pip packages installed
-        shell: pwsh
-        working-directory: ${{ runner.temp }}\voice-mirror-full
-        run: |
-          $venvPython = "python\.venv\Scripts\python.exe"
-          Write-Host "=== Python version ==="
-          & $venvPython --version
-
-          Write-Host "=== Installed packages ==="
-          & $venvPython -m pip list --format=columns
-
-          Write-Host "=== Checking key packages ==="
-          & $venvPython -c "import numpy; print(f'numpy {numpy.__version__}')"
-          if ($LASTEXITCODE -ne 0) { throw "numpy import failed" }
-
-          & $venvPython -c "import onnxruntime; print(f'onnxruntime {onnxruntime.__version__}')"
-          if ($LASTEXITCODE -ne 0) { throw "onnxruntime import failed" }
-
-          & $venvPython -c "import openwakeword; print('openwakeword OK')"
-          if ($LASTEXITCODE -ne 0) { throw "openwakeword import failed" }
-
-          & $venvPython -c "import psutil; print(f'psutil {psutil.__version__}')"
-          if ($LASTEXITCODE -ne 0) { throw "psutil import failed" }
-
-          & $venvPython -c "import sounddevice; print(f'sounddevice {sounddevice.__version__}')"
-          if ($LASTEXITCODE -ne 0) { throw "sounddevice import failed" }
-
-          & $venvPython -c "import pynput; print('pynput OK')"
-          if ($LASTEXITCODE -ne 0) { throw "pynput import failed" }
 
       - name: Run unit tests
         working-directory: ${{ runner.temp }}\voice-mirror-full
@@ -321,13 +256,6 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           path: source
-
-      # macos-latest ships Python 3.14 which is too new for onnxruntime 1.23.x.
-      # Pin to 3.12 until ORT catches up. The installer still creates its own venv.
-      - name: Setup Python 3.12
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
-        with:
-          python-version: '3.12'
 
       - name: Run install.sh (fresh clone, full setup)
         run: |
@@ -348,9 +276,8 @@ jobs:
           test -d mcp-server/node_modules
           test -f electron/main.js
 
-          echo "=== Checking Python venv ==="
-          test -d python/.venv
-          test -f python/.venv/bin/python
+          echo "=== Checking voice-core source ==="
+          test -d voice-core
 
       - name: Verify CLI is linked
         run: |
@@ -365,34 +292,9 @@ jobs:
         run: |
           node cli/index.mjs doctor 2>&1 | tee doctor-output.txt
           echo "--- Doctor output above ---"
-          if grep -q '✗ Python 3 not found' doctor-output.txt; then
-            echo "FATAL: Doctor reports Python missing" && exit 1
-          fi
-          if grep -q '✗ Python venv not found' doctor-output.txt; then
-            echo "FATAL: Doctor reports venv missing" && exit 1
-          fi
-          if grep -q '✗ pip requirements missing' doctor-output.txt; then
-            echo "FATAL: Doctor reports pip requirements missing" && exit 1
-          fi
           if grep -q '✗ MCP server deps missing' doctor-output.txt; then
             echo "FATAL: Doctor reports MCP deps missing" && exit 1
           fi
-
-      - name: Verify pip packages installed
-        working-directory: ${{ runner.temp }}/voice-mirror-full
-        run: |
-          VENV_PYTHON="python/.venv/bin/python"
-          echo "=== Python version ==="
-          $VENV_PYTHON --version
-
-          echo "=== Checking key packages ==="
-          $VENV_PYTHON -c "import numpy; print(f'numpy {numpy.__version__}')"
-          $VENV_PYTHON -c "import onnxruntime; print(f'onnxruntime {onnxruntime.__version__}')"
-          $VENV_PYTHON -c "import openwakeword; print('openwakeword OK')"
-          $VENV_PYTHON -c "import psutil; print(f'psutil {psutil.__version__}')"
-          $VENV_PYTHON -c "import sounddevice; print(f'sounddevice {sounddevice.__version__}')"
-          # pynput needs display server to import — verify installed via pip
-          $VENV_PYTHON -m pip show pynput | head -2
 
       - name: Run unit tests
         working-directory: ${{ runner.temp }}/voice-mirror-full

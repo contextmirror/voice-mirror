@@ -28,7 +28,7 @@ top of that file for the exact startup sequence.
 |---|---|---|
 | `logger.js` | `createLogger()` | File + console logger with color-coded categories |
 | `ai-manager.js` | `createAIManager()` | Manages Claude Code PTY and OpenAI-compatible providers |
-| `python-backend.js` | `createPythonBackend()` | Spawns/manages Python subprocess (STT, TTS, VAD) |
+| `voice-backend.js` | `createVoiceBackend()` | Spawns/manages Rust voice-core subprocess (STT, TTS, VAD) |
 | `hotkey-manager.js` | `createHotkeyManager()` | Dual-layer hotkeys: uiohook-napi + Electron globalShortcut |
 | `uiohook-shared.js` | singleton | Shared uiohook-napi instance with health monitoring |
 | `screen-capture-watcher.js` | `createScreenCaptureWatcher()` | Watches for MCP screen-capture requests and fulfills them |

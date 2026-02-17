@@ -22,11 +22,20 @@ tracing-appender = "0.2"
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1", features = ["v4"] }
 anyhow = "1"
+zip = { version = "2", default-features = false, features = ["deflate"], optional = true }
+byteorder = { version = "1", optional = true }
+base64 = "0.22"
+tokio-tungstenite = { version = "0.24", features = ["native-tls"] }
+http = "1"
+minimp3 = "0.5"
+sha2 = "0.10"
+hex = "0.4"
+futures-util = "0.3"
 
 [features]
 default = ["onnx"]
 # ONNX Runtime for Kokoro TTS, Silero VAD, OpenWakeWord (downloads pre-built binaries)
-onnx = ["ort"]
+onnx = ["ort", "zip", "byteorder"]
 # whisper.cpp for local STT (requires C compiler: MSVC on Windows, gcc/clang on Linux)
 whisper = ["whisper-rs"]
 # Both ONNX + whisper.cpp

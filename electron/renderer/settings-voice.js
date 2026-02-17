@@ -62,7 +62,6 @@ const ADAPTER_REGISTRY = {
     piper: {
         label: 'Piper (Local, lightweight, ~50MB)',
         category: 'local',
-        pipPackage: 'piper-tts',
         voices: [
             { value: 'en_US-amy-medium', label: 'Amy (US Female)' },
             { value: 'en_US-lessac-medium', label: 'Lessac (US Male)' },
@@ -79,7 +78,6 @@ const ADAPTER_REGISTRY = {
     edge: {
         label: 'Edge TTS (Free cloud, Microsoft)',
         category: 'cloud-free',
-        pipPackage: 'edge-tts',
         voices: [
             { value: 'en-US-AriaNeural', label: 'Aria (US Female)' },
             { value: 'en-US-GuyNeural', label: 'Guy (US Male)' },
@@ -96,7 +94,6 @@ const ADAPTER_REGISTRY = {
     'openai-tts': {
         label: 'OpenAI TTS (Cloud, API key required)',
         category: 'cloud-paid',
-        pipPackage: 'openai',
         voices: [
             { value: 'alloy', label: 'Alloy' },
             { value: 'echo', label: 'Echo' },
@@ -114,7 +111,6 @@ const ADAPTER_REGISTRY = {
     elevenlabs: {
         label: 'ElevenLabs (Cloud, premium)',
         category: 'cloud-paid',
-        pipPackage: 'elevenlabs',
         voices: [
             { value: 'Rachel', label: 'Rachel' },
             { value: 'Domi', label: 'Domi' },
@@ -164,7 +160,6 @@ const STT_REGISTRY = {
     'faster-whisper': {
         label: 'Faster-Whisper (GPU accelerated)',
         category: 'local',
-        pipPackage: 'faster-whisper',
         showModelName: true,
         showApiKey: false,
         showEndpoint: false
@@ -172,7 +167,6 @@ const STT_REGISTRY = {
     'openai-whisper-api': {
         label: 'OpenAI Whisper API',
         category: 'cloud-paid',
-        pipPackage: 'openai',
         showModelName: false,
         showApiKey: true,
         showEndpoint: false
@@ -290,7 +284,7 @@ export function updateSTTAdapterUI(adapter) {
 }
 
 /**
- * Load available audio devices from Python backend
+ * Load available audio devices from voice backend
  */
 async function loadAudioDevices() {
     const inputSelect = document.getElementById('audio-input-device');
@@ -407,67 +401,10 @@ export async function loadVoiceSettingsUI() {
 }
 
 /**
- * Ensure required pip packages are installed for the selected TTS/STT adapters.
- * Prompts the user for confirmation before installing.
- * Returns true if all deps are satisfied, false if the user cancelled.
+ * Adapter dependency check — no-op after Python-to-Rust migration.
+ * TTS/STT engines are now bundled in the voice-core binary.
  */
 export async function ensureAdapterDeps() {
-    const ttsAdapter = document.getElementById('tts-adapter').value;
-    const sttAdapter = document.getElementById('stt-model').value;
-
-    const ttsReg = ADAPTER_REGISTRY[ttsAdapter];
-    const sttReg = STT_REGISTRY[sttAdapter];
-
-    // Collect packages that need checking
-    const toCheck = [];
-    if (ttsReg?.pipPackage) toCheck.push({ name: ttsReg.pipPackage, adapter: ttsReg.label, type: 'TTS' });
-    if (sttReg?.pipPackage) toCheck.push({ name: sttReg.pipPackage, adapter: sttReg.label, type: 'STT' });
-
-    // Deduplicate (e.g. openai used by both TTS and STT)
-    const seen = new Set();
-    const unique = toCheck.filter(p => {
-        if (seen.has(p.name)) return false;
-        seen.add(p.name);
-        return true;
-    });
-
-    for (const pkg of unique) {
-        try {
-            const result = await window.voiceMirror.config.checkPipPackage(pkg.name);
-            if (result.success && result.installed) continue;
-
-            // Package not installed — ask user
-            const install = confirm(
-                `${pkg.type} engine "${pkg.adapter}" requires the "${pkg.name}" Python package.\n\n` +
-                `Install it now? This may take a moment.`
-            );
-            if (!install) return false;
-
-            // Show installing state
-            const saveBtn = document.querySelector('.settings-btn.primary');
-            const originalText = saveBtn?.textContent;
-            if (saveBtn) {
-                saveBtn.textContent = `Installing ${pkg.name}...`;
-                saveBtn.disabled = true;
-            }
-
-            try {
-                const installResult = await window.voiceMirror.config.installPipPackage(pkg.name);
-                if (!installResult.success) {
-                    alert(`Failed to install "${pkg.name}":\n${installResult.error}\n\nYou can install it manually: pip install ${pkg.name}`);
-                    return false;
-                }
-            } finally {
-                if (saveBtn) {
-                    saveBtn.textContent = originalText;
-                    saveBtn.disabled = false;
-                }
-            }
-        } catch (err) {
-            log.info(`Pip package check failed for ${pkg.name}:`, err);
-        }
-    }
-
     return true;
 }
 

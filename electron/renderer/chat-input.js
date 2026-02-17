@@ -33,7 +33,7 @@ function sendMessage() {
     }
 
     addMessage('user', text);
-    isDuplicate(text); // Register in dedup map so Python echo is suppressed
+    isDuplicate(text); // Register in dedup map so echo is suppressed
     window.voiceMirror.python.sendQuery({ text });
     triggerAutoName();
 

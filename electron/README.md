@@ -33,7 +33,7 @@ electron/
 │
 ├── services/               # Main process services
 │   ├── ai-manager.js       # AI provider orchestration
-│   ├── python-backend.js   # Python voice processing bridge
+│   ├── voice-backend.js    # Rust voice-core process bridge
 │   ├── inbox-watcher.js    # MCP inbox polling
 │   ├── screen-capture-watcher.js  # Screenshot requests
 │   ├── browser-watcher.js  # Web search/fetch requests
@@ -120,7 +120,7 @@ electron/
 ### Main Process (`main.js`)
 Orchestrates all services and delegates IPC to `ipc/` modules:
 - Window creation & lifecycle
-- Service initialization (Python, AI, watchers)
+- Service initialization (voice backend, AI, watchers)
 - Global shortcut registration
 
 ### IPC Layer (`ipc/`)
@@ -129,7 +129,7 @@ Modular IPC handlers split by domain (ai, config, misc, screen, window), registe
 ### Service Layer
 Modular services for separation of concerns:
 - **ai-manager**: Routes between Claude PTY and API providers
-- **python-backend**: JSON IPC bridge to Python voice processing
+- **voice-backend**: JSON IPC bridge to Rust voice-core
 - **inbox-watcher**: Polls MCP inbox for messages
 - **screen-capture-watcher**: Fulfills screenshot requests
 - **browser-watcher**: Handles web search/fetch requests
@@ -181,7 +181,7 @@ window.voiceMirror = {
   // Core UI
   toggleExpand, captureScreen, getState,
 
-  // Python backend
+  // Voice backend (Rust voice-core)
   python: { sendQuery, setMode, start, stop },
 
   // AI provider

@@ -104,4 +104,14 @@ pub enum VoiceCommand {
     Stop {},
     ListAdapters {},
     Ping {},
+    /// Image sent from Electron (uses `"type": "image"` instead of `"command"`).
+    /// Normalized to `"command": "image"` in the stdin reader.
+    Image {
+        #[serde(default)]
+        data: Option<String>,
+        #[serde(default)]
+        filename: Option<String>,
+        #[serde(default)]
+        prompt: Option<String>,
+    },
 }

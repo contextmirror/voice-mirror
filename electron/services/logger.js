@@ -2,7 +2,7 @@
  * File logging service for Voice Mirror Electron.
  * Writes color-coded, structured logs to vmr.log in the config data directory.
  *
- * Categories: APP, CONFIG, PYTHON, CLAUDE, EVENT, ERROR, LOG,
+ * Categories: APP, CONFIG, VOICE, CLAUDE, EVENT, ERROR, LOG,
  *             UI, BACKEND, TOOL, PTT, TTS, IPC
  */
 
@@ -30,7 +30,7 @@ const Colors = {
 const LOG_STYLES = {
     'APP': [Colors.GREEN, '*'],
     'CONFIG': [Colors.YELLOW, '#'],
-    'PYTHON': [Colors.MAGENTA, '>'],
+    'VOICE': [Colors.MAGENTA, '>'],
     'CLAUDE': [Colors.BLUE, '>'],
     'EVENT': [Colors.CYAN, '>'],
     'ERROR': [Colors.RED, 'x'],

@@ -3,9 +3,9 @@
  */
 
 import { execFileSync, execSync } from 'child_process';
-import { existsSync, readFileSync, statSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
-import { platform, arch, release } from 'os';
+import { platform, arch } from 'os';
 
 /**
  * Check if a command exists on PATH.
@@ -25,24 +25,6 @@ export function commandExists(cmd) {
  */
 export function getNodeVersion() {
     return process.version.replace(/^v/, '');
-}
-
-/**
- * Detect Python 3 binary and version.
- * Returns { binary, version } or null.
- * @deprecated Python is no longer required — kept for backward compatibility.
- */
-export function detectPython() {
-    for (const bin of ['python3', 'python']) {
-        try {
-            const version = execFileSync(bin, ['--version'], { encoding: 'utf8' }).trim();
-            const match = version.match(/Python (\d+\.\d+\.\d+)/);
-            if (match && parseInt(match[1]) >= 3) {
-                return { binary: bin, version: match[1] };
-            }
-        } catch { /* skip */ }
-    }
-    return null;
 }
 
 /**
@@ -126,48 +108,6 @@ export async function detectOllama() {
  */
 export function detectClaudeCli() {
     return commandExists('claude');
-}
-
-/**
- * Check Python venv status.
- * @deprecated Python venv is no longer used — voice-core is a Rust binary.
- */
-export function detectPythonVenv(projectDir) {
-    const venvDir = join(projectDir, 'python', '.venv');
-    const venvBin = platform() === 'win32'
-        ? join(venvDir, 'Scripts', 'python.exe')
-        : join(venvDir, 'bin', 'python');
-    return {
-        exists: existsSync(venvDir),
-        binary: venvBin,
-        binExists: existsSync(venvBin),
-    };
-}
-
-/**
- * Check if pip requirements are installed.
- * @deprecated Python is no longer used — voice-core is a Rust binary.
- */
-export function checkPipRequirements(venvPython, projectDir) {
-    return { ok: false, reason: 'Python backend replaced by voice-core (Rust)' };
-}
-
-/**
- * Check if wake word model exists.
- * Models are now bundled with or downloaded by voice-core.
- */
-export function detectWakeWordModel(projectDir) {
-    // voice-core bundles wake word detection natively
-    return detectVoiceCore(projectDir);
-}
-
-/**
- * Check if TTS models exist.
- * TTS is now handled by voice-core (Rust).
- */
-export function detectTTSModel(projectDir) {
-    // voice-core bundles TTS natively
-    return detectVoiceCore(projectDir);
 }
 
 /**

@@ -34,6 +34,24 @@ pub fn emit_error(message: &str) {
     });
 }
 
+/// Normalize incoming JSON: if it has a `"type"` field but no `"command"`
+/// field, rename `"type"` to `"command"` so serde can deserialize it.
+/// This handles Electron's `sendImage` which sends `{"type": "image", ...}`.
+fn normalize_command_json(input: &str) -> String {
+    if let Ok(mut obj) = serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(input)
+    {
+        if !obj.contains_key("command") {
+            if let Some(type_val) = obj.remove("type") {
+                obj.insert("command".to_string(), type_val);
+                if let Ok(json) = serde_json::to_string(&obj) {
+                    return json;
+                }
+            }
+        }
+    }
+    input.to_string()
+}
+
 /// Spawn a blocking thread that reads JSON lines from stdin, deserializes
 /// them into `VoiceCommand`, and forwards them through the returned channel.
 ///
@@ -52,7 +70,11 @@ pub fn spawn_stdin_reader() -> mpsc::UnboundedReceiver<VoiceCommand> {
                     if trimmed.is_empty() {
                         continue;
                     }
-                    match serde_json::from_str::<VoiceCommand>(&trimmed) {
+                    // Electron sometimes sends `{"type": "image", ...}` instead
+                    // of `{"command": "image", ...}`. Normalize so serde can
+                    // deserialize with the `command` tag.
+                    let normalized = normalize_command_json(&trimmed);
+                    match serde_json::from_str::<VoiceCommand>(&normalized) {
                         Ok(cmd) => {
                             debug!(?cmd, "Received command from Electron");
                             if tx.send(cmd).is_err() {

@@ -11,9 +11,8 @@ pkill -9 -f "electron \\." 2>/dev/null
 # Kill Wayland orb helper
 pkill -9 -f "wayland-orb" 2>/dev/null
 
-# Kill Python voice processes
-pkill -9 -f "electron_bridge.py" 2>/dev/null
-pkill -9 -f "voice_agent.py" 2>/dev/null
+# Kill voice-core binary
+pkill -9 -f "voice-core" 2>/dev/null
 
 # Kill Claude processes spawned by Voice Mirror (but not main Claude Code sessions)
 # Match on the Voice Mirror prompt text to avoid killing unrelated claude instances

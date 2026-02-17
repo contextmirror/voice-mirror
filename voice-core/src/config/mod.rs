@@ -1,4 +1,8 @@
 //! Configuration reading and data directory paths.
+//!
+//! The single source of truth is `voice_settings.json` in the data directory,
+//! written by Electron's `syncVoiceSettings()` before spawning voice-core.
+//! All fields use snake_case.
 
 pub mod paths;
 
@@ -9,90 +13,62 @@ use tracing::warn;
 
 use paths::get_data_dir;
 
-/// Top-level voice_config.json shape (written by Electron settings panel).
+/// voice_settings.json — the single config file written by Electron and read by voice-core.
+///
+/// Electron's `syncVoiceSettings()` merges the relevant parts of config.json
+/// (voice adapters, behavior keys, user name) into this flat snake_case structure
+/// before spawning the voice-core process.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct VoiceConfig {
+pub struct VoiceSettings {
+    // ── Adapter selection ────────────────────────────────────────────
     #[serde(default)]
-    pub user_name: Option<String>,
+    pub tts_adapter: Option<String>,
+    #[serde(default)]
+    pub tts_voice: Option<String>,
+    #[serde(default)]
+    pub tts_model_size: Option<String>,
+    #[serde(default)]
+    pub tts_volume: Option<f64>,
+    #[serde(default)]
+    pub tts_speed: Option<f64>,
+    #[serde(default)]
+    pub tts_api_key: Option<String>,
+    #[serde(default)]
+    pub tts_endpoint: Option<String>,
+    #[serde(default)]
+    pub tts_model_path: Option<String>,
+    #[serde(default)]
+    pub stt_adapter: Option<String>,
+    #[serde(default)]
+    pub stt_api_key: Option<String>,
+    #[serde(default)]
+    pub stt_endpoint: Option<String>,
+    #[serde(default)]
+    pub stt_model_name: Option<String>,
+
+    // ── Behavior / hotkey ────────────────────────────────────────────
     #[serde(default)]
     pub activation_mode: Option<String>,
     #[serde(default)]
     pub ptt_key: Option<String>,
     #[serde(default)]
-    pub voice: Option<VoiceAdapterConfig>,
-}
+    pub dictation_key: Option<String>,
 
-/// Nested voice adapter settings inside voice_config.json.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct VoiceAdapterConfig {
+    // ── Audio devices ────────────────────────────────────────────────
     #[serde(default)]
-    pub tts_adapter: Option<String>,
+    pub input_device: Option<String>,
     #[serde(default)]
-    pub tts_voice: Option<String>,
-    #[serde(default)]
-    pub tts_model_size: Option<String>,
-    #[serde(default)]
-    pub tts_volume: Option<f64>,
-    #[serde(default)]
-    pub tts_api_key: Option<String>,
-    #[serde(default)]
-    pub tts_endpoint: Option<String>,
-    #[serde(default)]
-    pub tts_model_path: Option<String>,
-    #[serde(default)]
-    pub stt_adapter: Option<String>,
-    #[serde(default)]
-    pub stt_api_key: Option<String>,
-    #[serde(default)]
-    pub stt_endpoint: Option<String>,
-    #[serde(default)]
-    pub stt_model_name: Option<String>,
-}
+    pub output_device: Option<String>,
 
-/// voice_settings.json shape (snake_case, read by the voice agent).
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct VoiceSettings {
+    // ── User ─────────────────────────────────────────────────────────
     #[serde(default)]
-    pub tts_adapter: Option<String>,
-    #[serde(default)]
-    pub tts_voice: Option<String>,
-    #[serde(default)]
-    pub tts_model_size: Option<String>,
-    #[serde(default)]
-    pub tts_volume: Option<f64>,
-    #[serde(default)]
-    pub tts_api_key: Option<String>,
-    #[serde(default)]
-    pub tts_endpoint: Option<String>,
-    #[serde(default)]
-    pub tts_model_path: Option<String>,
-    #[serde(default)]
-    pub stt_adapter: Option<String>,
-    #[serde(default)]
-    pub stt_api_key: Option<String>,
-    #[serde(default)]
-    pub stt_endpoint: Option<String>,
-    #[serde(default)]
-    pub stt_model_name: Option<String>,
-}
-
-/// Read voice_config.json from the data directory.
-pub fn read_voice_config() -> VoiceConfig {
-    let path = get_config_path();
-    read_json_file(&path).unwrap_or_default()
+    pub user_name: Option<String>,
 }
 
 /// Read voice_settings.json from the data directory.
 pub fn read_voice_settings() -> VoiceSettings {
     let path = get_voice_settings_path();
     read_json_file(&path).unwrap_or_default()
-}
-
-/// Path to voice_config.json.
-pub fn get_config_path() -> PathBuf {
-    get_data_dir().join("voice_config.json")
 }
 
 /// Path to voice_settings.json.

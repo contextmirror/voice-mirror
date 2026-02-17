@@ -85,7 +85,6 @@ const DEFAULT_CONFIG = {
 
     // Advanced
     advanced: {
-        pythonPath: null,  // null = auto-detect sibling folder
         debugMode: false,
         showDependencies: false  // Hidden flag — enables Dependencies settings tab and dep update checks
     },

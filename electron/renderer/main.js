@@ -312,7 +312,7 @@ async function init() {
     // Listen for voice events
     window.voiceMirror.onVoiceEvent(handleVoiceEvent);
 
-    // Listen for chat messages from Python backend
+    // Listen for chat messages from voice backend
     window.voiceMirror.onChatMessage((data) => {
         log.debug('Chat message:', data);
         window.voiceMirror.devlog('IPC', 'chat-message-received', {
@@ -387,10 +387,10 @@ async function init() {
     state.isExpanded = initialState.data.expanded;
     updateUI();
 
-    // Check Python status
-    const pythonStatusResult = await window.voiceMirror.python.getStatus();
-    const pythonStatus = pythonStatusResult.data;
-    if (!pythonStatus.running) {
+    // Check voice backend status
+    const voiceStatusResult = await window.voiceMirror.python.getStatus();
+    const voiceStatus = voiceStatusResult.data;
+    if (!voiceStatus.running) {
         statusText.textContent = 'Voice backend not running';
     }
 

@@ -12,11 +12,11 @@ voice-mirror start       # Launch Voice Mirror (optionally with --dev)
 
 ### `setup`
 
-Walks users through first-time configuration: AI provider selection, Ollama installation/model pulling, Python venv creation, wake-word and TTS model checks, and config file generation. Supports `--non-interactive` mode with flags for CI/scripted installs.
+Walks users through first-time configuration: AI provider selection, Ollama installation/model pulling, voice-core binary check, and config file generation. Supports `--non-interactive` mode with flags for CI/scripted installs.
 
 ### `doctor`
 
-Runs all system checks (Node version, Python, Ollama, Claude CLI, venv, pip requirements, ffmpeg, wake-word model, TTS model, MCP server deps) and prints a pass/fail summary. Exits with code 1 if any issues are found.
+Runs all system checks (Node version, voice-core binary, Ollama, Claude CLI, ffmpeg, MCP server deps) and prints a pass/fail summary. Exits with code 1 if any issues are found.
 
 ### `start`
 
@@ -29,7 +29,7 @@ Delegates to `npm start` in the project root. Pass `--dev` for development mode.
 | `index.mjs` | CLI entry point, command registration (commander) |
 | `setup.mjs` | Interactive onboarding wizard (@clack/prompts) |
 | `doctor.mjs` | System health checks with pass/fail output |
-| `checks.mjs` | Detection utilities (Python, Ollama, Claude CLI, venv, etc.) |
+| `checks.mjs` | Detection utilities (voice-core, Ollama, Claude CLI, etc.) |
 | `ollama-setup.mjs` | Ollama detection, installation, and model pulling |
-| `python-setup.mjs` | Python venv creation and pip automation |
+| `python-setup.mjs` | MCP deps, Chromium, and ffmpeg helpers |
 | `banner.mjs` | ASCII banner and version display |

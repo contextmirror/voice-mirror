@@ -167,6 +167,7 @@ impl HotkeyListener {
     }
 
     /// Stop the hotkey listener.
+    #[allow(dead_code)]
     pub fn stop(&self) {
         self.running.store(false, Ordering::SeqCst);
     }

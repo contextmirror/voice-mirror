@@ -99,16 +99,6 @@
                 </div>
             </div>
 
-            <div class="dep-card dep-card-compact" data-dep="python">
-                <div class="dep-header">
-                    <span class="dep-name">Python</span>
-                    <span class="dep-value" id="dep-python-version">--</span>
-                </div>
-                <div class="dep-footer">
-                    <span class="dep-badge" id="dep-python-badge">Checking...</span>
-                </div>
-            </div>
-
             <div class="dep-card dep-card-compact" data-dep="ollama">
                 <div class="dep-header">
                     <span class="dep-name">Ollama</span>
@@ -129,30 +119,6 @@
                 </div>
             </div>
 
-        </div>
-    </div>
-
-    <!-- Section 3: Python Environment -->
-    <div class="dep-section">
-        <div class="dep-section-header">
-            <h4 class="dep-section-title">Python Environment</h4>
-            <button class="dep-update-all-btn" id="dep-pip-update-all" style="display:none;">Update All</button>
-        </div>
-        <div id="dep-pip-status" class="dep-pip-status">
-            <span class="dep-badge checking" id="dep-pip-summary">Checking...</span>
-        </div>
-        <div id="dep-pip-table-container" style="display:none;">
-            <table class="dep-pip-table" id="dep-pip-table">
-                <thead>
-                    <tr>
-                        <th>Package</th>
-                        <th>Installed</th>
-                        <th>Latest</th>
-                    </tr>
-                </thead>
-                <tbody id="dep-pip-tbody">
-                </tbody>
-            </table>
         </div>
     </div>
 
@@ -307,33 +273,4 @@
         justify-content: flex-start;
     }
 
-    /* Pip outdated table */
-    .dep-pip-status {
-        margin-bottom: 8px;
-    }
-    .dep-pip-table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 12px;
-    }
-    .dep-pip-table th {
-        text-align: left;
-        padding: 6px 10px;
-        color: rgba(255, 255, 255, 0.5);
-        font-weight: 500;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-    }
-    .dep-pip-table td {
-        padding: 5px 10px;
-        color: rgba(255, 255, 255, 0.8);
-        font-family: var(--font-mono, 'SF Mono', monospace);
-        border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-    }
-    .dep-pip-table tr:last-child td {
-        border-bottom: none;
-    }
-    #dep-pip-table-container {
-        max-height: 300px;
-        overflow-y: auto;
-    }
 </style>

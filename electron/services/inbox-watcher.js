@@ -39,6 +39,14 @@ function createInboxWatcher(options = {}) {
     // Helper to get the current sender name (user-configurable)
     const _senderName = () => (getSenderName ? getSenderName() : 'user');
 
+    // Check if a message is from the user. Accepts configured name AND "user" fallback
+    // because Rust voice-core may use the configured name or "user" depending on config sync timing.
+    const _isFromUser = (msg) => {
+        const from = (msg.from || '').toLowerCase();
+        const configured = _senderName().toLowerCase();
+        return from === configured || from === 'user';
+    };
+
     // Dev log helper — uses logger.devlog if provided, else no-op
     const _devlog = log?.devlog
         ? (category, action, data) => log.devlog(category, action, data)
@@ -76,7 +84,7 @@ function createInboxWatcher(options = {}) {
                     if (msg.id) {
                         displayedMessageIds.add(msg.id);
                         // Also seed processedUserMessageIds for user messages
-                        if (msg.from === _senderName()) {
+                        if (_isFromUser(msg)) {
                             processedUserMessageIds.add(msg.id);
                         }
                     }
@@ -147,7 +155,7 @@ function createInboxWatcher(options = {}) {
 
                 if (!claudeRunning && activeProvider && activeProvider.isRunning()) {
                     for (const msg of messages) {
-                        if (processedUserMessageIds.has(msg.id) || msg.from !== _senderName()) continue;
+                        if (processedUserMessageIds.has(msg.id) || !_isFromUser(msg)) continue;
 
                         processedUserMessageIds.add(msg.id);
 
@@ -276,7 +284,7 @@ function createInboxWatcher(options = {}) {
             for (const msg of messages) {
                 if (msg.id) {
                     displayedMessageIds.add(msg.id);
-                    if (msg.from === _senderName()) {
+                    if (_isFromUser(msg)) {
                         processedUserMessageIds.add(msg.id);
                     }
                 }
@@ -657,7 +665,7 @@ function stripEchoedContent(response) {
 }
 
 /**
- * Write AI response to inbox so Python TTS can speak it.
+ * Write AI response to inbox so the voice backend TTS can speak it.
  * @param {string} dataDir - Path to data directory
  * @param {string} response - The AI response text
  * @param {string} providerName - Display name of the provider

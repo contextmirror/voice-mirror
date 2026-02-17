@@ -746,7 +746,7 @@ function printSummary(config) {
     if (config.ai?.localModel) lines.push(`Local LLM:    ${config.ai.localModel} (Ollama)`);
 
     lines.push(`Voice:        ${formatActivation(config.behavior?.activationMode)}`);
-    lines.push(`TTS:          Kokoro (local)`);
+    lines.push(`TTS:          voice-core (Rust)`);
 
     const feats = [];
     if (config.features?.browser) feats.push('Browser');

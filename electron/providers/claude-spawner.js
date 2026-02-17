@@ -27,8 +27,8 @@ const CLAUDE_CONFIG_DIRS = [
 const CLAUDE_CONFIG_DIR = CLAUDE_CONFIG_DIRS[0];
 const MCP_SETTINGS_PATH = path.join(CLAUDE_CONFIG_DIR, 'mcp_settings.json');
 
-// Voice Mirror working directory
-const VOICE_MIRROR_DIR = path.join(__dirname, '..', '..', 'python');
+// Voice Mirror project root (working directory for Claude PTY)
+const VOICE_MIRROR_DIR = path.join(__dirname, '..', '..');
 
 const DATA_DIR = _getDataDir();
 const INBOX_PATH = path.join(DATA_DIR, 'inbox.json');
@@ -157,8 +157,8 @@ async function configureStatusLine() {
         return;
     }
 
-    const pythonExe = path.join(__dirname, '..', '..', 'python', '.venv',
-        process.platform === 'win32' ? 'Scripts\\python.exe' : 'bin/python');
+    // Use system Python (venv no longer exists after Rust migration)
+    const pythonExe = process.platform === 'win32' ? 'python' : 'python3';
 
     // Read existing settings
     let settings = {};
@@ -173,7 +173,7 @@ async function configureStatusLine() {
     } else {
         settings.statusLine = {
             type: 'command',
-            command: `"${pythonExe}" "${scriptPath}"`,
+            command: `${pythonExe} "${scriptPath}"`,
             refresh: 150
         };
         await fsPromises.writeFile(settingsPath, JSON.stringify(settings, null, 2), 'utf-8');

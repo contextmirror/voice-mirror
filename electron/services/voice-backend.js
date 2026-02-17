@@ -602,21 +602,43 @@ function createVoiceBackend(options = {}) {
                 existing = JSON.parse(await fsP.readFile(settingsPath, 'utf-8'));
             } catch { /* ignore parse errors or missing file */ }
 
-            // Merge Electron voice config into settings
+            // Merge Electron voice config into settings (camelCase -> snake_case)
             const voice = cfg?.voice || {};
+            const behavior = cfg?.behavior || {};
             const updates = {};
+
+            // TTS adapter settings
             if (voice.ttsAdapter) updates.tts_adapter = voice.ttsAdapter;
             if (voice.ttsVoice) updates.tts_voice = voice.ttsVoice;
             if (voice.ttsModelSize) updates.tts_model_size = voice.ttsModelSize;
             if (voice.ttsVolume !== undefined) updates.tts_volume = voice.ttsVolume;
+            if (voice.ttsSpeed !== undefined) updates.tts_speed = voice.ttsSpeed;
             if (voice.ttsApiKey !== undefined) updates.tts_api_key = voice.ttsApiKey;
             if (voice.ttsEndpoint !== undefined) updates.tts_endpoint = voice.ttsEndpoint;
             if (voice.ttsModelPath !== undefined) updates.tts_model_path = voice.ttsModelPath;
+
+            // STT adapter settings
             if (voice.sttModel) updates.stt_adapter = voice.sttModel;
             if (voice.sttAdapter) updates.stt_adapter = voice.sttAdapter;
             if (voice.sttApiKey !== undefined) updates.stt_api_key = voice.sttApiKey;
             if (voice.sttEndpoint !== undefined) updates.stt_endpoint = voice.sttEndpoint;
             if (voice.sttModelName !== undefined) updates.stt_model_name = voice.sttModelName;
+
+            // Behavior / hotkey settings
+            // Map Electron camelCase mode names to Rust snake_case equivalents
+            if (behavior.activationMode) {
+                const modeMap = { pushToTalk: 'ptt', wakeWord: 'wake_word' };
+                updates.activation_mode = modeMap[behavior.activationMode] || behavior.activationMode;
+            }
+            if (behavior.pttKey !== undefined) updates.ptt_key = behavior.pttKey;
+            if (behavior.dictationKey !== undefined) updates.dictation_key = behavior.dictationKey;
+
+            // Audio device settings
+            if (voice.inputDevice !== undefined) updates.input_device = voice.inputDevice;
+            if (voice.outputDevice !== undefined) updates.output_device = voice.outputDevice;
+
+            // User settings (lowercase to match inbox watcher sender name)
+            if (cfg?.user?.name !== undefined) updates.user_name = cfg.user.name ? cfg.user.name.toLowerCase() : null;
 
             const merged = { ...existing, ...updates };
             await fsP.writeFile(settingsPath, JSON.stringify(merged, null, 2), 'utf-8');

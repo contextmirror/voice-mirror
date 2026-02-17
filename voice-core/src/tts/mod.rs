@@ -20,23 +20,11 @@ pub trait TtsEngine: Send + Sync {
     fn speak(&self, text: &str) -> Pin<Box<dyn Future<Output = anyhow::Result<Vec<f32>>> + Send + '_>>;
 
     /// Interrupt any in-progress synthesis.
+    #[allow(dead_code)]
     fn stop(&self);
 
     /// Display name for this engine (e.g. "Kokoro (af_bella)").
     fn name(&self) -> String;
-}
-
-/// Which TTS backend to use.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum TtsBackend {
-    /// Local Kokoro ONNX (requires `onnx` feature).
-    KokoroLocal,
-    /// Microsoft Edge TTS (free, cloud).
-    EdgeCloud,
-    /// OpenAI TTS API (paid, cloud).
-    OpenAiCloud,
-    /// ElevenLabs TTS API (paid, cloud).
-    ElevenLabsCloud,
 }
 
 /// Create a TTS engine from config values.

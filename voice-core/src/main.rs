@@ -23,10 +23,16 @@ use tracing_subscriber::EnvFilter;
 
 use audio::{audio_ring_buffer, AudioConsumer, AudioStateMachine, RecordingSource};
 use config::paths::get_data_dir;
-use config::{read_voice_config, read_voice_settings};
+use config::read_voice_settings;
 use hotkey::{HotkeyConfig, HotkeyEvent, HotkeyListener};
 use ipc::bridge::{emit_error, emit_event, spawn_stdin_reader};
 use ipc::{AudioDeviceInfo, VoiceCommand, VoiceEvent};
+
+/// Decode a base64 string to bytes (standard or URL-safe alphabet).
+fn base64_decode(input: &str) -> Result<Vec<u8>, base64::DecodeError> {
+    use base64::Engine as _;
+    base64::engine::general_purpose::STANDARD.decode(input)
+}
 
 /// Chunk size in samples (80 ms at 16 kHz). Matches capture and OWW input.
 const CHUNK_SAMPLES: usize = 1280;
@@ -81,13 +87,12 @@ async fn main() {
     // Emit starting event immediately so Electron knows we're alive.
     emit_event(&VoiceEvent::Starting {});
 
-    // Read config
+    // Read config (single source: voice_settings.json written by Electron)
     emit_event(&VoiceEvent::Loading {
         step: "Reading configuration...".to_string(),
     });
-    let voice_config = read_voice_config();
     let voice_settings = read_voice_settings();
-    info!(?voice_config, ?voice_settings, "Configuration loaded");
+    info!(?voice_settings, "Configuration loaded");
 
     let model_dir = data_dir.join("models");
 
@@ -154,35 +159,11 @@ async fn main() {
     let stt_adapter_name = voice_settings
         .stt_adapter
         .as_deref()
-        .or(voice_config
-            .voice
-            .as_ref()
-            .and_then(|v| v.stt_adapter.as_deref()))
-        .unwrap_or("whisper-local");
+        .unwrap_or("parakeet");
 
-    let stt_api_key = voice_settings
-        .stt_api_key
-        .as_deref()
-        .or(voice_config
-            .voice
-            .as_ref()
-            .and_then(|v| v.stt_api_key.as_deref()));
-
-    let stt_endpoint = voice_settings
-        .stt_endpoint
-        .as_deref()
-        .or(voice_config
-            .voice
-            .as_ref()
-            .and_then(|v| v.stt_endpoint.as_deref()));
-
-    let stt_model_name = voice_settings
-        .stt_model_name
-        .as_deref()
-        .or(voice_config
-            .voice
-            .as_ref()
-            .and_then(|v| v.stt_model_name.as_deref()));
+    let stt_api_key = voice_settings.stt_api_key.as_deref();
+    let stt_endpoint = voice_settings.stt_endpoint.as_deref();
+    let stt_model_name = voice_settings.stt_model_name.as_deref();
 
     let stt_engine = match stt::create_stt_engine(
         stt_adapter_name,
@@ -212,35 +193,11 @@ async fn main() {
     let tts_adapter_name = voice_settings
         .tts_adapter
         .as_deref()
-        .or(voice_config
-            .voice
-            .as_ref()
-            .and_then(|v| v.tts_adapter.as_deref()))
         .unwrap_or("kokoro");
 
-    let tts_voice = voice_settings
-        .tts_voice
-        .as_deref()
-        .or(voice_config
-            .voice
-            .as_ref()
-            .and_then(|v| v.tts_voice.as_deref()));
-
-    let tts_api_key = voice_settings
-        .tts_api_key
-        .as_deref()
-        .or(voice_config
-            .voice
-            .as_ref()
-            .and_then(|v| v.tts_api_key.as_deref()));
-
-    let tts_endpoint = voice_settings
-        .tts_endpoint
-        .as_deref()
-        .or(voice_config
-            .voice
-            .as_ref()
-            .and_then(|v| v.tts_endpoint.as_deref()));
+    let tts_voice = voice_settings.tts_voice.as_deref();
+    let tts_api_key = voice_settings.tts_api_key.as_deref();
+    let tts_endpoint = voice_settings.tts_endpoint.as_deref();
 
     let tts_engine = match tts::create_tts_engine(
         tts_adapter_name,
@@ -265,10 +222,7 @@ async fn main() {
     // ── TTS Playback ─────────────────────────────────────────────────
     let tts_player = match tts::playback::AudioPlayer::new() {
         Ok(player) => {
-            let volume = voice_settings
-                .tts_volume
-                .or(voice_config.voice.as_ref().and_then(|v| v.tts_volume))
-                .unwrap_or(1.0) as f32;
+            let volume = voice_settings.tts_volume.unwrap_or(1.0) as f32;
             player.set_volume(volume);
             info!("Audio playback initialized");
             Some(player)
@@ -280,7 +234,7 @@ async fn main() {
     };
 
     // ── Hotkey listener ──────────────────────────────────────────────
-    let activation_mode = voice_config
+    let activation_mode = voice_settings
         .activation_mode
         .as_deref()
         .unwrap_or("ptt");
@@ -289,8 +243,8 @@ async fn main() {
 
     let _hotkey_listener = if activation_mode == "ptt" || activation_mode == "hybrid" {
         let hk_config = HotkeyConfig {
-            ptt_key: voice_config.ptt_key.clone().or(Some("MouseButton5".to_string())),
-            dictation_key: None,
+            ptt_key: voice_settings.ptt_key.clone().or(Some("MouseButton5".to_string())),
+            dictation_key: voice_settings.dictation_key.clone(),
         };
         let listener = HotkeyListener::new(hk_config);
         listener.start(hotkey_tx);
@@ -302,7 +256,12 @@ async fn main() {
     };
 
     // ── Inbox ────────────────────────────────────────────────────────
-    let inbox_manager = inbox::InboxManager::new(&data_dir, Some("user"));
+    let sender_name = voice_settings
+        .user_name
+        .as_deref()
+        .unwrap_or("user")
+        .to_lowercase();
+    let inbox_manager = inbox::InboxManager::new(&data_dir, Some(&sender_name));
     let removed = inbox_manager.cleanup(2.0);
     if removed > 0 {
         info!(removed, "Inbox startup cleanup");
@@ -888,6 +847,64 @@ async fn handle_command(cmd: VoiceCommand, app_state: &Arc<Mutex<AppState>>) -> 
                     emit_error("TTS not available");
                 }
             }
+        }
+
+        VoiceCommand::Image {
+            data,
+            filename,
+            prompt,
+        } => {
+            info!(
+                has_data = data.is_some(),
+                filename = ?filename,
+                "Image received from Electron"
+            );
+
+            // Save image to disk
+            let images_dir = get_data_dir().join("images");
+            let _ = std::fs::create_dir_all(&images_dir);
+            let fname = filename.unwrap_or_else(|| "screenshot.png".to_string());
+            let image_path = images_dir.join(&fname);
+
+            if let Some(ref b64) = data {
+                use std::io::Write as _;
+                match base64_decode(b64) {
+                    Ok(bytes) => {
+                        if let Ok(mut f) = std::fs::File::create(&image_path) {
+                            let _ = f.write_all(&bytes);
+                        }
+                    }
+                    Err(e) => {
+                        emit_error(&format!("Failed to decode image: {}", e));
+                    }
+                }
+            }
+
+            emit_event(&VoiceEvent::ImageReceived {
+                path: image_path.to_string_lossy().to_string(),
+            });
+
+            // Send to inbox
+            let prompt_text = prompt.unwrap_or_else(|| "What's in this image?".to_string());
+            let msg_id = {
+                let app = app_state.lock().unwrap();
+                if let Some(ref inbox) = app.inbox {
+                    match inbox.send(&prompt_text) {
+                        Ok(id) => id,
+                        Err(e) => {
+                            warn!("Failed to send image query to inbox: {}", e);
+                            None
+                        }
+                    }
+                } else {
+                    None
+                }
+            };
+
+            emit_event(&VoiceEvent::SentToInbox {
+                message: prompt_text,
+                msg_id,
+            });
         }
 
         VoiceCommand::ListAdapters {} => {

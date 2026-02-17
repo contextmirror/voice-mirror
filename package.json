@@ -23,6 +23,13 @@
   "build": {
     "appId": "com.voicemirror.app",
     "productName": "Voice Mirror",
+    "extraFiles": [
+      {
+        "from": "voice-core/target/release/",
+        "to": "resources/bin/",
+        "filter": ["voice-core", "voice-core.exe"]
+      }
+    ],
     "linux": {
       "target": [
         "AppImage"

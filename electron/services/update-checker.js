@@ -220,17 +220,13 @@ function createUpdateChecker(options = {}) {
                 }
             }
 
-            // Check what changed for restart hints
-            const changed = await exec('git', ['diff', '--name-only', `${beforeHash}..${afterHash}`]);
-            const needsPip = changed.includes('requirements.txt');
-
             if (log) {
                 log('APP', `Update complete: ${beforeHash.slice(0, 7)} → ${afterHash.slice(0, 7)}`);
             }
 
-            sendStatus('ready', { needsRestart: true, needsPip, installFailed });
+            sendStatus('ready', { needsRestart: true, installFailed });
             updating = false;
-            return { success: true, needsPip, installFailed };
+            return { success: true, installFailed };
         } catch (err) {
             if (log) log('APP', `Update failed: ${err.message}`);
 

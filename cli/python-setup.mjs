@@ -1,107 +1,15 @@
 /**
- * Voice Mirror CLI — Python venv and pip automation
+ * Voice Mirror CLI — Dependency installation helpers
+ *
+ * Historical note: This file previously contained Python venv and pip
+ * automation. Those functions were removed when voice-core moved to Rust.
+ * The remaining helpers (MCP deps, Chromium, ffmpeg) are still used by
+ * setup.mjs and doctor.mjs.
  */
 
 import { execFileSync, execSync } from 'child_process';
 import { existsSync } from 'fs';
 import { join } from 'path';
-import { platform } from 'os';
-import { detectPython, detectPythonVenv } from './checks.mjs';
-
-/**
- * Create Python venv if it doesn't exist.
- * Returns { ok, binary, error }
- */
-export function createVenv(projectDir, spinner) {
-    const pythonDir = join(projectDir, 'python');
-    const venvDir = join(pythonDir, '.venv');
-
-    if (existsSync(venvDir)) {
-        const venv = detectPythonVenv(projectDir);
-        if (venv.binExists) {
-            return { ok: true, binary: venv.binary };
-        }
-    }
-
-    const python = detectPython();
-    if (!python) {
-        return { ok: false, error: 'Python 3 not found. Install Python 3.9+ and try again.' };
-    }
-
-    spinner.update(`Creating Python venv with ${python.binary}...`);
-    try {
-        execFileSync(python.binary, ['-m', 'venv', venvDir], {
-            stdio: 'pipe',
-            timeout: 60000,
-        });
-        const venv = detectPythonVenv(projectDir);
-        return { ok: true, binary: venv.binary };
-    } catch (err) {
-        return { ok: false, error: `Failed to create venv: ${err.message}` };
-    }
-}
-
-/**
- * Install pip requirements.
- * Returns { ok, error }
- */
-export function installRequirements(venvPython, projectDir, spinner) {
-    const reqFile = join(projectDir, 'python', 'requirements.txt');
-
-    if (!existsSync(reqFile)) {
-        return { ok: false, error: 'requirements.txt not found' };
-    }
-
-    spinner.update('Installing Python dependencies...');
-    try {
-        // Upgrade pip first
-        execFileSync(venvPython, ['-m', 'pip', 'install', '--upgrade', 'pip'], {
-            stdio: 'pipe',
-            timeout: 60000,
-            cwd: join(projectDir, 'python'),
-        });
-
-        // Install requirements
-        execFileSync(venvPython, ['-m', 'pip', 'install', '-r', reqFile], {
-            stdio: 'pipe',
-            timeout: 300000, // 5 min for large packages
-            cwd: join(projectDir, 'python'),
-        });
-
-        // Install openwakeword WITHOUT its dependencies — tflite-runtime
-        // has no wheels for Python 3.12+, Windows, or macOS.  All real
-        // deps (tqdm, scipy, scikit-learn, etc.) are already in requirements.txt;
-        // onnxruntime is provided by onnx-asr.
-        spinner.update('Installing openwakeword (no-deps)...');
-        execFileSync(venvPython, [
-            '-m', 'pip', 'install', '--no-deps', 'openwakeword>=0.6.0,<1.0.0',
-        ], {
-            stdio: 'pipe',
-            timeout: 120000,
-            cwd: join(projectDir, 'python'),
-        });
-
-        return { ok: true };
-    } catch (err) {
-        return { ok: false, error: `pip install failed: ${err.message}` };
-    }
-}
-
-/**
- * Install optional voice cloning dependencies.
- */
-export function installVoiceCloneDeps(venvPython, spinner) {
-    spinner.update('Installing voice cloning dependencies...');
-    try {
-        execFileSync(venvPython, ['-m', 'pip', 'install', 'yt-dlp'], {
-            stdio: 'pipe',
-            timeout: 120000,
-        });
-        return { ok: true };
-    } catch (err) {
-        return { ok: false, error: err.message };
-    }
-}
 
 /**
  * Install MCP server dependencies.
@@ -144,59 +52,7 @@ export function installChromium(projectDir, spinner) {
 }
 
 /**
- * Download TTS models (kokoro) via Python.
- * The kokoro-onnx package auto-downloads on first import.
- */
-export async function downloadTTSModels(venvPython, projectDir, spinner) {
-    const pythonDir = join(projectDir, 'python');
-    const modelPath = join(pythonDir, 'kokoro-v1.0.onnx');
-    const voicesPath = join(pythonDir, 'voices-v1.0.bin');
-    const baseUrl = 'https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0';
-
-    const { downloadFile } = await import('./ollama-setup.mjs');
-
-    // Step 1: Download ONNX model file if missing (~370 MB)
-    if (!existsSync(modelPath)) {
-        spinner.update('Downloading TTS model (kokoro-v1.0.onnx, ~370 MB)...');
-        try {
-            await downloadFile(`${baseUrl}/kokoro-v1.0.onnx`, modelPath);
-        } catch (err) {
-            return { ok: false, error: `Model download failed: ${err.message}` };
-        }
-    }
-
-    // Step 2: Download voices file if missing (~27 MB)
-    if (!existsSync(voicesPath)) {
-        spinner.update('Downloading TTS voices file (27 MB)...');
-        try {
-            await downloadFile(`${baseUrl}/voices-v1.0.bin`, voicesPath);
-        } catch (err) {
-            return { ok: false, error: `Voices download failed: ${err.message}` };
-        }
-    }
-
-    // Step 3: Verify both files load correctly
-    spinner.update('Verifying TTS model...');
-    try {
-        execFileSync(venvPython, ['-c', `
-import os
-os.chdir(${JSON.stringify(pythonDir)})
-from kokoro_onnx import Kokoro
-k = Kokoro("kokoro-v1.0.onnx", "voices-v1.0.bin")
-print("ok")
-`], {
-            stdio: 'pipe',
-            timeout: 60000,
-            cwd: pythonDir,
-        });
-        return { ok: true };
-    } catch (err) {
-        return { ok: false, error: err.message };
-    }
-}
-
-/**
- * Check if ffmpeg is installed (needed for voice cloning).
+ * Check if ffmpeg is installed (needed for TTS audio playback and voice cloning).
  */
 export function detectFfmpeg() {
     try {

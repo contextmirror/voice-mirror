@@ -3,9 +3,6 @@
 //! The real implementation is gated behind `#[cfg(feature = "whisper")]`.
 //! When the feature is disabled, a stub is provided that always returns an error.
 
-/// Minimum audio duration in samples at 16 kHz (0.4 s = 6400 samples).
-const MIN_SAMPLES: usize = 6_400;
-
 // ── whisper enabled ────────────────────────────────────────────────
 #[cfg(feature = "whisper")]
 mod inner {
@@ -15,8 +12,10 @@ mod inner {
     use tracing::info;
     use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
-    use super::MIN_SAMPLES;
     use crate::stt::SttEngine;
+
+    /// Minimum audio duration in samples at 16 kHz (0.4 s = 6400 samples).
+    const MIN_SAMPLES: usize = 6_400;
 
     pub struct WhisperStt {
         ctx: Mutex<WhisperContext>,

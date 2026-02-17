@@ -1,11 +1,11 @@
 /**
  * IPC handlers for miscellaneous operations.
  * Handles: toggle-log-viewer, open-external, quit-app, hotkey-fallback, devlog,
- *          send-to-python, get-python-status, start-python, stop-python,
- *          python-restart, send-query, set-voice-mode, send-image,
- *          list-audio-devices, get-detected-keys, check-cli-available,
- *          install-cli, chat-list, chat-load, chat-save, chat-delete,
- *          chat-rename, apply-update, app-relaunch
+ *          get-python-status, start-python, stop-python, python-restart,
+ *          send-query, set-voice-mode, send-image, list-audio-devices,
+ *          get-detected-keys, check-cli-available, install-cli,
+ *          chat-list, chat-load, chat-save, chat-delete, chat-rename,
+ *          apply-update, app-relaunch
  */
 
 const { app, ipcMain, shell } = require('electron');
@@ -63,7 +63,7 @@ function registerMiscHandlers(ctx, validators) {
         return { success: true };
     });
 
-    // Audio device enumeration (asks Python backend)
+    // Audio device enumeration (asks voice backend)
     ipcMain.handle('list-audio-devices', async () => {
         const devices = ctx.listAudioDevices ? await ctx.listAudioDevices() : null;
         return { success: true, data: devices };
@@ -198,8 +198,8 @@ function registerMiscHandlers(ctx, validators) {
             }
         }
 
-        // --- Run all 3 sections in parallel ---
-        const [npm, system, pip] = await Promise.all([
+        // --- Run both sections in parallel ---
+        const [npm, system] = await Promise.all([
             // Section 1: npm packages
             (async () => {
                 const results = {};
@@ -231,26 +231,6 @@ function registerMiscHandlers(ctx, validators) {
 
                 // Node.js
                 results.node = { version: process.version.replace(/^v/, '') };
-
-                // Python (from venv, fallback to system)
-                const pythonDir = path.join(__dirname, '..', '..', 'python');
-                const isWin = process.platform === 'win32';
-                const venvPython = isWin
-                    ? path.join(pythonDir, '.venv', 'Scripts', 'python.exe')
-                    : path.join(pythonDir, '.venv', 'bin', 'python');
-                const pythonBin = fs.existsSync(venvPython) ? venvPython : (isWin ? 'python' : 'python3');
-                try {
-                    const version = await new Promise((resolve) => {
-                        execFile(pythonBin, ['--version'], { timeout: 10000, windowsHide: true }, (err, stdout) => {
-                            if (err) return resolve(null);
-                            const match = stdout.match(/Python (\d+\.\d+\.\d+)/);
-                            resolve(match ? match[1] : null);
-                        });
-                    });
-                    results.python = version ? { version } : { version: null, error: 'Not found' };
-                } catch {
-                    results.python = { version: null, error: 'Not found' };
-                }
 
                 // Ollama — extract version from `ollama --version`
                 try {
@@ -285,41 +265,10 @@ function registerMiscHandlers(ctx, validators) {
                 }
 
                 return results;
-            })(),
-
-            // Section 3: Python pip outdated
-            (async () => {
-                const pythonDir = path.join(__dirname, '..', '..', 'python');
-                const isWin = process.platform === 'win32';
-                const venvPython = isWin
-                    ? path.join(pythonDir, '.venv', 'Scripts', 'python.exe')
-                    : path.join(pythonDir, '.venv', 'bin', 'python');
-
-                if (!fs.existsSync(venvPython)) {
-                    return { outdated: [], error: 'Python venv not found' };
-                }
-
-                try {
-                    const outdated = await new Promise((resolve, reject) => {
-                        execFile(venvPython, ['-m', 'pip', 'list', '--outdated', '--format=json'], {
-                            timeout: 30000, windowsHide: true, cwd: pythonDir
-                        }, (err, stdout) => {
-                            if (err) return reject(err);
-                            try {
-                                const data = JSON.parse(stdout);
-                                resolve(data.map(p => ({ name: p.name, installed: p.version, latest: p.latest_version })));
-                            } catch (e) { reject(e); }
-                        });
-                    });
-                    return { outdated };
-                } catch (err) {
-                    ctx.logger.error('[Deps]', `pip outdated check failed: ${err.message}`);
-                    return { outdated: [], error: 'Check failed' };
-                }
             })()
         ]);
 
-        return { success: true, data: { npm, system, pip } };
+        return { success: true, data: { npm, system } };
     });
 
     // Dependency update handler
@@ -355,74 +304,6 @@ function registerMiscHandlers(ctx, validators) {
                 }
             });
         });
-    });
-
-    // Pip package upgrade handler — stops Python first to release DLL locks
-    ipcMain.handle('update-pip-packages', async () => {
-        const { execFile } = require('child_process');
-        const pythonDir = path.join(__dirname, '..', '..', 'python');
-        const isWin = process.platform === 'win32';
-        const venvPython = isWin
-            ? path.join(pythonDir, '.venv', 'Scripts', 'python.exe')
-            : path.join(pythonDir, '.venv', 'bin', 'python');
-
-        if (!fs.existsSync(venvPython)) {
-            return { success: false, error: 'Python venv not found' };
-        }
-
-        // Stop voice backend to release DLL locks
-        const voiceBackend = ctx.getVoiceBackend();
-        const wasRunning = voiceBackend?.isRunning();
-        if (wasRunning) {
-            ctx.logger.info('[Dep Update]', 'Stopping voice backend for upgrade...');
-            voiceBackend.stop();
-            // Wait for process to fully exit before pip install
-            await new Promise(r => setTimeout(r, 2000));
-        }
-
-        // Get the actual outdated package names, then upgrade them directly.
-        // (pip install -r requirements.txt --upgrade only upgrades direct deps,
-        // not transitive deps like filelock, setuptools, rdflib, etc.)
-        const outdated = await new Promise((resolve) => {
-            execFile(venvPython, ['-m', 'pip', 'list', '--outdated', '--format=json'], {
-                timeout: 30000, windowsHide: true, cwd: pythonDir
-            }, (err, stdout) => {
-                if (err) return resolve([]);
-                try { resolve(JSON.parse(stdout)); } catch { resolve([]); }
-            });
-        });
-
-        if (outdated.length === 0) {
-            if (wasRunning) ctx.startVoiceBackendService();
-            return { success: true };
-        }
-
-        const pkgNames = outdated.map(p => p.name);
-        ctx.logger.info('[Dep Update]', `Upgrading ${pkgNames.length} pip packages: ${pkgNames.join(', ')}`);
-
-        const result = await new Promise((resolve) => {
-            execFile(venvPython, ['-m', 'pip', 'install', '--upgrade', ...pkgNames], {
-                timeout: 300000, windowsHide: true, cwd: pythonDir
-            }, (err, stdout, stderr) => {
-                if (err) {
-                    const hint = stderr?.match(/ERROR: .*/)?.[0] || err.message;
-                    ctx.logger.error('[Dep Update]', 'pip upgrade failed:', err.message);
-                    if (stderr) ctx.logger.error('[Dep Update]', 'stderr:', stderr.slice(0, 500));
-                    resolve({ success: false, error: hint.slice(0, 200) });
-                } else {
-                    ctx.logger.info('[Dep Update]', 'pip packages upgraded successfully');
-                    resolve({ success: true });
-                }
-            });
-        });
-
-        // Restart voice backend if it was running before
-        if (wasRunning) {
-            ctx.logger.info('[Dep Update]', 'Restarting voice backend...');
-            ctx.startVoiceBackendService();
-        }
-
-        return result;
     });
 
     // Image handling - send to voice backend

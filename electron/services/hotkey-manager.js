@@ -4,7 +4,7 @@
  * Uses Electron globalShortcut (RegisterHotKey on Windows) with
  * health-checked auto-recovery after sleep/unlock.
  *
- * PTT is handled separately by Python's GlobalHotkeyListener (pynput).
+ * PTT is handled separately by the voice backend.
  */
 
 const { globalShortcut, powerMonitor } = require('electron');

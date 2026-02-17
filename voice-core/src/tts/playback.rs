@@ -12,7 +12,7 @@ use rodio::{OutputStream, OutputStreamHandle, Sink};
 /// Audio player that plays f32 PCM samples through the default output device.
 pub struct AudioPlayer {
     _stream: OutputStream,
-    stream_handle: OutputStreamHandle,
+    _stream_handle: OutputStreamHandle,
     sink: Arc<Sink>,
     playing: Arc<AtomicBool>,
 }
@@ -27,7 +27,7 @@ impl AudioPlayer {
 
         Ok(Self {
             _stream: stream,
-            stream_handle,
+            _stream_handle: stream_handle,
             sink: Arc::new(sink),
             playing: Arc::new(AtomicBool::new(false)),
         })
@@ -55,12 +55,14 @@ impl AudioPlayer {
     }
 
     /// Stop current playback immediately.
+    #[allow(dead_code)]
     pub fn stop(&self) {
         self.sink.stop();
         self.playing.store(false, Ordering::SeqCst);
     }
 
     /// Check if audio is currently playing.
+    #[allow(dead_code)]
     pub fn is_playing(&self) -> bool {
         self.playing.load(Ordering::SeqCst)
     }

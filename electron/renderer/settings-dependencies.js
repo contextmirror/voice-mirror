@@ -1,7 +1,7 @@
 /**
  * settings-dependencies.js — Dependencies settings tab sub-module
  *
- * Shows 3 sections: npm packages, system tools, and Python environment.
+ * Shows 2 sections: npm packages and system tools.
  * Hidden behind advanced.showDependencies feature flag.
  */
 
@@ -161,75 +161,6 @@ function updateSystemCard(prefix, info) {
     }
 }
 
-// --- Section 3: Python environment ---
-
-function updatePipSection(pipData) {
-    const summaryEl = document.getElementById('dep-pip-summary');
-    const tableContainer = document.getElementById('dep-pip-table-container');
-    const tbody = document.getElementById('dep-pip-tbody');
-    const updateAllBtn = document.getElementById('dep-pip-update-all');
-
-    if (!summaryEl) return;
-
-    if (pipData.error) {
-        setBadge(summaryEl, 'error', pipData.error);
-        if (tableContainer) tableContainer.style.display = 'none';
-        if (updateAllBtn) updateAllBtn.style.display = 'none';
-        return;
-    }
-
-    const outdated = pipData.outdated || [];
-    if (outdated.length === 0) {
-        setBadge(summaryEl, 'up-to-date', 'All up to date');
-        if (tableContainer) tableContainer.style.display = 'none';
-        if (updateAllBtn) updateAllBtn.style.display = 'none';
-        return;
-    }
-
-    setBadge(summaryEl, 'update-available', `${outdated.length} package${outdated.length > 1 ? 's' : ''} can be updated`);
-    if (updateAllBtn) updateAllBtn.style.display = '';
-
-    if (tbody) {
-        tbody.innerHTML = '';
-        for (const pkg of outdated) {
-            const tr = document.createElement('tr');
-            tr.innerHTML = `<td>${escapeHtml(pkg.name)}</td><td>${escapeHtml(pkg.installed)}</td><td>${escapeHtml(pkg.latest)}</td>`;
-            tbody.appendChild(tr);
-        }
-    }
-    if (tableContainer) tableContainer.style.display = '';
-}
-
-async function handlePipUpdateAll() {
-    const btn = document.getElementById('dep-pip-update-all');
-    const summaryEl = document.getElementById('dep-pip-summary');
-    if (btn) {
-        btn.disabled = true;
-        btn.textContent = 'Updating...';
-    }
-    if (summaryEl) setBadge(summaryEl, 'checking', 'Upgrading packages...');
-
-    try {
-        const result = await window.voiceMirror.ai.updatePipPackages();
-        if (result.success) {
-            if (summaryEl) setBadge(summaryEl, 'up-to-date', 'Updated!');
-            setTimeout(() => checkVersions(), 1000);
-        } else {
-            const msg = result.error ? `Failed: ${result.error}` : 'Update failed';
-            if (summaryEl) setBadge(summaryEl, 'error', msg.length > 60 ? msg.slice(0, 57) + '...' : msg);
-            log.error('Pip update failed:', result.error);
-        }
-    } catch (err) {
-        log.error('Pip update failed:', err);
-        if (summaryEl) setBadge(summaryEl, 'error', 'Update failed');
-    } finally {
-        if (btn) {
-            btn.disabled = false;
-            btn.textContent = 'Update All';
-        }
-    }
-}
-
 // --- Main check function ---
 
 async function checkVersions() {
@@ -243,14 +174,10 @@ async function checkVersions() {
     });
 
     // Set checking state for system cards
-    ['node', 'python', 'ollama', 'ffmpeg'].forEach(prefix => {
+    ['node', 'ollama', 'ffmpeg'].forEach(prefix => {
         const badge = document.getElementById(`dep-${prefix}-badge`);
         if (badge) setBadge(badge, 'checking', 'Checking...');
     });
-
-    // Set checking state for pip section
-    const pipSummary = document.getElementById('dep-pip-summary');
-    if (pipSummary) setBadge(pipSummary, 'checking', 'Checking...');
 
     if (checkBtn) checkBtn.disabled = true;
 
@@ -269,14 +196,8 @@ async function checkVersions() {
             // system section
             if (result.data.system) {
                 if (result.data.system.node) updateSystemCard('node', result.data.system.node);
-                if (result.data.system.python) updateSystemCard('python', result.data.system.python);
                 if (result.data.system.ollama) updateSystemCard('ollama', result.data.system.ollama);
                 if (result.data.system.ffmpeg) updateSystemCard('ffmpeg', result.data.system.ffmpeg);
-            }
-
-            // pip section
-            if (result.data.pip) {
-                updatePipSection(result.data.pip);
             }
         }
 
@@ -304,12 +225,9 @@ export function initDependenciesTab() {
     if (opencodeBtn) opencodeBtn.addEventListener('click', () => handleUpdate('opencode', 'opencode'));
     if (claudeBtn) claudeBtn.addEventListener('click', () => handleUpdate('claude-code', 'claude'));
 
-    // Update All buttons
+    // Update All button
     const npmUpdateAllBtn = document.getElementById('dep-npm-update-all');
-    const pipUpdateAllBtn = document.getElementById('dep-pip-update-all');
-
     if (npmUpdateAllBtn) npmUpdateAllBtn.addEventListener('click', () => handleNpmUpdateAll());
-    if (pipUpdateAllBtn) pipUpdateAllBtn.addEventListener('click', () => handlePipUpdateAll());
 
     // Expose check function globally for onclick
     window.checkDependencyUpdates = checkVersions;

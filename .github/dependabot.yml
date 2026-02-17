@@ -18,15 +18,6 @@ updates:
     labels:
       - "dependencies"
 
-  # pip dependencies (Python backend)
-  - package-ecosystem: "pip"
-    directory: "/python"
-    schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 3
-    labels:
-      - "dependencies"
-
   # GitHub Actions
   - package-ecosystem: "github-actions"
     directory: "/"
