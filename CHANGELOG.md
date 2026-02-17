@@ -5,6 +5,25 @@ Format inspired by game dev patch notes — grouped by release, categorized by i
 
 ---
 
+## v0.10.2 (2026-02-17)
+
+### Fixed — Voice Pipeline
+- **Claude not responding to voice input** — `claude_listen` used case-sensitive sender matching (`===`) while voice-core lowercases all sender names. When the new `--append-system-prompt` passed the user's name with original casing (e.g. "Nathan"), it never matched the lowercased inbox messages ("nathan"). Fixed with case-insensitive comparison in the MCP handler and normalized name in the system prompt
+- **Inbox poll timeout too short** — Rust `wait_for_response()` had a 60-second default timeout, too short for Claude to receive, process, and respond via MCP. Increased to 300 seconds (5 minutes)
+- **Silent timeout failures** — Added user-visible error emission (`emit_error`) when inbox polling times out or errors, so the UI shows feedback instead of silently failing
+
+### New — Embedded Claude Instructions
+- **`--append-system-prompt` for spawned Claude** — Claude Code instances spawned inside Voice Mirror now receive a dynamic system prompt with Voice Mirror architecture, MCP tool documentation, voice workflow instructions (including 600s timeout), response style guidelines, and prompt injection resistance rules. Previously Claude had no context about Voice Mirror's capabilities
+- **Dynamic tool documentation** — System prompt adapts to the active tool profile, only documenting tool groups that are actually enabled
+
+### Fixed — Code Audit
+- **Memory leaks** — Fixed blur handler leak in chat-store, context menu listener accumulation, transitionend listener not cleaned up
+- **Buffer handling** — Fixed `chunks.join('')` corrupting multi-byte UTF-8 in n8n handler (2 locations), replaced with `Buffer.concat(chunks).toString()`
+- **Security** — Removed unnecessary `shell: true` from ollama execFile, fixed HTTPS check ordering in voice-clone handler
+- **Cleanup** — Removed dead `aiReadyCheckInterval` code, added webview listener cleanup on destroy, added provider-switch-error notification, null check for welcomeBubble
+
+---
+
 ## v0.10.1 (2026-02-17)
 
 ### New — "What's New" Post-Update Notification
