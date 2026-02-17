@@ -937,6 +937,22 @@ class VoiceMirror:
                 )
                 notification_task = asyncio.create_task(notification_watcher.run())
 
+            # Preload STT model in background so first recording doesn't freeze
+            # the system (ONNX model loading is CPU-intensive and blocks the cursor
+            # for ~2 seconds when done on-demand during the first transcription).
+            if self.stt_adapter and not self.stt_adapter.is_loaded:
+                async def _preload_stt():
+                    await asyncio.sleep(3)  # let TTS greeting finish first
+                    if self.stt_adapter and not self.stt_adapter.is_loaded:
+                        print("[STT] Preloading model...")
+                        try:
+                            loaded = await self.stt_adapter.load()
+                            if loaded:
+                                print(f"[OK] STT model preloaded")
+                        except Exception as e:
+                            print(f"[WARN] STT preload failed: {e}")
+                asyncio.create_task(_preload_stt())
+
             try:
                 while True:
                     await asyncio.sleep(0.1)
