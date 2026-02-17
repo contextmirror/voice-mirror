@@ -198,30 +198,6 @@ mod inner {
                 .collect()
         }
 
-        /// Split text into sentences at punctuation boundaries.
-        fn split_sentences(text: &str) -> Vec<String> {
-            let mut sentences = Vec::new();
-            let mut current = String::new();
-
-            for ch in text.chars() {
-                current.push(ch);
-                if matches!(ch, '.' | '!' | '?' | ';') {
-                    let trimmed = current.trim().to_string();
-                    if !trimmed.is_empty() {
-                        sentences.push(trimmed);
-                    }
-                    current.clear();
-                }
-            }
-
-            let trimmed = current.trim().to_string();
-            if !trimmed.is_empty() {
-                sentences.push(trimmed);
-            }
-
-            sentences
-        }
-
         /// Run inference for a single chunk of tokens.
         fn infer_chunk(
             &self,
@@ -287,41 +263,49 @@ mod inner {
                     _ => "en-us",
                 };
 
-                let sentences = Self::split_sentences(&text);
+                // Phonemize the full text at once so espeak-ng preserves
+                // natural prosody across sentence boundaries.
+                let phonemes = Self::phonemize(&text, lang)?;
+                let mut tokens = self.tokenize(&phonemes);
+
+                if tokens.is_empty() {
+                    anyhow::bail!("No phoneme tokens for input text");
+                }
+
+                debug!(
+                    phoneme_count = phonemes.len(),
+                    token_count = tokens.len(),
+                    "Phonemized"
+                );
+
                 let mut all_audio = Vec::new();
 
-                /// Silence gap between sentences (150ms at 24kHz).
-                const SENTENCE_GAP_SAMPLES: usize = 3600;
+                // The space token (16) marks word boundaries — prefer
+                // splitting there when chunking long sequences.
+                const SPACE_TOKEN: i64 = 16;
 
-                for (i, sentence) in sentences.iter().enumerate() {
+                while !tokens.is_empty() {
                     if self.interrupted.load(Ordering::SeqCst) {
                         debug!("Kokoro synthesis interrupted");
                         break;
                     }
 
-                    let phonemes = Self::phonemize(sentence, lang)?;
-                    let mut tokens = self.tokenize(&phonemes);
+                    let chunk = if tokens.len() <= MAX_PHONEME_TOKENS {
+                        std::mem::take(&mut tokens)
+                    } else {
+                        // Find the last space token within the limit for a
+                        // clean word-boundary split.
+                        let search_end = MAX_PHONEME_TOKENS;
+                        let split_at = tokens[..search_end]
+                            .iter()
+                            .rposition(|&t| t == SPACE_TOKEN)
+                            .map(|p| p + 1) // include the space in the first chunk
+                            .unwrap_or(search_end);
+                        tokens.drain(..split_at).collect()
+                    };
 
-                    if tokens.is_empty() {
-                        continue;
-                    }
-
-                    // Add silence gap between sentences (not before the first)
-                    if i > 0 && !all_audio.is_empty() {
-                        all_audio.extend(std::iter::repeat(0.0f32).take(SENTENCE_GAP_SAMPLES));
-                    }
-
-                    // Chunk tokens if exceeding max length
-                    while !tokens.is_empty() {
-                        if self.interrupted.load(Ordering::SeqCst) {
-                            break;
-                        }
-
-                        let chunk_len = tokens.len().min(MAX_PHONEME_TOKENS);
-                        let chunk: Vec<i64> = tokens.drain(..chunk_len).collect();
-                        let audio = self.infer_chunk(&chunk, voice_data)?;
-                        all_audio.extend_from_slice(&audio);
-                    }
+                    let audio = self.infer_chunk(&chunk, voice_data)?;
+                    all_audio.extend_from_slice(&audio);
                 }
 
                 if all_audio.is_empty() {
