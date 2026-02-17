@@ -23,6 +23,9 @@ let orbPreviewStateIdx = 0;
 let orbPreviewCycleTimer = null;
 let orbPreviewPhaseStart = 0;
 
+// ========== Custom Theme Management ==========
+let _customThemes = [];
+
 // ========== Custom Font Management ==========
 const _injectedFontStyles = new Map();
 
@@ -31,7 +34,7 @@ function gatherColors() {
     const colors = {};
     for (const key of APPEARANCE_COLOR_KEYS) {
         const picker = document.getElementById(`color-${key}`);
-        colors[key] = picker ? picker.value : PRESETS.dark.colors[key];
+        colors[key] = picker ? picker.value : PRESETS.colorblind.colors[key];
     }
     return colors;
 }
@@ -39,8 +42,8 @@ function gatherColors() {
 /** Gather current font select values */
 function gatherFonts() {
     return {
-        fontFamily: document.getElementById('font-family-select')?.value || PRESETS.dark.fonts.fontFamily,
-        fontMono: document.getElementById('font-mono-select')?.value || PRESETS.dark.fonts.fontMono,
+        fontFamily: document.getElementById('font-family-select')?.value || PRESETS.colorblind.fonts.fontFamily,
+        fontMono: document.getElementById('font-mono-select')?.value || PRESETS.colorblind.fonts.fontMono,
     };
 }
 
@@ -51,7 +54,7 @@ function applyLiveTheme() {
 
 /** Select a preset theme -- updates pickers, fonts, and applies live */
 function selectPreset(presetKey) {
-    const preset = PRESETS[presetKey];
+    const preset = PRESETS[presetKey] || _customThemes.find(t => t.key === presetKey);
     if (!preset) return;
 
     state._activeThemePreset = presetKey;
@@ -82,8 +85,8 @@ function selectPreset(presetKey) {
 
 /** Check if colors differ from preset and show badge */
 function markCustomized() {
-    if (!state._activeThemePreset || !PRESETS[state._activeThemePreset]) return;
-    const preset = PRESETS[state._activeThemePreset];
+    const preset = PRESETS[state._activeThemePreset] || _customThemes.find(t => t.key === state._activeThemePreset);
+    if (!state._activeThemePreset || !preset) return;
     const colors = gatherColors();
     const customized = Object.keys(preset.colors).some(k => colors[k] !== preset.colors[k]);
     state._themeCustomized = customized;
@@ -175,13 +178,28 @@ async function importTheme() {
             document.getElementById('color-picker-grid').style.display = '';
         }
 
-        state._themeCustomized = true;
-        document.querySelectorAll('.theme-preset-card').forEach(card => {
-            card.classList.remove('active');
-            card.classList.remove('customized');
+        // Save as a custom theme preset
+        const customKey = `custom-${Date.now()}`;
+        const customName = (result.data?.name && result.data.name !== 'My Theme')
+            ? result.data.name : 'Custom';
+        const customTheme = {
+            key: customKey,
+            name: customName,
+            colors: { ...validation.colors },
+            fonts: validation.fonts ? { ...validation.fonts } : gatherFonts(),
+        };
+        _customThemes.push(customTheme);
+
+        // Persist to config
+        window.voiceMirror.config.update({
+            appearance: { customThemes: _customThemes.map(t => ({ key: t.key, name: t.name, colors: t.colors, fonts: t.fonts })) }
         });
 
-        applyLiveTheme();
+        // Re-render custom theme cards and select the new one
+        renderCustomThemes();
+        selectPreset(customKey);
+
+        log.info('Imported theme saved as custom preset:', customName);
     } catch (err) {
         log.error('Theme import failed:', err);
     }
@@ -433,11 +451,12 @@ function initMessageCardControls() {
  */
 export async function loadAppearanceUI() {
     const appearance = state.currentConfig.appearance || {};
-    const themeName = appearance.theme || 'dark';
-    const preset = PRESETS[themeName] || PRESETS.dark;
+    const themeName = appearance.theme || 'colorblind';
+    const isCustomTheme = _customThemes.some(t => t.key === themeName);
+    const preset = PRESETS[themeName] || _customThemes.find(t => t.key === themeName) || PRESETS.colorblind;
 
-    state._activeThemePreset = PRESETS[themeName] ? themeName : 'dark';
-    state._themeCustomized = !!appearance.colors;
+    state._activeThemePreset = (PRESETS[themeName] || isCustomTheme) ? themeName : 'colorblind';
+    state._themeCustomized = !!appearance.colors && !isCustomTheme;
 
     // Update preset cards
     document.querySelectorAll('.theme-preset-card').forEach(card => {
@@ -452,9 +471,9 @@ export async function loadAppearanceUI() {
     const activeColors = appearance.colors || preset.colors;
     for (const key of APPEARANCE_COLOR_KEYS) {
         const picker = document.getElementById(`color-${key}`);
-        if (picker) picker.value = activeColors[key] || PRESETS.dark.colors[key];
+        if (picker) picker.value = activeColors[key] || PRESETS.colorblind.colors[key];
         const hex = document.getElementById(`color-${key}-hex`);
-        if (hex) hex.textContent = activeColors[key] || PRESETS.dark.colors[key];
+        if (hex) hex.textContent = activeColors[key] || PRESETS.colorblind.colors[key];
     }
 
     // Customize toggle
@@ -522,12 +541,14 @@ export async function loadAppearanceUI() {
  * Called by saveSettings() in the coordinator.
  */
 export function buildAppearanceSaveData() {
-    const themeName = state._activeThemePreset || 'dark';
-    const preset = PRESETS[themeName] || PRESETS.dark;
+    const themeName = state._activeThemePreset || 'colorblind';
+    const preset = PRESETS[themeName] || _customThemes.find(t => t.key === themeName) || PRESETS.colorblind;
     const currentColors = gatherColors();
     const currentFonts = gatherFonts();
 
-    const colorsCustomized = state._themeCustomized ||
+    // Custom themes always save colors (no built-in preset to fall back to)
+    const isCustomTheme = themeName.startsWith('custom-');
+    const colorsCustomized = isCustomTheme || state._themeCustomized ||
         Object.keys(preset.colors).some(k => currentColors[k] !== preset.colors[k]);
 
     // Message card -- only save if customized from defaults
@@ -577,6 +598,70 @@ export function buildAppearanceSaveData() {
     };
 }
 
+/** Render custom theme cards in the preset grid */
+function renderCustomThemes() {
+    const grid = document.getElementById('theme-preset-grid');
+    if (!grid) return;
+
+    // Remove existing custom cards
+    grid.querySelectorAll('.theme-preset-card[data-custom-key]').forEach(el => el.remove());
+
+    for (const theme of _customThemes) {
+        const card = document.createElement('div');
+        card.className = 'theme-preset-card';
+        card.dataset.preset = theme.key;
+        card.dataset.customKey = theme.key;
+        card.style.position = 'relative';
+
+        const swatches = document.createElement('div');
+        swatches.className = 'preset-swatches';
+        for (const color of [theme.colors.bg, theme.colors.accent, theme.colors.text, theme.colors.orbCore]) {
+            const dot = document.createElement('div');
+            dot.className = 'preset-swatch';
+            dot.style.background = color;
+            swatches.appendChild(dot);
+        }
+        card.appendChild(swatches);
+
+        const name = document.createElement('span');
+        name.className = 'preset-name';
+        name.textContent = theme.name;
+        card.appendChild(name);
+
+        const badge = document.createElement('span');
+        badge.className = 'preset-badge';
+        badge.textContent = 'Customized';
+        card.appendChild(badge);
+
+        // Delete button (X)
+        const del = document.createElement('button');
+        del.className = 'preset-delete';
+        del.textContent = '\u00d7';
+        del.title = 'Remove theme';
+        del.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const wasActive = state._activeThemePreset === theme.key;
+            _customThemes = _customThemes.filter(t => t.key !== theme.key);
+            window.voiceMirror.config.update({
+                appearance: { customThemes: _customThemes.map(t => ({ key: t.key, name: t.name, colors: t.colors, fonts: t.fonts })) }
+            });
+            renderCustomThemes();
+            if (wasActive) selectPreset('colorblind');
+        });
+        card.appendChild(del);
+
+        card.addEventListener('click', () => selectPreset(theme.key));
+        grid.appendChild(card);
+    }
+
+    // Update active state
+    if (state._activeThemePreset) {
+        grid.querySelectorAll('.theme-preset-card').forEach(card => {
+            card.classList.toggle('active', card.dataset.preset === state._activeThemePreset);
+        });
+    }
+}
+
 /**
  * Initialize appearance tab -- preset cards, color pickers, orb preview, import/export.
  * Called by initSettings() in the coordinator.
@@ -615,6 +700,12 @@ export function initAppearanceTab() {
         card.addEventListener('click', () => selectPreset(key));
         grid.appendChild(card);
     }
+
+    // Load and render custom themes from config
+    window.voiceMirror.config.get().then(config => {
+        _customThemes = (config.appearance?.customThemes || []).filter(t => t.key && t.colors);
+        if (_customThemes.length > 0) renderCustomThemes();
+    }).catch(() => {});
 
     // Customize toggle
     const toggle = document.getElementById('customize-colors-toggle');

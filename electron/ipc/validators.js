@@ -153,9 +153,9 @@ const validators = {
         }
       }
       if (s.appearance.theme !== undefined) {
-        const VALID_THEMES = ['dark', 'midnight', 'emerald', 'rose', 'slate', 'black', 'gray', 'custom'];
-        if (typeof s.appearance.theme !== 'string' || !VALID_THEMES.includes(s.appearance.theme)) {
-          errors.push(`appearance.theme must be one of: ${VALID_THEMES.join(', ')}`);
+        const VALID_THEMES = ['colorblind', 'midnight', 'emerald', 'rose', 'slate', 'black', 'gray', 'light', 'custom'];
+        if (typeof s.appearance.theme !== 'string' || (!VALID_THEMES.includes(s.appearance.theme) && !s.appearance.theme.startsWith('custom-'))) {
+          errors.push(`appearance.theme must be one of: ${VALID_THEMES.join(', ')} (or a custom-* key)`);
         }
       }
       if (s.appearance.colors !== undefined && s.appearance.colors !== null) {

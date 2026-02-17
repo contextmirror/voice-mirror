@@ -52,9 +52,9 @@ describe('theme-engine', () => {
     });
 
     describe('presets', () => {
-        it('should define dark preset', () => {
-            assert.ok(src.includes("dark:"));
-            assert.ok(src.includes("name: 'Dark'"));
+        it('should define colorblind preset', () => {
+            assert.ok(src.includes("colorblind:"));
+            assert.ok(src.includes("name: 'Colorblind'"));
         });
         it('should define midnight preset', () => {
             assert.ok(src.includes("midnight:"));
@@ -135,8 +135,8 @@ describe('theme-engine', () => {
     });
 
     describe('resolveTheme', () => {
-        it('should fall back to dark preset when theme is unknown', () => {
-            assert.ok(src.includes("PRESETS[themeName] || PRESETS.dark"));
+        it('should fall back to colorblind preset when theme is unknown', () => {
+            assert.ok(src.includes("PRESETS[themeName] || PRESETS.colorblind"));
         });
         it('should use custom colors when provided', () => {
             assert.ok(src.includes("appearance.colors || preset.colors"));

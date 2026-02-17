@@ -1510,6 +1510,30 @@
     display: block;
 }
 
+.theme-preset-card .preset-delete {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-size: 14px;
+    line-height: 1;
+    padding: 0 3px;
+    cursor: pointer;
+    display: none;
+    -webkit-app-region: no-drag;
+    z-index: 10001;
+}
+
+.theme-preset-card:hover .preset-delete {
+    display: block;
+}
+
+.theme-preset-card .preset-delete:hover {
+    color: var(--danger);
+}
+
 .theme-actions {
     display: flex;
     gap: 8px;

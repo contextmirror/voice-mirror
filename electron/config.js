@@ -54,7 +54,7 @@ const DEFAULT_CONFIG = {
     // Appearance
     appearance: {
         orbSize: 64,
-        theme: 'dark',
+        theme: 'colorblind',
         panelWidth: 500,
         panelHeight: 700,
         colors: null,    // null = use preset from theme, object = custom { bg, bgElevated, ... }

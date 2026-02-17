@@ -88,6 +88,13 @@ function showWhatsNewBanner(version) {
 
     banner.style.display = '';
     banner.className = 'success';
+
+    // Show dismiss button for post-update banner (not needed for update/restart banners)
+    const dismissBtn = document.getElementById('update-banner-dismiss');
+    if (dismissBtn) {
+        dismissBtn.style.display = '';
+        dismissBtn.onclick = () => { banner.style.display = 'none'; };
+    }
 }
 
 /**

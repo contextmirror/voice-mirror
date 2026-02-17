@@ -472,6 +472,23 @@
     background: var(--danger, #ef4444);
 }
 
+#sidebar-update-banner #update-banner-dismiss {
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-size: 16px;
+    line-height: 1;
+    padding: 0 2px;
+    cursor: pointer;
+    flex-shrink: 0;
+    -webkit-app-region: no-drag;
+    z-index: 10001;
+}
+
+#sidebar-update-banner #update-banner-dismiss:hover {
+    color: var(--text);
+}
+
 /* Collapsed sidebar: icon only */
 #sidebar.collapsed #sidebar-update-banner {
     justify-content: center;
@@ -479,7 +496,8 @@
 }
 
 #sidebar.collapsed #sidebar-update-banner #update-banner-text,
-#sidebar.collapsed #sidebar-update-banner #update-banner-btn {
+#sidebar.collapsed #sidebar-update-banner #update-banner-btn,
+#sidebar.collapsed #sidebar-update-banner #update-banner-dismiss {
     display: none;
 }
 
