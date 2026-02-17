@@ -115,6 +115,26 @@ function minimizeWindow() {
 }
 
 /**
+ * Maximize or restore window
+ */
+function maximizeWindow() {
+    window.voiceMirror.maximizeWindow().then(result => {
+        if (result?.data) updateMaximizeIcon(result.data.maximized);
+    });
+}
+
+function updateMaximizeIcon(maximized) {
+    const btn = document.querySelector('.win-maximize');
+    if (!btn) return;
+    btn.innerHTML = maximized
+        ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><rect x="7" y="3" width="14" height="14" rx="1"/><path d="M3 7v12a2 2 0 0 0 2 2h12"/></svg>'
+        : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><rect x="5" y="5" width="14" height="14" rx="1"/></svg>';
+    // Toggle maximized class on panel to remove border-radius
+    const panel = document.getElementById('panel');
+    if (panel) panel.classList.toggle('maximized', maximized);
+}
+
+/**
  * Quit the application
  */
 function quitApp() {
@@ -280,8 +300,13 @@ async function init() {
 
     // Listen for state changes from main process
     window.voiceMirror.onStateChange((data) => {
-        state.isExpanded = data.expanded;
-        updateUI();
+        if (data.expanded !== undefined) {
+            state.isExpanded = data.expanded;
+            updateUI();
+        }
+        if (data.maximized !== undefined) {
+            updateMaximizeIcon(data.maximized);
+        }
     });
 
     // Listen for voice events
@@ -595,6 +620,7 @@ window.sendImage = sendImage;
 window.cancelImage = cancelImage;
 window.copyMessage = copyMessage;
 window.minimizeWindow = minimizeWindow;
+window.maximizeWindow = maximizeWindow;
 window.quitApp = quitApp;
 window.updateWelcomeMessage = updateWelcomeMessage;
 // Terminal functions (from terminal.js)

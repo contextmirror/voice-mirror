@@ -10,13 +10,50 @@
     border-radius: var(--radius-xl);
     border: 1px solid var(--border-strong);
     box-shadow: var(--shadow-lg), 0 0 0 1px rgba(255, 255, 255, 0.03);
-    flex-direction: row; /* Changed from column to row for sidebar layout */
+    flex-direction: column; /* Titlebar on top, panel-body below */
     overflow: hidden;
 }
 
 #panel.visible {
     display: flex;
     animation: scale-in var(--duration-slow) var(--ease-out);
+}
+
+/* ========== Titlebar ========== */
+#titlebar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 40px;
+    min-height: 40px;
+    padding: 0 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+    -webkit-app-region: drag;
+}
+
+#titlebar .titlebar-logo {
+    width: 20px;
+    height: 20px;
+    object-fit: contain;
+    flex-shrink: 0;
+}
+
+#titlebar .titlebar-title {
+    color: var(--text-strong);
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+    margin-right: auto;
+}
+
+/* ========== Panel Body ========== */
+#panel-body {
+    display: flex;
+    flex-direction: row;
+    flex: 1;
+    overflow: hidden;
+    min-height: 0;
 }
 
 /* Control buttons */

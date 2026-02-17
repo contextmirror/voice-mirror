@@ -234,6 +234,7 @@ contextBridge.exposeInMainWorld('voiceMirror', {
 
     // Window controls
     minimizeWindow: () => ipcRenderer.invoke('minimize-window'),
+    maximizeWindow: () => ipcRenderer.invoke('maximize-window'),
     quitApp: () => ipcRenderer.invoke('quit-app'),
 
     // Frameless window resize (transparent windows lack native resize edges)

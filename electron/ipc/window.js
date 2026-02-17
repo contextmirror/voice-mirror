@@ -34,6 +34,11 @@ function registerWindowHandlers(ctx, validators) {
         return { success: true };
     });
 
+    ipcMain.handle('maximize-window', () => {
+        const maximized = ctx.toggleMaximize();
+        return { success: true, data: { maximized } };
+    });
+
     ipcMain.handle('get-window-position', () => {
         const mainWindow = ctx.getMainWindow();
         if (mainWindow) {

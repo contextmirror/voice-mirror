@@ -19,58 +19,11 @@
     min-width: 48px;
 }
 
-/* ========== Sidebar Header ========== */
-#sidebar-header {
-    padding: 14px 16px;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    border-bottom: 1px solid var(--border);
-    -webkit-app-region: drag;
-    min-height: 60px;
-}
-
-#sidebar-header .sidebar-logo {
-    width: 28px;
-    height: 28px;
-    object-fit: contain;
-    flex-shrink: 0;
-    cursor: pointer;
-    -webkit-app-region: no-drag;
-    transition: transform var(--duration-fast) var(--ease-out);
-}
-
-#sidebar-header .sidebar-logo:hover {
-    transform: scale(1.1);
-}
-
-#sidebar-header .sidebar-title {
-    color: var(--text-strong);
-    font-size: 15px;
-    font-weight: 600;
-    white-space: nowrap;
-    opacity: 1;
-    transition: opacity var(--duration-fast) var(--ease-out);
-}
-
-#sidebar.collapsed #sidebar-header .sidebar-title {
-    opacity: 0;
-    width: 0;
-    overflow: hidden;
-}
-
-#sidebar.collapsed #sidebar-header {
-    padding: 14px 0;
-    justify-content: center;
-    gap: 0;
-}
-
-/* ========== Window Controls ========== */
+/* ========== Window Controls (in titlebar) ========== */
 .window-controls {
-    margin-left: auto;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     -webkit-app-region: no-drag;
 }
 
@@ -78,11 +31,9 @@
     width: 32px;
     height: 32px;
     border: none;
-    border-radius: 50%;
-    background: rgba(255, 255, 255, 0.08);
+    border-radius: var(--radius-sm);
+    background: transparent;
     color: var(--text-muted);
-    font-size: 16px;
-    line-height: 1;
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -90,6 +41,11 @@
     transition: background var(--duration-fast) var(--ease-out),
                 color var(--duration-fast) var(--ease-out);
     padding: 0;
+}
+
+.win-btn svg {
+    width: 14px;
+    height: 14px;
 }
 
 .win-btn:hover {
@@ -107,14 +63,14 @@
     color: #32d74b;
 }
 
+.win-btn.win-maximize:hover {
+    background: rgba(50, 215, 75, 0.25);
+    color: #32d74b;
+}
+
 .win-btn.win-close:hover {
     background: rgba(255, 69, 58, 0.3);
     color: #ff453a;
-}
-
-/* Hide window controls when sidebar is collapsed */
-#sidebar.collapsed .window-controls {
-    display: none;
 }
 
 /* ========== Chat History Section ========== */

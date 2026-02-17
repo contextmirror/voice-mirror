@@ -586,6 +586,7 @@ app.whenReady().then(() => {
         safeSend,
         expandPanel,
         collapseToOrb,
+        toggleMaximize: () => windowManager?.toggleMaximize(),
         getIsExpanded: () => isExpanded,
         getOrbSize,
         sendToPython,

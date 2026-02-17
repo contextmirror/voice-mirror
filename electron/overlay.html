@@ -58,17 +58,30 @@
 
     <!-- Panel View (expanded) -->
     <div id="panel">
+        <!-- Titlebar (full-width, draggable) -->
+        <div id="titlebar">
+            <img class="titlebar-logo" src="../assets/icon-32.png" alt="Voice Mirror">
+            <span class="titlebar-title">Voice Mirror</span>
+            <div class="window-controls">
+                <button class="win-btn win-collapse" onclick="collapse()" title="Collapse to orb">
+                    <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><circle cx="12" cy="12" r="5"/></svg>
+                </button>
+                <button class="win-btn win-minimize" onclick="minimizeWindow()" title="Minimize">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                </button>
+                <button class="win-btn win-maximize" onclick="maximizeWindow()" title="Maximize">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><rect x="5" y="5" width="14" height="14" rx="1"/></svg>
+                </button>
+                <button class="win-btn win-close" onclick="quitApp()" title="Close">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- Panel Body (sidebar + main content) -->
+        <div id="panel-body">
         <!-- Sidebar Navigation -->
         <aside id="sidebar">
-            <div id="sidebar-header">
-                <img class="sidebar-logo" src="../assets/icon-32.png" alt="Voice Mirror" onclick="collapse()">
-                <span class="sidebar-title">Voice Mirror</span>
-                <div class="window-controls">
-                    <button class="win-btn win-minimize" onclick="minimizeWindow()" title="Minimize to taskbar">─</button>
-                    <button class="win-btn win-collapse" onclick="collapse()" title="Collapse to orb">◉</button>
-                    <button class="win-btn win-close" onclick="quitApp()" title="Quit">×</button>
-                </div>
-            </div>
             <!-- Chat History -->
             <div id="sidebar-chats">
                 <div class="sidebar-section-header">
@@ -366,6 +379,7 @@
                 <span id="perf-ctx" style="display:none">CTX: --</span>
             </div>
         </main>
+        </div><!-- /panel-body -->
     </div>
 
     <!-- Disclaimer Modal (shown on first launch before anything else) -->

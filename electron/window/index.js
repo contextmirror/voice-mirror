@@ -50,6 +50,8 @@ function createWindowManager(options = {}) {
 
     let mainWindow = null;
     let isExpanded = false;
+    let isManualMaximized = false;
+    let preMaximizeBounds = null;
     let overlayInterval = null;
     let x11WindowId = null;
     let moveDebounce = null;
@@ -276,6 +278,11 @@ function createWindowManager(options = {}) {
             mainWindow.setAlwaysOnTop(false);  // Allow other windows to cover when expanded
             mainWindow.focus();
             logger.info('[Window]', 'Expanded to panel:', panelWidth, 'x', panelHeight);
+            // Restore maximized state if it was saved
+            const cfg = getConfig();
+            if (cfg?.window?.maximized) {
+                toggleMaximize();
+            }
             // Re-register hotkeys after compositor settles
             if (onWindowStateChanged) setTimeout(onWindowStateChanged, 150);
         }, 50);
@@ -310,8 +317,10 @@ function createWindowManager(options = {}) {
         const { x: restoreX, y: restoreY } = clampToVisibleArea(rawRestoreX, rawRestoreY, orbSize, orbSize);
 
         isExpanded = false;
+        isManualMaximized = false;
+        preMaximizeBounds = null;
         startOverlayEnforcer();
-        updateConfig({ window: { expanded: false } });
+        updateConfig({ window: { expanded: false, maximized: false } });
 
         // Send state change first so UI updates
         mainWindow.webContents.send('state-change', { expanded: false });
@@ -327,6 +336,40 @@ function createWindowManager(options = {}) {
             // Re-register hotkeys after compositor settles
             if (onWindowStateChanged) setTimeout(onWindowStateChanged, 150);
         }, 50);
+    }
+
+    /**
+     * Toggle maximize: fill the work area or restore to previous size.
+     * Manual implementation because Electron's maximize() doesn't work
+     * properly with transparent frameless windows on Windows.
+     * @returns {boolean} Whether the window is now maximized
+     */
+    function toggleMaximize() {
+        if (!mainWindow || !isExpanded) return false;
+
+        if (isManualMaximized) {
+            // Restore to previous bounds
+            if (preMaximizeBounds) {
+                mainWindow.setBounds(preMaximizeBounds);
+            }
+            isManualMaximized = false;
+            updateConfig({ window: { maximized: false } });
+            mainWindow.webContents.send('state-change', { maximized: false });
+            logger.info('[Window]', 'Restored from maximize');
+        } else {
+            // Save current bounds and fill work area
+            preMaximizeBounds = mainWindow.getBounds();
+            const nearest = screen.getDisplayNearestPoint({
+                x: preMaximizeBounds.x + Math.floor(preMaximizeBounds.width / 2),
+                y: preMaximizeBounds.y + Math.floor(preMaximizeBounds.height / 2)
+            });
+            mainWindow.setBounds(nearest.workArea);
+            isManualMaximized = true;
+            updateConfig({ window: { maximized: true } });
+            mainWindow.webContents.send('state-change', { maximized: true });
+            logger.info('[Window]', 'Maximized to', nearest.workArea.width, 'x', nearest.workArea.height);
+        }
+        return isManualMaximized;
     }
 
     /**
@@ -357,6 +400,7 @@ function createWindowManager(options = {}) {
         create,
         expand,
         collapse,
+        toggleMaximize,
         getWindow,
         getIsExpanded,
         getCurrentOrbSize
