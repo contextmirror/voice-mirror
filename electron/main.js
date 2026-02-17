@@ -111,7 +111,6 @@ let appConfig = null;
 let voiceReadyTimeout = null;
 let startupPinger = null;
 let aiStartupTimeout = null;
-let aiReadyCheckInterval = null;
 
 /** Send IPC to mainWindow only if it still exists and isn't destroyed. */
 function safeSend(channel, data) {
@@ -652,18 +651,29 @@ app.whenReady().then(async () => {
             });
 
             // Track console messages from the webview
-            guestWebContents.on('console-message', (event) => {
+            const onConsoleMessage = (event) => {
                 browserController.trackConsoleMessage({ level: event.level, message: event.message, timestamp: Date.now() });
-            });
+            };
+            guestWebContents.on('console-message', onConsoleMessage);
 
             // Notify renderer of URL changes
-            guestWebContents.on('did-navigate', (e, url) => {
+            const onDidNavigate = (e, url) => {
                 safeSend('browser-status', { url });
-            });
-            guestWebContents.on('did-navigate-in-page', (e, url, isMainFrame) => {
+            };
+            const onDidNavigateInPage = (e, url, isMainFrame) => {
                 if (isMainFrame) {
                     safeSend('browser-status', { url });
                 }
+            };
+            guestWebContents.on('did-navigate', onDidNavigate);
+            guestWebContents.on('did-navigate-in-page', onDidNavigateInPage);
+
+            // Clean up listeners when the guest webContents is destroyed
+            // to prevent closures from preventing GC
+            guestWebContents.once('destroyed', () => {
+                guestWebContents.removeListener('console-message', onConsoleMessage);
+                guestWebContents.removeListener('did-navigate', onDidNavigate);
+                guestWebContents.removeListener('did-navigate-in-page', onDidNavigateInPage);
             });
         } catch (err) {
             logger.error('[Voice Mirror]', 'Failed to attach webview debugger:', err.message);
@@ -810,7 +820,6 @@ app.on('before-quit', async () => {
 
     // Clean up startup timers
     if (aiStartupTimeout) { clearTimeout(aiStartupTimeout); aiStartupTimeout = null; }
-    if (aiReadyCheckInterval) { clearInterval(aiReadyCheckInterval); aiReadyCheckInterval = null; }
     if (startupPinger) { clearInterval(startupPinger); startupPinger = null; }
     if (voiceReadyTimeout) { clearTimeout(voiceReadyTimeout); voiceReadyTimeout = null; }
 

@@ -84,6 +84,8 @@ fn decode_mp3_to_f32(mp3_bytes: &[u8]) -> anyhow::Result<Vec<f32>> {
     use symphonia::core::meta::MetadataOptions;
     use symphonia::core::probe::Hint;
 
+    // .to_vec() is required: MediaSourceStream::new takes Box<dyn MediaSource> which
+    // implies 'static, so Cursor<&[u8]> (borrowed) cannot be used here.
     let cursor = std::io::Cursor::new(mp3_bytes.to_vec());
     let mss = MediaSourceStream::new(Box::new(cursor), Default::default());
 
@@ -403,6 +405,12 @@ impl TtsEngine for OpenAiTts {
                 .map_err(|e| anyhow::anyhow!("Failed to read OpenAI TTS response: {}", e))?;
 
             // Convert i16 PCM to f32 samples
+            if bytes.len() % 2 != 0 {
+                warn!(
+                    len = bytes.len(),
+                    "OpenAI TTS PCM response has odd byte count; trailing byte will be ignored (possible data corruption)"
+                );
+            }
             let samples: Vec<f32> = bytes
                 .chunks_exact(2)
                 .map(|chunk| {

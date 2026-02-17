@@ -72,7 +72,7 @@ async function configureMCPServer(appConfig) {
     const configHash = crypto.createHash('sha256').update(enabledGroups).digest('hex');
     if (_lastMcpConfigHash === configHash) {
         logger.info('[Claude Spawner]', 'MCP config unchanged, skipping writes');
-        return;
+        return enabledGroups;
     }
 
     const serverEntry = {
@@ -129,6 +129,7 @@ async function configureMCPServer(appConfig) {
     await Promise.all(writePromises);
     _lastMcpConfigHash = configHash;
     logger.info('[Claude Spawner]', `MCP settings written to ${writtenCount} locations`);
+    return enabledGroups;
 }
 
 // Cache existsSync results for status line config (paths don't change at runtime)
@@ -265,7 +266,7 @@ async function spawnClaude(options = {}) {
     }
 
     // Configure MCP server with tool profile from config
-    await configureMCPServer(options.appConfig);
+    const enabledGroups = await configureMCPServer(options.appConfig);
 
     // Configure claude-pulse status line
     await configureStatusLine();
@@ -288,10 +289,19 @@ async function spawnClaude(options = {}) {
     const claudeCmd = _resolvedClaudePath || 'claude';
     debugLog(`Using Claude command: ${claudeCmd}`);
 
+    // Build system prompt with Voice Mirror context
+    const { buildClaudeInstructions } = require('./claude-instructions');
+    const instructions = buildClaudeInstructions({
+        userName: options.appConfig?.user?.name || 'User',
+        enabledGroups: enabledGroups || 'core,meta',
+        appVersion: require('../../package.json').version,
+    });
+
     // Start Claude interactively - shows full TUI
     // Voice prompt is injected via PTY after TUI loads (see main.js sendInputWhenReady)
     const claudeArgs = [
-        '--dangerously-skip-permissions'
+        '--dangerously-skip-permissions',
+        '--append-system-prompt', instructions,
     ];
 
     logger.info('[Claude Spawner]', 'Spawning Claude Code PTY...');

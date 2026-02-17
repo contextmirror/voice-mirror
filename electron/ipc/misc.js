@@ -220,7 +220,7 @@ function registerMiscHandlers(ctx, validators) {
                 // Ollama — extract version from `ollama --version`
                 try {
                     const ollamaVersion = await new Promise((resolve) => {
-                        execFile('ollama', ['--version'], { timeout: 5000, windowsHide: true, shell: true }, (err, stdout) => {
+                        execFile('ollama', ['--version'], { timeout: 5000, windowsHide: true }, (err, stdout) => {
                             if (err) return resolve(null);
                             const match = stdout.match(/(\d+\.\d+\.\d+)/);
                             resolve(match ? match[1] : null);

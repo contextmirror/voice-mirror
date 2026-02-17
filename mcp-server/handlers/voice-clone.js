@@ -209,15 +209,15 @@ async function handleCloneVoice(args) {
                         downloadedFile = sourceAudioPath;
                     }
                 } else {
+                    // Use HTTPS for external downloads to prevent cleartext transmission
+                    if (!audioUrl.startsWith('https')) {
+                        throw new Error('HTTPS required for audio downloads from external URLs');
+                    }
                     // Try curl first (fast, follows redirects), fall back to Node.js https
                     try {
                         execFileSync('curl', ['-L', '-o', downloadPath, audioUrl], { timeout: 30000 });
                     } catch {
                         const https = require('https');
-                        // Use HTTPS for external downloads to prevent cleartext transmission
-                        if (!audioUrl.startsWith('https')) {
-                            throw new Error('HTTPS required for audio downloads from external URLs');
-                        }
                         await new Promise((resolve, reject) => {
                             const follow = (url) => {
                                 https.get(url, (res) => {

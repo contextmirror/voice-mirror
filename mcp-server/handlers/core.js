@@ -55,6 +55,7 @@ function acquireListenerLock(instanceId) {
         return { success: true };
     } catch (err) {
         // On error, assume we can acquire (fail open for resilience)
+        console.warn('[MCP Core] acquireListenerLock failed, proceeding anyway:', err?.message || err);
         return { success: true };
     }
 }
@@ -368,7 +369,7 @@ async function handleClaudeListen(args) {
                 if (!fs.existsSync(CLAUDE_MESSAGES_PATH)) return null;
                 const data = JSON.parse(fs.readFileSync(CLAUDE_MESSAGES_PATH, 'utf-8'));
                 const messages = data.messages || [];
-                let fromSenderMsgs = messages.filter(m => m.from === fromSender);
+                let fromSenderMsgs = messages.filter(m => m.from.toLowerCase() === fromSender.toLowerCase());
                 if (threadFilter) {
                     fromSenderMsgs = fromSenderMsgs.filter(m => m.thread_id === threadFilter);
                 }

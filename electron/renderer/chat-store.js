@@ -10,6 +10,8 @@ const log = createLog('[ChatStore]');
 
 let currentChatId = null;
 let contextMenuEl = null;
+let _ctxClickHandler = null;
+let _ctxKeydownHandler = null;
 
 /**
  * Initialize chat store: wire up sidebar controls and load chat list.
@@ -286,13 +288,13 @@ function getOrCreateContextMenu() {
     contextMenuEl.appendChild(renameBtn);
     document.body.appendChild(contextMenuEl);
 
-    // Dismiss on click outside
-    document.addEventListener('click', (e) => {
+    // Handler references are stored so they can be removed when menu hides
+    _ctxClickHandler = (e) => {
         if (!contextMenuEl.contains(e.target)) hideChatContextMenu();
-    });
-    document.addEventListener('keydown', (e) => {
+    };
+    _ctxKeydownHandler = (e) => {
         if (e.key === 'Escape') hideChatContextMenu();
-    });
+    };
 
     return contextMenuEl;
 }
@@ -300,6 +302,10 @@ function getOrCreateContextMenu() {
 function showChatContextMenu(x, y, chatId) {
     const menu = getOrCreateContextMenu();
     menu.classList.remove('hidden');
+
+    // Attach dismiss listeners each time the menu is shown
+    document.addEventListener('click', _ctxClickHandler);
+    document.addEventListener('keydown', _ctxKeydownHandler);
     menu.style.left = `${x}px`;
     menu.style.top = `${y}px`;
 
@@ -324,6 +330,8 @@ function showChatContextMenu(x, y, chatId) {
 
 function hideChatContextMenu() {
     if (contextMenuEl) contextMenuEl.classList.add('hidden');
+    if (_ctxClickHandler) document.removeEventListener('click', _ctxClickHandler);
+    if (_ctxKeydownHandler) document.removeEventListener('keydown', _ctxKeydownHandler);
 }
 
 /**
@@ -356,6 +364,7 @@ function startInlineRename(chatId) {
     const commit = async () => {
         if (committed) return;
         committed = true;
+        input.removeEventListener('blur', onBlur);
 
         const newName = input.value.trim();
         if (newName && newName !== currentName) {
@@ -371,12 +380,15 @@ function startInlineRename(chatId) {
     const cancel = async () => {
         if (committed) return;
         committed = true;
+        input.removeEventListener('blur', onBlur);
         await loadChatList();
     };
+
+    const onBlur = () => commit();
 
     input.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') { e.preventDefault(); commit(); }
         if (e.key === 'Escape') { e.preventDefault(); cancel(); }
     });
-    input.addEventListener('blur', commit);
+    input.addEventListener('blur', onBlur);
 }

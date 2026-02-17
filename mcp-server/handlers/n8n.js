@@ -72,7 +72,7 @@ function apiRequest(endpoint, method = 'GET', data = null) {
             const chunks = [];
             res.on('data', chunk => chunks.push(chunk));
             res.on('end', () => {
-                const body = chunks.join('');
+                const body = Buffer.concat(chunks).toString();
                 if (res.statusCode >= 200 && res.statusCode < 300) {
                     try {
                         resolve(JSON.parse(body));
@@ -125,7 +125,7 @@ function rawRequest(url, method = 'POST', data = null, headers = {}, timeout = 6
             const chunks = [];
             res.on('data', chunk => chunks.push(chunk));
             res.on('end', () => {
-                const body = chunks.join('');
+                const body = Buffer.concat(chunks).toString();
                 if (res.statusCode >= 200 && res.statusCode < 300) {
                     try { resolve(JSON.parse(body)); } catch { resolve(body); }
                 } else {

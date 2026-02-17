@@ -492,9 +492,11 @@ export function minimizeTerminal() {
             }
         }
     };
-    terminalContainer.addEventListener('transitionend', onTransitionEnd);
+    terminalContainer.addEventListener('transitionend', onTransitionEnd, { once: true });
 
-    // Fallback: clean up transition class if transitionend doesn't fire
+    // Fallback: clean up transition class if transitionend doesn't fire.
+    // The { once: true } on addEventListener ensures the listener auto-removes
+    // if it does fire, so this only handles the case where it never fires.
     setTimeout(() => {
         terminalContainer.removeEventListener('transitionend', onTransitionEnd);
         terminalContainer.classList.remove('transitioning');

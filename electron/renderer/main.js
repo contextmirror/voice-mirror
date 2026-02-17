@@ -51,6 +51,7 @@ export async function updateWelcomeMessage() {
         const config = await window.voiceMirror.config.get();
         const mode = config.behavior?.activationMode || 'wakeWord';
         const welcomeBubble = document.getElementById('welcome-bubble');
+        if (!welcomeBubble) return;
         const copyBtn = welcomeBubble.querySelector('.message-copy-btn');
 
         // Build provider prefix if available
@@ -76,7 +77,8 @@ export async function updateWelcomeMessage() {
         welcomeBubble.innerHTML = message + copyBtn.outerHTML;
     } catch (err) {
         log.error('Failed to load welcome config:', err);
-        document.getElementById('welcome-bubble').textContent = 'Ready to assist.';
+        const fallback = document.getElementById('welcome-bubble');
+        if (fallback) fallback.textContent = 'Ready to assist.';
     }
 }
 

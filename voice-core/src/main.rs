@@ -979,9 +979,11 @@ async fn handle_command(cmd: VoiceCommand, app_state: &Arc<Mutex<AppState>>) -> 
                                 }
                                 Ok(None) => {
                                     warn!("Inbox poll timed out for {}", id);
+                                    emit_error("Response timed out — Claude may still be processing");
                                 }
                                 Err(e) => {
                                     warn!("Inbox poll error: {}", e);
+                                    emit_error(&format!("Inbox poll error: {}", e));
                                 }
                             }
                             let mut app = app_clone.lock().unwrap();

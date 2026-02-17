@@ -160,6 +160,7 @@ function registerConfigHandlers(ctx, validators) {
                         ctx.logger.info('[Config]', `New provider started: ${newProvider} (${lastTermCols}x${lastTermRows})`);
                     } catch (err) {
                         ctx.logger.error('[Config]', 'Provider switch error:', err.message);
+                        ctx.safeSend('provider-switch-error', { error: err.message });
                     }
                 });
             }
