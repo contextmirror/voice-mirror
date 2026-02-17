@@ -1,7 +1,7 @@
 //! Speech-to-Text adapters.
 //!
 //! Provides a common `SttEngine` trait with implementations for:
-//! - Local whisper.cpp inference (behind `native-ml` feature)
+//! - Local whisper.cpp inference (behind `whisper` feature)
 //! - OpenAI Whisper API (cloud)
 //! - Custom user-configured API endpoint (cloud)
 

@@ -5,15 +5,15 @@
 //!   2. `embedding_model.onnx` — mel features -> embeddings
 //!   3. `hey_claude_v2.onnx` — accumulated embeddings -> wake word score
 //!
-//! When the `native-ml` feature is disabled, provides a stub that always
+//! When the `onnx` feature is disabled, provides a stub that always
 //! uses energy-based detection as a fallback (never triggers wake word).
 //!
-//! When `native-ml` is enabled but exact tensor shapes cannot be resolved
+//! When `onnx` is enabled but exact tensor shapes cannot be resolved
 //! at runtime (model mismatch, etc.), falls back gracefully to the stub.
 
 use std::path::Path;
 use tracing::warn;
-#[cfg(feature = "native-ml")]
+#[cfg(feature = "onnx")]
 use tracing::info;
 
 /// Detection threshold — score must be >= this to trigger.
@@ -23,9 +23,9 @@ const DETECTION_THRESHOLD: f32 = 0.98;
 const CHUNK_SAMPLES: usize = 1280;
 
 // -----------------------------------------------------------------------
-// native-ml: real ONNX implementation
+// onnx: real ONNX implementation
 // -----------------------------------------------------------------------
-#[cfg(feature = "native-ml")]
+#[cfg(feature = "onnx")]
 mod inner {
     use super::*;
     use ort::session::Session;
@@ -132,44 +132,43 @@ mod inner {
         ///   - embedding output: [1, EMBED_DIM] -> accumulated for classifier
         ///   - classifier input: [1, WINDOW, EMBED_DIM] accumulated embeddings
         fn run_pipeline(&mut self, chunk: &[f32]) -> Result<f32, String> {
-            let mel_session = self.mel_session.as_ref().ok_or("mel model not loaded")?;
-            let embed_session = self.embed_session.as_ref().ok_or("embed model not loaded")?;
-            let ww_session = self.ww_session.as_ref().ok_or("ww model not loaded")?;
+            let mel_session = self.mel_session.as_mut().ok_or("mel model not loaded")?;
+            let embed_session = self.embed_session.as_mut().ok_or("embed model not loaded")?;
+            let ww_session = self.ww_session.as_mut().ok_or("ww model not loaded")?;
 
             // Stage 1: audio -> mel spectrogram
-            // Input: raw audio as [1, 1280] f32
             let audio_input = ort::value::Value::from_array(
-                ndarray::Array2::from_shape_vec((1, CHUNK_SAMPLES), chunk.to_vec())
-                    .map_err(|e| format!("mel input tensor: {e}"))?,
+                ([1, CHUNK_SAMPLES], chunk.to_vec()),
             )
             .map_err(|e| format!("mel input value: {e}"))?;
 
+            let mel_inputs = ort::inputs!["input" => audio_input];
             let mel_outputs = mel_session
-                .run(ort::inputs!["input" => audio_input].map_err(|e| format!("mel inputs: {e}"))?)
+                .run(mel_inputs)
                 .map_err(|e| format!("mel inference: {e}"))?;
 
-            let mel_output = &mel_outputs[0];
-
             // Stage 2: mel features -> embedding
-            // Pass mel output directly to embedding model
-            let embed_input = mel_output
+            // Extract mel output data and re-create as input tensor
+            let (mel_shape, mel_data) = mel_outputs[0]
                 .try_extract_tensor::<f32>()
                 .map_err(|e| format!("extract mel output: {e}"))?;
 
-            let embed_input_val = ort::value::Value::from_array(embed_input.to_owned())
-                .map_err(|e| format!("embed input value: {e}"))?;
+            // Re-create tensor from extracted shape + data
+            let mel_dims: Vec<usize> = mel_shape.iter().map(|&d| d as usize).collect();
+            let embed_input_val = ort::value::Value::from_array(
+                (mel_dims, mel_data.to_vec()),
+            )
+            .map_err(|e| format!("embed input value: {e}"))?;
 
+            let embed_inputs = ort::inputs!["input" => embed_input_val];
             let embed_outputs = embed_session
-                .run(
-                    ort::inputs!["input" => embed_input_val]
-                        .map_err(|e| format!("embed inputs: {e}"))?,
-                )
+                .run(embed_inputs)
                 .map_err(|e| format!("embed inference: {e}"))?;
 
-            let embedding = embed_outputs[0]
+            let (_embed_shape, embed_data) = embed_outputs[0]
                 .try_extract_tensor::<f32>()
                 .map_err(|e| format!("extract embedding: {e}"))?;
-            let embed_vec: Vec<f32> = embedding.iter().copied().collect();
+            let embed_vec: Vec<f32> = embed_data.to_vec();
 
             // Accumulate embeddings
             self.embeddings.push(embed_vec);
@@ -184,28 +183,24 @@ mod inner {
             }
 
             // Stage 3: accumulated embeddings -> wake word score
-            // Flatten the embedding window into a single input tensor
             let embed_dim = self.embeddings[0].len();
             let flat: Vec<f32> = self.embeddings.iter().flat_map(|e| e.iter().copied()).collect();
 
             let ww_input = ort::value::Value::from_array(
-                ndarray::Array3::from_shape_vec(
-                    (1, self.embedding_window, embed_dim),
-                    flat,
-                )
-                .map_err(|e| format!("ww input tensor: {e}"))?,
+                ([1, self.embedding_window, embed_dim], flat),
             )
             .map_err(|e| format!("ww input value: {e}"))?;
 
+            let ww_inputs = ort::inputs!["input" => ww_input];
             let ww_outputs = ww_session
-                .run(ort::inputs!["input" => ww_input].map_err(|e| format!("ww inputs: {e}"))?)
+                .run(ww_inputs)
                 .map_err(|e| format!("ww inference: {e}"))?;
 
             let score = {
-                let tensor = ww_outputs[0]
+                let (_shape, data) = ww_outputs[0]
                     .try_extract_tensor::<f32>()
                     .map_err(|e| format!("extract ww score: {e}"))?;
-                *tensor.iter().next().ok_or("empty ww output")?
+                *data.first().ok_or("empty ww output")?
             };
 
             Ok(score)
@@ -240,9 +235,9 @@ mod inner {
 }
 
 // -----------------------------------------------------------------------
-// Stub: no native-ml feature
+// Stub: no onnx feature
 // -----------------------------------------------------------------------
-#[cfg(not(feature = "native-ml"))]
+#[cfg(not(feature = "onnx"))]
 mod inner {
     use super::*;
 
@@ -260,7 +255,7 @@ mod inner {
         }
 
         pub fn load(&mut self, _model_dir: &Path) -> bool {
-            warn!("OpenWakeWord not available (native-ml feature disabled) — wake word disabled");
+            warn!("OpenWakeWord not available (onnx feature disabled) — wake word disabled");
             false
         }
 

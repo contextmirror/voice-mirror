@@ -143,7 +143,7 @@ async fn main() {
     if ww_loaded {
         info!("OpenWakeWord loaded");
     } else {
-        info!("Wake word detection disabled (models not found or native-ml off)");
+        info!("Wake word detection disabled (models not found or onnx feature off)");
     }
 
     // ── STT ──────────────────────────────────────────────────────────
@@ -216,7 +216,7 @@ async fn main() {
             .voice
             .as_ref()
             .and_then(|v| v.tts_adapter.as_deref()))
-        .unwrap_or("edge");
+        .unwrap_or("kokoro");
 
     let tts_voice = voice_settings
         .tts_voice

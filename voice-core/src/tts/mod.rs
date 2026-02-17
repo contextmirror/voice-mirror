@@ -1,7 +1,7 @@
 //! Text-to-Speech adapters and playback.
 //!
 //! Provides a common `TtsEngine` trait with implementations for:
-//! - Local Kokoro ONNX synthesis (behind `native-ml` feature)
+//! - Local Kokoro ONNX synthesis (behind `onnx` feature)
 //! - Edge TTS (free Microsoft cloud voices)
 //! - OpenAI TTS API
 //! - ElevenLabs TTS API
@@ -29,7 +29,7 @@ pub trait TtsEngine: Send + Sync {
 /// Which TTS backend to use.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TtsBackend {
-    /// Local Kokoro ONNX (requires `native-ml` feature).
+    /// Local Kokoro ONNX (requires `onnx` feature).
     KokoroLocal,
     /// Microsoft Edge TTS (free, cloud).
     EdgeCloud,
@@ -61,7 +61,7 @@ pub fn create_tts_engine(
                     Ok(Box::new(engine))
                 }
                 Err(_) => {
-                    // Kokoro unavailable (no native-ml or missing models), fall back to Edge TTS
+                    // Kokoro unavailable (no onnx feature or missing models), fall back to Edge TTS
                     tracing::warn!("Kokoro TTS unavailable, falling back to Edge TTS");
                     let v = voice.unwrap_or("en-US-AriaNeural");
                     Ok(Box::new(cloud::EdgeTts::new(v)))

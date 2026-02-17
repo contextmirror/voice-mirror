@@ -1,12 +1,12 @@
 //! Kokoro ONNX local TTS engine.
 //!
-//! The real implementation is gated behind `#[cfg(feature = "native-ml")]`.
+//! The real implementation is gated behind `#[cfg(feature = "onnx")]`.
 //! When the feature is disabled, a stub is provided that always returns an error.
 
 use super::TtsEngine;
 
-// ── native-ml enabled ────────────────────────────────────────────────
-#[cfg(feature = "native-ml")]
+// ── onnx enabled ────────────────────────────────────────────────
+#[cfg(feature = "onnx")]
 mod inner {
     use std::future::Future;
     use std::path::{Path, PathBuf};
@@ -111,8 +111,8 @@ mod inner {
     }
 }
 
-// ── native-ml disabled (stub) ────────────────────────────────────────
-#[cfg(not(feature = "native-ml"))]
+// ── onnx disabled (stub) ────────────────────────────────────────
+#[cfg(not(feature = "onnx"))]
 mod inner {
     use std::future::Future;
     use std::path::Path;
@@ -132,10 +132,10 @@ mod inner {
         pub fn new(model_dir: &Path) -> anyhow::Result<Self> {
             warn!(
                 model_dir = %model_dir.display(),
-                "Kokoro TTS requested but native-ml feature is disabled"
+                "Kokoro TTS requested but onnx feature is disabled"
             );
             anyhow::bail!(
-                "Local Kokoro TTS is not available (compile with --features native-ml)"
+                "Local Kokoro TTS is not available (compile with --features onnx)"
             )
         }
 
@@ -147,7 +147,7 @@ mod inner {
     impl TtsEngine for KokoroTts {
         fn speak(&self, _text: &str) -> Pin<Box<dyn Future<Output = anyhow::Result<Vec<f32>>> + Send + '_>> {
             Box::pin(async {
-                anyhow::bail!("Local Kokoro TTS is not available (compile with --features native-ml)")
+                anyhow::bail!("Local Kokoro TTS is not available (compile with --features onnx)")
             })
         }
 

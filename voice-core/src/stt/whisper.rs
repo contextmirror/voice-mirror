@@ -1,13 +1,13 @@
 //! Local whisper.cpp STT via whisper-rs.
 //!
-//! The real implementation is gated behind `#[cfg(feature = "native-ml")]`.
+//! The real implementation is gated behind `#[cfg(feature = "whisper")]`.
 //! When the feature is disabled, a stub is provided that always returns an error.
 
 /// Minimum audio duration in samples at 16 kHz (0.4 s = 6400 samples).
 const MIN_SAMPLES: usize = 6_400;
 
-// ── native-ml enabled ────────────────────────────────────────────────
-#[cfg(feature = "native-ml")]
+// ── whisper enabled ────────────────────────────────────────────────
+#[cfg(feature = "whisper")]
 mod inner {
     use std::path::Path;
     use std::sync::Mutex;
@@ -110,8 +110,8 @@ mod inner {
     }
 }
 
-// ── native-ml disabled (stub) ────────────────────────────────────────
-#[cfg(not(feature = "native-ml"))]
+// ── whisper disabled (stub) ────────────────────────────────────────
+#[cfg(not(feature = "whisper"))]
 mod inner {
     use std::path::Path;
 
@@ -125,17 +125,17 @@ mod inner {
         pub fn new(model_path: &Path) -> anyhow::Result<Self> {
             warn!(
                 model = %model_path.display(),
-                "Whisper STT requested but native-ml feature is disabled"
+                "Whisper STT requested but whisper feature is disabled"
             );
             anyhow::bail!(
-                "Local whisper STT is not available (compile with --features native-ml)"
+                "Local whisper STT is not available (compile with --features whisper)"
             )
         }
     }
 
     impl SttEngine for WhisperStt {
         async fn transcribe(&self, _audio: &[f32]) -> anyhow::Result<String> {
-            anyhow::bail!("Local whisper STT is not available (compile with --features native-ml)")
+            anyhow::bail!("Local whisper STT is not available (compile with --features whisper)")
         }
     }
 }

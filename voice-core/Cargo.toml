@@ -24,9 +24,13 @@ uuid = { version = "1", features = ["v4"] }
 anyhow = "1"
 
 [features]
-default = []
-# Enable native ML inference (requires LLVM/clang for build, ONNX Runtime + whisper.cpp models at runtime)
-native-ml = ["ort", "whisper-rs"]
+default = ["onnx"]
+# ONNX Runtime for Kokoro TTS, Silero VAD, OpenWakeWord (downloads pre-built binaries)
+onnx = ["ort"]
+# whisper.cpp for local STT (requires C compiler: MSVC on Windows, gcc/clang on Linux)
+whisper = ["whisper-rs"]
+# Both ONNX + whisper.cpp
+native-ml = ["onnx", "whisper"]
 
 [target.'cfg(target_os = "linux")'.dependencies]
 evdev = "0.12"

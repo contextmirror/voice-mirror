@@ -3,12 +3,12 @@
 //! Processes 512-sample windows at 16 kHz and returns speech probability.
 //! Maintains LSTM hidden state (h, c tensors) across calls.
 //!
-//! When the `native-ml` feature is disabled, provides a stub that always
+//! When the `onnx` feature is disabled, provides a stub that always
 //! falls back to energy-based detection.
 
 use std::path::Path;
 use tracing::warn;
-#[cfg(feature = "native-ml")]
+#[cfg(feature = "onnx")]
 use tracing::info;
 
 use super::energy;
@@ -38,9 +38,9 @@ fn energy_threshold_for_mode(mode: &str) -> f32 {
 }
 
 // -----------------------------------------------------------------------
-// native-ml: real ONNX implementation
+// onnx: real ONNX implementation
 // -----------------------------------------------------------------------
-#[cfg(feature = "native-ml")]
+#[cfg(feature = "onnx")]
 mod inner {
     use super::*;
     use ort::session::Session;
@@ -107,69 +107,59 @@ mod inner {
         }
 
         fn infer_window(&mut self, window: &[f32]) -> Result<f32, String> {
-            let session = self.session.as_ref().ok_or("Model not loaded")?;
+            let session = self.session.as_mut().ok_or("Model not loaded")?;
 
-            // Build input tensors
-            // "input": shape [1, 512] f32
-            let input_data: Vec<f32> = window.to_vec();
+            // Build input tensors using ort's tuple API: (shape, Vec<T>)
             let input_tensor = ort::value::Value::from_array(
-                ndarray::Array2::from_shape_vec((1, WINDOW_SIZE), input_data)
-                    .map_err(|e| format!("input tensor: {e}"))?,
+                ([1, WINDOW_SIZE], window.to_vec()),
             )
             .map_err(|e| format!("input value: {e}"))?;
 
-            // "sr": scalar i64
             let sr_tensor = ort::value::Value::from_array(
-                ndarray::Array1::from_vec(vec![SAMPLE_RATE]),
+                ([1], vec![SAMPLE_RATE]),
             )
             .map_err(|e| format!("sr value: {e}"))?;
 
-            // "h": shape [2, 1, 128]
             let h_tensor = ort::value::Value::from_array(
-                ndarray::Array3::from_shape_vec((2, 1, 128), self.h.clone())
-                    .map_err(|e| format!("h tensor: {e}"))?,
+                ([2, 1, 128], self.h.clone()),
             )
             .map_err(|e| format!("h value: {e}"))?;
 
-            // "c": shape [2, 1, 128]
             let c_tensor = ort::value::Value::from_array(
-                ndarray::Array3::from_shape_vec((2, 1, 128), self.c.clone())
-                    .map_err(|e| format!("c tensor: {e}"))?,
+                ([2, 1, 128], self.c.clone()),
             )
             .map_err(|e| format!("c value: {e}"))?;
 
-            // The Python code uses input names: "input", "state", "sr"
-            // but the actual Silero model v5 uses: "input", "sr", "h", "c"
-            // We try the h/c variant which matches the task spec.
+            let inputs = ort::inputs![
+                "input" => input_tensor,
+                "sr" => sr_tensor,
+                "h" => h_tensor,
+                "c" => c_tensor,
+            ];
             let outputs = session
-                .run(ort::inputs![
-                    "input" => input_tensor,
-                    "sr" => sr_tensor,
-                    "h" => h_tensor,
-                    "c" => c_tensor,
-                ].map_err(|e| format!("inputs: {e}"))?)
+                .run(inputs)
                 .map_err(|e| format!("inference: {e}"))?;
 
             // Output[0]: speech probability, Output[1]: new h, Output[2]: new c
             let prob = {
-                let tensor = outputs[0]
+                let (_shape, data) = outputs[0]
                     .try_extract_tensor::<f32>()
                     .map_err(|e| format!("extract prob: {e}"))?;
-                *tensor.iter().next().ok_or("empty probability output")?
+                *data.first().ok_or("empty probability output")?
             };
 
             // Update hidden states
             {
-                let h_out = outputs[1]
+                let (_shape, data) = outputs[1]
                     .try_extract_tensor::<f32>()
                     .map_err(|e| format!("extract h: {e}"))?;
-                self.h = h_out.iter().copied().collect();
+                self.h = data.to_vec();
             }
             {
-                let c_out = outputs[2]
+                let (_shape, data) = outputs[2]
                     .try_extract_tensor::<f32>()
                     .map_err(|e| format!("extract c: {e}"))?;
-                self.c = c_out.iter().copied().collect();
+                self.c = data.to_vec();
             }
 
             Ok(prob)
@@ -211,9 +201,9 @@ mod inner {
 }
 
 // -----------------------------------------------------------------------
-// Stub: no native-ml feature
+// Stub: no onnx feature
 // -----------------------------------------------------------------------
-#[cfg(not(feature = "native-ml"))]
+#[cfg(not(feature = "onnx"))]
 mod inner {
     use super::*;
 
@@ -231,7 +221,7 @@ mod inner {
         }
 
         pub fn load(&mut self, _model_dir: &Path) -> bool {
-            warn!("Silero VAD not available (native-ml feature disabled) — using energy fallback");
+            warn!("Silero VAD not available (onnx feature disabled) — using energy fallback");
             false
         }
 
