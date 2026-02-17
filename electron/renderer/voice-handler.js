@@ -91,6 +91,10 @@ export function handleVoiceEvent(data) {
             setAIStatus('Speaking...', true, 0, 'voice');
             break;
         case 'idle':
+            // Don't downgrade from recording/dictating (e.g. PTT interrupted TTS —
+            // speaking_end arrives after recording already started)
+            if (statusIndicator.className === 'recording' ||
+                statusIndicator.className === 'dictating') break;
             setOrbState('idle');
             statusIndicator.className = '';
             statusText.textContent = 'Listening...';

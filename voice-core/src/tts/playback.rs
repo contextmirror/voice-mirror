@@ -54,15 +54,18 @@ impl AudioPlayer {
         self.sink.set_volume(volume.clamp(0.0, 1.0));
     }
 
+    /// Get a clonable handle to the underlying sink (for external stop).
+    pub fn sink_handle(&self) -> Arc<Sink> {
+        Arc::clone(&self.sink)
+    }
+
     /// Stop current playback immediately.
-    #[allow(dead_code)]
     pub fn stop(&self) {
         self.sink.stop();
         self.playing.store(false, Ordering::SeqCst);
     }
 
     /// Check if audio is currently playing.
-    #[allow(dead_code)]
     pub fn is_playing(&self) -> bool {
         self.playing.load(Ordering::SeqCst)
     }

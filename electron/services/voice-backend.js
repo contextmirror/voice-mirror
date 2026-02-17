@@ -563,6 +563,15 @@ function createVoiceBackend(options = {}) {
     }
 
     /**
+     * Interrupt in-progress TTS playback.
+     * Has no effect during non-interruptible system speak (startup greeting).
+     * @returns {boolean} True if sent
+     */
+    function stopSpeaking() {
+        return send({ command: 'stop_speaking' });
+    }
+
+    /**
      * List available audio devices from voice backend.
      * @returns {Promise<{input: Array, output: Array}|null>}
      */
@@ -658,6 +667,7 @@ function createVoiceBackend(options = {}) {
         send,
         sendImage,
         systemSpeak,
+        stopSpeaking,
         listAudioDevices,
         syncVoiceSettings,
         isRunning,

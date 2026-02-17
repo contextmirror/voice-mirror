@@ -15,8 +15,11 @@ mod tts;
 mod vad;
 mod wake_word;
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+
+use rodio::Sink;
 
 use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
@@ -52,6 +55,12 @@ struct AppState {
     inbox: Option<inbox::InboxManager>,
     /// Buffer accumulating recorded audio samples for STT.
     recording_buf: Vec<f32>,
+    /// Cancellation token for in-progress TTS. Set to `true` to interrupt.
+    tts_cancel: Arc<AtomicBool>,
+    /// Shared handle to the rodio Sink for stopping playback from outside.
+    tts_sink: Option<Arc<Sink>>,
+    /// True while a non-interruptible system speak is in progress.
+    system_speaking: bool,
 }
 
 #[tokio::main]
@@ -279,6 +288,9 @@ async fn main() {
         stt_engine,
         inbox: Some(inbox_manager),
         recording_buf: Vec::new(),
+        tts_cancel: Arc::new(AtomicBool::new(false)),
+        tts_sink: None,
+        system_speaking: false,
     }));
 
     let vad_shared = Arc::new(Mutex::new(vad_engine));
@@ -342,6 +354,20 @@ async fn main() {
                     if ww_detected
                         && audio_loop_state.start_recording(RecordingSource::WakeWord)
                     {
+                        // Interrupt TTS if speaking (conversation interruption)
+                        {
+                            let app = audio_loop_app.lock().unwrap();
+                            if !app.system_speaking {
+                                app.tts_cancel.store(true, Ordering::SeqCst);
+                                if let Some(ref sink) = app.tts_sink {
+                                    sink.stop();
+                                }
+                                if let Some(ref engine) = app.tts_engine {
+                                    engine.stop();
+                                }
+                            }
+                        }
+
                         emit_event(&VoiceEvent::RecordingStart {
                             rec_type: "wake_word".to_string(),
                         });
@@ -540,8 +566,8 @@ async fn run_stt_and_emit(app_state: &Arc<Mutex<AppState>>, audio: Vec<f32>) {
                             let mut app = app_state.lock().unwrap();
                             app.inbox = Some(inbox);
                         }
-                        // Auto-speak the AI response
-                        speak_text(app_state, &response).await;
+                        // Auto-speak the AI response (interruptible)
+                        speak_text(app_state, &response, false).await;
                         return;
                     }
                     Ok(None) => {
@@ -558,8 +584,11 @@ async fn run_stt_and_emit(app_state: &Arc<Mutex<AppState>>, audio: Vec<f32>) {
     }
 }
 
-/// Speak text via TTS (used for both system_speak and auto-speaking responses).
-async fn speak_text(app_state: &Arc<Mutex<AppState>>, text: &str) {
+/// Speak text via TTS with interruptible playback.
+///
+/// If `system` is true, the speak is non-interruptible (startup greeting).
+/// Otherwise, playback can be cancelled via `tts_cancel` / `tts_sink`.
+async fn speak_text(app_state: &Arc<Mutex<AppState>>, text: &str, system: bool) {
     let tts_engine = {
         let mut app = app_state.lock().unwrap();
         app.tts_engine.take()
@@ -571,35 +600,75 @@ async fn speak_text(app_state: &Arc<Mutex<AppState>>, text: &str) {
 
     match (tts_engine, tts_player) {
         (Some(engine), Some(player)) => {
+            // Mark system speaking if this is a non-interruptible speak
+            if system {
+                let mut app = app_state.lock().unwrap();
+                app.system_speaking = true;
+            }
+
             emit_event(&VoiceEvent::SpeakingStart {
                 text: text.to_string(),
             });
 
+            // Reset cancellation flag before synthesis
+            {
+                let app = app_state.lock().unwrap();
+                app.tts_cancel.store(false, Ordering::SeqCst);
+            }
+
             match engine.speak(text).await {
                 Ok(samples) => {
-                    if !samples.is_empty() {
-                        let play_result = tokio::task::spawn_blocking(move || {
-                            player.play(&samples, TTS_SAMPLE_RATE)
-                        })
-                        .await;
-
-                        match play_result {
-                            Ok(Ok(())) => info!("TTS playback complete"),
-                            Ok(Err(e)) => {
-                                warn!("TTS playback error: {}", e);
-                                emit_error(&format!("TTS playback failed: {}", e));
-                            }
-                            Err(e) => warn!("TTS playback task panicked: {}", e),
-                        }
-
-                        // Player was moved into spawn_blocking; recreate it.
-                        let new_player = tts::playback::AudioPlayer::new().ok();
+                    // Put engine back immediately so StopSpeaking can call engine.stop()
+                    {
                         let mut app = app_state.lock().unwrap();
                         app.tts_engine = Some(engine);
-                        app.tts_player = new_player;
+                    }
+
+                    if !samples.is_empty() {
+                        // Check if cancelled during synthesis
+                        let cancelled = {
+                            let app = app_state.lock().unwrap();
+                            app.tts_cancel.load(Ordering::SeqCst)
+                        };
+
+                        if cancelled {
+                            info!("TTS cancelled during synthesis");
+                            let mut app = app_state.lock().unwrap();
+                            app.tts_player = Some(player);
+                        } else {
+                            // Store sink handle so external code can stop playback
+                            let sink = player.sink_handle();
+                            let cancel = {
+                                let mut app = app_state.lock().unwrap();
+                                app.tts_sink = Some(Arc::clone(&sink));
+                                app.tts_cancel.clone()
+                            };
+
+                            // Append audio to sink (non-blocking)
+                            let source = rodio::buffer::SamplesBuffer::new(
+                                1,
+                                TTS_SAMPLE_RATE,
+                                samples,
+                            );
+                            sink.append(source);
+
+                            // Poll until playback finishes or is cancelled
+                            while !sink.empty() {
+                                if cancel.load(Ordering::SeqCst) {
+                                    sink.stop();
+                                    info!("TTS playback interrupted");
+                                    break;
+                                }
+                                tokio::time::sleep(Duration::from_millis(50)).await;
+                            }
+
+                            // Clear sink handle and put player back (reused, not recreated)
+                            let mut app = app_state.lock().unwrap();
+                            app.tts_sink = None;
+                            app.tts_player = Some(player);
+                        }
                     } else {
                         let mut app = app_state.lock().unwrap();
-                        app.tts_engine = Some(engine);
                         app.tts_player = Some(player);
                     }
                 }
@@ -613,6 +682,12 @@ async fn speak_text(app_state: &Arc<Mutex<AppState>>, text: &str) {
             }
 
             emit_event(&VoiceEvent::SpeakingEnd {});
+
+            // Clear system speaking flag
+            if system {
+                let mut app = app_state.lock().unwrap();
+                app.system_speaking = false;
+            }
         }
         (engine, player) => {
             let mut app = app_state.lock().unwrap();
@@ -633,6 +708,24 @@ async fn handle_hotkey_event(
 ) {
     match event {
         HotkeyEvent::PttDown => {
+            // Interrupt TTS if speaking (conversation interruption)
+            {
+                let app = app_state.lock().unwrap();
+                if !app.system_speaking && app.tts_sink.is_some() {
+                    app.tts_cancel.store(true, Ordering::SeqCst);
+                    if let Some(ref sink) = app.tts_sink {
+                        sink.stop();
+                    }
+                    if let Some(ref engine) = app.tts_engine {
+                        engine.stop();
+                    }
+                    // Force state to Listening so start_recording() works
+                    // immediately (the spawned speak_text task will see the
+                    // cancel flag and skip its own finish_processing).
+                    audio_state.finish_processing();
+                }
+            }
+
             info!("PTT key pressed — start recording");
             emit_event(&VoiceEvent::PttStart {});
 
@@ -664,13 +757,20 @@ async fn handle_hotkey_event(
                     std::mem::take(&mut app.recording_buf)
                 };
 
-                run_stt_and_emit(app_state, audio_for_stt).await;
+                // Spawn STT+speak pipeline so the main loop stays responsive
+                // for interrupt events (PTT press, StopSpeaking command).
+                let app_clone = app_state.clone();
+                let state_clone = audio_state.clone();
+                let vad_clone = vad_shared.clone();
+                tokio::spawn(async move {
+                    run_stt_and_emit(&app_clone, audio_for_stt).await;
 
-                audio_state.finish_processing();
-                emit_event(&VoiceEvent::Listening {});
+                    state_clone.finish_processing();
+                    emit_event(&VoiceEvent::Listening {});
 
-                let mut v = vad_shared.lock().unwrap();
-                v.reset();
+                    let mut v = vad_clone.lock().unwrap();
+                    v.reset();
+                });
             }
         }
         HotkeyEvent::DictationDown => {
@@ -772,6 +872,22 @@ async fn handle_command(cmd: VoiceCommand, app_state: &Arc<Mutex<AppState>>) -> 
             return false;
         }
 
+        VoiceCommand::StopSpeaking {} => {
+            let app = app_state.lock().unwrap();
+            if app.system_speaking {
+                info!("Stop speaking ignored (system speak in progress)");
+            } else {
+                info!("Stop speaking requested");
+                app.tts_cancel.store(true, Ordering::SeqCst);
+                if let Some(ref sink) = app.tts_sink {
+                    sink.stop();
+                }
+                if let Some(ref engine) = app.tts_engine {
+                    engine.stop();
+                }
+            }
+        }
+
         VoiceCommand::ListAudioDevices {} => {
             let device_names = audio::list_devices();
             let input: Vec<AudioDeviceInfo> = device_names
@@ -857,8 +973,8 @@ async fn handle_command(cmd: VoiceCommand, app_state: &Arc<Mutex<AppState>>) -> 
                                         let mut app = app_clone.lock().unwrap();
                                         app.inbox = Some(inbox);
                                     }
-                                    // Auto-speak the AI response
-                                    speak_text(&app_clone, &response).await;
+                                    // Auto-speak the AI response (interruptible)
+                                    speak_text(&app_clone, &response, false).await;
                                     return;
                                 }
                                 Ok(None) => {
@@ -911,8 +1027,8 @@ async fn handle_command(cmd: VoiceCommand, app_state: &Arc<Mutex<AppState>>) -> 
         }
 
         VoiceCommand::SystemSpeak { text } => {
-            info!(text = %text, "System speak requested");
-            speak_text(app_state, &text).await;
+            info!(text = %text, "System speak requested (non-interruptible)");
+            speak_text(app_state, &text, true).await;
         }
 
         VoiceCommand::Image {

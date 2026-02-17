@@ -102,6 +102,7 @@ pub enum VoiceCommand {
         text: String,
     },
     Stop {},
+    StopSpeaking {},
     ListAdapters {},
     Ping {},
     /// Image sent from Electron (uses `"type": "image"` instead of `"command"`).

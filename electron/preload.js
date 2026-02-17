@@ -98,7 +98,8 @@ contextBridge.exposeInMainWorld('voiceMirror', {
         stop: () => ipcRenderer.invoke('stop-voice'),
         restart: () => ipcRenderer.invoke('voice-restart'),
         listAudioDevices: () => ipcRenderer.invoke('list-audio-devices'),
-        getDetectedKeys: () => ipcRenderer.invoke('get-detected-keys')
+        getDetectedKeys: () => ipcRenderer.invoke('get-detected-keys'),
+        stopSpeaking: () => ipcRenderer.invoke('stop-speaking')
     },
 
     // Claude Code backend control

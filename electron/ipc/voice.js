@@ -2,7 +2,7 @@
  * IPC handlers for voice backend management.
  * Handles: get-voice-status, start-voice, stop-voice, voice-restart,
  *          send-query, set-voice-mode, send-image, list-audio-devices,
- *          get-detected-keys
+ *          get-detected-keys, stop-speaking
  */
 
 const { ipcMain } = require('electron');
@@ -78,6 +78,13 @@ function registerVoiceHandlers(ctx, validators) {
     ipcMain.handle('list-audio-devices', async () => {
         const devices = ctx.listAudioDevices ? await ctx.listAudioDevices() : null;
         return { success: true, data: devices };
+    });
+
+    // Interrupt in-progress TTS playback (no effect during startup greeting)
+    ipcMain.handle('stop-speaking', () => {
+        const voiceBackend = ctx.getVoiceBackend();
+        if (voiceBackend) voiceBackend.stopSpeaking();
+        return { success: true };
     });
 
     // Detect API keys from environment (returns provider names only, not keys)

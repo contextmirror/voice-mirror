@@ -39,15 +39,13 @@ mod inner {
 
     impl VoiceData {
         /// Get the style vector for a given token count. Shape: (1, 256).
+        /// Clamps to the last entry if token_count exceeds available styles.
         fn style_for_len(&self, token_count: usize) -> anyhow::Result<Vec<f32>> {
-            if token_count >= self.num_entries {
-                anyhow::bail!(
-                    "Token count {} exceeds voice style entries ({})",
-                    token_count,
-                    self.num_entries
-                );
+            if self.num_entries == 0 {
+                anyhow::bail!("Voice style data is empty");
             }
-            let start = token_count * STYLE_DIM;
+            let idx = token_count.min(self.num_entries - 1);
+            let start = idx * STYLE_DIM;
             Ok(self.data[start..start + STYLE_DIM].to_vec())
         }
     }

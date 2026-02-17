@@ -97,27 +97,44 @@ mod inner {
     use std::sync::{Arc, Mutex};
 
     use tracing::info;
-    use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
+    use whisper_rs::{
+        FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters, WhisperState,
+    };
 
     use crate::stt::SttEngine;
 
     /// Minimum audio duration in samples at 16 kHz (0.4 s = 6400 samples).
     const MIN_SAMPLES: usize = 6_400;
 
-    /// Wrapper to make WhisperContext Send + Sync through Arc<Mutex<>>.
-    ///
-    /// WhisperContext is internally thread-safe when access is serialized
-    /// via our Mutex, but doesn't implement Send/Sync. This wrapper lets
-    /// us share it across threads via Arc.
-    struct SendableCtx(WhisperContext);
+    /// Number of threads for whisper.cpp inference.
+    /// Uses half the available cores (capped 1..=8) to leave headroom for
+    /// the rest of the app (audio capture, TTS playback, Electron UI).
+    fn inference_threads() -> i32 {
+        let cores = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(4);
+        (cores / 2).clamp(1, 8) as i32
+    }
 
-    // SAFETY: WhisperContext is safe to send between threads when protected
-    // by a Mutex (no interior mutability without the lock).
-    unsafe impl Send for SendableCtx {}
-    unsafe impl Sync for SendableCtx {}
+    /// Holds both the WhisperContext and a cached WhisperState.
+    ///
+    /// `WhisperState` internally holds an `Arc` clone of the context's inner
+    /// data, so no lifetime issues arise from storing both together.
+    /// Caching the state avoids ~200 MB of buffer reallocation per call
+    /// (`whisper_init_state` in whisper.cpp).
+    struct WhisperInner {
+        ctx: WhisperContext,
+        cached_state: Option<WhisperState>,
+    }
+
+    // SAFETY: WhisperContext and WhisperState are safe to send between threads
+    // when access is serialized via a Mutex (no interior mutability without the lock).
+    unsafe impl Send for WhisperInner {}
+    unsafe impl Sync for WhisperInner {}
 
     pub struct WhisperStt {
-        ctx: Arc<Mutex<SendableCtx>>,
+        inner: Arc<Mutex<WhisperInner>>,
+        n_threads: i32,
     }
 
     impl WhisperStt {
@@ -129,16 +146,25 @@ mod inner {
                     model_path.display()
                 );
             }
-            let params = WhisperContextParameters::default();
+            let ctx_params = WhisperContextParameters::default();
             let ctx = WhisperContext::new_with_params(
                 model_path.to_str().unwrap_or_default(),
-                params,
+                ctx_params,
             )
             .map_err(|e| anyhow::anyhow!("Failed to load whisper model: {}", e))?;
 
-            info!(model = %model_path.display(), "Whisper model loaded");
+            let n_threads = inference_threads();
+            info!(
+                model = %model_path.display(),
+                threads = n_threads,
+                "Whisper model loaded"
+            );
             Ok(Self {
-                ctx: Arc::new(Mutex::new(SendableCtx(ctx))),
+                inner: Arc::new(Mutex::new(WhisperInner {
+                    ctx,
+                    cached_state: None,
+                })),
+                n_threads,
             })
         }
     }
@@ -150,24 +176,38 @@ mod inner {
             }
 
             let audio = audio.to_vec();
-            let ctx = Arc::clone(&self.ctx);
+            let inner = Arc::clone(&self.inner);
+            let n_threads = self.n_threads;
 
             // Run whisper inference on a blocking thread to avoid stalling
             // the tokio runtime.
             let result = tokio::task::spawn_blocking(move || -> anyhow::Result<String> {
-                let guard = ctx.lock().unwrap();
+                let mut guard = inner.lock().unwrap();
 
-                let mut state = guard.0.create_state()
-                    .map_err(|e| anyhow::anyhow!("Failed to create whisper state: {}", e))?;
+                // Lazily create the state on first call, reuse on subsequent calls.
+                // This avoids ~200 MB of whisper_init_state overhead per transcription.
+                let state = match guard.cached_state.as_mut() {
+                    Some(s) => s,
+                    None => {
+                        info!("Creating whisper state (first transcription)");
+                        let s = guard.ctx.create_state()
+                            .map_err(|e| anyhow::anyhow!("Failed to create whisper state: {}", e))?;
+                        guard.cached_state = Some(s);
+                        guard.cached_state.as_mut().unwrap()
+                    }
+                };
 
                 let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
                 params.set_language(Some("en"));
+                params.set_n_threads(n_threads);
                 params.set_print_special(false);
                 params.set_print_progress(false);
                 params.set_print_realtime(false);
                 params.set_print_timestamps(false);
                 params.set_single_segment(true);
                 params.set_no_timestamps(true);
+                // Suppress non-speech tokens (reduces hallucination on silence)
+                params.set_suppress_non_speech_tokens(true);
 
                 state
                     .full(params, &audio)
