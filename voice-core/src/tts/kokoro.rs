@@ -254,7 +254,7 @@ mod inner {
 
             let mut session = self.session.lock().unwrap();
             let outputs = session.run(ort::inputs! {
-                "input_ids" => input_ids,
+                "tokens" => input_ids,
                 "style" => style_tensor,
                 "speed" => speed_tensor
             })?;
