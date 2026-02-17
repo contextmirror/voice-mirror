@@ -102,7 +102,6 @@ impl AudioStateMachine {
     }
 
     /// Current recording source (only meaningful when state == Recording).
-    #[allow(dead_code)]
     pub fn recording_source(&self) -> RecordingSource {
         RecordingSource::from_u8(self.source.load(Ordering::Acquire))
     }

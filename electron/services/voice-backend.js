@@ -162,6 +162,8 @@ function createVoiceBackend(options = {}) {
                 type: 'mode_change',
                 mode: data.mode
             }),
+            'ptt_start': () => ({ type: 'ptt_active' }),
+            'ptt_stop': () => ({ type: 'ptt_inactive' }),
             'dictation_start': () => ({ type: 'dictation_start' }),
             'dictation_stop': () => ({ type: 'dictation_stop' }),
             'dictation_result': () => ({

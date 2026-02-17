@@ -13,9 +13,10 @@ pub mod linux;
 pub mod macos;
 pub mod windows;
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::thread;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use rdev::{listen, Event, EventType, Key};
 use tokio::sync::mpsc;
@@ -86,12 +87,29 @@ impl HotkeyListener {
             "Starting hotkey listener"
         );
 
-        // Track press state to distinguish down/up
+        // Track press state and timestamps to debounce key repeat.
+        // Windows key repeat sends rapid KeyPress→KeyRelease cycles (~80ms),
+        // so we require a minimum hold time before accepting a release event.
         let ptt_pressed = Arc::new(AtomicBool::new(false));
         let dict_pressed = Arc::new(AtomicBool::new(false));
+        let ptt_press_time = Arc::new(AtomicU64::new(0));
+        let dict_press_time = Arc::new(AtomicU64::new(0));
+
+        /// Minimum key hold time (ms) to accept a release event.
+        /// Shorter holds are treated as key-repeat artifacts and ignored.
+        const MIN_HOLD_MS: u64 = 150;
+
+        fn now_ms() -> u64 {
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64
+        }
 
         let ptt_pressed_clone = ptt_pressed.clone();
         let dict_pressed_clone = dict_pressed.clone();
+        let ptt_press_time_clone = ptt_press_time.clone();
+        let dict_press_time_clone = dict_press_time.clone();
 
         thread::spawn(move || {
             let callback = move |event: Event| {
@@ -104,12 +122,14 @@ impl HotkeyListener {
                         if let Some(Some(target)) = ptt_target.as_ref() {
                             if matches_rdev_key(&key, target) && !ptt_pressed_clone.load(Ordering::SeqCst) {
                                 ptt_pressed_clone.store(true, Ordering::SeqCst);
+                                ptt_press_time_clone.store(now_ms(), Ordering::SeqCst);
                                 let _ = tx.blocking_send(HotkeyEvent::PttDown);
                             }
                         }
                         if let Some(Some(target)) = dict_target.as_ref() {
                             if matches_rdev_key(&key, target) && !dict_pressed_clone.load(Ordering::SeqCst) {
                                 dict_pressed_clone.store(true, Ordering::SeqCst);
+                                dict_press_time_clone.store(now_ms(), Ordering::SeqCst);
                                 let _ = tx.blocking_send(HotkeyEvent::DictationDown);
                             }
                         }
@@ -117,14 +137,21 @@ impl HotkeyListener {
                     EventType::KeyRelease(key) => {
                         if let Some(Some(target)) = ptt_target.as_ref() {
                             if matches_rdev_key(&key, target) && ptt_pressed_clone.load(Ordering::SeqCst) {
-                                ptt_pressed_clone.store(false, Ordering::SeqCst);
-                                let _ = tx.blocking_send(HotkeyEvent::PttUp);
+                                let held = now_ms().saturating_sub(ptt_press_time_clone.load(Ordering::SeqCst));
+                                if held >= MIN_HOLD_MS {
+                                    ptt_pressed_clone.store(false, Ordering::SeqCst);
+                                    let _ = tx.blocking_send(HotkeyEvent::PttUp);
+                                }
+                                // else: ignore release from key repeat, keep pressed state
                             }
                         }
                         if let Some(Some(target)) = dict_target.as_ref() {
                             if matches_rdev_key(&key, target) && dict_pressed_clone.load(Ordering::SeqCst) {
-                                dict_pressed_clone.store(false, Ordering::SeqCst);
-                                let _ = tx.blocking_send(HotkeyEvent::DictationUp);
+                                let held = now_ms().saturating_sub(dict_press_time_clone.load(Ordering::SeqCst));
+                                if held >= MIN_HOLD_MS {
+                                    dict_pressed_clone.store(false, Ordering::SeqCst);
+                                    let _ = tx.blocking_send(HotkeyEvent::DictationUp);
+                                }
                             }
                         }
                     }
@@ -132,12 +159,14 @@ impl HotkeyListener {
                         if let Some(Some(target)) = ptt_target.as_ref() {
                             if matches_rdev_button(&button, target) && !ptt_pressed_clone.load(Ordering::SeqCst) {
                                 ptt_pressed_clone.store(true, Ordering::SeqCst);
+                                ptt_press_time_clone.store(now_ms(), Ordering::SeqCst);
                                 let _ = tx.blocking_send(HotkeyEvent::PttDown);
                             }
                         }
                         if let Some(Some(target)) = dict_target.as_ref() {
                             if matches_rdev_button(&button, target) && !dict_pressed_clone.load(Ordering::SeqCst) {
                                 dict_pressed_clone.store(true, Ordering::SeqCst);
+                                dict_press_time_clone.store(now_ms(), Ordering::SeqCst);
                                 let _ = tx.blocking_send(HotkeyEvent::DictationDown);
                             }
                         }

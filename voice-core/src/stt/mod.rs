@@ -44,7 +44,7 @@ impl SttAdapter {
 ///
 /// `adapter` is one of: "parakeet", "whisper-local", "openai-cloud", "custom-cloud".
 /// When no adapter is configured the caller should default to "parakeet".
-pub fn create_stt_engine(
+pub async fn create_stt_engine(
     adapter: &str,
     data_dir: &Path,
     model_size: Option<&str>,
@@ -60,7 +60,7 @@ pub fn create_stt_engine(
 
     match adapter {
         "parakeet" => {
-            match parakeet::ParakeetStt::new(data_dir) {
+            match parakeet::ParakeetStt::new(data_dir).await {
                 Ok(engine) => Ok(SttAdapter::Parakeet(engine)),
                 Err(e) => {
                     // If an API key is available, fall back to OpenAI cloud STT.

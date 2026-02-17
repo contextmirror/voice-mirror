@@ -290,7 +290,10 @@ mod inner {
                 let sentences = Self::split_sentences(&text);
                 let mut all_audio = Vec::new();
 
-                for sentence in &sentences {
+                /// Silence gap between sentences (150ms at 24kHz).
+                const SENTENCE_GAP_SAMPLES: usize = 3600;
+
+                for (i, sentence) in sentences.iter().enumerate() {
                     if self.interrupted.load(Ordering::SeqCst) {
                         debug!("Kokoro synthesis interrupted");
                         break;
@@ -301,6 +304,11 @@ mod inner {
 
                     if tokens.is_empty() {
                         continue;
+                    }
+
+                    // Add silence gap between sentences (not before the first)
+                    if i > 0 && !all_audio.is_empty() {
+                        all_audio.extend(std::iter::repeat(0.0f32).take(SENTENCE_GAP_SAMPLES));
                     }
 
                     // Chunk tokens if exceeding max length

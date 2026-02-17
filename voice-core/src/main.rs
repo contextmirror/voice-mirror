@@ -171,7 +171,9 @@ async fn main() {
         stt_model_name,
         stt_api_key,
         stt_endpoint,
-    ) {
+    )
+    .await
+    {
         Ok(engine) => {
             info!(adapter = stt_adapter_name, "STT engine initialized");
             Some(engine)
@@ -352,39 +354,47 @@ async fn main() {
                         app.recording_buf.extend_from_slice(chunk);
                     }
 
-                    let (is_speech, _prob) = {
-                        let mut v = audio_loop_vad.lock().unwrap();
-                        v.process(chunk, "recording")
-                    };
-
-                    if is_speech {
+                    // PTT and Dictation recordings are controlled by key release,
+                    // not by silence detection. Only apply silence timeout for
+                    // wake-word and follow-up recordings.
+                    let source = audio_loop_state.recording_source();
+                    if source == RecordingSource::Ptt || source == RecordingSource::Dictation {
                         silence_start = None;
                     } else {
-                        let silence = silence_start.get_or_insert_with(Instant::now);
-                        if silence.elapsed().as_secs_f64() >= SILENCE_TIMEOUT_SECS {
-                            info!("Silence timeout — stopping recording");
-                            if audio_loop_state.stop_recording() {
-                                emit_event(&VoiceEvent::RecordingStop {});
+                        let (is_speech, _prob) = {
+                            let mut v = audio_loop_vad.lock().unwrap();
+                            v.process(chunk, "recording")
+                        };
 
-                                let remaining = {
-                                    let mut cons = audio_loop_consumer.lock().unwrap();
-                                    cons.drain_all()
-                                };
+                        if is_speech {
+                            silence_start = None;
+                        } else {
+                            let silence = silence_start.get_or_insert_with(Instant::now);
+                            if silence.elapsed().as_secs_f64() >= SILENCE_TIMEOUT_SECS {
+                                info!("Silence timeout — stopping recording");
+                                if audio_loop_state.stop_recording() {
+                                    emit_event(&VoiceEvent::RecordingStop {});
 
-                                let audio_for_stt = {
-                                    let mut app = audio_loop_app.lock().unwrap();
-                                    app.recording_buf.extend_from_slice(&remaining);
-                                    std::mem::take(&mut app.recording_buf)
-                                };
+                                    let remaining = {
+                                        let mut cons = audio_loop_consumer.lock().unwrap();
+                                        cons.drain_all()
+                                    };
 
-                                run_stt_and_emit(&audio_loop_app, audio_for_stt).await;
+                                    let audio_for_stt = {
+                                        let mut app = audio_loop_app.lock().unwrap();
+                                        app.recording_buf.extend_from_slice(&remaining);
+                                        std::mem::take(&mut app.recording_buf)
+                                    };
 
-                                audio_loop_state.finish_processing();
-                                emit_event(&VoiceEvent::Listening {});
-                                silence_start = None;
+                                    run_stt_and_emit(&audio_loop_app, audio_for_stt).await;
 
-                                let mut v = audio_loop_vad.lock().unwrap();
-                                v.reset();
+                                    audio_loop_state.finish_processing();
+                                    emit_event(&VoiceEvent::Listening {});
+                                    silence_start = None;
+
+                                    let mut v = audio_loop_vad.lock().unwrap();
+                                    v.reset();
+                                }
                             }
                         }
                     }
@@ -613,6 +623,7 @@ async fn handle_hotkey_event(
                 run_stt_and_emit(app_state, audio_for_stt).await;
 
                 audio_state.finish_processing();
+                emit_event(&VoiceEvent::Listening {});
 
                 let mut v = vad_shared.lock().unwrap();
                 v.reset();
