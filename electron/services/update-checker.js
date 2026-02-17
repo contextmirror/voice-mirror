@@ -4,7 +4,17 @@
  * Update notifications appear in the sidebar banner (not chat toasts).
  */
 
-const { app } = require('electron');
+let app;
+try {
+    const electron = require('electron');
+    app = electron && typeof electron === 'object' && electron.app ? electron.app : null;
+} catch {
+    app = null;
+}
+if (!app) {
+    // Outside Electron runtime (e.g. Node.js test runner) — treat as dev mode
+    app = { isPackaged: false };
+}
 const { createLogger } = require('./logger');
 const log = createLogger();
 
