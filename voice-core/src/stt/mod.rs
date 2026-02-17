@@ -47,6 +47,13 @@ pub fn create_stt_engine(
     api_key: Option<&str>,
     endpoint: Option<&str>,
 ) -> anyhow::Result<SttAdapter> {
+    // Map legacy Python adapter names to Rust equivalents
+    let adapter = match adapter {
+        "parakeet" | "whisper" | "faster-whisper" => "whisper-local",
+        "openai" => "openai-cloud",
+        other => other,
+    };
+
     match adapter {
         "whisper-local" => {
             let size = model_size.unwrap_or("base");

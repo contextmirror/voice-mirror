@@ -53,11 +53,20 @@ pub fn create_tts_engine(
     match adapter {
         "kokoro" => {
             let model_dir = data_dir.join("models").join("kokoro");
-            let mut engine = kokoro::KokoroTts::new(&model_dir)?;
-            if let Some(v) = voice {
-                engine.set_voice(v);
+            match kokoro::KokoroTts::new(&model_dir) {
+                Ok(mut engine) => {
+                    if let Some(v) = voice {
+                        engine.set_voice(v);
+                    }
+                    Ok(Box::new(engine))
+                }
+                Err(_) => {
+                    // Kokoro unavailable (no native-ml or missing models), fall back to Edge TTS
+                    tracing::warn!("Kokoro TTS unavailable, falling back to Edge TTS");
+                    let v = voice.unwrap_or("en-US-AriaNeural");
+                    Ok(Box::new(cloud::EdgeTts::new(v)))
+                }
             }
-            Ok(Box::new(engine))
         }
         "edge" => {
             let v = voice.unwrap_or("en-US-AriaNeural");
