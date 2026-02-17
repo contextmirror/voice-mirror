@@ -126,7 +126,7 @@ describe('API key detection - main.js integration', () => {
 
 describe('API key detection - IPC and preload', () => {
     const ipcSource = fs.readFileSync(
-        path.join(__dirname, '../../electron/ipc/misc.js'), 'utf-8'
+        path.join(__dirname, '../../electron/ipc/voice.js'), 'utf-8'
     );
     const preloadSource = fs.readFileSync(
         path.join(__dirname, '../../electron/preload.js'), 'utf-8'
@@ -135,7 +135,7 @@ describe('API key detection - IPC and preload', () => {
     it('should have get-detected-keys IPC handler', () => {
         assert.ok(
             ipcSource.includes('get-detected-keys'),
-            'ipc/misc.js should handle get-detected-keys'
+            'ipc/voice.js should handle get-detected-keys'
         );
     });
 

@@ -4,7 +4,7 @@
  *          check-cli-available, install-cli, check-dependency-versions,
  *          update-dependency, run-uninstall,
  *          chat-list, chat-load, chat-save, chat-delete, chat-rename,
- *          apply-update, app-relaunch
+ *          apply-update, install-update, app-relaunch
  */
 
 const { app, ipcMain, shell } = require('electron');
@@ -475,13 +475,20 @@ function registerMiscHandlers(ctx, validators) {
         };
     });
 
-    // Update checker
+    // Update checker — triggers download of available update
     ipcMain.handle('apply-update', async () => {
         const checker = ctx.getUpdateChecker?.();
         if (checker) {
             return await checker.applyUpdate();
         }
         return { success: false, error: 'Update checker not initialized' };
+    });
+
+    // Install downloaded update — quit and install via electron-updater
+    ipcMain.handle('install-update', () => {
+        const { autoUpdater } = require('electron-updater');
+        autoUpdater.quitAndInstall(false, true);
+        return { success: true };
     });
 
     // App relaunch (used after updates)

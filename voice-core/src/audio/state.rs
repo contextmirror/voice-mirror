@@ -15,7 +15,7 @@ pub enum AudioState {
     Idle = 0,
     /// Actively listening for wake word or VAD trigger.
     Listening = 1,
-    /// Recording user speech (triggered by wake word, PTT, follow-up, or dictation).
+    /// Recording user speech (triggered by wake word, PTT, or dictation).
     Recording = 2,
     /// Recorded audio is being processed (STT, LLM, etc.).
     Processing = 3,
@@ -51,18 +51,14 @@ pub enum RecordingSource {
     None = 0,
     WakeWord = 1,
     Ptt = 2,
-    #[allow(dead_code)]
-    FollowUp = 3,
     Dictation = 4,
 }
 
 impl RecordingSource {
-    #[allow(dead_code)]
     fn from_u8(v: u8) -> Self {
         match v {
             1 => Self::WakeWord,
             2 => Self::Ptt,
-            3 => Self::FollowUp,
             4 => Self::Dictation,
             _ => Self::None,
         }
@@ -75,7 +71,6 @@ impl std::fmt::Display for RecordingSource {
             Self::None => write!(f, "none"),
             Self::WakeWord => write!(f, "wake_word"),
             Self::Ptt => write!(f, "ptt"),
-            Self::FollowUp => write!(f, "follow_up"),
             Self::Dictation => write!(f, "dictation"),
         }
     }
@@ -163,17 +158,6 @@ impl AudioStateMachine {
         self.state.store(AudioState::Idle as u8, Ordering::Release);
     }
 
-    /// True when we are actively capturing user speech.
-    #[allow(dead_code)]
-    pub fn is_recording(&self) -> bool {
-        self.current_state() == AudioState::Recording
-    }
-
-    /// True when we are in listening mode (wake word / VAD active).
-    #[allow(dead_code)]
-    pub fn is_listening(&self) -> bool {
-        self.current_state() == AudioState::Listening
-    }
 }
 
 impl Default for AudioStateMachine {

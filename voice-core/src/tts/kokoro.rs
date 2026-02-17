@@ -51,8 +51,6 @@ mod inner {
     }
 
     pub struct KokoroTts {
-        #[allow(dead_code)]
-        model_dir: PathBuf,
         voice: Mutex<String>,
         speed: f32,
         interrupted: AtomicBool,
@@ -92,7 +90,6 @@ mod inner {
             let vocab = build_vocab();
 
             Ok(Self {
-                model_dir: model_dir.to_path_buf(),
                 voice: Mutex::new("af_bella".to_string()),
                 speed: speed.unwrap_or(1.0),
                 interrupted: AtomicBool::new(false),

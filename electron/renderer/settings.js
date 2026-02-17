@@ -31,7 +31,6 @@ import {
     initVoiceTab,
     loadVoiceSettingsUI,
     collectVoiceSaveData,
-    ensureAdapterDeps,
 } from './settings-voice.js';
 
 import {
@@ -245,10 +244,6 @@ export async function saveSettings() {
         nameInput.addEventListener('input', () => nameInput.classList.remove('input-error'), { once: true });
         return;
     }
-
-    // Check adapter dependencies (no-op after Rust migration)
-    const depsOk = await ensureAdapterDeps();
-    if (!depsOk) return;
 
     // Collect data from sub-modules
     const voiceData = collectVoiceSaveData();

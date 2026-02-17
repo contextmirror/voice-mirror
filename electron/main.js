@@ -747,12 +747,9 @@ app.whenReady().then(async () => {
     // Voice-core captures key press/release globally regardless of window state and writes
     // ptt_trigger.json directly.
 
-    // Update checker (git-based)
+    // Update checker (electron-updater, GitHub Releases)
     updateChecker = createUpdateChecker({
-        safeSend,
-        log: (level, msg) => logger.log(level, msg),
-        appDir: path.join(__dirname, '..'),
-        userDataDir: app.getPath('userData')
+        safeSend
     });
     updateChecker.start();
 

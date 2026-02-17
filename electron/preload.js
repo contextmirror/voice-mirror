@@ -275,6 +275,7 @@ contextBridge.exposeInMainWorld('voiceMirror', {
         return () => ipcRenderer.removeListener('update-status', handler);
     },
     applyUpdate: () => ipcRenderer.invoke('apply-update'),
+    installUpdate: () => ipcRenderer.invoke('install-update'),
     relaunch: () => ipcRenderer.invoke('app-relaunch'),
 
     // Hotkey fallback — renderer sends this when it detects the hotkey via DOM keydown

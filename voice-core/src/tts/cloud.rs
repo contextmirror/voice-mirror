@@ -465,13 +465,13 @@ impl TtsEngine for ElevenLabsTts {
                 .await
                 .map_err(|e| anyhow::anyhow!("Failed to read ElevenLabs response: {}", e))?;
 
-            // TODO: Decode mp3 bytes to f32 PCM samples.
-            // Need symphonia, minimp3, or similar crate for mp3 decoding.
-            // For now, return an error indicating the decoding step is needed.
-            anyhow::bail!(
-                "ElevenLabs TTS received {} bytes of mp3 audio but mp3 decoding not yet implemented",
-                bytes.len()
-            )
+            let samples = decode_mp3_to_f32(&bytes)?;
+            info!(
+                mp3_bytes = bytes.len(),
+                pcm_samples = samples.len(),
+                "ElevenLabs TTS synthesis complete"
+            );
+            Ok(samples)
         })
     }
 

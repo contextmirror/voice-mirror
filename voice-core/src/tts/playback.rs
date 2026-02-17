@@ -6,7 +6,6 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use rodio::buffer::SamplesBuffer;
 use rodio::{OutputStream, OutputStreamHandle, Sink};
 
 /// Audio player that plays f32 PCM samples through the default output device.
@@ -31,22 +30,6 @@ impl AudioPlayer {
             sink: Arc::new(sink),
             playing: Arc::new(AtomicBool::new(false)),
         })
-    }
-
-    /// Play f32 PCM audio samples at the given sample rate (blocking until done).
-    pub fn play(&self, samples: &[f32], sample_rate: u32) -> anyhow::Result<()> {
-        if samples.is_empty() {
-            return Ok(());
-        }
-
-        self.playing.store(true, Ordering::SeqCst);
-
-        let source = SamplesBuffer::new(1, sample_rate, samples.to_vec());
-        self.sink.append(source);
-        self.sink.sleep_until_end();
-
-        self.playing.store(false, Ordering::SeqCst);
-        Ok(())
     }
 
     /// Set playback volume (0.0 = silent, 1.0 = full volume).

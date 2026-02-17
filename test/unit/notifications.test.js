@@ -147,8 +147,7 @@ describe('notifications', () => {
 
         it('should handle update status events', () => {
             assert.ok(mainContent.includes('onUpdateStatus'));
-            assert.ok(mainContent.includes("status === 'pulling'"));
-            assert.ok(mainContent.includes("status === 'installing'"));
+            assert.ok(mainContent.includes("status === 'downloading'"));
             assert.ok(mainContent.includes("status === 'ready'"));
             assert.ok(mainContent.includes("status === 'error'"));
         });

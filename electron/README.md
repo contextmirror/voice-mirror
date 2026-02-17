@@ -182,7 +182,7 @@ window.voiceMirror = {
   toggleExpand, captureScreen, getState,
 
   // Voice backend (Rust voice-core)
-  python: { sendQuery, setMode, start, stop },
+  voice: { sendQuery, setMode, start, stop },
 
   // AI provider
   claude: { start, stop, sendInput, resize },

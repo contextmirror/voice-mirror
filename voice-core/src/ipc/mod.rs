@@ -17,7 +17,6 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "event", content = "data")]
 #[serde(rename_all = "snake_case")]
-#[allow(dead_code)]
 pub enum VoiceEvent {
     Starting {},
     Loading { step: String },
@@ -60,6 +59,8 @@ pub enum VoiceEvent {
     DictationResult { text: String, success: bool },
     ImageReceived { path: String },
     Listening {},
+    /// Reserved for Electron UI — not yet emitted by voice-core.
+    #[allow(dead_code)]
     ConversationActive {},
     PttStart {},
     PttStop {},

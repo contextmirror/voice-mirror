@@ -418,14 +418,6 @@ export async function loadVoiceSettingsUI() {
 }
 
 /**
- * Adapter dependency check — no-op after Python-to-Rust migration.
- * TTS/STT engines are now bundled in the voice-core binary.
- */
-export async function ensureAdapterDeps() {
-    return true;
-}
-
-/**
  * Collect voice/behavior save data from current UI state.
  * Called by saveSettings() in the coordinator.
  */

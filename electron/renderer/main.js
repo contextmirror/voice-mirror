@@ -556,12 +556,12 @@ async function init() {
 
     window.voiceMirror.onUpdateAvailable((data) => {
         if (!updateBanner) return;
-        updateText.textContent = `Update (${data.behind} new)`;
+        updateText.textContent = `Update available (v${data.version})`;
         updateBtn.textContent = 'Update';
         updateBtn.disabled = false;
         updateBtn.onclick = async () => {
             updateBtn.disabled = true;
-            updateText.textContent = 'Pulling...';
+            updateText.textContent = 'Downloading...';
             updateBanner.className = 'loading';
             await window.voiceMirror.applyUpdate();
         };
@@ -571,31 +571,15 @@ async function init() {
 
     window.voiceMirror.onUpdateStatus((data) => {
         if (!updateBanner || updateBanner.style.display === 'none') return;
-        if (data.status === 'pulling') {
-            updateText.textContent = 'Pulling...';
+        if (data.status === 'downloading') {
+            updateText.textContent = `Downloading... ${data.percent || 0}%`;
             updateBanner.className = 'loading';
-        } else if (data.status === 'installing') {
-            updateText.textContent = 'Installing...';
         } else if (data.status === 'ready') {
-            if (data.installFailed) {
-                updateText.textContent = 'Restart to finish update';
-                updateBanner.className = 'success';
-                updateBtn.textContent = 'Restart';
-                updateBtn.disabled = false;
-                updateBtn.onclick = () => window.voiceMirror.relaunch();
-            } else if (data.pendingInstallCompleted) {
-                updateText.textContent = 'Update complete — restart to apply';
-                updateBanner.className = 'success';
-                updateBtn.textContent = 'Restart';
-                updateBtn.disabled = false;
-                updateBtn.onclick = () => window.voiceMirror.relaunch();
-            } else {
-                updateText.textContent = 'Restart to apply';
-                updateBanner.className = 'success';
-                updateBtn.textContent = 'Restart';
-                updateBtn.disabled = false;
-                updateBtn.onclick = () => window.voiceMirror.relaunch();
-            }
+            updateText.textContent = `Update ready — restart to apply`;
+            updateBanner.className = 'success';
+            updateBtn.textContent = 'Restart';
+            updateBtn.disabled = false;
+            updateBtn.onclick = () => window.voiceMirror.installUpdate();
         } else if (data.status === 'error') {
             updateText.textContent = 'Update failed';
             updateBanner.className = 'error';
@@ -603,7 +587,7 @@ async function init() {
             updateBtn.disabled = false;
             updateBtn.onclick = async () => {
                 updateBtn.disabled = true;
-                updateText.textContent = 'Pulling...';
+                updateText.textContent = 'Downloading...';
                 updateBanner.className = 'loading';
                 await window.voiceMirror.applyUpdate();
             };

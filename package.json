@@ -26,28 +26,41 @@
   "build": {
     "appId": "com.voicemirror.app",
     "productName": "Voice Mirror",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "contextmirror",
+        "repo": "voice-mirror-electron"
+      }
+    ],
     "extraFiles": [
       {
         "from": "voice-core/target/release/",
         "to": "resources/bin/",
         "filter": ["voice-core", "voice-core.exe"]
+      },
+      {
+        "from": "tools/espeak-ng/",
+        "to": "resources/bin/espeak-ng/",
+        "filter": ["**/*"]
       }
     ],
     "linux": {
-      "target": [
-        "AppImage"
-      ],
+      "target": ["AppImage"],
       "category": "Utility"
     },
     "mac": {
-      "target": [
-        "dmg"
-      ]
+      "target": ["dmg"]
     },
     "win": {
-      "target": [
-        "nsis"
-      ]
+      "target": ["nsis"],
+      "icon": "assets/icon-256.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
     }
   },
   "dependencies": {
@@ -55,6 +68,7 @@
     "chalk": "^5.6.2",
     "commander": "^14.0.3",
     "dompurify": "^3.3.1",
+    "electron-updater": "^6.3.0",
     "ghostty-web": "^0.4.0",
     "marked": "^17.0.1",
     "node-pty": "^1.1.0",
