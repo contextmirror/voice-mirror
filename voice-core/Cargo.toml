@@ -27,7 +27,7 @@ byteorder = { version = "1", optional = true }
 base64 = "0.22"
 tokio-tungstenite = { version = "0.24", features = ["native-tls"] }
 http = "1"
-minimp3 = "0.5"
+symphonia = { version = "0.5", default-features = false, features = ["mp3"] }
 sha2 = "0.10"
 hex = "0.4"
 futures-util = "0.3"

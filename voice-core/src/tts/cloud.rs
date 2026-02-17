@@ -75,28 +75,69 @@ fn xml_escape(s: &str) -> String {
     out
 }
 
-/// Decode MP3 bytes to mono f32 PCM samples using minimp3.
+/// Decode MP3 bytes to mono f32 PCM samples using Symphonia.
 fn decode_mp3_to_f32(mp3_bytes: &[u8]) -> anyhow::Result<Vec<f32>> {
-    let mut decoder = minimp3::Decoder::new(std::io::Cursor::new(mp3_bytes));
+    use symphonia::core::audio::SampleBuffer;
+    use symphonia::core::codecs::DecoderOptions;
+    use symphonia::core::formats::FormatOptions;
+    use symphonia::core::io::MediaSourceStream;
+    use symphonia::core::meta::MetadataOptions;
+    use symphonia::core::probe::Hint;
+
+    let cursor = std::io::Cursor::new(mp3_bytes.to_vec());
+    let mss = MediaSourceStream::new(Box::new(cursor), Default::default());
+
+    let mut hint = Hint::new();
+    hint.with_extension("mp3");
+
+    let probed = symphonia::default::get_probe()
+        .format(&hint, mss, &FormatOptions::default(), &MetadataOptions::default())?;
+
+    let mut format = probed.format;
+    let track = format.default_track().ok_or_else(|| anyhow::anyhow!("no audio track"))?;
+    let track_id = track.id;
+    let channels = track
+        .codec_params
+        .channels
+        .map(|c| c.count())
+        .unwrap_or(1);
+
+    let mut decoder =
+        symphonia::default::get_codecs().make(&track.codec_params, &DecoderOptions::default())?;
+
     let mut all_samples = Vec::new();
+
     loop {
-        match decoder.next_frame() {
-            Ok(frame) => {
-                let channels = frame.channels;
-                if channels == 1 {
-                    all_samples.extend(frame.data.iter().map(|&s| s as f32 / 32768.0));
-                } else {
-                    // Downmix to mono by averaging channels
-                    for chunk in frame.data.chunks(channels) {
-                        let sum: i32 = chunk.iter().map(|&s| s as i32).sum();
-                        all_samples.push((sum as f32 / channels as f32) / 32768.0);
-                    }
-                }
+        let packet = match format.next_packet() {
+            Ok(p) => p,
+            Err(symphonia::core::errors::Error::IoError(ref e))
+                if e.kind() == std::io::ErrorKind::UnexpectedEof =>
+            {
+                break;
             }
-            Err(minimp3::Error::Eof) => break,
-            Err(e) => return Err(anyhow::anyhow!("MP3 decode error: {:?}", e)),
+            Err(e) => return Err(anyhow::anyhow!("MP3 decode error: {}", e)),
+        };
+        if packet.track_id() != track_id {
+            continue;
+        }
+        let decoded = decoder.decode(&packet)?;
+        let spec = *decoded.spec();
+        let duration = decoded.capacity();
+        let mut sample_buf = SampleBuffer::<f32>::new(duration as u64, spec);
+        sample_buf.copy_interleaved_ref(decoded);
+        let samples = sample_buf.samples();
+
+        if channels == 1 {
+            all_samples.extend_from_slice(samples);
+        } else {
+            // Downmix to mono by averaging channels
+            for chunk in samples.chunks(channels) {
+                let sum: f32 = chunk.iter().sum();
+                all_samples.push(sum / channels as f32);
+            }
         }
     }
+
     Ok(all_samples)
 }
 
