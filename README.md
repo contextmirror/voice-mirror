@@ -37,7 +37,7 @@
 > **Alpha Release** — Voice Mirror is in active development. Core features work and are tested across all platforms, but expect rough edges. Bug reports and feedback welcome via [GitHub Issues](https://github.com/contextmirror/voice-mirror-electron/issues) or [Discord](https://discord.com/invite/JBpsSFB7EQ).
 
 <p align="center">
-  <img src="assets/screenshots/dashboard.png" alt="Voice Mirror Dashboard" width="800">
+  <img src="assets/screenshots/dashboard.png?v=2" alt="Voice Mirror Dashboard" width="800">
 </p>
 
 <p align="center">
