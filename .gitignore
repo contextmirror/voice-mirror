@@ -89,7 +89,6 @@ python/legacy/
 eslint.config.js
 ruff.toml
 
-# Internal docs (reference only, not for repo)
-docs/
+# Local-only files
 CLAUDE.md
 cleanup-test.ps1
