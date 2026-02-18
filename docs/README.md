@@ -14,7 +14,6 @@ Project documentation for Voice Mirror Electron.
 | [THEME-SYSTEM.md](THEME-SYSTEM.md) | Theme presets, color derivation, custom themes, TUI theming |
 | [IPC-PROTOCOL.md](IPC-PROTOCOL.md) | Complete IPC channel reference (70+ channels, validators) |
 | [BROWSER-CONTROL-REFERENCE.md](BROWSER-CONTROL-REFERENCE.md) | Deep-dive into browser control via CDP |
-| [POLISH-PLAN.md](POLISH-PLAN.md) | Roadmap: e2e tests, error recovery, crash logging, telemetry |
 
 Also see the repo root:
 - [CLAUDE.md](../CLAUDE.md) — project context for Claude Code AI assistants
