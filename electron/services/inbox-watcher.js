@@ -375,7 +375,22 @@ async function captureProviderResponse(provider, message, _devlog = () => {}, im
         provider.emitOutput = (type, text) => {
             originalEmit(type, text);
             if (resolved) return;
-            if ((type === 'stdout' || type === 'response') && text) {
+
+            // stream-end fires once when the provider is completely done
+            // (after all tool iterations). Use it as the definitive done signal
+            // instead of relying on stability polling which can resolve prematurely
+            // during LLM generation pauses on long responses.
+            if (type === 'stream-end') {
+                // text carries the complete final response from the provider
+                const responseText = text || allOutput;
+                const speakable = extractSpeakableResponse(responseText);
+                logger.info('[InboxWatcher]', `Stream-end received (${responseText.length} chars) -> speakable: "${speakable?.slice(0, 100)}..."`);
+                _devlog('BACKEND', 'response-captured', { text: speakable, chars: responseText.length, reason: 'stream-end' });
+                finish(speakable, 'stream-end');
+                return;
+            }
+
+            if (type === 'stdout' && text) {
                 fullResponse += text;
                 allOutput += text;
                 // Detect max tool iterations reached
@@ -383,6 +398,8 @@ async function captureProviderResponse(provider, message, _devlog = () => {}, im
                     maxIterationsReached = true;
                 }
             }
+            // Note: 'response' type is NOT accumulated — it duplicates stdout content.
+            // The stream-end event provides the clean final response.
         };
 
         // Send the message (with optional image)
