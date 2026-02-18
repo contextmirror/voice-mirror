@@ -5,6 +5,37 @@ Format inspired by game dev patch notes — grouped by release, categorized by i
 
 ---
 
+## v0.11.0 — "Live Wire" (2026-02-18)
+
+Real-time chat streaming, inline tool activity cards, sentence-level TTS, and duplicate message elimination. The chat window now feels as fast as the TUI dashboard.
+
+### New — Real-Time Chat Streaming
+- **Token-by-token streaming** — Chat cards now build in real-time as the LLM generates tokens, matching the TUI dashboard speed. Previously cards appeared 2-3 seconds after the response completed
+- **30ms token batching** — DOM updates batched at ~33/s instead of per-token, keeping the UI smooth without visible lag
+- **Instant scroll** — Chat auto-scrolls with `behavior: 'instant'` during streaming (no 300-600ms smooth animation delay)
+- **Streaming cursor** — Blinking block cursor shows the response is actively generating
+
+### New — Inline Tool Activity Cards
+- **Tool cards in chat bubbles** — When the LLM calls a tool (memory_search, web_search, etc.), a styled inline card appears showing the tool name and status ("Running" → "Done"/"Failed") with the existing pulse animation
+- **Full response preserved** — Tool call JSON is replaced with the card; the natural language response renders below with full markdown (bold, lists, code blocks, headers). Previously `stripToolJson()` aggressively removed content
+- **Multiple tool calls** — Each tool call creates its own card; follow-up text sections render independently
+
+### New — Sentence-Level TTS (Rust)
+- **Incremental speech** — `speak_text()` now splits text into sentences at `. ! ? \n` boundaries and synthesizes each independently. First sentence starts playing as soon as it's ready; remaining sentences queue via rodio Sink
+- **Short fragment merging** — Fragments under 20 characters are merged with neighbors to avoid choppy speech
+- **Inter-sentence cancellation** — Cancel flag checked between sentences for responsive interruption
+
+### Fixed — Duplicate Chat Messages
+- **Two-source dedup** — Both the inbox-watcher and voice-backend TTS path sent separate `chat-message` IPC events for the same response. Now suppressed via a 10-second `streamingFinalizedAt` window after streaming completes
+- **Text mismatch handled** — Inbox-watcher sends cleaned/stripped text while streaming uses raw text; time-based suppression works regardless of text differences
+
+### Improved
+- **Copy button targets answer text** — `copyMessage()` now targets `.markdown-content` instead of the first `div`, preventing accidental copy of tool card text
+- **Max-iterations finalization** — `stream-end` now emits when max tool iterations are reached, ensuring streaming cards always get finalized
+- **Tool result iteration tracking** — `onToolResult` events now include `iteration` field for precise card identification
+
+---
+
 ## v0.10.4 (2026-02-18)
 
 ### Fixed — Audio
