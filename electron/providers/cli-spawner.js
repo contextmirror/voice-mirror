@@ -137,8 +137,8 @@ function createCLISpawner(cliType) {
                 const instructions = buildGenericInstructions({
                     providerName: config.displayName,
                     userName: appConfig.user?.name || 'User',
-                    enabledGroups: appConfig.tools?.activeProfile
-                        ? (appConfig.tools.profiles?.[appConfig.tools.activeProfile]?.groups || 'core,meta')
+                    enabledGroups: appConfig.ai?.toolProfile
+                        ? (appConfig.ai.toolProfiles?.[appConfig.ai.toolProfile]?.groups || []).join(',') || 'core,meta'
                         : 'core,meta',
                     appVersion: require('../../package.json').version,
                 });
