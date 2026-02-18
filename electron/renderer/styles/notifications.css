@@ -133,3 +133,14 @@
 @keyframes spin {
     to { transform: rotate(360deg); }
 }
+
+/* ========== Reduced Motion ========== */
+@media (prefers-reduced-motion: reduce) {
+    .toast {
+        animation: none;
+    }
+
+    .toast-spinner {
+        animation: none;
+    }
+}

@@ -55,22 +55,22 @@
 
 .win-btn.win-minimize:hover {
     background: rgba(255, 190, 50, 0.25);
-    color: #ffbe32;
+    color: var(--warn, #ffbe32);
 }
 
 .win-btn.win-collapse:hover {
     background: rgba(50, 215, 75, 0.25);
-    color: #32d74b;
+    color: var(--ok, #32d74b);
 }
 
 .win-btn.win-maximize:hover {
     background: rgba(50, 215, 75, 0.25);
-    color: #32d74b;
+    color: var(--ok, #32d74b);
 }
 
 .win-btn.win-close:hover {
     background: rgba(255, 69, 58, 0.3);
-    color: #ff453a;
+    color: var(--danger, #ff453a);
 }
 
 /* ========== Chat History Section ========== */

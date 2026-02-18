@@ -76,7 +76,7 @@ async function configureOpenCodeMCP(appConfig) {
  * @param {Function} options.onVoiceEvent - Callback for voice events
  * @param {Function} options.onToolCall - Callback for tool calls
  * @param {Function} options.onToolResult - Callback for tool results
- * @param {Function} options.onProviderSwitch - Callback when provider is switched (clear message IDs)
+ * @param {Function} [options.onProviderSwitch] - Synchronous callback invoked when provider stops. Must not return a Promise.
  * @returns {Object} AI manager service instance
  */
 function createAIManager(options = {}) {

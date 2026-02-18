@@ -645,15 +645,17 @@ app.whenReady().then(async () => {
     const webviewCdp = require('./browser/webview-cdp');
     const browserController = require('./browser/browser-controller');
 
-    mainWindow.webContents.on('did-attach-webview', (event, guestWebContents) => {
+    mainWindow.webContents.on('did-attach-webview', async (event, guestWebContents) => {
         logger.info('[Voice Mirror]', 'Webview attached, setting up CDP debugger');
         try {
             webviewCdp.attachDebugger(guestWebContents);
 
             // Set up dialog event listener for JS dialog handling
-            browserController.setupDialogListener().catch(err => {
+            try {
+                await browserController.setupDialogListener();
+            } catch (err) {
                 logger.error('[Voice Mirror]', 'Dialog listener setup failed:', err.message);
-            });
+            }
 
             // Track console messages from the webview
             const onConsoleMessage = (event) => {

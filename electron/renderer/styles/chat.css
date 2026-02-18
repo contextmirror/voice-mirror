@@ -738,3 +738,26 @@
     color: var(--muted);
     font-size: 12px;
 }
+
+/* ========== Reduced Motion ========== */
+@media (prefers-reduced-motion: reduce) {
+    .message-group {
+        animation: none;
+    }
+
+    .tool-card {
+        animation: none;
+    }
+
+    .tool-status.running {
+        animation: none;
+    }
+
+    #ai-status-text.shiny-text {
+        animation: none;
+    }
+
+    .toast.exiting {
+        animation: none;
+    }
+}

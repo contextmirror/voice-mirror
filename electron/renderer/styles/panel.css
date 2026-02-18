@@ -162,7 +162,7 @@
     display: none;
     position: absolute;
     inset: 0;
-    background: rgba(102, 126, 234, 0.9);
+    background: var(--accent, rgba(102, 126, 234, 0.9));
     border-radius: 16px;
     align-items: center;
     justify-content: center;

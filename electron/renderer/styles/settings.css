@@ -1697,3 +1697,31 @@
     background: var(--danger-subtle);
     border-color: var(--danger);
 }
+
+/* ========== Reduced Motion ========== */
+@media (prefers-reduced-motion: reduce) {
+    .keybind-input.recording {
+        animation: none;
+    }
+
+    .toggle-slider,
+    .toggle-slider::before {
+        transition: none;
+    }
+
+    .radio-option,
+    .checkbox-option,
+    .settings-btn,
+    .settings-card,
+    .keybind-input,
+    .keybind-input-style,
+    .setting-row select,
+    .provider-selector-btn,
+    .provider-selector-btn .dropdown-arrow,
+    .disclaimer-modal,
+    .profile-dropdown,
+    .provider-selector.open .provider-dropdown {
+        transition: none;
+        animation: none;
+    }
+}
