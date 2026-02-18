@@ -43,29 +43,55 @@ function stripProviderPrefix(text) {
 /**
  * Strip tool call JSON from message text.
  * Local LLMs output JSON for tool calls - don't show that in the chat bubble.
+ * Uses brace-balancing to handle nested objects (e.g., {"tool":"x","args":{"q":"y"}}).
  */
 function stripToolJson(text) {
     if (!text) return text;
 
-    // Pattern 1: Standalone JSON tool call
-    // {"tool": "web_search", "args": {...}}
-    const jsonPattern = /\{[\s\S]*?"tool"[\s\S]*?"args"[\s\S]*?\}/g;
+    const toolPattern = /"tool"\s*:/;
+    let result = text;
 
-    // Pattern 2: "Sure!" followed by JSON (common Ollama pattern)
-    const prefixJsonPattern = /^(Sure!?\s*)?(\{[\s\S]*?"tool"[\s\S]*?"args"[\s\S]*?\})\s*/i;
+    // Find and remove brace-balanced JSON blocks containing "tool":
+    let searchFrom = 0;
+    while (searchFrom < result.length) {
+        const braceIdx = result.indexOf('{', searchFrom);
+        if (braceIdx === -1) break;
 
-    let cleaned = text;
+        // Find the matching closing brace (brace-balancing)
+        let depth = 0;
+        let endIdx = -1;
+        for (let i = braceIdx; i < result.length; i++) {
+            if (result[i] === '{') depth++;
+            if (result[i] === '}') depth--;
+            if (depth === 0) { endIdx = i; break; }
+        }
 
-    // Remove inline JSON tool calls
-    cleaned = cleaned.replace(jsonPattern, '').trim();
+        if (endIdx === -1) {
+            // Unbalanced — remove from brace to end if it looks like a tool call
+            const fragment = result.substring(braceIdx);
+            if (toolPattern.test(fragment)) {
+                result = result.substring(0, braceIdx).trim();
+                break;
+            }
+            searchFrom = braceIdx + 1;
+            continue;
+        }
 
-    // Remove "Sure! {json}" patterns
-    cleaned = cleaned.replace(prefixJsonPattern, '').trim();
+        const candidate = result.substring(braceIdx, endIdx + 1);
+        if (toolPattern.test(candidate)) {
+            result = result.substring(0, braceIdx) + result.substring(endIdx + 1);
+            // Don't advance searchFrom — content shifted
+        } else {
+            searchFrom = endIdx + 1;
+        }
+    }
+
+    result = result.trim();
 
     // Remove common pre-tool-call phrases that make no sense without the JSON
-    cleaned = cleaned.replace(/^(Sure!?|I'll search|Let me search|Searching)[.!]?\s*$/i, '').trim();
+    result = result.replace(/^(Sure!?|I'll search|Let me search|Searching)[.!]?\s*$/i, '').trim();
 
-    return cleaned;
+    return result;
 }
 
 /**
@@ -380,10 +406,16 @@ export function addStreamingToolCard(toolName, displayName, iteration) {
  * @param {boolean} success - Whether the tool succeeded
  */
 export function updateStreamingToolCard(iteration, success) {
-    if (!state.streamingMessageGroup) return;
+    if (!state.streamingMessageGroup) {
+        log.debug('updateStreamingToolCard: no streamingMessageGroup');
+        return;
+    }
 
     const card = state.streamingMessageGroup.querySelector(`[data-tool-iteration="${iteration}"]`);
-    if (!card) return;
+    if (!card) {
+        log.debug(`updateStreamingToolCard: card not found for iteration ${iteration}`);
+        return;
+    }
 
     const status = card.querySelector('.tool-status');
     if (status) {
@@ -422,6 +454,14 @@ export function finalizeStreamingMessage(fullText) {
         state.streamingActive = false;
         state.streamingToolCount = 0;
         return;
+    }
+
+    // Safety net: finalize any tool cards still stuck on "running"
+    const runningCards = bubble.querySelectorAll('.tool-status.running');
+    for (const status of runningCards) {
+        status.classList.remove('running');
+        status.classList.add('success');
+        status.textContent = 'Done';
     }
 
     // Handle all streaming text nodes (there may be multiple if tool cards were inserted)
