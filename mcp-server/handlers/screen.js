@@ -72,6 +72,8 @@ async function handleCaptureScreen(args) {
     }
 
     // Fallback: Request screenshot from Electron via file-based IPC
+    // NOTE: Concurrent calls to this handler may collide on the shared request/response files.
+    // MCP is single-threaded so this is safe in practice.
     const requestPath = path.join(HOME_DATA_DIR, 'screen_capture_request.json');
     const responsePath = path.join(HOME_DATA_DIR, 'screen_capture_response.json');
 

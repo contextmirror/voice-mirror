@@ -316,9 +316,14 @@ async function handleClaudeInbox(args) {
         }
         let allMessages = data.messages || [];
 
-        // Auto-cleanup old messages
+        // Auto-cleanup old messages (24h cutoff)
         const cutoff = Date.now() - (AUTO_CLEANUP_HOURS * 60 * 60 * 1000);
         allMessages = allMessages.filter(m => new Date(m.timestamp).getTime() > cutoff);
+
+        // Secondary cap: if total messages exceed 500, trim oldest beyond 500
+        if (allMessages.length > 500) {
+            allMessages = allMessages.slice(-500);
+        }
 
         // Filter out own messages
         let inbox = allMessages.filter(m => m.from !== instanceId);

@@ -20,8 +20,15 @@ const Z_INDEX = {
     OVERLAY_INTERACTIVE: 10001,
 };
 
+// Default terminal dimensions for PTY spawn (cols x rows)
+const DEFAULT_TERMINAL = {
+    COLS: 120,
+    ROWS: 30,
+};
+
 module.exports = {
     CLI_PROVIDERS,
     DEFAULT_ENDPOINTS,
     Z_INDEX,
+    DEFAULT_TERMINAL,
 };

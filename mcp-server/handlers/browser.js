@@ -13,6 +13,9 @@ const RESPONSE_PATH = path.join(HOME_DATA_DIR, 'browser_response.json');
 // Shared file-based IPC helper
 // ============================================
 
+// NOTE: Concurrent calls to this handler may collide on the shared request/response files.
+// MCP is single-threaded so this is safe in practice.
+
 /**
  * Write a request file and poll for a response file.
  *

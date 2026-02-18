@@ -107,6 +107,7 @@ const validators = {
         }
       }
       if (s.ai.contextLength !== undefined) {
+        // 1MB max context length (1048576 = 1024 * 1024)
         if (!Number.isInteger(s.ai.contextLength) || s.ai.contextLength < 1024 || s.ai.contextLength > 1048576) {
           errors.push('ai.contextLength must be an integer 1024-1048576');
         }

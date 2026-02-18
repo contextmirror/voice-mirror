@@ -49,7 +49,7 @@ if (fs.existsSync(LISTENER_LOCK_PATH)) {
     } catch (e) {
         console.error('[MCP]', 'Parse error reading lock file at startup:', e?.message);
         // Corrupt lock file — safe to remove
-        try { fs.unlinkSync(LISTENER_LOCK_PATH); } catch {}
+        try { fs.unlinkSync(LISTENER_LOCK_PATH); } catch (e2) { console.error('[MCP]', 'Failed to remove corrupt lock file:', e2?.message); }
     }
 }
 

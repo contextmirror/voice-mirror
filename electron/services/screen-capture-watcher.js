@@ -98,13 +98,17 @@ function createScreenCaptureWatcher(options = {}) {
                         return;
                     }
 
+                    let captureTimeout;
                     const sources = await Promise.race([
                         captureScreen({
                             types: ['screen'],
                             thumbnailSize: { width: 1920, height: 1080 }
                         }),
-                        new Promise((_, reject) => setTimeout(() => reject(new Error('Screen capture timed out after 30s')), 30000))
+                        new Promise((_, reject) => {
+                            captureTimeout = setTimeout(() => reject(new Error('Screen capture timed out after 30s')), 30000);
+                        })
                     ]);
+                    clearTimeout(captureTimeout);
 
                     logger.info('[ScreenCapture]', `desktopCapturer returned ${sources.length} source(s): ${sources.map((s, i) => `[${i}] "${s.name}" display_id=${s.display_id}`).join(', ')}`);
 

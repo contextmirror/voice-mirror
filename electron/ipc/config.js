@@ -347,6 +347,9 @@ function registerConfigHandlers(ctx, validators) {
     ipcMain.handle('font-add', async (_event, filePath, type) => {
         if (type !== 'ui' && type !== 'mono') return { success: false, error: 'type must be "ui" or "mono"' };
         if (typeof filePath !== 'string' || filePath.length > 1024) return { success: false, error: 'Invalid file path' };
+        // Path traversal protection: must be absolute and free of ".." segments
+        if (!path.isAbsolute(filePath)) return { success: false, error: 'File path must be absolute' };
+        if (filePath.includes('..')) return { success: false, error: 'File path must not contain ".." segments' };
         try { return await fontManager.addFont(filePath, type); }
         catch (err) { return { success: false, error: err.message }; }
     });
@@ -357,7 +360,13 @@ function registerConfigHandlers(ctx, validators) {
         catch (err) { return { success: false, error: err.message }; }
     });
 
-    ipcMain.handle('font-list', () => ({ success: true, data: fontManager.listFonts() }));
+    ipcMain.handle('font-list', () => {
+        try {
+            return { success: true, data: fontManager.listFonts() };
+        } catch (err) {
+            return { success: false, error: err.message };
+        }
+    });
 
     ipcMain.handle('font-get-data-url', async (_event, fontId) => {
         if (typeof fontId !== 'string' || fontId.length > 20) return { success: false, error: 'Invalid font ID' };

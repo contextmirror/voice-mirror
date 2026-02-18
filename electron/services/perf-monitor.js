@@ -88,7 +88,7 @@ function createPerfMonitor(options = {}) {
         if (sampleCount % FLUSH_INTERVAL === 0 && csvBuffer.length > 0) {
             const batch = csvBuffer.join('');
             csvBuffer = [];
-            fsPromises.appendFile(logPath, batch).catch(e => { if (!logWarned) { console.warn('[PerfMonitor] Log write failed:', e?.message); logWarned = true; } });
+            fsPromises.appendFile(logPath, batch).catch(e => { if (!logWarned) { logger.warn('[PerfMonitor]', 'Log write failed:', e?.message); logWarned = true; } });
         }
 
         // Deterministic rotation check (~5min)
@@ -119,7 +119,7 @@ function createPerfMonitor(options = {}) {
             if (csvBuffer.length > 0 && logPath) {
                 const batch = csvBuffer.join('');
                 csvBuffer = [];
-                fsPromises.appendFile(logPath, batch).catch(e => { if (!logWarned) { console.warn('[PerfMonitor] Log write failed:', e?.message); logWarned = true; } });
+                fsPromises.appendFile(logPath, batch).catch(e => { if (!logWarned) { logger.warn('[PerfMonitor]', 'Log write failed:', e?.message); logWarned = true; } });
             }
             logger.info('[PerfMonitor]', 'Stopped');
         }

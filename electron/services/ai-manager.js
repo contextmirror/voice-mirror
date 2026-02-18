@@ -14,7 +14,7 @@ const {
     resizePty
 } = require('../providers/claude-spawner');
 
-const { CLI_PROVIDERS } = require('../constants');
+const { CLI_PROVIDERS, DEFAULT_TERMINAL } = require('../constants');
 const { createProvider } = require('../providers');
 const { ensureLocalLLMRunning: _ensureLocalLLMRunning } = require('../lib/ollama-launcher');
 
@@ -143,8 +143,8 @@ function createAIManager(options = {}) {
                 sendOutput('exit', code);
                 sendVoiceEvent({ type: 'claude_disconnected' });
             },
-            cols: cols || 120,
-            rows: rows || 30,
+            cols: cols || DEFAULT_TERMINAL.COLS,
+            rows: rows || DEFAULT_TERMINAL.ROWS,
             appConfig
         });
 
@@ -233,8 +233,8 @@ function createAIManager(options = {}) {
                 sendVoiceEvent({ type: 'claude_disconnected' });
                 cliSpawner = null;
             },
-            cols: cols || 120,
-            rows: rows || 30,
+            cols: cols || DEFAULT_TERMINAL.COLS,
+            rows: rows || DEFAULT_TERMINAL.ROWS,
             appConfig
         });
 
@@ -347,7 +347,8 @@ function createAIManager(options = {}) {
                 await startClaudeCode(cols, rows);
                 if (isSwitch && onSystemSpeak) {
                     const hint = getActivationHint ? ` ${getActivationHint()}` : '';
-                    setTimeout(() => onSystemSpeak(`Claude is online.${hint}`), 3000);
+                    const myGen = generation;
+                    setTimeout(() => { if (myGen !== generation) return; onSystemSpeak(`Claude is online.${hint}`); }, 3000);
                 }
             } else {
                 // Non-Claude CLI agents (OpenCode, Codex, Gemini CLI, Kimi CLI)
@@ -360,7 +361,8 @@ function createAIManager(options = {}) {
                 if (isSwitch && onSystemSpeak) {
                     const displayName = cliSpawner?.config?.displayName || providerType;
                     const hint = getActivationHint ? ` ${getActivationHint()}` : '';
-                    setTimeout(() => onSystemSpeak(`${displayName} is online.${hint}`), 3000);
+                    const myGen = generation;
+                    setTimeout(() => { if (myGen !== generation) return; onSystemSpeak(`${displayName} is online.${hint}`); }, 3000);
                 }
             }
             starting = false;

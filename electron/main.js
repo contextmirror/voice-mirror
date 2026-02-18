@@ -33,6 +33,11 @@ const { createTrayService } = require('./window/tray');
 const { createWindowManager } = require('./window');
 const { createWaylandOrb } = require('./services/wayland-orb');
 
+// Named timeout constants (avoids magic numbers in the main flow)
+const VOICE_READY_TIMEOUT_MS = 30000;
+const STARTUP_GREETING_DELAY_MS = 2000;
+const AI_START_TIMEOUT_MS = 5000;
+
 /*
  * Service Initialization Order (inside app.whenReady)
  * ───────────────────────────────────────────────────
@@ -236,12 +241,12 @@ function startVoiceBackendService() {
                 sendToVoiceBackend({ command: 'ping' });
             }
         }, 2000);
-        // Set a 30-second timeout for voice-core ready event
+        // Set a timeout for voice-core ready event
         if (voiceReadyTimeout) clearTimeout(voiceReadyTimeout);
         voiceReadyTimeout = setTimeout(() => {
             clearInterval(startupPinger);
             startupPinger = null;
-            logger.error('[Voice]', 'Backend failed to start within 30 seconds, killing process');
+            logger.error('[Voice]', `Backend failed to start within ${VOICE_READY_TIMEOUT_MS / 1000} seconds, killing process`);
             if (voiceBackend?.isRunning()) {
                 voiceBackend.kill();
             }
@@ -250,7 +255,7 @@ function startVoiceBackendService() {
                 message: 'Voice backend failed to start. Build with: cd voice-core && cargo build --release'
             });
             voiceReadyTimeout = null;
-        }, 30000);
+        }, VOICE_READY_TIMEOUT_MS);
     }
 }
 
@@ -449,7 +454,7 @@ app.whenReady().then(async () => {
         if (event.type === 'loading' && voiceReadyTimeout) {
             clearTimeout(voiceReadyTimeout);
             voiceReadyTimeout = setTimeout(() => {
-                logger.error('[Voice]', 'Backend failed to start within 30 seconds, killing process');
+                logger.error('[Voice]', `Backend failed to start within ${VOICE_READY_TIMEOUT_MS / 1000} seconds, killing process`);
                 if (voiceBackend?.isRunning()) {
                     voiceBackend.kill();
                 }
@@ -458,7 +463,7 @@ app.whenReady().then(async () => {
                     message: 'Voice backend failed to start. Build with: cd voice-core && cargo build --release'
                 });
                 voiceReadyTimeout = null;
-            }, 30000);
+            }, VOICE_READY_TIMEOUT_MS);
         }
 
         // Startup greeting when voice backend is ready
@@ -475,7 +480,7 @@ app.whenReady().then(async () => {
                     userName: appConfig.user?.name || null
                 }
             });
-            setTimeout(() => doStartupGreeting(), 2000);
+            setTimeout(() => doStartupGreeting(), STARTUP_GREETING_DELAY_MS);
 
             // Start AI provider directly now that voice backend is ready
             // (event-driven — replaces the old 300ms polling interval)
@@ -795,8 +800,8 @@ app.whenReady().then(async () => {
 
         startVoiceBackendService();
 
-        // Fallback: start AI after 5 seconds if voice-core ready event hasn't fired
-        aiStartupTimeout = setTimeout(doStartAI, 5000);
+        // Fallback: start AI after timeout if voice-core ready event hasn't fired
+        aiStartupTimeout = setTimeout(doStartAI, AI_START_TIMEOUT_MS);
     } catch (err) {
         logger.error('[Voice Mirror]', 'Auto-start failed:', err.message);
     }

@@ -123,7 +123,9 @@ function registerWindowHandlers(ctx, validators) {
         return { success: true, data: mainWindow.getBounds() };
     });
 
-    // Fire-and-forget: renderer sends bounds at ~60fps during drag resize
+    // Fire-and-forget: renderer sends bounds at ~60fps during drag resize.
+    // Uses inline validation instead of centralized validators because this is
+    // an ipcMain.on() (not handle) for performance — no async overhead at 60fps.
     ipcMain.on('set-window-bounds', (event, x, y, w, h) => {
         const mainWindow = ctx.getMainWindow();
         if (!mainWindow || mainWindow.isDestroyed()) return;

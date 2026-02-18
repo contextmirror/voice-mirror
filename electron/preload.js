@@ -267,7 +267,7 @@ contextBridge.exposeInMainWorld('voiceMirror', {
     },
 
     // App version + changelog (for "What's New" feature)
-    getAppVersion: () => ipcRenderer.invoke('get-app-version'),
+    getAppVersion: () => ipcRenderer.invoke('get-app-version').then(r => r.data),
     getChangelog: (version) => ipcRenderer.invoke('get-changelog', version),
     markVersionSeen: (version) => ipcRenderer.invoke('mark-version-seen', version),
 

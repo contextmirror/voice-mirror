@@ -36,7 +36,7 @@ async function handlePipelineTrace(args) {
                 fs.unlinkSync(fPath);
             }
         }
-    } catch { /* ignore */ }
+    } catch (e) { console.error('[MCP]', 'diagnostic trace cleanup error:', e?.message); }
 
     // Write request
     fs.writeFileSync(requestPath, JSON.stringify({
@@ -58,14 +58,14 @@ async function handlePipelineTrace(args) {
                 const trace = JSON.parse(fs.readFileSync(tracePath, 'utf-8'));
 
                 // Clean up trace file
-                try { fs.unlinkSync(tracePath); } catch { /* ignore */ }
+                try { fs.unlinkSync(tracePath); } catch (e) { console.error('[MCP]', 'diagnostic trace file cleanup error:', e?.message); }
 
                 // Format output
                 return {
                     content: [{ type: 'text', text: formatTraceOutput(trace) }]
                 };
-            } catch {
-                // File may still be written, retry
+            } catch (e) {
+                console.error('[MCP]', 'diagnostic trace parse error (will retry):', e?.message);
             }
         }
     }

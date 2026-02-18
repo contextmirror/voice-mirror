@@ -187,6 +187,7 @@ export function addMessage(role, text, imageBase64 = null) {
         const copyBtn = document.createElement('button');
         copyBtn.className = 'message-copy-btn';
         copyBtn.title = 'Copy';
+        copyBtn.setAttribute('aria-label', 'Copy message');
         copyBtn.innerHTML = `
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>

@@ -53,25 +53,40 @@
 
 /* ========== Status Indicator States ========== */
 #status-indicator.wake {
-    background: #fbbf24;
+    background: var(--warn, #fbbf24);
     animation: status-blink 0.3s ease-in-out infinite;
 }
 
 #status-indicator.thinking {
-    background: #8b5cf6;
+    background: var(--accent, #8b5cf6);
     animation: status-blink 0.5s ease-in-out infinite;
 }
 
 #status-indicator.speaking {
-    background: #3b82f6;
+    background: var(--ok, #3b82f6);
     animation: status-blink 0.8s ease-in-out infinite;
 }
 
 #status-indicator.error {
-    background: #ef4444;
+    background: var(--danger, #ef4444);
 }
 
 @keyframes status-blink {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.5; }
+}
+
+/* ========== Reduced Motion ========== */
+@media (prefers-reduced-motion: reduce) {
+    #status-indicator.wake,
+    #status-indicator.thinking,
+    #status-indicator.speaking {
+        animation: none;
+    }
+
+    #orb,
+    #orb-canvas,
+    #orb-button {
+        transition: none;
+    }
 }

@@ -26,18 +26,26 @@ const N8N_API_URL = 'http://localhost:5678';
 const N8N_API_KEY_FILE = path.join(os.homedir(), '.config', 'n8n', 'api_key');
 
 let _cachedApiKey = null;
+let _cacheTimestamp = 0;
+const API_KEY_CACHE_TTL_MS = 300000; // 5 minutes
 
 function getApiKey() {
-    if (_cachedApiKey) return _cachedApiKey;
+    const now = Date.now();
+    if (_cachedApiKey && (now - _cacheTimestamp) < API_KEY_CACHE_TTL_MS) return _cachedApiKey;
+    // Cache is stale or empty — re-read
+    _cachedApiKey = null;
+    _cacheTimestamp = 0;
     try {
         if (fs.existsSync(N8N_API_KEY_FILE)) {
             _cachedApiKey = fs.readFileSync(N8N_API_KEY_FILE, 'utf-8').trim();
+            _cacheTimestamp = now;
             return _cachedApiKey;
         }
     } catch {
         _cachedApiKey = null;
     }
     _cachedApiKey = process.env.N8N_API_KEY || null;
+    _cacheTimestamp = now;
     return _cachedApiKey;
 }
 
@@ -701,7 +709,7 @@ async function handleN8nDeployTemplate(args) {
             parsed.template_description = (outerWorkflow.description || '').slice(0, 200);
             return ok(parsed);
         }
-    } catch {}
+    } catch (e) { console.error('[MCP]', 'n8n deploy template response parse error:', e?.message); }
 
     return createResult;
 }

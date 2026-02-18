@@ -88,21 +88,21 @@
 }
 
 .control-btn.clear {
-    background: rgba(100, 116, 139, 0.3);
-    color: #94a3b8;
-    border: 1px solid rgba(100, 116, 139, 0.4);
+    background: var(--border, rgba(100, 116, 139, 0.3));
+    color: var(--muted, #94a3b8);
+    border: 1px solid var(--border-strong, rgba(100, 116, 139, 0.4));
 }
 
 .control-btn.clear:hover {
-    background: rgba(100, 116, 139, 0.5);
-    color: #cbd5e1;
+    background: var(--border-strong, rgba(100, 116, 139, 0.5));
+    color: var(--text, #cbd5e1);
 }
 
 /* ========== Image Preview ========== */
 #image-preview {
     display: none;
     padding: 12px 16px;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    border-top: 1px solid var(--border, rgba(255, 255, 255, 0.1));
     background: rgba(0, 0, 0, 0.3);
 }
 
@@ -116,7 +116,7 @@
     max-width: 80px;
     max-height: 60px;
     border-radius: 8px;
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    border: 1px solid var(--border-strong, rgba(255, 255, 255, 0.2));
 }
 
 #image-preview .preview-info {
@@ -149,12 +149,12 @@
 }
 
 #image-preview .cancel-btn {
-    background: rgba(255, 255, 255, 0.1);
-    color: rgba(255, 255, 255, 0.8);
+    background: var(--border, rgba(255, 255, 255, 0.1));
+    color: var(--text-strong, rgba(255, 255, 255, 0.8));
 }
 
 #image-preview .cancel-btn:hover {
-    background: rgba(255, 255, 255, 0.2);
+    background: var(--border-strong, rgba(255, 255, 255, 0.2));
 }
 
 /* ========== Drop Zone ========== */

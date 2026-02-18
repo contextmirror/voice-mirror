@@ -487,7 +487,7 @@ function registerMiscHandlers(ctx, validators) {
     });
 
     // Get app version (for renderer "What's New" checks)
-    ipcMain.handle('get-app-version', () => app.getVersion());
+    ipcMain.handle('get-app-version', () => ({ success: true, data: app.getVersion() }));
 
     // Get changelog section for a specific version
     ipcMain.handle('get-changelog', async (_event, version) => {

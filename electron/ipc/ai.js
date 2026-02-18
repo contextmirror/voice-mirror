@@ -146,7 +146,18 @@ function registerAIHandlers(ctx, validators) {
 
     // TUI theme update — pass app theme colors to the TUI renderer
     ipcMain.handle('ai-set-tui-theme', (event, colors) => {
-        if (!colors || typeof colors !== 'object') return { success: false, error: 'invalid colors' };
+        if (!colors || typeof colors !== 'object' || Array.isArray(colors)) {
+            return { success: false, error: 'invalid colors' };
+        }
+        const keys = Object.keys(colors);
+        if (keys.length > 20) {
+            return { success: false, error: 'too many color keys (max 20)' };
+        }
+        for (const key of keys) {
+            if (typeof colors[key] !== 'string') {
+                return { success: false, error: `color value for "${key}" must be a string` };
+            }
+        }
         const aiManager = ctx.getAIManager();
         const provider = aiManager?.getProvider();
         if (provider && provider.tui && provider.tui.setThemeColors) {

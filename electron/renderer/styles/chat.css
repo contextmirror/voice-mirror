@@ -155,10 +155,14 @@
     pointer-events: auto;
 }
 
-.message-copy-btn:hover {
+.message-copy-btn:hover,
+.message-copy-btn:focus-visible {
     opacity: 1;
     background: rgba(0, 0, 0, 0.5);
     color: var(--text-strong);
+    pointer-events: auto;
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
 }
 
 .message-copy-btn.copied {

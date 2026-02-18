@@ -273,6 +273,8 @@ class OpenAIProvider extends BaseProvider {
         try {
             // Create abort controller for this request
             this.abortController = new AbortController();
+            let malformedChunkWarned = false;  // Escalate first malformed SSE chunk to warn
+            let timeoutWarningTimer = null;    // 60s warning before 120s hard timeout
 
             const url = this.baseUrl + this.chatEndpoint;
             const headers = {
@@ -335,12 +337,21 @@ class OpenAIProvider extends BaseProvider {
                 ? AbortSignal.any([this.abortController.signal, timeoutSignal])
                 : this.abortController.signal; // Fallback for older Node.js without AbortSignal.any
 
+            // Start a 60-second warning timer before the 120s hard timeout
+            timeoutWarningTimer = setTimeout(() => {
+                this.emitOutput('stdout', '\n[Still waiting for response... timeout in 60s]\n');
+            }, 60000);
+
             const response = await fetch(url, {
                 method: 'POST',
                 headers,
                 body: JSON.stringify(body),
                 signal: combinedSignal
             });
+
+            // Response headers received — clear the timeout warning
+            clearTimeout(timeoutWarningTimer);
+            timeoutWarningTimer = null;
 
             if (!response.ok) {
                 const errorText = await response.text();
@@ -410,7 +421,12 @@ class OpenAIProvider extends BaseProvider {
                         } catch (parseErr) {
                             // Log non-empty chunks that fail to parse (empty/whitespace chunks are normal SSE separators)
                             if (data && data.trim()) {
-                                logger.debug('[OpenAIProvider]', `Failed to parse SSE chunk: ${parseErr.message} (data: ${data.substring(0, 100)})`);
+                                if (!malformedChunkWarned) {
+                                    malformedChunkWarned = true;
+                                    logger.warn('[OpenAIProvider]', `Malformed SSE chunk: ${parseErr.message} (data: ${data.substring(0, 100)})`);
+                                } else {
+                                    logger.debug('[OpenAIProvider]', `Malformed SSE chunk: ${parseErr.message} (data: ${data.substring(0, 100)})`);
+                                }
                             }
                         }
                     }
@@ -734,6 +750,10 @@ class OpenAIProvider extends BaseProvider {
                 }
             }
 
+            if (!fullResponse) {
+                this.emitOutput('stdout', '\n[No response from model]\n');
+            }
+
             if (this.tui) {
                 // Emit response text for InboxWatcher to capture (chat cards + TTS).
                 // Only reaches here for non-tool-call responses — tool calls return early
@@ -746,6 +766,11 @@ class OpenAIProvider extends BaseProvider {
             }
 
         } catch (err) {
+            // Clean up timeout warning timer on error/abort
+            if (timeoutWarningTimer) {
+                clearTimeout(timeoutWarningTimer);
+                timeoutWarningTimer = null;
+            }
             if (err.name === 'AbortError') {
                 this.emitOutput('stdout', '\n[Cancelled]\n');
             } else {

@@ -7,6 +7,8 @@ const path = require('path');
 const { HOME_DATA_DIR } = require('../paths');
 
 const VOICES_DIR = path.join(HOME_DATA_DIR, 'voices');
+// NOTE: Concurrent calls to this handler may collide on the shared request/response files.
+// MCP is single-threaded so this is safe in practice.
 const VOICE_CLONE_REQUEST_PATH = path.join(HOME_DATA_DIR, 'voice_clone_request.json');
 const VOICE_CLONE_RESPONSE_PATH = path.join(HOME_DATA_DIR, 'voice_clone_response.json');
 
@@ -219,23 +221,28 @@ async function handleCloneVoice(args) {
                     // Try curl first (fast, follows redirects), fall back to Node.js https
                     try {
                         execFileSync('curl', ['-L', '-o', downloadPath, audioUrl], { timeout: 30000 });
-                    } catch {
+                    } catch (e) {
+                        console.error('[MCP]', 'curl download failed, falling back to Node.js https:', e?.message);
                         const https = require('https');
                         await new Promise((resolve, reject) => {
-                            const follow = (url) => {
+                            const maxRedirects = 5;
+                            const follow = (url, remainingRedirects) => {
+                                if (remainingRedirects <= 0) {
+                                    return reject(new Error('Too many redirects'));
+                                }
                                 https.get(url, (res) => {
                                     if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
                                         // Only follow HTTPS redirects
                                         if (!res.headers.location.startsWith('https')) {
                                             return reject(new Error('Redirect to non-HTTPS URL not allowed'));
                                         }
-                                        follow(res.headers.location);
+                                        follow(res.headers.location, remainingRedirects - 1);
                                         return;
                                     }
                                     res.pipe(fs.createWriteStream(downloadPath)).on('finish', resolve).on('error', reject);
                                 }).on('error', reject);
                             };
-                            follow(audioUrl);
+                            follow(audioUrl, maxRedirects);
                         });
                     }
                     sourceAudioPath = downloadPath;
@@ -409,7 +416,8 @@ async function handleListVoiceClones(args) {
             try {
                 const meta = JSON.parse(fs.readFileSync(path.join(VOICES_DIR, f), 'utf-8'));
                 return `- ${meta.name}: "${meta.transcript?.slice(0, 50) || 'No transcript'}..." (created: ${meta.created_at})`;
-            } catch {
+            } catch (e) {
+                console.error('[MCP]', 'voice clone metadata parse error:', e?.message);
                 return `- ${f.replace('.json', '')}: (metadata unavailable)`;
             }
         });
