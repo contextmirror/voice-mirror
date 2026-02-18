@@ -113,6 +113,39 @@ function createAIManager(options = {}) {
     }
 
     /**
+     * Send the voice listen loop command to a running CLI agent (OpenCode).
+     * Builds the prompt, sends via PTY, and retries on failure.
+     * Called on startup, after interrupt, and via IPC for manual retry.
+     */
+    function sendVoiceLoop() {
+        if (!cliSpawner || !cliSpawner.isRunning()) return;
+        const config = getConfig();
+        const providerType = config?.ai?.provider;
+        if (!CLI_PROVIDERS.includes(providerType) || providerType === 'claude') return;
+
+        const senderName = (config.user?.name || 'user').toLowerCase();
+        const voicePrompt = `Use claude_listen to wait for voice input from ${senderName}, then reply with claude_send. Loop forever.\n`;
+        const myGen = generation;
+
+        cliSpawner.sendInputWhenReady(voicePrompt, 20000)
+            .then(() => {
+                if (myGen !== generation) return;
+                logger.info('[AIManager]', 'Voice loop command sent to CLI agent');
+            })
+            .catch((err) => {
+                if (myGen !== generation) return;
+                logger.error('[AIManager]', 'Voice loop send failed, retrying:', err.message);
+                setTimeout(() => {
+                    if (myGen !== generation) return;
+                    if (cliSpawner && cliSpawner.isRunning()) {
+                        cliSpawner.sendInput(voicePrompt);
+                        logger.info('[AIManager]', 'Voice loop command sent (fallback)');
+                    }
+                }, 3000);
+            });
+    }
+
+    /**
      * Start Claude Code with Voice Mirror MCP tools.
      * Spawns a real PTY terminal running Claude Code.
      */
@@ -249,26 +282,7 @@ function createAIManager(options = {}) {
 
             // Send voice loop command for MCP-capable CLI agents
             // (full instructions are written to .opencode/instructions.md by the spawner)
-            if (providerType === 'opencode') {
-                const senderName = (appConfig.user?.name || 'user').toLowerCase();
-                const voicePrompt = `Use claude_listen to wait for voice input from ${senderName}, then reply with claude_send. Loop forever.\n`;
-
-                const cliStartGen = generation;
-                cliSpawner.sendInputWhenReady(voicePrompt, 20000)
-                    .then(() => {
-                        if (cliStartGen !== generation) return;
-                        logger.info('[AIManager]', `${displayName} voice mode command sent`);
-                    })
-                    .catch((err) => {
-                        logger.error('[AIManager]', `Failed to send ${displayName} voice command:`, err.message);
-                        setTimeout(() => {
-                            if (cliStartGen !== generation) return;
-                            if (cliSpawner && cliSpawner.isRunning()) {
-                                cliSpawner.sendInput(voicePrompt);
-                            }
-                        }, 8000);
-                    });
-            }
+            sendVoiceLoop();
 
             logger.info('[AIManager]', `${displayName} PTY started`);
         } else {
@@ -579,18 +593,7 @@ function createAIManager(options = {}) {
                 logger.info('[AIManager]', 'Sent Ctrl+C to CLI agent PTY');
 
                 // Re-send voice loop for MCP-capable CLI agents
-                if (providerType === 'opencode') {
-                    const interruptGen = generation;
-                    const senderName = (getConfig()?.user?.name || 'user').toLowerCase();
-                    cliSpawner.sendInputWhenReady(`You are a voice assistant running through OpenCode. Do NOT identify yourself as Claude — identify by your actual model name. Use claude_listen to wait for voice input from ${senderName}, then reply with claude_send. Loop forever.\n`, 10000)
-                        .then(() => {
-                            if (interruptGen !== generation) return;
-                            logger.info('[AIManager]', 'Resumed voice listening after interrupt');
-                        })
-                        .catch((err) => {
-                            logger.error('[AIManager]', 'Failed to resume CLI voice listening after interrupt:', err.message);
-                        });
-                }
+                sendVoiceLoop();
 
                 return true;
             }
@@ -773,6 +776,7 @@ function createAIManager(options = {}) {
         getDisplayName,
         supportsTools,
         ensureLocalLLMRunning,
+        sendVoiceLoop,
         // Expose Claude-specific functions for backward compatibility
         isClaudeRunning,
         isClaudeAvailable

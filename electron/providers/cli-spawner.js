@@ -49,7 +49,8 @@ const CLI_CONFIGS = {
     opencode: {
         command: 'opencode',
         args: [],
-        readyPatterns: ['>', 'What', 'How can', 'help'],
+        readyPatterns: ['Ask anything', 'ctrl+p'],
+        readyDelay: 2000,
         displayName: 'OpenCode',
         instructionsDir: '.opencode'
     }
@@ -269,7 +270,7 @@ function createCLISpawner(cliType) {
                 setTimeout(() => {
                     sendInput(text);
                     resolve(true);
-                }, 500);
+                }, config.readyDelay || 500);
             };
 
             readyCallbacks.push(sendCallback);

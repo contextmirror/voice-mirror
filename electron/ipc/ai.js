@@ -39,6 +39,11 @@ function registerAIHandlers(ctx, validators) {
         return { success: interrupted };
     });
 
+    ipcMain.handle('send-voice-loop', () => {
+        ctx.sendVoiceLoop?.();
+        return { success: true };
+    });
+
     ipcMain.handle('get-claude-status', () => {
         const providerType = ctx.getAppConfig()?.ai?.provider || 'claude';
         return {

@@ -127,6 +127,9 @@ contextBridge.exposeInMainWorld('voiceMirror', {
         // Interrupt current operation (Ctrl+C for PTY, abort for API)
         interrupt: () => ipcRenderer.invoke('interrupt-ai'),
 
+        // Re-send voice listen loop command to CLI agent (OpenCode)
+        sendVoiceLoop: () => ipcRenderer.invoke('send-voice-loop'),
+
         // Get Claude process status
         getStatus: () => ipcRenderer.invoke('get-claude-status'),
 

@@ -290,6 +290,10 @@ function interruptAIProvider() {
     return false;
 }
 
+function sendVoiceLoop() {
+    if (aiManager) aiManager.sendVoiceLoop();
+}
+
 // Inbox watcher helper functions that delegate to inboxWatcherService
 function startInboxWatcher() {
     if (inboxWatcherService) {
@@ -612,6 +616,7 @@ app.whenReady().then(async () => {
         startAIProvider,
         stopAIProvider,
         interruptAIProvider,
+        sendVoiceLoop,
         isAIProviderRunning,
         getAIManager: () => aiManager,
         getVoiceBackend: () => voiceBackend,
