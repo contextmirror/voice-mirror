@@ -233,7 +233,7 @@ async fn main() {
     };
 
     // ── TTS Playback ─────────────────────────────────────────────────
-    let tts_player = match tts::playback::AudioPlayer::new() {
+    let tts_player = match tts::playback::AudioPlayer::new(voice_settings.output_device.as_deref()) {
         Ok(player) => {
             let volume = voice_settings.tts_volume.unwrap_or(1.0) as f32;
             player.set_volume(volume);
@@ -889,8 +889,8 @@ async fn handle_command(cmd: VoiceCommand, app_state: &Arc<Mutex<AppState>>) -> 
         }
 
         VoiceCommand::ListAudioDevices {} => {
-            let device_names = audio::list_devices();
-            let input: Vec<AudioDeviceInfo> = device_names
+            let input_names = audio::list_devices();
+            let input: Vec<AudioDeviceInfo> = input_names
                 .into_iter()
                 .enumerate()
                 .map(|(i, name)| AudioDeviceInfo {
@@ -898,7 +898,15 @@ async fn handle_command(cmd: VoiceCommand, app_state: &Arc<Mutex<AppState>>) -> 
                     name,
                 })
                 .collect();
-            let output = Vec::<AudioDeviceInfo>::new();
+            let output_names = audio::list_output_devices();
+            let output: Vec<AudioDeviceInfo> = output_names
+                .into_iter()
+                .enumerate()
+                .map(|(i, name)| AudioDeviceInfo {
+                    id: i as i32,
+                    name,
+                })
+                .collect();
             emit_event(&VoiceEvent::AudioDevices { input, output });
         }
 

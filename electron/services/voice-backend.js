@@ -290,14 +290,11 @@ function createVoiceBackend(options = {}) {
                 const line = msg.trim();
                 if (!line) continue;
                 if (line.includes(' ERROR ')) {
-                    logger.error('[Voice]', 'stderr:', line);
-                    if (log) log('ERROR', line);
+                    if (log) { log('ERROR', line); } else { logger.error('[Voice]', 'stderr:', line); }
                 } else if (line.includes(' WARN ')) {
-                    logger.warn('[Voice]', 'stderr:', line);
-                    if (log) log('WARN', line);
+                    if (log) { log('WARN', line); } else { logger.warn('[Voice]', 'stderr:', line); }
                 } else {
-                    logger.info('[VOICE]', line);
-                    if (log) log('VOICE', line);
+                    if (log) { log('VOICE', line); } else { logger.info('[VOICE]', line); }
                 }
             }
         });

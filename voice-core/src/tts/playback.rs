@@ -1,14 +1,16 @@
 //! Audio playback via rodio.
 //!
-//! Plays f32 PCM audio through the default output device with volume
+//! Plays f32 PCM audio through the default (or named) output device with volume
 //! control and interruptible playback.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
+use cpal::traits::{DeviceTrait, HostTrait};
 use rodio::{OutputStream, OutputStreamHandle, Sink};
+use tracing::info;
 
-/// Audio player that plays f32 PCM samples through the default output device.
+/// Audio player that plays f32 PCM samples through an output device.
 pub struct AudioPlayer {
     _stream: OutputStream,
     _stream_handle: OutputStreamHandle,
@@ -17,10 +19,35 @@ pub struct AudioPlayer {
 }
 
 impl AudioPlayer {
-    /// Open the default audio output device.
-    pub fn new() -> anyhow::Result<Self> {
-        let (stream, stream_handle) = OutputStream::try_default()
-            .map_err(|e| anyhow::anyhow!("Failed to open audio output: {}", e))?;
+    /// Open an audio output device. If `device_name` is provided, try to find
+    /// that specific device; otherwise fall back to the system default.
+    pub fn new(device_name: Option<&str>) -> anyhow::Result<Self> {
+        let (stream, stream_handle) = if let Some(name) = device_name {
+            // Try to find the named device
+            let host = cpal::default_host();
+            let device = host
+                .output_devices()
+                .map_err(|e| anyhow::anyhow!("Failed to enumerate output devices: {e}"))?
+                .find(|d| d.name().map(|n| n == name).unwrap_or(false));
+
+            match device {
+                Some(dev) => {
+                    let dev_name = dev.name().unwrap_or_else(|_| "unknown".into());
+                    info!(device = %dev_name, "Selected output device");
+                    OutputStream::try_from_device(&dev)
+                        .map_err(|e| anyhow::anyhow!("Failed to open output device '{}': {}", name, e))?
+                }
+                None => {
+                    info!(requested = %name, "Output device not found, falling back to default");
+                    OutputStream::try_default()
+                        .map_err(|e| anyhow::anyhow!("Failed to open default audio output: {}", e))?
+                }
+            }
+        } else {
+            OutputStream::try_default()
+                .map_err(|e| anyhow::anyhow!("Failed to open audio output: {}", e))?
+        };
+
         let sink = Sink::try_new(&stream_handle)
             .map_err(|e| anyhow::anyhow!("Failed to create audio sink: {}", e))?;
 

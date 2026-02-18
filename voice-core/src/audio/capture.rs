@@ -30,6 +30,20 @@ pub fn list_devices() -> Vec<String> {
     names
 }
 
+/// List available output device names.
+pub fn list_output_devices() -> Vec<String> {
+    let host = cpal::default_host();
+    let mut names = Vec::new();
+    if let Ok(devices) = host.output_devices() {
+        for dev in devices {
+            if let Ok(name) = dev.name() {
+                names.push(name);
+            }
+        }
+    }
+    names
+}
+
 /// Resolved info about the audio input we will use.
 struct CaptureConfig {
     device: cpal::Device,

@@ -400,6 +400,7 @@ app.whenReady().then(async () => {
     });
 
     // --- Jarvis-style startup greeting ---
+    let suppressNextGreeting = false;
     function getTimePeriod() {
         const hour = new Date().getHours();
         if (hour < 12) return 'morning';
@@ -480,7 +481,11 @@ app.whenReady().then(async () => {
                     userName: appConfig.user?.name || null
                 }
             });
-            setTimeout(() => doStartupGreeting(), STARTUP_GREETING_DELAY_MS);
+            if (suppressNextGreeting) {
+                suppressNextGreeting = false;
+            } else {
+                setTimeout(() => doStartupGreeting(), STARTUP_GREETING_DELAY_MS);
+            }
 
             // Start AI provider directly now that voice backend is ready
             // (event-driven — replaces the old 300ms polling interval)
@@ -600,6 +605,7 @@ app.whenReady().then(async () => {
         isAIProviderRunning,
         getAIManager: () => aiManager,
         getVoiceBackend: () => voiceBackend,
+        suppressVoiceGreeting: () => { suppressNextGreeting = true; },
         listAudioDevices: () => voiceBackend?.listAudioDevices() ?? Promise.resolve(null),
         getWaylandOrb: () => waylandOrb,
         getHotkeyManager: () => hotkeyManager,

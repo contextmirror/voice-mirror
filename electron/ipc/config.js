@@ -221,7 +221,22 @@ function registerConfigHandlers(ctx, validators) {
         const voiceSettingsChanged = activationModeChanged || pttKeyChanged || dictationKeyChanged || userNameChanged ||
             (updates.wakeWord && JSON.stringify(updates.wakeWord) !== JSON.stringify(oldWakeWord)) ||
             (updates.voice && JSON.stringify(updates.voice) !== JSON.stringify(oldVoice));
-        if (voiceSettingsChanged && ctx.getVoiceBackend()?.isRunning()) {
+        // Audio device changes require a full voice backend restart (stream opened at startup)
+        // Check this separately from general voice settings — use explicit null-safe comparison
+        const oldInputDevice = oldVoice?.inputDevice || null;
+        const oldOutputDevice = oldVoice?.outputDevice || null;
+        const newInputDevice = updates.voice?.inputDevice !== undefined ? (updates.voice.inputDevice || null) : undefined;
+        const newOutputDevice = updates.voice?.outputDevice !== undefined ? (updates.voice.outputDevice || null) : undefined;
+        const inputDeviceChanged = newInputDevice !== undefined && newInputDevice !== oldInputDevice;
+        const outputDeviceChanged = newOutputDevice !== undefined && newOutputDevice !== oldOutputDevice;
+
+        if ((inputDeviceChanged || outputDeviceChanged) && ctx.getVoiceBackend()?.isRunning()) {
+            const currentConfig = ctx.getAppConfig();
+            ctx.getVoiceBackend().syncVoiceSettings(currentConfig);
+            ctx.logger.info('[Config]', `Audio device changed: input=${oldInputDevice}->${newInputDevice}, output=${oldOutputDevice}->${newOutputDevice}`);
+            ctx.suppressVoiceGreeting();
+            ctx.getVoiceBackend().restart();
+        } else if (voiceSettingsChanged && ctx.getVoiceBackend()?.isRunning()) {
             const currentConfig = ctx.getAppConfig();
             // Sync settings file so voice-core reads correct config on restart
             ctx.getVoiceBackend().syncVoiceSettings(currentConfig);
