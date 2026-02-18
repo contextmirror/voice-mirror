@@ -386,8 +386,13 @@ async function captureProviderResponse(provider, message, _devlog = () => {}, im
             originalEmit(type, text);
             if (resolved) return;
             if ((type === 'stdout' || type === 'response') && text) {
-                fullResponse += text;
                 allOutput += text;
+                // Only accumulate stdout tokens in fullResponse — the provider also fires a
+                // 'response' event with the complete text at the end, which would double the
+                // content if accumulated here too.
+                if (type === 'stdout') {
+                    fullResponse += text;
+                }
                 // Detect max tool iterations reached
                 if (text.includes('[Max tool iterations reached]')) {
                     maxIterationsReached = true;
