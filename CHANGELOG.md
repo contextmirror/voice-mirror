@@ -5,6 +5,24 @@ Format inspired by game dev patch notes — grouped by release, categorized by i
 
 ---
 
+## v0.10.4 (2026-02-18)
+
+### Fixed — Audio
+- **Output device selection** — Output device dropdown was empty (Rust voice-core returned hardcoded empty list). Added `list_output_devices()` and wired device names into the `AudioPlayer` so selecting a specific speaker/headset actually routes audio there
+- **Device change takes effect immediately** — Changing input or output device in settings now restarts the voice backend automatically, no manual restart needed
+- **System Default normalization** — Switching back to "System Default" from a named device now correctly triggers a restart (null comparison was failing due to empty-string vs null mismatch)
+- **Startup greeting suppressed on device change** — Config-triggered voice backend restarts no longer replay the "Good morning" startup greeting
+
+### Fixed — Code Quality (3-round audit)
+- **P0 fixes (round 1, 34 files)** — Generation counter for AI manager race conditions, async stop with event listener cleanup, stream error handling with fetch timeout, JSON.parse safety in MCP handlers, atomic file writes, lock file TOCTOU protection, base64 size limits in IPC validators
+- **P1/P2 fixes (round 2, 25 files)** — CSS theme variables with fallbacks replacing hardcoded colors, `prefers-reduced-motion` media query support, ARIA labels on interactive buttons, IPC return format consistency, provider empty-response messaging, SSE malformed-line handling, MCP redirect depth limit, n8n cache TTL, message size cap, magic numbers replaced with named constants
+- **Accessibility polish (round 3, 10 files)** — Extended `prefers-reduced-motion` to remaining animations, sidebar color consistency, service documentation
+
+### Fixed — Logging
+- **Log duplication** — Voice-core stderr lines were appearing twice (once via logger, once via log callback that routed to the same logger). Now uses one path only
+
+---
+
 ## v0.10.3 (2026-02-18)
 
 ### New — Theme System

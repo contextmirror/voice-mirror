@@ -1,6 +1,6 @@
 {
   "name": "voice-mirror-electron",
-  "version": "0.10.3",
+  "version": "0.10.4",
   "description": "Voice-controlled AI agent overlay for your entire computer",
   "main": "electron/main.js",
   "scripts": {
