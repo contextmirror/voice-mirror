@@ -475,6 +475,7 @@ class OpenAIProvider extends BaseProvider {
                 if (this.currentToolIteration >= this.maxToolIterations) {
                     logger.info('[OpenAIProvider]', `Max tool iterations (${this.maxToolIterations}) reached`);
                     this.emitOutput('stdout', '\n[Max tool iterations reached]\n');
+                    this.emitOutput('stream-end', fullResponse || '');
                     this.emitOutput('context-usage', JSON.stringify(this.estimateTokenUsage()));
                     return;
                 }
@@ -521,7 +522,7 @@ class OpenAIProvider extends BaseProvider {
 
                     // Notify UI of result
                     if (this.onToolResult) {
-                        this.onToolResult({ tool: tc.name, success: result.success, result: result.result || result.error });
+                        this.onToolResult({ tool: tc.name, success: result.success, result: result.result || result.error, iteration: this.currentToolIteration });
                     }
 
                     // Format result text
@@ -615,6 +616,7 @@ class OpenAIProvider extends BaseProvider {
                     if (this.currentToolIteration >= this.maxToolIterations) {
                         logger.info('[OpenAIProvider]', `Max tool iterations (${this.maxToolIterations}) reached`);
                         this.emitOutput('stdout', '\n[Max tool iterations reached]\n');
+                        this.emitOutput('stream-end', fullResponse || '');
                         return;
                     }
 
@@ -672,7 +674,8 @@ class OpenAIProvider extends BaseProvider {
                         this.onToolResult({
                             tool: toolCall.tool,
                             success: result.success,
-                            result: result.result || result.error
+                            result: result.result || result.error,
+                            iteration: this.currentToolIteration
                         });
                     }
 

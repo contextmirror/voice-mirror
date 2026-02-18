@@ -7,7 +7,7 @@ import { state } from './state.js';
 import { createLog } from './log.js';
 const log = createLog('[Main]');
 import { initMarkdown } from './markdown.js';
-import { addMessage, isDuplicate, copyMessage, initScrollButtons, startStreamingMessage, appendStreamingToken, finalizeStreamingMessage } from './messages.js';
+import { addMessage, isDuplicate, copyMessage, initScrollButtons, startStreamingMessage, appendStreamingToken, finalizeStreamingMessage, addStreamingToolCard, updateStreamingToolCard } from './messages.js';
 import { initTerminal, handleAIOutput, updateAIStatus, toggleTerminal, startAI, stopAI, updateProviderDisplay } from './terminal.js';
 import { initSettings, toggleSettings } from './settings.js';
 import { initNavigation, navigateTo, toggleSidebarCollapse } from './navigation.js';
@@ -336,6 +336,17 @@ async function init() {
             }
         }
 
+        // Suppress assistant messages that were already shown via streaming.
+        // TWO sources fire chat-message for the same response:
+        //   1. inbox-watcher onAssistantMessage (cleaned text)
+        //   2. voice-backend 'response' event (TTS text → chatMessage)
+        // Keep the flag alive for the full window to suppress BOTH.
+        if (data.role === 'assistant' && state.streamingFinalizedAt &&
+            (Date.now() - state.streamingFinalizedAt) < 10000) {
+            log.debug('Suppressed duplicate assistant message (already shown via streaming)');
+            return;
+        }
+
         if (!isDuplicate(data.text)) {
             addMessage(data.role, data.text);
             autoSave();
@@ -397,12 +408,24 @@ async function init() {
         }
     });
 
-    // Listen for tool events (local LLM tool system) — status bar + existing logging
+    // Listen for tool events (local LLM tool system) — status bar + inline chat cards
     window.voiceMirror.tools.onToolCall((data) => {
         log.debug('Tool call:', data);
         window.voiceMirror.devlog('TOOL', 'tool-call', { tool: data.tool, text: JSON.stringify(data.args)?.slice(0, 200) });
         const displayName = TOOL_DISPLAY_NAMES[data.tool] || `Running ${data.tool.replace(/_/g, ' ')}`;
         setAIStatus(`${displayName}...`, true, 8000, 'mcp');
+
+        // Flush pending stream tokens before inserting tool card
+        if (streamTokenTimer) {
+            clearTimeout(streamTokenTimer);
+            streamTokenTimer = null;
+        }
+        flushStreamTokens();
+
+        // Insert inline tool card into active streaming message
+        if (state.streamingActive) {
+            addStreamingToolCard(data.tool, displayName, data.iteration);
+        }
     });
 
     window.voiceMirror.tools.onToolResult((data) => {
@@ -410,6 +433,9 @@ async function init() {
         window.voiceMirror.devlog('TOOL', 'tool-result', { tool: data.tool, success: data.success, text: data.result?.slice(0, 200) });
         const displayName = TOOL_DISPLAY_NAMES[data.tool] || data.tool.replace(/_/g, ' ');
         setAIStatus(`${displayName} ${data.success ? 'done' : 'failed'}`, false, 2500, 'mcp');
+
+        // Update inline tool card status
+        updateStreamingToolCard(data.iteration, data.success);
     });
 
     // Listen for MCP tool activity (Claude Code via file IPC watchers)

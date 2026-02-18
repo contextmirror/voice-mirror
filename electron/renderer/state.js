@@ -29,7 +29,9 @@ export const state = {
     streamingMessageGroup: null,    // DOM reference to the active streaming message group
     streamingBubble: null,          // DOM reference to the streaming bubble's text node
     streamingText: '',              // Accumulated plain text during streaming
-    streamingActive: false          // Whether a streaming message is being built
+    streamingActive: false,         // Whether a streaming message is being built
+    streamingFinalizedAt: 0,         // Timestamp when streaming was last finalized (for dedup)
+    streamingToolCount: 0            // Number of inline tool cards in current streaming bubble
 };
 
 // Deduplication: track recent messages to prevent duplicates

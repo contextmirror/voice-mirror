@@ -234,6 +234,9 @@ export function addMessage(role, text, imageBase64 = null) {
  * Creates the message group with an empty bubble that fills token-by-token.
  */
 export function startStreamingMessage() {
+    // Clear any previous finalized flag — this is a NEW response
+    state.streamingFinalizedAt = 0;
+
     const chatContainer = document.getElementById('chat-container');
 
     const group = document.createElement('div');
@@ -282,6 +285,7 @@ export function startStreamingMessage() {
     state.streamingBubble = textNode;
     state.streamingText = '';
     state.streamingActive = true;
+    state.streamingToolCount = 0;
 }
 
 /**
@@ -299,6 +303,93 @@ export function appendStreamingToken(token) {
     const distanceFromBottom = chatContainer.scrollHeight - chatContainer.scrollTop - chatContainer.clientHeight;
     if (distanceFromBottom <= 150) {
         chatContainer.scrollTo({ top: chatContainer.scrollHeight, behavior: 'instant' });
+    }
+}
+
+/**
+ * Insert an inline tool activity card into the active streaming message.
+ * Strips tool JSON from accumulated text and shows a styled card instead.
+ * @param {string} toolName - Raw tool name (e.g., 'memory_search')
+ * @param {string} displayName - Friendly display name (e.g., 'Searching memory')
+ * @param {number} iteration - Tool iteration number (for identifying the card)
+ */
+export function addStreamingToolCard(toolName, displayName, iteration) {
+    if (!state.streamingActive || !state.streamingMessageGroup) return;
+
+    const bubble = state.streamingMessageGroup.querySelector('.message-bubble');
+    if (!bubble) return;
+
+    // Strip tool JSON from accumulated streaming text
+    const cleanedText = stripToolJson(state.streamingText).trim();
+    if (state.streamingBubble) {
+        if (cleanedText) {
+            state.streamingBubble.textContent = cleanedText;
+        } else {
+            // Pre-tool text was just the JSON or empty — hide it
+            state.streamingBubble.style.display = 'none';
+        }
+    }
+
+    // Create the tool card element (uses existing .tool-card CSS)
+    const card = document.createElement('div');
+    card.className = 'tool-card tool-call inline';
+    card.setAttribute('data-tool-iteration', iteration || 0);
+
+    const header = document.createElement('div');
+    header.className = 'tool-card-header';
+
+    const icon = document.createElement('span');
+    icon.className = 'tool-icon';
+    icon.textContent = '\u26A1'; // ⚡
+
+    const name = document.createElement('span');
+    name.className = 'tool-name';
+    name.textContent = displayName || toolName;
+
+    const status = document.createElement('span');
+    status.className = 'tool-status running';
+    status.textContent = 'Running';
+
+    header.appendChild(icon);
+    header.appendChild(name);
+    header.appendChild(status);
+    card.appendChild(header);
+
+    // Insert tool card before the cursor
+    const cursor = bubble.querySelector('.streaming-cursor');
+    bubble.insertBefore(card, cursor);
+
+    // Create a new streaming text div for follow-up tokens
+    const newTextNode = document.createElement('div');
+    newTextNode.className = 'streaming-text';
+    bubble.insertBefore(newTextNode, cursor);
+
+    // Update streaming state to point to the new text node
+    state.streamingBubble = newTextNode;
+    state.streamingText = '';
+    state.streamingToolCount++;
+
+    // Scroll to show the tool card
+    const chatContainer = document.getElementById('chat-container');
+    chatContainer.scrollTo({ top: chatContainer.scrollHeight, behavior: 'instant' });
+}
+
+/**
+ * Update an inline tool card's status after tool execution completes.
+ * @param {number} iteration - Tool iteration number
+ * @param {boolean} success - Whether the tool succeeded
+ */
+export function updateStreamingToolCard(iteration, success) {
+    if (!state.streamingMessageGroup) return;
+
+    const card = state.streamingMessageGroup.querySelector(`[data-tool-iteration="${iteration}"]`);
+    if (!card) return;
+
+    const status = card.querySelector('.tool-status');
+    if (status) {
+        status.classList.remove('running');
+        status.classList.add(success ? 'success' : 'error');
+        status.textContent = success ? 'Done' : 'Failed';
     }
 }
 
@@ -322,25 +413,43 @@ export function finalizeStreamingMessage(fullText) {
     let displayText = stripProviderPrefix(fullText);
     displayText = stripToolJson(displayText);
 
-    // If was just a tool call, remove the streaming message
-    if (isToolCallOnly(fullText)) {
+    // If was just a tool call with no tool cards and no content, remove the message
+    if (state.streamingToolCount === 0 && isToolCallOnly(fullText)) {
         group.remove();
         state.streamingMessageGroup = null;
         state.streamingBubble = null;
         state.streamingText = '';
         state.streamingActive = false;
+        state.streamingToolCount = 0;
         return;
     }
 
-    // Replace plain text with markdown-rendered content
-    const textNode = bubble.querySelector('.streaming-text');
-    if (textNode && displayText) {
-        textNode.className = 'markdown-content';
-        try {
-            textNode.innerHTML = renderMarkdown(displayText);
-        } catch (err) {
-            log.error('Markdown render failed during finalize:', err);
-            textNode.innerHTML = escapeHtml(displayText).replace(/\n/g, '<br>');
+    // Handle all streaming text nodes (there may be multiple if tool cards were inserted)
+    const textNodes = bubble.querySelectorAll('.streaming-text');
+    for (const textNode of textNodes) {
+        const isLast = textNode === textNodes[textNodes.length - 1];
+        const content = textNode.textContent.trim();
+
+        if (isLast && displayText) {
+            // Last text node gets the full answer rendered as markdown
+            textNode.className = 'markdown-content';
+            try {
+                textNode.innerHTML = renderMarkdown(displayText);
+            } catch (err) {
+                log.error('Markdown render failed during finalize:', err);
+                textNode.innerHTML = escapeHtml(displayText).replace(/\n/g, '<br>');
+            }
+        } else if (!content || content.length < 5) {
+            // Empty or trivial pre-tool text — remove it
+            textNode.remove();
+        } else {
+            // Non-trivial pre-tool text — render with markdown
+            textNode.className = 'markdown-content';
+            try {
+                textNode.innerHTML = renderMarkdown(content);
+            } catch (err) {
+                textNode.innerHTML = escapeHtml(content).replace(/\n/g, '<br>');
+            }
         }
     }
 
@@ -379,6 +488,10 @@ export function finalizeStreamingMessage(fullText) {
     // Register in dedup map so the later chat-message from inbox-watcher is suppressed
     isDuplicate(fullText);
 
+    // Set timestamp so onChatMessage can suppress the delayed inbox-watcher duplicate
+    // (inbox-watcher sends cleaned/stripped text that won't match raw fullText in dedup)
+    state.streamingFinalizedAt = Date.now();
+
     // Dev log
     window.voiceMirror?.devlog('UI', 'card-rendered', {
         role: 'assistant',
@@ -392,6 +505,7 @@ export function finalizeStreamingMessage(fullText) {
     state.streamingBubble = null;
     state.streamingText = '';
     state.streamingActive = false;
+    state.streamingToolCount = 0;
 }
 
 /**
@@ -413,7 +527,7 @@ export function clearMessagesArray() {
  */
 export function copyMessage(btn) {
     const bubble = btn.parentElement;
-    const textEl = bubble.querySelector('div');
+    const textEl = bubble.querySelector('.markdown-content') || bubble.querySelector('div');
     if (!textEl) return;
 
     navigator.clipboard.writeText(textEl.textContent).then(() => {
