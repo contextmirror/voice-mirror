@@ -45,6 +45,11 @@ export const DEFAULT_GLOBAL_SHORTCUTS = {
     label: 'Show/hide window',
     category: 'global',
   },
+  'stats-dashboard': {
+    keys: 'Ctrl+Shift+M',
+    label: 'Toggle stats dashboard',
+    category: 'global',
+  },
 };
 
 /**
@@ -94,6 +99,9 @@ const actionHandlers = {
   },
   'toggle-window': () => {
     console.log('[shortcuts] toggle-window triggered (no handler set)');
+  },
+  'stats-dashboard': () => {
+    console.log('[shortcuts] stats-dashboard triggered (no handler set)');
   },
 
   // In-app shortcuts -- wired to navigation store (press only)

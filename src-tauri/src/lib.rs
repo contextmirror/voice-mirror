@@ -45,6 +45,7 @@ pub fn run() {
         .manage(shortcut_cmds::ShortcutManagerState(
             std::sync::Mutex::new(shortcut_cmds::ShortcutManager::new()),
         ))
+        .manage(std::sync::Mutex::new(sysinfo::System::new()) as window_cmds::PerfMonitorState)
         .manage(std::sync::Mutex::new(None::<Box<dyn voice::tts::TtsEngine>>) as PreloadedTtsState)
         .invoke_handler(tauri::generate_handler![
             // Config
@@ -104,6 +105,8 @@ pub fn run() {
             shortcut_cmds::unregister_shortcut,
             shortcut_cmds::list_shortcuts,
             shortcut_cmds::unregister_all_shortcuts,
+            // Performance stats
+            window_cmds::get_process_stats,
         ])
         .setup(|app| {
             // Clear stale listener locks from previous sessions.

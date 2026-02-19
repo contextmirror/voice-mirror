@@ -313,6 +313,12 @@ export async function unregisterAllShortcuts() {
   return invoke('unregister_all_shortcuts');
 }
 
+// ============ Performance Stats ============
+
+export async function getProcessStats() {
+  return invoke('get_process_stats');
+}
+
 // ============ Config Migration ============
 
 /**

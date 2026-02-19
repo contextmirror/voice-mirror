@@ -1,5 +1,10 @@
 use super::IpcResponse;
+use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
 use tauri::{AppHandle, Manager};
+
+/// Managed state for the performance monitor.
+/// Holds a persistent `System` instance so CPU deltas are accurate across calls.
+pub type PerfMonitorState = std::sync::Mutex<System>;
 
 /// Get the current window position.
 #[tauri::command]
@@ -166,4 +171,35 @@ pub fn set_resizable(app: AppHandle, value: bool) -> IpcResponse {
 pub fn quit_app(app: AppHandle) -> IpcResponse {
     app.exit(0);
     IpcResponse::ok_empty()
+}
+
+/// Get current process CPU and memory stats.
+/// CPU requires a persistent System instance (managed state) so the delta
+/// between refreshes produces meaningful percentages.
+#[tauri::command]
+pub fn get_process_stats(
+    state: tauri::State<'_, PerfMonitorState>,
+) -> IpcResponse {
+    let mut sys = match state.lock() {
+        Ok(guard) => guard,
+        Err(e) => return IpcResponse::err(format!("Failed to lock perf state: {}", e)),
+    };
+
+    let pid = Pid::from_u32(std::process::id());
+    sys.refresh_processes_specifics(
+        ProcessesToUpdate::Some(&[pid]),
+        true,
+        ProcessRefreshKind::everything(),
+    );
+
+    match sys.process(pid) {
+        Some(proc) => IpcResponse::ok(serde_json::json!({
+            "cpu": proc.cpu_usage(),
+            "rss": proc.memory() / 1_048_576,
+        })),
+        None => IpcResponse::ok(serde_json::json!({
+            "cpu": 0.0,
+            "rss": 0,
+        })),
+    }
 }

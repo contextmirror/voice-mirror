@@ -55,6 +55,9 @@ symphonia = { version = "0.5", default-features = false, features = ["mp3"] }
 # Tool calling: UUID generation for tool call IDs
 uuid = { version = "1", features = ["v4"] }
 
+# Performance monitoring (CPU + memory stats)
+sysinfo = { version = "0.33", default-features = false, features = ["system"] }
+
 [[bin]]
 name = "voice-mirror-mcp"
 path = "src/bin/mcp.rs"

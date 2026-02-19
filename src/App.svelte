@@ -16,6 +16,7 @@
   import Terminal from './components/terminal/Terminal.svelte';
   import SettingsPanel from './components/settings/SettingsPanel.svelte';
   import OverlayPanel from './components/overlay/OverlayPanel.svelte';
+  import StatsBar from './components/shared/StatsBar.svelte';
 
   // Load config on mount and init event listeners
   $effect(() => {
@@ -55,6 +56,9 @@
     }
   });
 
+  // ---- Stats dashboard visibility ----
+  let statsVisible = $state(false);
+
   // ---- Voice activation handlers (shared by keyboard shortcuts + mouse buttons) ----
 
   function handleVoicePress() {
@@ -87,9 +91,10 @@
       shortcutsInitialized = true;
       shortcutsStore.init(configStore.value?.shortcuts);
 
-      // Wire PTT/Toggle keyboard shortcut (Ctrl+Shift+Space)
+      // Wire shortcut handlers
       setActionHandler('toggle-voice', handleVoicePress);
       setReleaseHandler('toggle-voice', handleVoiceRelease);
+      setActionHandler('stats-dashboard', () => { statsVisible = !statsVisible; });
 
       // Listen for PTT events from the unified input hook.
       // The Rust hook handles matching the configured key and emits
@@ -266,6 +271,8 @@
     </div>
   </div>
 {/if}
+
+<StatsBar bind:visible={statsVisible} />
 
 <style>
   .app-shell {

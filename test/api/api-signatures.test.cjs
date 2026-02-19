@@ -173,6 +173,8 @@ describe('api.js -- exported async functions', () => {
     'unregisterShortcut',
     'listShortcuts',
     'unregisterAllShortcuts',
+    // Performance Stats
+    'getProcessStats',
     // Migration
     'migrateElectronConfig',
   ];
@@ -198,7 +200,7 @@ describe('api.js -- exported async functions', () => {
 });
 
 describe('api.js -- section organization', () => {
-  const sections = ['Config', 'Window', 'Voice', 'AI', 'Inbox', 'Chat', 'Tools', 'Shortcuts', 'Config Migration'];
+  const sections = ['Config', 'Window', 'Voice', 'AI', 'Inbox', 'Chat', 'Tools', 'Shortcuts', 'Performance Stats', 'Config Migration'];
 
   for (const section of sections) {
     it(`has "${section}" section comment`, () => {
