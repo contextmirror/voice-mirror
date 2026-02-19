@@ -73,6 +73,12 @@ pub struct ToolRegistry {
     destructive_tools: HashSet<String>,
 }
 
+impl Default for ToolRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ToolRegistry {
     /// Create a new registry with all built-in tool groups.
     pub fn new() -> Self {
@@ -233,12 +239,12 @@ impl ToolRegistry {
 
         // Also load dependencies
         for dep in &group.dependencies {
-            if !self.loaded.contains(dep) {
-                if self.groups.contains_key(dep) {
-                    self.loaded.insert(dep.clone());
-                    self.group_last_used.insert(dep.clone(), count);
-                    info!("[MCP] Auto-loaded dependency \"{}\" (required by {})", dep, group_name);
-                }
+            if !self.loaded.contains(dep)
+                && self.groups.contains_key(dep)
+            {
+                self.loaded.insert(dep.clone());
+                self.group_last_used.insert(dep.clone(), count);
+                info!("[MCP] Auto-loaded dependency \"{}\" (required by {})", dep, group_name);
             }
         }
 

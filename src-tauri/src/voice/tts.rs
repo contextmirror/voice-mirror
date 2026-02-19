@@ -514,14 +514,13 @@ impl EdgeTts {
 
         // Send speech.config message
         let request_id = uuid::Uuid::new_v4().as_simple().to_string();
-        let config_msg = format!(
+        let config_msg =
             "X-Timestamp:Thu Jan 01 1970 00:00:00 GMT+0000 (Coordinated Universal Time)\r\n\
              Content-Type:application/json; charset=utf-8\r\n\
              Path:speech.config\r\n\r\n\
-             {{\"context\":{{\"synthesis\":{{\"audio\":{{\"metadataoptions\":\
-             {{\"sentenceBoundaryEnabled\":\"false\",\"wordBoundaryEnabled\":\"false\"}},\
-             \"outputFormat\":\"audio-24khz-48kbitrate-mono-mp3\"}}}}}}}}"
-        );
+             {\"context\":{\"synthesis\":{\"audio\":{\"metadataoptions\":\
+             {\"sentenceBoundaryEnabled\":\"false\",\"wordBoundaryEnabled\":\"false\"},\
+             \"outputFormat\":\"audio-24khz-48kbitrate-mono-mp3\"}}}}".to_string();
         ws_send_text(&mut upgraded, &config_msg).await?;
 
         // Send SSML request
@@ -800,7 +799,7 @@ async fn ws_read_frame<R: tokio::io::AsyncRead + Unpin>(
 fn base64_encode(data: &[u8]) -> String {
     const CHARS: &[u8] =
         b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut result = String::with_capacity((data.len() + 2) / 3 * 4);
+    let mut result = String::with_capacity(data.len().div_ceil(3) * 4);
     for chunk in data.chunks(3) {
         let b0 = chunk[0] as u32;
         let b1 = if chunk.len() > 1 { chunk[1] as u32 } else { 0 };

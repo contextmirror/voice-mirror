@@ -427,7 +427,7 @@ mod tests {
         assert!(chats[0].get("messages").is_none());
         assert!(chats[1].get("messages").is_none());
 
-        let _ = fs::remove_dir_all(dir.parent().unwrap());
+        let _ = fs::remove_dir_all(&dir);
     }
 
     // ---- Delete ----
@@ -456,7 +456,7 @@ mod tests {
         // (the file is already gone -- no error expected)
         assert!(!path.exists());
 
-        let _ = fs::remove_dir_all(dir.parent().unwrap());
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -466,7 +466,7 @@ mod tests {
         let path = dir.join("nonexistent.json");
         assert!(!path.exists());
         // No error -- this is the expected behavior
-        let _ = fs::remove_dir_all(dir.parent().unwrap());
+        let _ = fs::remove_dir_all(&dir);
     }
 
     // ---- Rename ----
@@ -503,7 +503,7 @@ mod tests {
         assert_eq!(final_chat["name"], "New Name");
         assert!(final_chat["updatedAt"].as_u64().unwrap() > 1000);
 
-        let _ = fs::remove_dir_all(dir.parent().unwrap());
+        let _ = fs::remove_dir_all(&dir);
     }
 
     // ---- Atomic write ----
@@ -523,6 +523,6 @@ mod tests {
         // tmp file should be cleaned up
         assert!(!path.with_extension("json.tmp").exists());
 
-        let _ = fs::remove_dir_all(dir.parent().unwrap());
+        let _ = fs::remove_dir_all(&dir);
     }
 }

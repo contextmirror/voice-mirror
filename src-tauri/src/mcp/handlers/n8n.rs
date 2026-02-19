@@ -1266,10 +1266,8 @@ fn extract_string_or_number(val: &Value, key: &str) -> Option<String> {
             }
         } else if let Some(n) = v.as_u64() {
             Some(n.to_string())
-        } else if let Some(n) = v.as_i64() {
-            Some(n.to_string())
         } else {
-            None
+            v.as_i64().map(|n| n.to_string())
         }
     })
 }

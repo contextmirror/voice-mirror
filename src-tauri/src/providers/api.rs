@@ -337,7 +337,7 @@ impl ApiProvider {
 
         debug!(
             msg_count = self.messages.len(),
-            has_system = self.messages.first().map_or(false, |m| m["role"] == "system"),
+            has_system = self.messages.first().is_some_and(|m| m["role"] == "system"),
             "Sending {} messages to API",
             self.messages.len()
         );

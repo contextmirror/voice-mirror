@@ -639,7 +639,7 @@ impl Provider for CliProvider {
         let project_root = find_project_root();
         let work_dir = self.config.cwd.as_ref().map(PathBuf::from)
             .or_else(|| project_root.clone())
-            .or_else(|| dirs::home_dir());
+            .or_else(dirs::home_dir);
 
         // Claude-specific setup: MCP config + system prompt + voice loop
         let is_claude = self.provider_type_id == "claude";

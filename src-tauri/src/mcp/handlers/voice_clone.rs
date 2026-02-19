@@ -103,8 +103,8 @@ fn validate_audio_path(file_path: &str) -> Result<(), String> {
 
     let resolved_str = resolved.to_string_lossy();
 
-    if resolved_str.starts_with(&data_dir.to_string_lossy().as_ref())
-        || resolved_str.starts_with(&home_dir.to_string_lossy().as_ref())
+    if resolved_str.starts_with(data_dir.to_string_lossy().as_ref())
+        || resolved_str.starts_with(home_dir.to_string_lossy().as_ref())
     {
         Ok(())
     } else {

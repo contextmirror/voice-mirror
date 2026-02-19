@@ -687,8 +687,7 @@ pub async fn handle_voice_listen(
                     true
                 }
             })
-            .filter(|m| !existing_ids.contains(&m.id))
-            .next_back();
+            .rfind(|m| !existing_ids.contains(&m.id));
 
         if let Some(msg) = new_msg {
             let wait_secs = start.elapsed().as_secs();
