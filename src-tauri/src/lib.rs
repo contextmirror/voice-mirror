@@ -155,6 +155,7 @@ pub fn run() {
                             }
                             ProviderEvent::Ready => {
                                 vec![
+                                    ("ai-output", serde_json::json!({ "type": "clear" })),
                                     ("ai-output", serde_json::json!({ "type": "start", "text": "Provider ready" })),
                                     ("ai-status-change", serde_json::json!({ "running": true })),
                                 ]

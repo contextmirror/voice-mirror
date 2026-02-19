@@ -234,6 +234,9 @@
         const data = event.payload;
 
         switch (data.type) {
+          case 'clear':
+            term.write('\x1b[2J\x1b[3J\x1b[H');
+            break;
           case 'start':
             if (data.text) {
               term.writeln(`\x1b[34m${data.text}\x1b[0m`);
