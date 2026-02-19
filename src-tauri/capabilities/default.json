@@ -1,0 +1,24 @@
+{
+  "$schema": "https://raw.githubusercontent.com/nicobao/tauri/refs/tags/tauri-v2.0.0/crates/tauri-utils/schema.json",
+  "identifier": "default",
+  "description": "Default capabilities for Voice Mirror",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "shell:allow-open",
+    "shell:allow-execute",
+    "core:window:allow-close",
+    "core:window:allow-minimize",
+    "core:window:allow-maximize",
+    "core:window:allow-unmaximize",
+    "core:window:allow-set-position",
+    "core:window:allow-outer-position",
+    "core:window:allow-set-size",
+    "core:window:allow-outer-size",
+    "core:window:allow-set-focus",
+    "core:window:allow-start-dragging",
+    "core:window:allow-set-decorations",
+    "core:window:allow-set-always-on-top",
+    "core:window:allow-set-resizable"
+  ]
+}

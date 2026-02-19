@@ -1,0 +1,161 @@
+/**
+ * terminal.css -- Terminal container, header, controls,
+ * ghostty-web canvas layout, fullscreen terminal page.
+ */
+
+/* ========== Terminal Panel ========== */
+
+.terminal-container {
+  display: flex;
+  height: 350px;
+  min-height: 100px;
+  background: var(--bg);
+  border-top: 1px solid var(--border-strong);
+  flex-direction: column;
+}
+
+/* Transition only applied during minimize/expand toggle, not window resize */
+.terminal-container.transitioning {
+  transition: height var(--duration-normal) ease;
+}
+
+.terminal-container.minimized {
+  height: 32px;
+}
+
+.terminal-container.minimized .terminal-mount {
+  display: none;
+}
+
+.terminal-container.hidden {
+  display: none;
+}
+
+/* Terminal canvas container (ghostty-web renders to <canvas>) */
+.terminal-mount {
+  flex: 1;
+  overflow: hidden;
+  padding: var(--space-xs);
+  position: relative;
+}
+
+/* ========== Terminal Header ========== */
+
+.terminal-header {
+  display: flex;
+  align-items: center;
+  padding: var(--space-sm) 12px;
+  background: rgba(0, 0, 0, 0.3);
+  border-bottom: 1px solid var(--border);
+}
+
+.terminal-header span {
+  color: var(--muted);
+  font-size: 12px;
+  font-family: var(--font-mono);
+}
+
+.terminal-header .terminal-status {
+  margin-left: var(--space-sm);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  font-size: 10px;
+  background: var(--ok-subtle);
+  color: var(--ok);
+}
+
+.terminal-header .terminal-status.stopped {
+  background: var(--danger-subtle);
+  color: var(--danger);
+}
+
+.terminal-header .terminal-title {
+  font-weight: 500;
+  color: var(--text-strong);
+}
+
+/* ========== Terminal Controls ========== */
+
+.terminal-controls {
+  margin-left: auto;
+  display: flex;
+  gap: var(--space-xs);
+}
+
+.terminal-ctrl-btn {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: var(--border);
+  color: var(--muted);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--duration-fast);
+}
+
+.terminal-ctrl-btn:hover {
+  background: var(--border-strong);
+  color: var(--text-strong);
+}
+
+/* ========== Fullscreen Terminal Page ========== */
+
+.terminal-fullscreen {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.terminal-fullscreen-header {
+  display: flex;
+  align-items: center;
+  padding: 12px var(--space-md);
+  background: rgba(0, 0, 0, 0.3);
+  border-bottom: 1px solid var(--border);
+}
+
+.terminal-fullscreen-header .terminal-title {
+  color: var(--text-strong);
+  font-size: 14px;
+  font-family: var(--font-mono);
+  font-weight: 500;
+}
+
+.terminal-fullscreen-header .terminal-status {
+  margin-left: 12px;
+  padding: 2px var(--space-sm);
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  background: var(--ok-subtle);
+  color: var(--ok);
+}
+
+.terminal-fullscreen-header .terminal-status.stopped {
+  background: var(--danger-subtle);
+  color: var(--danger);
+}
+
+.terminal-fullscreen-header .control-btn {
+  margin-left: 12px;
+}
+
+.terminal-fullscreen-mount {
+  flex: 1;
+  overflow: hidden;
+  padding: var(--space-sm);
+  position: relative;
+}
+
+/* ========== Reduced Motion ========== */
+
+@media (prefers-reduced-motion: reduce) {
+  .terminal-container.transitioning {
+    transition: none;
+  }
+}

@@ -1,0 +1,68 @@
+{
+  "$schema": "https://raw.githubusercontent.com/nicobao/tauri/refs/tags/tauri-v2.0.0/crates/tauri-utils/schema.json",
+  "productName": "Voice Mirror",
+  "version": "0.1.0",
+  "identifier": "com.voicemirror.app",
+  "build": {
+    "beforeDevCommand": "npx vite dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npx vite build",
+    "frontendDist": "../dist",
+    "features": ["native-ml"]
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Voice Mirror",
+        "width": 900,
+        "height": 800,
+        "minWidth": 600,
+        "minHeight": 500,
+        "resizable": true,
+        "decorations": false,
+        "transparent": true,
+        "shadow": false,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "windows": {
+      "nsis": {
+        "displayLanguageSelector": false,
+        "installerIcon": "icons/icon.ico"
+      }
+    },
+    "macOS": {
+      "minimumSystemVersion": "10.15"
+    },
+    "linux": {
+      "deb": {
+        "desktopTemplate": null
+      },
+      "appimage": {
+        "bundleMediaFramework": false
+      }
+    },
+    "category": "Utility",
+    "shortDescription": "Voice-controlled AI agent overlay for your desktop",
+    "longDescription": "Voice Mirror is a transparent desktop overlay that lets you control AI agents using your voice. Features speech-to-text, text-to-speech, and integration with multiple AI providers."
+  },
+  "plugins": {
+    "shell": {
+      "open": true
+    }
+  }
+}

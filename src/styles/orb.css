@@ -1,0 +1,91 @@
+/**
+ * orb.css -- Floating orb layout, canvas renderer,
+ * voice status indicator states.
+ */
+
+/* ========== Orb Container ========== */
+/* Layout/positioning only -- Canvas renderer handles all visuals */
+
+.orb {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  cursor: grab;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+  /* Center in window */
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.orb:active {
+  cursor: grabbing;
+}
+
+/* Canvas fills the orb container */
+.orb-canvas {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+/* Inner clickable button */
+.orb-button {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  padding: 0;
+  position: relative;
+  z-index: 1;
+}
+
+/* ========== Status Indicator States ========== */
+
+.status-indicator.wake {
+  background: var(--warn);
+  animation: status-blink 0.3s ease-in-out infinite;
+}
+
+.status-indicator.thinking {
+  background: var(--accent);
+  animation: status-blink 0.5s ease-in-out infinite;
+}
+
+.status-indicator.speaking {
+  background: var(--ok);
+  animation: status-blink 0.8s ease-in-out infinite;
+}
+
+.status-indicator.error {
+  background: var(--danger);
+}
+
+/* ========== Reduced Motion ========== */
+
+@media (prefers-reduced-motion: reduce) {
+  .status-indicator.wake,
+  .status-indicator.thinking,
+  .status-indicator.speaking {
+    animation: none;
+  }
+
+  .orb,
+  .orb-canvas,
+  .orb-button {
+    transition: none;
+  }
+}

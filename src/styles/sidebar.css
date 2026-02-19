@@ -1,0 +1,668 @@
+/**
+ * sidebar.css -- Sidebar layout, navigation tabs, chat list,
+ * collapse animation, window controls, status indicators.
+ *
+ * NOTE: App shell layout (.app-shell, .app-body, .main-content,
+ * .view-panel, .view-placeholder) is handled by App.svelte scoped styles.
+ */
+
+/* ========== Sidebar Container ========== */
+
+.sidebar {
+  width: 275px;
+  min-width: 275px;
+  background: var(--chrome);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  transition: width var(--duration-normal) var(--ease-out),
+              min-width var(--duration-normal) var(--ease-out);
+  overflow: hidden;
+}
+
+.sidebar.collapsed {
+  width: 48px;
+  min-width: 48px;
+}
+
+/* ========== Chat History Section ========== */
+
+.sidebar-chats {
+  border-bottom: 1px solid var(--border);
+  max-height: 200px;
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px 6px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.sidebar-section-header button {
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.sidebar-section-header button:hover {
+  background: var(--bg-hover);
+  color: var(--text-strong);
+}
+
+.sidebar-section-header button svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* ========== Chat List ========== */
+
+.sidebar-chat-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 6px 6px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.sidebar-chat-list li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text);
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.sidebar-chat-list li:hover {
+  background: var(--bg-hover);
+}
+
+.sidebar-chat-list li.active {
+  background: var(--accent-subtle);
+  color: var(--accent);
+}
+
+.sidebar-chat-list .chat-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-chat-list .chat-time {
+  color: var(--muted);
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+.sidebar-chat-list .chat-delete-btn {
+  width: 18px;
+  height: 18px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  line-height: 1;
+  flex-shrink: 0;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.sidebar-chat-list li:hover .chat-delete-btn {
+  display: flex;
+}
+
+.sidebar-chat-list .chat-delete-btn:hover {
+  background: var(--danger-subtle);
+  color: var(--danger);
+}
+
+/* ========== Context Menu ========== */
+
+.context-menu {
+  position: fixed;
+  z-index: 10000;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-xs) 0;
+  min-width: 140px;
+  box-shadow: var(--shadow-md);
+}
+
+.context-menu.hidden {
+  display: none;
+}
+
+.context-menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  width: 100%;
+  padding: 6px 12px;
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.context-menu-item:hover {
+  background: var(--bg-hover);
+}
+
+.context-menu-item svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+/* Inline rename input */
+.chat-rename-input {
+  width: 100%;
+  background: var(--bg-elevated);
+  color: var(--text);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 2px 4px;
+  font-size: 13px;
+  outline: none;
+}
+
+/* Collapsed sidebar: hide chats section */
+.sidebar.collapsed .sidebar-chats {
+  display: none;
+}
+
+/* ========== Navigation ========== */
+
+.sidebar-nav {
+  flex: 1;
+  padding: 12px var(--space-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  color: var(--muted);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+  white-space: nowrap;
+  transition: all var(--duration-fast) var(--ease-out);
+  width: 100%;
+}
+
+.nav-item:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.nav-item.active {
+  background: var(--accent-subtle);
+  color: var(--accent);
+}
+
+.nav-item svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.nav-item span {
+  opacity: 1;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+/* Collapsed state */
+.sidebar.collapsed .nav-item {
+  justify-content: center;
+  padding: 10px;
+  position: relative;
+}
+
+.sidebar.collapsed .nav-item span {
+  opacity: 0;
+  width: 0;
+  overflow: hidden;
+  position: absolute;
+}
+
+/* Nav item badge */
+.nav-item .nav-badge {
+  margin-left: auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ok);
+  flex-shrink: 0;
+}
+
+.nav-item .nav-badge.stopped {
+  background: var(--danger);
+}
+
+.sidebar.collapsed .nav-item .nav-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  margin-left: 0;
+}
+
+/* Two-line label with provider sub-label */
+.nav-label-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.nav-provider-sub {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  opacity: 0.6;
+  font-weight: 400;
+}
+
+.nav-provider-sub .provider-icon {
+  width: 16px;
+  height: 16px;
+  border-radius: var(--radius-sm);
+}
+
+.sidebar.collapsed .nav-label-group {
+  opacity: 0;
+  width: 0;
+  overflow: hidden;
+  position: absolute;
+}
+
+/* ========== Sidebar Footer ========== */
+
+.sidebar-footer {
+  padding: 12px var(--space-sm);
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+/* ========== Update Banner ========== */
+
+.sidebar-update-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) 10px;
+  background: var(--accent-subtle);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-md);
+  color: var(--text);
+  font-size: 12px;
+  animation: update-banner-in 0.25s var(--ease-out);
+}
+
+.sidebar-update-banner .update-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--accent);
+}
+
+.sidebar-update-banner .update-banner-text {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar-update-banner .update-banner-btn {
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.sidebar-update-banner .update-banner-btn:hover {
+  background: var(--accent-hover);
+}
+
+.sidebar-update-banner .update-banner-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Banner loading state */
+.sidebar-update-banner.loading {
+  border-color: var(--muted);
+  background: var(--bg);
+}
+
+.sidebar-update-banner.loading .update-icon {
+  color: var(--muted);
+  animation: spin 1s linear infinite;
+}
+
+/* Banner success state */
+.sidebar-update-banner.success {
+  border-color: var(--ok);
+  background: var(--ok-subtle);
+}
+
+.sidebar-update-banner.success .update-icon {
+  color: var(--ok);
+}
+
+.sidebar-update-banner.success .update-banner-btn {
+  background: var(--ok);
+  color: var(--bg);
+}
+
+.sidebar-update-banner.success .update-banner-btn:hover {
+  filter: brightness(0.9);
+}
+
+/* Banner error state */
+.sidebar-update-banner.error {
+  border-color: var(--danger);
+  background: var(--danger-subtle);
+}
+
+.sidebar-update-banner.error .update-icon {
+  color: var(--danger);
+}
+
+.sidebar-update-banner.error .update-banner-btn {
+  background: var(--danger);
+}
+
+.sidebar-update-banner .update-banner-dismiss {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 2px;
+  cursor: pointer;
+  flex-shrink: 0;
+  z-index: 10001;
+}
+
+.sidebar-update-banner .update-banner-dismiss:hover {
+  color: var(--text);
+}
+
+/* Collapsed sidebar: icon only for banner */
+.sidebar.collapsed .sidebar-update-banner {
+  justify-content: center;
+  padding: var(--space-sm);
+}
+
+.sidebar.collapsed .sidebar-update-banner .update-banner-text,
+.sidebar.collapsed .sidebar-update-banner .update-banner-btn,
+.sidebar.collapsed .sidebar-update-banner .update-banner-dismiss {
+  display: none;
+}
+
+/* ========== Sidebar Action Buttons ========== */
+
+.sidebar-actions {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-sm);
+}
+
+.sidebar-action-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.sidebar-action-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+  color: var(--text-strong);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.sidebar-action-btn:active {
+  transform: translateY(0);
+  box-shadow: none;
+}
+
+.sidebar-action-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* ========== Sidebar Status ========== */
+
+.sidebar-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm);
+  background: var(--bg);
+  border-radius: var(--radius-md);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.sidebar-status .status-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ok);
+  flex-shrink: 0;
+  box-shadow: 0 0 8px var(--ok-glow);
+  animation: status-glow 2s ease-in-out infinite;
+}
+
+.sidebar-status .status-indicator.recording {
+  background: var(--danger);
+  box-shadow: 0 0 8px var(--danger-glow);
+  animation: status-glow 0.5s ease-in-out infinite;
+}
+
+.sidebar-status .status-indicator.warning {
+  background: var(--warning, #f59e0b);
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.5);
+  animation: status-glow 0.8s ease-in-out infinite;
+}
+
+.sidebar-status .status-indicator.error {
+  background: var(--danger);
+  box-shadow: 0 0 8px var(--danger-glow);
+  animation: none;
+}
+
+.sidebar-status .status-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Reconnect button */
+.reconnect-btn {
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+  font-size: 11px;
+  cursor: pointer;
+  margin-left: var(--space-xs);
+  flex-shrink: 0;
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.reconnect-btn:hover {
+  background: var(--accent-hover);
+}
+
+/* Collapsed state for sidebar footer */
+.sidebar.collapsed .sidebar-actions {
+  flex-direction: column;
+}
+
+.sidebar.collapsed .sidebar-status {
+  flex-direction: column;
+  padding: 6px;
+}
+
+.sidebar.collapsed .sidebar-status .status-text {
+  display: none;
+}
+
+/* ========== Collapse Button ========== */
+
+.sidebar-collapse-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) 12px;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: 12px;
+  transition: all var(--duration-fast) var(--ease-out);
+  width: 100%;
+}
+
+.sidebar-collapse-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.sidebar-collapse-btn svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  transition: transform var(--duration-normal) var(--ease-out);
+}
+
+.sidebar.collapsed .sidebar-collapse-btn svg {
+  transform: rotate(180deg);
+}
+
+.sidebar-collapse-btn span {
+  opacity: 1;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.sidebar.collapsed .sidebar-collapse-btn span {
+  opacity: 0;
+  width: 0;
+  overflow: hidden;
+  position: absolute;
+}
+
+/* ========== Tooltips for Collapsed Sidebar ========== */
+
+.sidebar.collapsed .nav-item::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  margin-left: var(--space-sm);
+  padding: 6px 10px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 12px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--duration-fast) var(--ease-out);
+  z-index: 1000;
+  box-shadow: var(--shadow-md);
+}
+
+.sidebar.collapsed .nav-item:hover::after {
+  opacity: 1;
+}
+
+/* ========== Reduced Motion ========== */
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar {
+    transition: none;
+  }
+
+  .sidebar-update-banner {
+    animation: none;
+  }
+
+  .sidebar-update-banner.loading .update-icon {
+    animation: none;
+  }
+
+  .sidebar-status .status-indicator {
+    animation: none;
+  }
+
+  .sidebar-collapse-btn svg {
+    transition: none;
+  }
+
+}
