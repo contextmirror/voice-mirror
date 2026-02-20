@@ -172,9 +172,16 @@ pub fn set_resizable(app: AppHandle, value: bool) -> IpcResponse {
 }
 
 /// Quit the application.
+/// Uses window.close() instead of app.exit() so that the CloseRequested
+/// event fires first, allowing the on_window_event handler in lib.rs to
+/// save window bounds before the process exits.
 #[tauri::command]
 pub fn quit_app(app: AppHandle) -> IpcResponse {
-    app.exit(0);
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.close();
+    } else {
+        app.exit(0);
+    }
     IpcResponse::ok_empty()
 }
 
