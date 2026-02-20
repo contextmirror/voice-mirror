@@ -66,6 +66,10 @@ pub fn run() {
             window_cmds::set_resizable,
             window_cmds::quit_app,
             window_cmds::take_screenshot,
+            window_cmds::list_monitors,
+            window_cmds::list_windows,
+            window_cmds::capture_monitor,
+            window_cmds::capture_window,
             // Voice
             voice_cmds::start_voice,
             voice_cmds::stop_voice,

@@ -228,6 +228,84 @@ describe('ChatPanel.svelte', () => {
     assert.ok(src.includes('onSend'), 'Should accept onSend prop');
     assert.ok(src.includes('inputDisabled'), 'Should accept inputDisabled prop');
   });
+
+  it('imports ScreenshotPicker', () => {
+    assert.ok(src.includes("import ScreenshotPicker from './ScreenshotPicker.svelte'"), 'Should import ScreenshotPicker');
+  });
+
+  it('has showScreenshotPicker state', () => {
+    assert.ok(src.includes('showScreenshotPicker'), 'Should have showScreenshotPicker state');
+  });
+
+  it('renders ScreenshotPicker conditionally', () => {
+    assert.ok(src.includes('<ScreenshotPicker'), 'Should render ScreenshotPicker component');
+  });
+});
+
+// ---- ScreenshotPicker.svelte ----
+
+describe('ScreenshotPicker.svelte', () => {
+  const src = readComponent('ScreenshotPicker.svelte');
+
+  it('uses $props', () => {
+    assert.ok(src.includes('$props()'), 'Should use $props');
+  });
+
+  it('has onCapture and onClose props', () => {
+    assert.ok(src.includes('onCapture'), 'Should have onCapture prop');
+    assert.ok(src.includes('onClose'), 'Should have onClose prop');
+  });
+
+  it('imports listMonitors and listWindows from api', () => {
+    assert.ok(src.includes('listMonitors'), 'Should import listMonitors');
+    assert.ok(src.includes('listWindows'), 'Should import listWindows');
+  });
+
+  it('imports captureMonitor and captureWindow from api', () => {
+    assert.ok(src.includes('captureMonitor'), 'Should import captureMonitor');
+    assert.ok(src.includes('captureWindow'), 'Should import captureWindow');
+  });
+
+  it('has three tabs: Browser Tab, Window, Entire Screen', () => {
+    assert.ok(src.includes('Browser Tab'), 'Should have Browser Tab');
+    assert.ok(src.includes("switchTab('window')"), 'Should have Window tab');
+    assert.ok(src.includes('Entire Screen'), 'Should have Entire Screen tab');
+  });
+
+  it('has picker-overlay with z-index 10001', () => {
+    assert.ok(src.includes('picker-overlay'), 'Should have picker-overlay');
+    assert.ok(src.includes('z-index: 10001'), 'Should have z-index 10001');
+  });
+
+  it('has Cancel and Share buttons', () => {
+    assert.ok(src.includes('Cancel'), 'Should have Cancel button');
+    assert.ok(src.includes('Share'), 'Should have Share button');
+  });
+
+  it('has loading state with spinner', () => {
+    assert.ok(src.includes('loading'), 'Should track loading state');
+    assert.ok(src.includes('Loading previews'), 'Should show loading text');
+  });
+
+  it('renders thumbnail images from base64', () => {
+    assert.ok(src.includes('data:image/png;base64'), 'Should render base64 thumbnails');
+  });
+
+  it('has selected class for thumbnail cards', () => {
+    assert.ok(src.includes('class:selected'), 'Should highlight selected thumbnail');
+  });
+
+  it('handles Escape key to close', () => {
+    assert.ok(src.includes("e.key === 'Escape'"), 'Should close on Escape');
+  });
+
+  it('disables browser tab with Coming soon', () => {
+    assert.ok(src.includes('Coming soon'), 'Should show Coming soon for browser tab');
+  });
+
+  it('has backdrop-filter for blur effect', () => {
+    assert.ok(src.includes('backdrop-filter: blur'), 'Should have backdrop blur');
+  });
 });
 
 // ---- MessageGroup.svelte ----

@@ -287,6 +287,22 @@ export async function takeScreenshot() {
   return invoke('take_screenshot');
 }
 
+export async function listMonitors() {
+  return invoke('list_monitors');
+}
+
+export async function listWindows() {
+  return invoke('list_windows');
+}
+
+export async function captureMonitor(index) {
+  return invoke('capture_monitor', { index });
+}
+
+export async function captureWindow(hwnd) {
+  return invoke('capture_window', { hwnd });
+}
+
 // ============ Tools ============
 
 /**

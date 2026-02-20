@@ -8,10 +8,11 @@
    */
   import { chatStore } from '../../lib/stores/chat.svelte.js';
   import { voiceStore } from '../../lib/stores/voice.svelte.js';
-  import { takeScreenshot, exportChatToFile } from '../../lib/api.js';
+  import { exportChatToFile } from '../../lib/api.js';
   import { save } from '@tauri-apps/plugin-dialog';
   import MessageGroup from './MessageGroup.svelte';
   import ChatInput from './ChatInput.svelte';
+  import ScreenshotPicker from './ScreenshotPicker.svelte';
 
   let {
     onSend = () => {},
@@ -20,6 +21,7 @@
 
   let isRecording = $derived(voiceStore.isRecording);
   let saveFlash = $state(false);
+  let showScreenshotPicker = $state(false);
 
   let scrollContainer = $state(null);
 
@@ -115,25 +117,20 @@
     }
   }
 
-  /** Capture a screenshot and add the path as a system message. */
-  async function handleScreenshot() {
-    try {
-      chatStore.addMessage('system', 'Taking screenshot...');
-      const result = await takeScreenshot();
-      const data = result?.data || result;
-      if (data?.path) {
-        // Replace the "taking screenshot" message with the result
-        const msgs = chatStore.messages;
-        const pending = msgs[msgs.length - 1];
-        if (pending && pending.text === 'Taking screenshot...') {
-          chatStore.removeMessage(pending.id);
-        }
-        chatStore.addMessage('system', `Screenshot saved: ${data.path}`);
-      }
-    } catch (err) {
-      console.error('[ChatPanel] Screenshot failed:', err);
-      chatStore.addMessage('error', `Screenshot failed: ${err?.message || err}`);
-    }
+  /** Open the screenshot picker modal. */
+  function handleScreenshot() {
+    showScreenshotPicker = true;
+  }
+
+  /** Called when a screenshot is captured from the picker. */
+  function handleScreenshotCapture(path) {
+    showScreenshotPicker = false;
+    chatStore.addMessage('system', `Screenshot saved: ${path}`);
+  }
+
+  /** Called when the screenshot picker is closed without capturing. */
+  function handleScreenshotClose() {
+    showScreenshotPicker = false;
   }
 
   // Auto-scroll whenever messages change or streaming updates
@@ -183,6 +180,13 @@
     disabled={inputDisabled}
     {saveFlash}
   />
+
+  {#if showScreenshotPicker}
+    <ScreenshotPicker
+      onCapture={handleScreenshotCapture}
+      onClose={handleScreenshotClose}
+    />
+  {/if}
 </div>
 
 <style>

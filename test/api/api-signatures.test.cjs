@@ -92,6 +92,12 @@ describe('api.js -- critical Tauri command names', () => {
     'chat_delete',
     'chat_rename',
     'export_chat_to_file',
+    // Screenshot
+    'take_screenshot',
+    'list_monitors',
+    'list_windows',
+    'capture_monitor',
+    'capture_window',
     // Tools
     'scan_cli_tools',
     'check_npm_versions',
@@ -169,6 +175,10 @@ describe('api.js -- exported async functions', () => {
     'exportChatToFile',
     // Screenshot
     'takeScreenshot',
+    'listMonitors',
+    'listWindows',
+    'captureMonitor',
+    'captureWindow',
     // Tools
     'scanCliTools',
     'checkNpmVersions',
