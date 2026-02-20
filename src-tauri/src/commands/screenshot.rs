@@ -3,6 +3,7 @@ use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::IpcResponse;
+use super::lens::LensState;
 use tauri::{AppHandle, Manager};
 
 /// Read a PNG file and return a `data:image/png;base64,...` URL.
@@ -631,4 +632,182 @@ $bmp.Dispose()
         }
     })
     .await
+}
+
+/// Capture the Lens browser webview content.
+///
+/// Finds the WebView2 rendering surface (child window of the main window)
+/// and uses PrintWindow to capture it. Returns `{ path, thumbnail, dataUrl }`.
+///
+/// Must be called while the webview is still visible (before hiding it).
+#[tauri::command]
+pub async fn lens_capture_browser(
+    app: AppHandle,
+    state: tauri::State<'_, LensState>,
+) -> Result<IpcResponse, String> {
+    // Verify the lens webview exists (read state synchronously before any .await)
+    {
+        let label_guard = state.webview_label.lock()
+            .map_err(|e| format!("Lock error: {}", e))?;
+        if label_guard.is_none() {
+            return Ok(IpcResponse::err("No lens webview active"));
+        }
+    }
+
+    // Get the main window's HWND to find the WebView2 child
+    let main_hwnd = {
+        let window = app.get_webview_window("main")
+            .ok_or_else(|| "Main window not found".to_string())?;
+        window.hwnd()
+            .map(|h| h.0 as i64)
+            .map_err(|e| format!("Failed to get main HWND: {}", e))?
+    };
+
+    let screenshots_dir = crate::services::platform::get_data_dir().join("screenshots");
+    if let Err(e) = fs::create_dir_all(&screenshots_dir) {
+        return Ok(IpcResponse::err(format!("Failed to create screenshots dir: {}", e)));
+    }
+
+    cleanup_old_screenshots(&screenshots_dir, 5);
+
+    let now_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+    let filename = format!("browser-{}.png", now_ms);
+    let filepath = screenshots_dir.join(&filename);
+    let filepath_str = filepath.to_string_lossy().to_string();
+
+    let result = tokio::task::spawn_blocking(move || {
+        #[cfg(target_os = "windows")]
+        {
+            // PowerShell script that:
+            // 1. Finds the largest child window of the main HWND (WebView2 surface)
+            // 2. Uses PrintWindow to capture it
+            // 3. Creates a thumbnail (max 300px wide)
+            // 4. Saves full capture + returns thumbnail as base64
+            let ps_script = format!(
+                r#"
+Add-Type -AssemblyName System.Drawing
+Add-Type @"
+using System;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
+public class BrowserCapture {{
+    public delegate bool EnumChildProc(IntPtr hWnd, IntPtr lParam);
+    [DllImport("user32.dll")] public static extern bool EnumChildWindows(IntPtr hWndParent, EnumChildProc lpEnumFunc, IntPtr lParam);
+    [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+    [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr hWnd, IntPtr hdcBlt, uint nFlags);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetClassName(IntPtr hWnd, System.Text.StringBuilder lpClassName, int nMaxCount);
+    [StructLayout(LayoutKind.Sequential)] public struct RECT {{ public int Left, Top, Right, Bottom; }}
+    public static List<IntPtr> children = new List<IntPtr>();
+    public static bool Callback(IntPtr hWnd, IntPtr lParam) {{
+        children.Add(hWnd);
+        return true;
+    }}
+}}
+"@
+$parentHwnd = [IntPtr]{main_hwnd}
+[BrowserCapture]::children.Clear()
+[BrowserCapture]::EnumChildWindows($parentHwnd, [BrowserCapture+EnumChildProc]::new([BrowserCapture], 'Callback'), [IntPtr]::Zero)
+# Find the WebView2 rendering surface: largest visible child window
+$bestHwnd = [IntPtr]::Zero
+$bestArea = 0
+foreach ($child in [BrowserCapture]::children) {{
+    if (-not [BrowserCapture]::IsWindowVisible($child)) {{ continue }}
+    $rect = New-Object BrowserCapture+RECT
+    [void][BrowserCapture]::GetWindowRect($child, [ref]$rect)
+    $w = $rect.Right - $rect.Left
+    $h = $rect.Bottom - $rect.Top
+    $area = $w * $h
+    if ($area -gt $bestArea -and $w -gt 50 -and $h -gt 50) {{
+        $bestArea = $area
+        $bestHwnd = $child
+    }}
+}}
+if ($bestHwnd -eq [IntPtr]::Zero) {{ throw "No WebView2 child window found" }}
+$rect = New-Object BrowserCapture+RECT
+[void][BrowserCapture]::GetWindowRect($bestHwnd, [ref]$rect)
+$w = $rect.Right - $rect.Left
+$h = $rect.Bottom - $rect.Top
+# Capture using PrintWindow PW_RENDERFULLCONTENT
+$bmp = New-Object System.Drawing.Bitmap($w, $h)
+$g = [System.Drawing.Graphics]::FromImage($bmp)
+$hdc = $g.GetHdc()
+$ok = [BrowserCapture]::PrintWindow($bestHwnd, $hdc, 2)
+$g.ReleaseHdc($hdc)
+$g.Dispose()
+if (-not $ok) {{
+    # Fallback: CopyFromScreen
+    $bmp.Dispose()
+    $bmp = New-Object System.Drawing.Bitmap($w, $h)
+    $g2 = [System.Drawing.Graphics]::FromImage($bmp)
+    $g2.CopyFromScreen($rect.Left, $rect.Top, 0, 0, (New-Object System.Drawing.Size($w, $h)))
+    $g2.Dispose()
+}}
+# Save full-res capture
+$bmp.Save('{filepath}')
+# Create thumbnail (max 300px wide)
+$maxW = 300
+$thumbB64 = ""
+if ($w -gt $maxW) {{
+    $ratio = $maxW / $w
+    $newH = [int]($h * $ratio)
+    $thumb = New-Object System.Drawing.Bitmap($maxW, $newH)
+    $tg = [System.Drawing.Graphics]::FromImage($thumb)
+    $tg.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+    $tg.DrawImage($bmp, 0, 0, $maxW, $newH)
+    $tg.Dispose()
+    $ms = New-Object System.IO.MemoryStream
+    $thumb.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)
+    $thumbB64 = [Convert]::ToBase64String($ms.ToArray())
+    $ms.Dispose()
+    $thumb.Dispose()
+}} else {{
+    $ms = New-Object System.IO.MemoryStream
+    $bmp.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)
+    $thumbB64 = [Convert]::ToBase64String($ms.ToArray())
+    $ms.Dispose()
+}}
+$bmp.Dispose()
+Write-Output $thumbB64
+"#,
+                main_hwnd = main_hwnd,
+                filepath = filepath_str.replace('\'', "''"),
+            );
+
+            let output = std::process::Command::new("powershell")
+                .args(["-NoProfile", "-NonInteractive", "-Command", &ps_script])
+                .output()
+                .map_err(|e| format!("Failed to run PowerShell: {}", e))?;
+
+            if !output.status.success() {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                return Err(format!("Browser capture failed: {}", stderr.trim()));
+            }
+
+            let thumbnail = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            Ok(thumbnail)
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            Err("Browser capture not yet supported on this platform".into())
+        }
+    })
+    .await;
+
+    match result {
+        Ok(Ok(thumbnail)) => {
+            let data_url = read_as_data_url(&filepath).unwrap_or_default();
+            Ok(IpcResponse::ok(serde_json::json!({
+                "path": filepath.to_string_lossy(),
+                "thumbnail": thumbnail,
+                "dataUrl": data_url
+            })))
+        }
+        Ok(Err(e)) => Ok(IpcResponse::err(e)),
+        Err(e) => Ok(IpcResponse::err(format!("Browser capture task panicked: {}", e))),
+    }
 }

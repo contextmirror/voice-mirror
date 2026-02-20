@@ -89,6 +89,7 @@ pub fn run() {
             screenshot_cmds::list_windows,
             screenshot_cmds::capture_monitor,
             screenshot_cmds::capture_window,
+            screenshot_cmds::lens_capture_browser,
             // Voice
             voice_cmds::start_voice,
             voice_cmds::stop_voice,

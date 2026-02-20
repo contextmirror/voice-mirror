@@ -13,9 +13,10 @@
   let {
     onCapture = () => {},
     onClose = () => {},
+    browserSnapshot = null,
   } = $props();
 
-  let activeTab = $state('screen');
+  let activeTab = $state(browserSnapshot ? 'browser' : 'screen');
   let monitors = $state([]);
   let windows = $state([]);
   let loading = $state(true);
@@ -28,7 +29,10 @@
   let monitorsLoaded = $state(false);
   let windowsLoaded = $state(false);
 
+  const hasBrowser = $derived(browserSnapshot !== null);
+
   const canShare = $derived(
+    (activeTab === 'browser' && hasBrowser) ||
     (activeTab === 'screen' && selectedMonitor !== null) ||
     (activeTab === 'window' && selectedWindow !== null)
   );
@@ -88,6 +92,12 @@
     if (!canShare || capturing) return;
     capturing = true;
     try {
+      if (activeTab === 'browser' && browserSnapshot) {
+        // Browser tab uses the pre-captured snapshot
+        onCapture(browserSnapshot.path, browserSnapshot.dataUrl || null);
+        return;
+      }
+
       let result;
       if (activeTab === 'screen' && selectedMonitor !== null) {
         result = await captureMonitor(selectedMonitor);
@@ -120,9 +130,9 @@
     return () => lensStore.setHidden(false);
   });
 
-  // Load monitors on mount (default tab)
+  // Load initial data for the default tab
   $effect(() => {
-    loadMonitors();
+    if (activeTab === 'screen') loadMonitors();
   });
 </script>
 
@@ -151,8 +161,9 @@
       <button
         class="tab"
         class:active={activeTab === 'browser'}
-        disabled
-        title="Coming soon"
+        disabled={!hasBrowser}
+        title={hasBrowser ? 'Capture browser content' : 'No browser active'}
+        onclick={() => switchTab('browser')}
         role="tab"
         aria-selected={activeTab === 'browser'}
       >
@@ -255,11 +266,29 @@
             </div>
           {/if}
         </div>
-      {:else}
-        <!-- Browser Tab placeholder -->
-        <div class="state-message">
-          <p>Browser tab sharing is coming soon.</p>
-        </div>
+      {:else if activeTab === 'browser'}
+        {#if browserSnapshot}
+          <div class="thumbnail-grid">
+            <button
+              class="thumbnail-card selected"
+            >
+              <div class="thumbnail-img-wrap">
+                <img
+                  src="data:image/png;base64,{browserSnapshot.thumbnail}"
+                  alt="Browser preview"
+                  draggable="false"
+                />
+              </div>
+              <div class="thumbnail-label">
+                <span class="thumbnail-name">Lens Browser</span>
+              </div>
+            </button>
+          </div>
+        {:else}
+          <div class="state-message">
+            <p>No browser active. Open a page in the Lens tab first.</p>
+          </div>
+        {/if}
       {/if}
     </div>
 

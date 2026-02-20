@@ -190,6 +190,7 @@ describe('api.js -- exported async functions', () => {
     'listWindows',
     'captureMonitor',
     'captureWindow',
+    'lensCapturePreview',
     // Tools
     'scanCliTools',
     'checkNpmVersions',

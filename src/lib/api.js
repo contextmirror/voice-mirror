@@ -313,6 +313,11 @@ export async function captureWindow(hwnd) {
   return invoke('capture_window', { hwnd });
 }
 
+/** Capture the Lens browser webview content. Returns { path, thumbnail, dataUrl }. */
+export async function lensCapturePreview() {
+  return invoke('lens_capture_browser');
+}
+
 // ============ Tools ============
 
 /**
