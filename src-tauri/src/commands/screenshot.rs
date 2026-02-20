@@ -321,23 +321,51 @@ $cb = {{
     if ($pid -eq $myPid) {{ return $true }}
     $procName = ""
     try {{ $procName = (Get-Process -Id $pid -ErrorAction SilentlyContinue).ProcessName }} catch {{}}
-    # Capture window via PrintWindow (renders even if obscured)
+    # Capture window thumbnail using multi-tier strategy:
+    # 1. PrintWindow with PW_RENDERFULLCONTENT (flag 2)
+    # 2. If blank, try PrintWindow with standard flag (0)
+    # 3. If still blank, fall back to CopyFromScreen
     $b64 = ""
     try {{
         $bmp = New-Object System.Drawing.Bitmap($w, $h)
         $g = [System.Drawing.Graphics]::FromImage($bmp)
         $hdc = $g.GetHdc()
-        # Flag 2 = PW_RENDERFULLCONTENT (captures DX/hardware-accelerated content)
         $ok = [WinAPI]::PrintWindow($hWnd, $hdc, 2)
         $g.ReleaseHdc($hdc)
         $g.Dispose()
-        if (-not $ok) {{
-            # Fallback to CopyFromScreen if PrintWindow fails
+        # Check if capture produced blank content (sample 3 pixels)
+        $useThis = $ok
+        if ($ok -and $w -gt 10 -and $h -gt 10) {{
+            $p1 = $bmp.GetPixel([int]($w/2), [int]($h/2))
+            $p2 = $bmp.GetPixel([int]($w/4), [int]($h/4))
+            $p3 = $bmp.GetPixel([int]($w*3/4), [int]($h*3/4))
+            if ($p1.R+$p1.G+$p1.B -lt 15 -and $p2.R+$p2.G+$p2.B -lt 15 -and $p3.R+$p3.G+$p3.B -lt 15) {{
+                $useThis = $false
+            }}
+        }}
+        if (-not $useThis) {{
+            # Try PrintWindow with standard flag
+            $g2 = [System.Drawing.Graphics]::FromImage($bmp)
+            $hdc2 = $g2.GetHdc()
+            $ok2 = [WinAPI]::PrintWindow($hWnd, $hdc2, 0)
+            $g2.ReleaseHdc($hdc2)
+            $g2.Dispose()
+            $useThis = $ok2
+            if ($ok2 -and $w -gt 10 -and $h -gt 10) {{
+                $p1 = $bmp.GetPixel([int]($w/2), [int]($h/2))
+                $p2 = $bmp.GetPixel([int]($w/4), [int]($h/4))
+                if ($p1.R+$p1.G+$p1.B -lt 15 -and $p2.R+$p2.G+$p2.B -lt 15) {{
+                    $useThis = $false
+                }}
+            }}
+        }}
+        if (-not $useThis) {{
+            # Last resort: CopyFromScreen (works when AOT is off)
             $bmp.Dispose()
             $bmp = New-Object System.Drawing.Bitmap($w, $h)
-            $g2 = [System.Drawing.Graphics]::FromImage($bmp)
-            $g2.CopyFromScreen($rect.Left, $rect.Top, 0, 0, (New-Object System.Drawing.Size($w, $h)))
-            $g2.Dispose()
+            $g3 = [System.Drawing.Graphics]::FromImage($bmp)
+            $g3.CopyFromScreen($rect.Left, $rect.Top, 0, 0, (New-Object System.Drawing.Size($w, $h)))
+            $g3.Dispose()
         }}
         $maxW = 300
         if ($w -gt $maxW) {{
@@ -526,12 +554,37 @@ $hdc = $g.GetHdc()
 $ok = [WinRect]::PrintWindow($hwnd, $hdc, 2)
 $g.ReleaseHdc($hdc)
 $g.Dispose()
-if (-not $ok) {{
+# Check if capture is blank (sample 3 pixels)
+$useThis = $ok
+if ($ok -and $w -gt 10 -and $h -gt 10) {{
+    $p1 = $bmp.GetPixel([int]($w/2), [int]($h/2))
+    $p2 = $bmp.GetPixel([int]($w/4), [int]($h/4))
+    $p3 = $bmp.GetPixel([int]($w*3/4), [int]($h*3/4))
+    if ($p1.R+$p1.G+$p1.B -lt 15 -and $p2.R+$p2.G+$p2.B -lt 15 -and $p3.R+$p3.G+$p3.B -lt 15) {{
+        $useThis = $false
+    }}
+}}
+if (-not $useThis) {{
+    $g2 = [System.Drawing.Graphics]::FromImage($bmp)
+    $hdc2 = $g2.GetHdc()
+    $ok2 = [WinRect]::PrintWindow($hwnd, $hdc2, 0)
+    $g2.ReleaseHdc($hdc2)
+    $g2.Dispose()
+    $useThis = $ok2
+    if ($ok2 -and $w -gt 10 -and $h -gt 10) {{
+        $p1 = $bmp.GetPixel([int]($w/2), [int]($h/2))
+        $p2 = $bmp.GetPixel([int]($w/4), [int]($h/4))
+        if ($p1.R+$p1.G+$p1.B -lt 15 -and $p2.R+$p2.G+$p2.B -lt 15) {{
+            $useThis = $false
+        }}
+    }}
+}}
+if (-not $useThis) {{
     $bmp.Dispose()
     $bmp = New-Object System.Drawing.Bitmap($w, $h)
-    $g2 = [System.Drawing.Graphics]::FromImage($bmp)
-    $g2.CopyFromScreen($rect.Left, $rect.Top, 0, 0, (New-Object System.Drawing.Size($w, $h)))
-    $g2.Dispose()
+    $g3 = [System.Drawing.Graphics]::FromImage($bmp)
+    $g3.CopyFromScreen($rect.Left, $rect.Top, 0, 0, (New-Object System.Drawing.Size($w, $h)))
+    $g3.Dispose()
 }}
 $bmp.Save('{}')
 $bmp.Dispose()
