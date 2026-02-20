@@ -5,36 +5,32 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use super::IpcResponse;
 use tauri::{AppHandle, Manager};
 
-/// Temporarily hide our window, run an async closure, then restore it.
-/// This ensures our window doesn't appear in screenshots/thumbnails and
-/// doesn't cause black areas where it overlaps other windows.
-async fn with_window_hidden<F, Fut>(app: &AppHandle, f: F) -> IpcResponse
+/// Temporarily disable always-on-top, run an async closure, then re-enable.
+///
+/// In dashboard mode AOT is already off, so this is a no-op. In orb mode
+/// (if a capture is triggered via hotkey etc.), this ensures our window
+/// drops below other windows so it doesn't appear in screenshots.
+async fn with_aot_disabled<F, Fut>(app: &AppHandle, f: F) -> IpcResponse
 where
     F: FnOnce() -> Fut,
     Fut: std::future::Future<Output = IpcResponse>,
 {
-    let (was_visible, was_on_top) = if let Some(window) = app.get_webview_window("main") {
-        let visible = window.is_visible().unwrap_or(true);
+    let was_on_top = if let Some(window) = app.get_webview_window("main") {
         let on_top = window.is_always_on_top().unwrap_or(false);
-        if visible {
-            let _ = window.hide();
-            // Wait for compositor to process the hide
-            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        if on_top {
+            let _ = window.set_always_on_top(false);
+            tokio::time::sleep(std::time::Duration::from_millis(150)).await;
         }
-        (visible, on_top)
+        on_top
     } else {
-        (false, false)
+        false
     };
 
     let result = f().await;
 
-    if was_visible {
+    if was_on_top {
         if let Some(window) = app.get_webview_window("main") {
-            let _ = window.show();
-            let _ = window.set_focus();
-            if was_on_top {
-                let _ = window.set_always_on_top(true);
-            }
+            let _ = window.set_always_on_top(true);
         }
     }
 
@@ -194,7 +190,7 @@ pub async fn take_screenshot() -> IpcResponse {
 /// Thumbnails are resized to max 300px wide.
 #[tauri::command]
 pub async fn list_monitors(app: AppHandle) -> IpcResponse {
-    with_window_hidden(&app, || async {
+    with_aot_disabled(&app, || async {
         let result = tokio::task::spawn_blocking(|| {
             let ps_script = r#"
 Add-Type -AssemblyName System.Windows.Forms,System.Drawing
@@ -279,7 +275,7 @@ $results | ConvertTo-Json -Compress
 pub async fn list_windows(app: AppHandle) -> IpcResponse {
     let our_pid = std::process::id();
 
-    with_window_hidden(&app, move || async move {
+    with_aot_disabled(&app, move || async move {
         let result = tokio::task::spawn_blocking(move || {
             let ps_script = format!(
                 r#"
@@ -439,7 +435,7 @@ $results | ConvertTo-Json -Compress
 /// Returns `{ path }`.
 #[tauri::command]
 pub async fn capture_monitor(app: AppHandle, index: u32) -> IpcResponse {
-    with_window_hidden(&app, move || async move {
+    with_aot_disabled(&app, move || async move {
         let screenshots_dir = crate::services::platform::get_data_dir().join("screenshots");
         if let Err(e) = fs::create_dir_all(&screenshots_dir) {
             return IpcResponse::err(format!("Failed to create screenshots dir: {}", e));
@@ -489,7 +485,7 @@ pub async fn capture_monitor(app: AppHandle, index: u32) -> IpcResponse {
 /// Returns `{ path }`.
 #[tauri::command]
 pub async fn capture_window(app: AppHandle, hwnd: i64) -> IpcResponse {
-    with_window_hidden(&app, move || async move {
+    with_aot_disabled(&app, move || async move {
         let screenshots_dir = crate::services::platform::get_data_dir().join("screenshots");
         if let Err(e) = fs::create_dir_all(&screenshots_dir) {
             return IpcResponse::err(format!("Failed to create screenshots dir: {}", e));
