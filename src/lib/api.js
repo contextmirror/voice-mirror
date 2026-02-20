@@ -175,8 +175,8 @@ export async function getAIStatus() {
   return invoke('get_ai_status');
 }
 
-export async function aiPtyInput(data) {
-  return invoke('ai_pty_input', { data });
+export async function aiPtyInput(data, imagePath) {
+  return invoke('ai_pty_input', { data, imagePath: imagePath || null });
 }
 
 export async function aiRawInput(data) {
@@ -259,9 +259,10 @@ export async function listModels(providerType, baseUrl) {
  * @param {string} message - The message text
  * @param {string} [from] - Sender name (defaults to config user name)
  * @param {string} [threadId] - Thread ID (defaults to "voice-mirror")
+ * @param {string} [imagePath] - Optional screenshot file path for multimodal messages
  */
-export async function writeUserMessage(message, from, threadId) {
-  return invoke('write_user_message', { message, from, threadId });
+export async function writeUserMessage(message, from, threadId, imagePath) {
+  return invoke('write_user_message', { message, from, threadId, imagePath: imagePath || null });
 }
 
 // ============ Chat ============

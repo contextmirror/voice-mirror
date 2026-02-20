@@ -87,6 +87,17 @@ describe('chat: message model', () => {
     assert.ok(src.includes('toolCalls'), 'Message should have "toolCalls" field');
   });
 
+  it('messages have an "attachments" field', () => {
+    assert.ok(src.includes('attachments'), 'Message should have "attachments" field');
+  });
+
+  it('attachments defaults to empty array from metadata', () => {
+    assert.ok(
+      src.includes('metadata.attachments || []'),
+      'attachments should default to empty array via metadata.attachments || []'
+    );
+  });
+
   it('messages have a "metadata" field', () => {
     assert.ok(src.includes('metadata'), 'Message should have "metadata" field');
   });

@@ -89,6 +89,14 @@ pub trait Provider: Send {
     /// Interrupt the current operation (Ctrl+C for PTY, abort for API).
     fn interrupt(&mut self);
 
+    /// Send text input with an image attachment.
+    ///
+    /// Default: ignores the image and sends text only via `send_input`.
+    /// API providers override this to build multimodal content arrays.
+    fn send_input_with_image(&mut self, data: &str, _image_path: &str) {
+        self.send_input(data);
+    }
+
     /// Send the voice listen loop command.
     ///
     /// Default: sends the voice loop prompt via `send_input`.

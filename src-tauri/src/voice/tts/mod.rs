@@ -6,7 +6,7 @@
 //!
 //! Audio output is f32 PCM samples suitable for playback via rodio.
 
-mod crypto;
+pub(crate) mod crypto;
 mod edge_tts;
 mod kokoro_impl;
 mod mp3_decode;

@@ -91,10 +91,19 @@ pub fn get_ai_status(state: State<'_, AiManagerState>) -> IpcResponse {
 /// Send text input to the active AI provider.
 ///
 /// For PTY providers, this writes to the terminal stdin.
-/// For API providers, this sends a chat message.
+/// For API providers, this sends a chat message (optionally with an image).
 #[tauri::command]
-pub fn ai_pty_input(state: State<'_, AiManagerState>, data: String) -> IpcResponse {
+pub fn ai_pty_input(
+    state: State<'_, AiManagerState>,
+    data: String,
+    image_path: Option<String>,
+) -> IpcResponse {
     let mut manager = lock_manager!(state);
+    if let Some(ref path) = image_path {
+        if manager.send_input_with_image(&data, path) {
+            return IpcResponse::ok_empty();
+        }
+    }
     if manager.send_input(&data) {
         IpcResponse::ok_empty()
     } else {
@@ -346,6 +355,7 @@ pub async fn write_user_message(
     message: String,
     from: Option<String>,
     thread_id: Option<String>,
+    image_path: Option<String>,
     pipe_state: State<'_, crate::ipc::pipe_server::PipeServerState>,
 ) -> Result<IpcResponse, ()> {
     let sender = from.unwrap_or_else(|| {
@@ -364,18 +374,21 @@ pub async fn write_user_message(
             message: message.clone(),
             thread_id: Some(tid.clone()),
             timestamp: chrono_now_iso(),
+            image_path: image_path.clone(),
         };
         if pipe_state.send(pipe_msg).is_ok() {
             // Also write to inbox.json for persistence/fallback
-            let _ = crate::services::inbox_watcher::write_inbox_message(
-                &sender, &message, Some(&tid),
+            let _ = crate::services::inbox_watcher::write_inbox_message_with_image(
+                &sender, &message, Some(&tid), image_path.as_deref(),
             );
             return Ok(IpcResponse::ok_empty());
         }
     }
 
     // Fallback: file-based inbox
-    match crate::services::inbox_watcher::write_inbox_message(&sender, &message, Some(&tid)) {
+    match crate::services::inbox_watcher::write_inbox_message_with_image(
+        &sender, &message, Some(&tid), image_path.as_deref(),
+    ) {
         Ok(()) => Ok(IpcResponse::ok_empty()),
         Err(e) => Ok(IpcResponse::err(e)),
     }

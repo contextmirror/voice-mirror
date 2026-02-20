@@ -684,6 +684,64 @@ impl ApiProvider {
     }
 }
 
+impl ApiProvider {
+    /// Send a message with an image attachment using the OpenAI vision format.
+    ///
+    /// Reads the image file, base64-encodes it, and sends it as a multimodal
+    /// content array: `[{type: "image_url", ...}, {type: "text", ...}]`.
+    fn send_message_with_image(&mut self, text: String, image_path: &str) {
+        if !self.running.load(Ordering::SeqCst) {
+            let _ = self
+                .event_tx
+                .send(ProviderEvent::Error("Provider not running".to_string()));
+            return;
+        }
+
+        // Read and base64-encode the image
+        let image_data = match std::fs::read(image_path) {
+            Ok(bytes) => {
+                let b64 = crate::voice::tts::crypto::base64_encode(&bytes);
+                format!("data:image/png;base64,{}", b64)
+            }
+            Err(e) => {
+                warn!("Failed to read image {}: {}", image_path, e);
+                // Fall back to text-only
+                self.send_message(text);
+                return;
+            }
+        };
+
+        // Build multimodal content array (OpenAI vision format)
+        let mut content_parts = vec![
+            serde_json::json!({
+                "type": "image_url",
+                "image_url": { "url": image_data }
+            }),
+        ];
+        if !text.is_empty() {
+            content_parts.push(serde_json::json!({
+                "type": "text",
+                "text": text
+            }));
+        }
+
+        // Per-message system reinforcement
+        if self.system_prompt.is_some() && self.messages.len() > 1 {
+            self.messages.push(serde_json::json!({
+                "role": "system",
+                "content": "Remember: answer only what was asked. Stay on topic."
+            }));
+        }
+        self.messages.push(serde_json::json!({
+            "role": "user",
+            "content": content_parts
+        }));
+        self.current_tool_iteration = 0;
+
+        self.send_message_internal(false);
+    }
+}
+
 impl Provider for ApiProvider {
     fn start(&mut self, _cols: u16, _rows: u16) -> Result<(), String> {
         if self.running.load(Ordering::SeqCst) {
@@ -733,6 +791,10 @@ impl Provider for ApiProvider {
 
     fn send_input(&mut self, data: &str) {
         self.send_message(data.to_string());
+    }
+
+    fn send_input_with_image(&mut self, data: &str, image_path: &str) {
+        self.send_message_with_image(data.to_string(), image_path);
     }
 
     fn send_raw_input(&mut self, _data: &[u8]) {

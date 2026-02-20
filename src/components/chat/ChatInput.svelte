@@ -6,6 +6,7 @@
    * "+" action menu (screenshot, save, clear), voice recording indicator,
    * and send button.
    */
+  import { convertFileSrc } from '@tauri-apps/api/core';
   import { chatStore } from '../../lib/stores/chat.svelte.js';
 
   let {
@@ -16,6 +17,9 @@
     isRecording = false,
     disabled = false,
     saveFlash = false,
+    attachments = [],
+    onRemoveAttachment = () => {},
+    onClearAttachments = () => {},
   } = $props();
 
   let text = $state('');
@@ -54,15 +58,17 @@
 
   function send() {
     const trimmed = text.trim();
-    if (trimmed.length === 0 || disabled) return;
+    if ((trimmed.length === 0 && !hasAttachments) || disabled) return;
 
-    // Add user message to the store
-    chatStore.addMessage('user', trimmed);
+    // Add user message to the store (with attachments if any)
+    const meta = hasAttachments ? { attachments: [...attachments] } : {};
+    chatStore.addMessage('user', trimmed, meta);
 
     // Fire the callback so parent can route to AI provider
-    onSend(trimmed);
+    onSend(trimmed, attachments);
 
-    // Reset textarea
+    // Clear attachments and reset textarea
+    onClearAttachments();
     text = '';
     if (textareaEl) {
       textareaEl.style.height = 'auto';
@@ -97,13 +103,33 @@
     }
   }
 
-  const sendDisabled = $derived(disabled || text.trim().length === 0);
+  const thumbnailUrls = $derived(
+    attachments.map(att => ({ ...att, url: convertFileSrc(att.path) }))
+  );
+  const hasAttachments = $derived(attachments.length > 0);
+  const sendDisabled = $derived(disabled || (text.trim().length === 0 && !hasAttachments));
   const hasMessages = $derived(chatStore.messages.length > 0);
 </script>
 
 <svelte:document onclick={handleDocumentClick} onkeydown={handleDocumentKeydown} />
 
 <div class="chat-input-bar" class:recording={isRecording}>
+  {#if thumbnailUrls.length > 0}
+    <div class="attachment-preview-strip">
+      {#each thumbnailUrls as att, idx}
+        <div class="attachment-thumb">
+          <img src={att.url} alt={att.name || 'Attachment'} class="attachment-thumb-img" />
+          <button class="attachment-remove-btn" onclick={() => onRemoveAttachment(idx)} title="Remove" aria-label="Remove attachment">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+      {/each}
+    </div>
+  {/if}
+
   {#if isRecording}
     <div class="recording-indicator">
       <span class="recording-dot"></span>
@@ -202,6 +228,51 @@
 </div>
 
 <style>
+  /* ========== Attachment Preview Strip ========== */
+  .attachment-preview-strip {
+    display: flex;
+    gap: 8px;
+    padding: 8px 0 4px;
+    overflow-x: auto;
+  }
+
+  .attachment-thumb {
+    position: relative;
+    flex-shrink: 0;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    overflow: hidden;
+  }
+
+  .attachment-thumb-img {
+    width: 64px;
+    height: 64px;
+    object-fit: cover;
+    display: block;
+  }
+
+  .attachment-remove-btn {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(0, 0, 0, 0.6);
+    color: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    transition: background var(--duration-fast) var(--ease-out);
+  }
+
+  .attachment-remove-btn:hover {
+    background: var(--danger);
+  }
+
   .chat-input-bar {
     padding: 10px 16px 8px;
     background: var(--bg);

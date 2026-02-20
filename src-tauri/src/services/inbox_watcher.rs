@@ -239,6 +239,19 @@ impl InboxWatcherHandle {
 /// Used to bridge voice transcriptions to the AI provider. The AI reads
 /// inbox.json via the `voice_listen` MCP tool.
 pub fn write_inbox_message(from: &str, message: &str, thread_id: Option<&str>) -> Result<(), String> {
+    write_inbox_message_with_image(from, message, thread_id, None)
+}
+
+/// Write a new message with an optional image attachment to the MCP inbox file.
+///
+/// When `image_path` is provided, the image is base64-encoded and included
+/// as a data URL so the MCP tool consumer can access the image content.
+pub fn write_inbox_message_with_image(
+    from: &str,
+    message: &str,
+    thread_id: Option<&str>,
+    image_path: Option<&str>,
+) -> Result<(), String> {
     let inbox_path = get_inbox_path();
     let data_dir = get_mcp_data_dir();
 
@@ -260,6 +273,23 @@ pub fn write_inbox_message(from: &str, message: &str, thread_id: Option<&str>) -
         format!("{}.000Z", secs)
     };
 
+    // Build image data URL if an image path was provided
+    let (img_path, img_data_url) = if let Some(path) = image_path {
+        let data_url = match std::fs::read(path) {
+            Ok(bytes) => {
+                let b64 = crate::voice::tts::crypto::base64_encode(&bytes);
+                Some(format!("data:image/png;base64,{}", b64))
+            }
+            Err(e) => {
+                tracing::warn!("Failed to read image for inbox: {}", e);
+                None
+            }
+        };
+        (Some(path.to_string()), data_url)
+    } else {
+        (None, None)
+    };
+
     // Create new message with UUID
     let msg = InboxMessage {
         id: uuid::Uuid::new_v4().to_string(),
@@ -269,8 +299,8 @@ pub fn write_inbox_message(from: &str, message: &str, thread_id: Option<&str>) -
         read_by: vec![],
         thread_id: thread_id.map(|s| s.to_string()),
         reply_to: None,
-        image_path: None,
-        image_data_url: None,
+        image_path: img_path,
+        image_data_url: img_data_url,
     };
 
     data.messages.push(msg);

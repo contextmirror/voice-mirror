@@ -102,6 +102,21 @@ describe('ChatBubble.svelte', () => {
     assert.ok(src.includes('streaming-dot'), 'Should have streaming dot indicator');
     assert.ok(src.includes('@keyframes pulse'), 'Should have pulse animation');
   });
+
+  it('imports convertFileSrc for image attachments', () => {
+    assert.ok(src.includes("import { convertFileSrc } from '@tauri-apps/api/core'"), 'Should import convertFileSrc');
+  });
+
+  it('derives hasAttachments from message.attachments', () => {
+    assert.ok(src.includes('hasAttachments'), 'Should derive hasAttachments');
+    assert.ok(src.includes('attachments.length > 0'), 'Should check attachments length');
+  });
+
+  it('renders attachment images with convertFileSrc', () => {
+    assert.ok(src.includes('bubble-attachments'), 'Should have bubble-attachments container');
+    assert.ok(src.includes('convertFileSrc(att.path)'), 'Should use convertFileSrc for image src');
+    assert.ok(src.includes('bubble-attachment-img'), 'Should have bubble-attachment-img class');
+  });
 });
 
 // ---- ChatInput.svelte ----
@@ -164,6 +179,48 @@ describe('ChatInput.svelte', () => {
 
   it('derives sendDisabled from state', () => {
     assert.ok(src.includes('sendDisabled'), 'Should have sendDisabled derived');
+  });
+
+  it('imports convertFileSrc for attachment previews', () => {
+    assert.ok(src.includes("import { convertFileSrc } from '@tauri-apps/api/core'"), 'Should import convertFileSrc');
+  });
+
+  it('has attachments prop', () => {
+    assert.ok(src.includes('attachments'), 'Should have attachments prop');
+  });
+
+  it('has onRemoveAttachment prop', () => {
+    assert.ok(src.includes('onRemoveAttachment'), 'Should have onRemoveAttachment prop');
+  });
+
+  it('has onClearAttachments prop', () => {
+    assert.ok(src.includes('onClearAttachments'), 'Should have onClearAttachments prop');
+  });
+
+  it('has attachment preview strip', () => {
+    assert.ok(src.includes('attachment-preview-strip'), 'Should have attachment preview strip');
+    assert.ok(src.includes('attachment-thumb'), 'Should have attachment thumbnail');
+    assert.ok(src.includes('attachment-remove-btn'), 'Should have attachment remove button');
+  });
+
+  it('derives thumbnailUrls using convertFileSrc', () => {
+    assert.ok(src.includes('thumbnailUrls'), 'Should derive thumbnailUrls');
+    assert.ok(src.includes('convertFileSrc(att.path)'), 'Should use convertFileSrc for thumbnail URLs');
+  });
+
+  it('allows sending with attachments only (no text required)', () => {
+    assert.ok(
+      src.includes('!hasAttachments'),
+      'sendDisabled should consider hasAttachments'
+    );
+  });
+
+  it('passes attachments to onSend callback', () => {
+    assert.ok(src.includes('onSend(trimmed, attachments)'), 'Should pass attachments to onSend');
+  });
+
+  it('calls onClearAttachments after send', () => {
+    assert.ok(src.includes('onClearAttachments()'), 'Should clear attachments after send');
   });
 });
 
@@ -239,6 +296,48 @@ describe('ChatPanel.svelte', () => {
 
   it('renders ScreenshotPicker conditionally', () => {
     assert.ok(src.includes('<ScreenshotPicker'), 'Should render ScreenshotPicker component');
+  });
+
+  it('has pendingAttachments state for screenshot attachments', () => {
+    assert.ok(src.includes('pendingAttachments'), 'Should have pendingAttachments state');
+  });
+
+  it('handleScreenshotCapture adds to pendingAttachments (not chat store)', () => {
+    // Should NOT add system message — should add to pending attachments instead
+    const captureBlock = src.slice(src.indexOf('function handleScreenshotCapture'));
+    const captureEnd = captureBlock.indexOf('}');
+    const captureBody = captureBlock.slice(0, captureEnd);
+    assert.ok(
+      !captureBody.includes("chatStore.addMessage"),
+      'handleScreenshotCapture should NOT add system message to chatStore'
+    );
+    assert.ok(
+      captureBody.includes('pendingAttachments'),
+      'handleScreenshotCapture should update pendingAttachments'
+    );
+  });
+
+  it('has handleRemoveAttachment function', () => {
+    assert.ok(src.includes('handleRemoveAttachment'), 'Should have handleRemoveAttachment');
+  });
+
+  it('has handleClearAttachments function', () => {
+    assert.ok(src.includes('handleClearAttachments'), 'Should have handleClearAttachments');
+  });
+
+  it('passes attachment props to ChatInput', () => {
+    assert.ok(
+      src.includes('attachments={pendingAttachments}'),
+      'Should pass pendingAttachments to ChatInput'
+    );
+    assert.ok(
+      src.includes('onRemoveAttachment={handleRemoveAttachment}'),
+      'Should pass onRemoveAttachment to ChatInput'
+    );
+    assert.ok(
+      src.includes('onClearAttachments={handleClearAttachments}'),
+      'Should pass onClearAttachments to ChatInput'
+    );
   });
 });
 

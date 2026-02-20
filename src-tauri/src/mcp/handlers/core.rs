@@ -600,6 +600,7 @@ pub async fn handle_voice_listen(
                     message,
                     thread_id: msg_thread,
                     timestamp,
+                    image_path: _,
                 }))) => {
                     // Check sender match
                     if from.to_lowercase() != from_sender.to_lowercase() {

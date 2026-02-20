@@ -23,6 +23,7 @@
   let saveFlash = $state(false);
   let showScreenshotPicker = $state(false);
 
+  let pendingAttachments = $state([]);
   let scrollContainer = $state(null);
 
   /** Distance from bottom (in px) within which we auto-scroll */
@@ -125,7 +126,17 @@
   /** Called when a screenshot is captured from the picker. */
   function handleScreenshotCapture(path) {
     showScreenshotPicker = false;
-    chatStore.addMessage('system', `Screenshot saved: ${path}`);
+    pendingAttachments = [...pendingAttachments, { path, type: 'image/png', name: 'Screenshot' }];
+  }
+
+  /** Remove an attachment by index from the pending list. */
+  function handleRemoveAttachment(index) {
+    pendingAttachments = pendingAttachments.filter((_, i) => i !== index);
+  }
+
+  /** Clear all pending attachments. */
+  function handleClearAttachments() {
+    pendingAttachments = [];
   }
 
   /** Called when the screenshot picker is closed without capturing. */
@@ -179,6 +190,9 @@
     {isRecording}
     disabled={inputDisabled}
     {saveFlash}
+    attachments={pendingAttachments}
+    onRemoveAttachment={handleRemoveAttachment}
+    onClearAttachments={handleClearAttachments}
   />
 
   {#if showScreenshotPicker}

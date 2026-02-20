@@ -276,7 +276,7 @@
    * For CLI providers (Claude Code, OpenCode): write to the MCP inbox
    * so the agent picks it up via voice_listen.
    */
-  function handleChatSend(text) {
+  function handleChatSend(text, attachments = []) {
     // In dictation-only mode, there's no AI to route to.
     // The message is already added to the chat store by ChatInput.
     // (Voice transcriptions are injected via injectText in voice.svelte.js)
@@ -284,12 +284,14 @@
       return;
     }
 
+    const imagePath = attachments.length > 0 ? attachments[0].path : null;
+
     if (aiStatusStore.isApiProvider) {
-      aiPtyInput(text).catch((err) => {
+      aiPtyInput(text, imagePath).catch((err) => {
         console.warn('[chat] Failed to send message to API provider:', err);
       });
     } else {
-      writeUserMessage(text).catch((err) => {
+      writeUserMessage(text, null, null, imagePath).catch((err) => {
         console.warn('[chat] Failed to write user message to inbox:', err);
       });
     }

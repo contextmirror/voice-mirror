@@ -14,6 +14,7 @@ import { uid } from '../utils.js';
  * @property {number} timestamp - Unix ms
  * @property {boolean} streaming - Whether this message is still being streamed
  * @property {Array} [toolCalls] - Tool calls attached to this message
+ * @property {Array} [attachments] - File attachments [{path, type, name}]
  * @property {Object} [metadata] - Extra metadata
  */
 
@@ -44,6 +45,7 @@ function createChatStore() {
         timestamp: Date.now(),
         streaming: false,
         toolCalls: metadata.toolCalls || [],
+        attachments: metadata.attachments || [],
         metadata,
       }];
       return id;
@@ -65,6 +67,7 @@ function createChatStore() {
         timestamp: Date.now(),
         streaming: true,
         toolCalls: [],
+        attachments: [],
         metadata: {},
       }];
       return id;

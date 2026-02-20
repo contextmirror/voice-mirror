@@ -244,10 +244,17 @@ describe('api.js -- parameter passing', () => {
     );
   });
 
-  it('writeUserMessage passes message, from, threadId', () => {
+  it('writeUserMessage passes message, from, threadId, imagePath', () => {
     assert.ok(
-      src.includes("invoke('write_user_message', { message, from, threadId })"),
-      'writeUserMessage should pass message, from, threadId'
+      src.includes("invoke('write_user_message', { message, from, threadId, imagePath:"),
+      'writeUserMessage should pass message, from, threadId, imagePath'
+    );
+  });
+
+  it('aiPtyInput passes data and optional imagePath', () => {
+    assert.ok(
+      src.includes("invoke('ai_pty_input', { data, imagePath:"),
+      'aiPtyInput should pass data and imagePath'
     );
   });
 

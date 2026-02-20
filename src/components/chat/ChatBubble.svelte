@@ -4,6 +4,7 @@
    * streaming support, tool cards, and copy button.
    */
   import { fly } from 'svelte/transition';
+  import { convertFileSrc } from '@tauri-apps/api/core';
   import { renderMarkdown } from '../../lib/markdown.js';
   import StreamingCursor from './StreamingCursor.svelte';
   import ToolCard from './ToolCard.svelte';
@@ -20,6 +21,8 @@
     && message.toolCalls !== undefined
     && message.toolCalls.length > 0
   );
+  const attachments = $derived(message.attachments || []);
+  const hasAttachments = $derived(attachments.length > 0);
 
   async function copyText() {
     try {
@@ -41,6 +44,13 @@
   transition:fly={{ y: 12, duration: 250 }}
 >
   <div class="bubble-content">
+    {#if hasAttachments}
+      <div class="bubble-attachments">
+        {#each attachments as att}
+          <img src={convertFileSrc(att.path)} alt={att.name || 'Attachment'} class="bubble-attachment-img" />
+        {/each}
+      </div>
+    {/if}
     {#if message.text}
       <!-- eslint-disable-next-line svelte/no-at-html-tags -->
       {@html htmlContent}
@@ -232,6 +242,19 @@
   .bubble-content :global(th) {
     background: var(--card-highlight);
     font-weight: 600;
+  }
+
+  /* Attachment images */
+  .bubble-attachments {
+    margin-bottom: 8px;
+  }
+
+  .bubble-attachment-img {
+    max-width: 100%;
+    max-height: 300px;
+    border-radius: var(--radius-sm);
+    object-fit: contain;
+    display: block;
   }
 
   /* Tool calls section */

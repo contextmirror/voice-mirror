@@ -153,6 +153,20 @@ impl AiManager {
         false
     }
 
+    /// Send text input with an image attachment to the active API provider.
+    ///
+    /// Returns false if no provider is running or if the provider doesn't
+    /// support multimodal input (CLI providers ignore images).
+    pub fn send_input_with_image(&mut self, data: &str, image_path: &str) -> bool {
+        if let Some(ref mut provider) = self.provider {
+            if provider.is_running() {
+                provider.send_input_with_image(data, image_path);
+                return true;
+            }
+        }
+        false
+    }
+
     /// Send raw bytes to the active provider (PTY passthrough).
     pub fn send_raw_input(&mut self, data: &[u8]) -> bool {
         if let Some(ref mut provider) = self.provider {
