@@ -9,6 +9,7 @@ pub mod voice;
 use commands::ai as ai_cmds;
 use commands::chat as chat_cmds;
 use commands::config as config_cmds;
+use commands::screenshot as screenshot_cmds;
 use commands::shortcuts as shortcut_cmds;
 use commands::tools as tools_cmds;
 use commands::voice as voice_cmds;
@@ -65,11 +66,12 @@ pub fn run() {
             window_cmds::set_always_on_top,
             window_cmds::set_resizable,
             window_cmds::quit_app,
-            window_cmds::take_screenshot,
-            window_cmds::list_monitors,
-            window_cmds::list_windows,
-            window_cmds::capture_monitor,
-            window_cmds::capture_window,
+            // Screenshot / screen capture
+            screenshot_cmds::take_screenshot,
+            screenshot_cmds::list_monitors,
+            screenshot_cmds::list_windows,
+            screenshot_cmds::capture_monitor,
+            screenshot_cmds::capture_window,
             // Voice
             voice_cmds::start_voice,
             voice_cmds::stop_voice,
