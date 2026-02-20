@@ -339,7 +339,7 @@
           </div>
         {:else if activeView === 'lens'}
           <div class="view-panel">
-            <LensWorkspace />
+            <LensWorkspace onSend={handleChatSend} />
           </div>
         {:else if activeView === 'settings'}
           <div class="view-panel">

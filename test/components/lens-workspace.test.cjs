@@ -19,6 +19,18 @@ describe('LensWorkspace.svelte', () => {
   it('imports LensPreview', () => {
     assert.ok(src.includes("import LensPreview from"));
   });
+  it('imports ChatPanel', () => {
+    assert.ok(src.includes("import ChatPanel from"));
+  });
+  it('imports Terminal', () => {
+    assert.ok(src.includes("import Terminal from"));
+  });
+
+  // Props
+  it('accepts onSend prop', () => {
+    assert.ok(src.includes('onSend'));
+    assert.ok(src.includes('$props()'));
+  });
 
   // Layout structure
   it('has vertical split for main area vs terminal', () => {
@@ -40,16 +52,22 @@ describe('LensWorkspace.svelte', () => {
     assert.ok(src.includes('tab-add'));
   });
 
-  // Chat panel skeleton
-  it('has chat area with session info', () => {
+  // Chat panel (real component)
+  it('has chat area wrapper with ChatPanel', () => {
     assert.ok(src.includes('chat-area'));
-    assert.ok(src.includes('chat-session-info'));
+    assert.ok(src.includes('<ChatPanel'));
   });
-  it('has chat input area', () => {
-    assert.ok(src.includes('chat-input-box'));
+  it('passes onSend to ChatPanel', () => {
+    assert.ok(src.includes('{onSend}'));
   });
 
-  // Files panel skeleton
+  // Terminal panel (real component)
+  it('has terminal area wrapper with Terminal', () => {
+    assert.ok(src.includes('terminal-area'));
+    assert.ok(src.includes('<Terminal'));
+  });
+
+  // Files panel skeleton (still placeholder)
   it('has files area with tab headers', () => {
     assert.ok(src.includes('files-area'));
     assert.ok(src.includes('files-header'));
@@ -61,16 +79,6 @@ describe('LensWorkspace.svelte', () => {
   it('has file tree with folders and files', () => {
     assert.ok(src.includes('files-tree'));
     assert.ok(src.includes('tree-item'));
-  });
-
-  // Terminal panel skeleton
-  it('has terminal area with tab bar', () => {
-    assert.ok(src.includes('terminal-area'));
-    assert.ok(src.includes('terminal-tabs'));
-  });
-  it('has terminal tab with close and add buttons', () => {
-    assert.ok(src.includes('terminal-tab-close'));
-    assert.ok(src.includes('terminal-tab-add'));
   });
 
   // Preview area
@@ -87,5 +95,11 @@ describe('LensWorkspace.svelte', () => {
   });
   it('uses flex column layout', () => {
     assert.ok(src.includes('flex-direction: column'));
+  });
+  it('has chat-area with border-right', () => {
+    assert.ok(src.includes('border-right'));
+  });
+  it('has terminal-area with border-top', () => {
+    assert.ok(src.includes('border-top'));
   });
 });
