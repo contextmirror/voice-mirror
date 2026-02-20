@@ -461,6 +461,7 @@ public class WinAPI {{
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
     [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
     [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+    [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr hWnd, IntPtr hdcBlt, uint nFlags);
     [DllImport("dwmapi.dll")] public static extern int DwmGetWindowAttribute(IntPtr hwnd, int dwAttribute, out int pvAttribute, int cbAttribute);
     [StructLayout(LayoutKind.Sequential)] public struct RECT {{ public int Left, Top, Right, Bottom; }}
 }}
@@ -489,13 +490,24 @@ $cb = {{
     if ($pid -eq $myPid) {{ return $true }}
     $procName = ""
     try {{ $procName = (Get-Process -Id $pid -ErrorAction SilentlyContinue).ProcessName }} catch {{}}
-    # Capture window area
+    # Capture window via PrintWindow (renders even if obscured)
     $b64 = ""
     try {{
         $bmp = New-Object System.Drawing.Bitmap($w, $h)
         $g = [System.Drawing.Graphics]::FromImage($bmp)
-        $g.CopyFromScreen($rect.Left, $rect.Top, 0, 0, (New-Object System.Drawing.Size($w, $h)))
+        $hdc = $g.GetHdc()
+        # Flag 2 = PW_RENDERFULLCONTENT (captures DX/hardware-accelerated content)
+        $ok = [WinAPI]::PrintWindow($hWnd, $hdc, 2)
+        $g.ReleaseHdc($hdc)
         $g.Dispose()
+        if (-not $ok) {{
+            # Fallback to CopyFromScreen if PrintWindow fails
+            $bmp.Dispose()
+            $bmp = New-Object System.Drawing.Bitmap($w, $h)
+            $g2 = [System.Drawing.Graphics]::FromImage($bmp)
+            $g2.CopyFromScreen($rect.Left, $rect.Top, 0, 0, (New-Object System.Drawing.Size($w, $h)))
+            $g2.Dispose()
+        }}
         $maxW = 300
         if ($w -gt $maxW) {{
             $ratio = $maxW / $w
@@ -667,18 +679,29 @@ using System;
 using System.Runtime.InteropServices;
 public class WinRect {{
     [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+    [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr hWnd, IntPtr hdcBlt, uint nFlags);
     [StructLayout(LayoutKind.Sequential)] public struct RECT {{ public int Left, Top, Right, Bottom; }}
 }}
 "@
+$hwnd = [IntPtr]{}
 $rect = New-Object WinRect+RECT
-[void][WinRect]::GetWindowRect([IntPtr]{}, [ref]$rect)
+[void][WinRect]::GetWindowRect($hwnd, [ref]$rect)
 $w = $rect.Right - $rect.Left
 $h = $rect.Bottom - $rect.Top
 if ($w -lt 1 -or $h -lt 1) {{ throw "Invalid window dimensions" }}
 $bmp = New-Object System.Drawing.Bitmap($w, $h)
 $g = [System.Drawing.Graphics]::FromImage($bmp)
-$g.CopyFromScreen($rect.Left, $rect.Top, 0, 0, (New-Object System.Drawing.Size($w, $h)))
+$hdc = $g.GetHdc()
+$ok = [WinRect]::PrintWindow($hwnd, $hdc, 2)
+$g.ReleaseHdc($hdc)
 $g.Dispose()
+if (-not $ok) {{
+    $bmp.Dispose()
+    $bmp = New-Object System.Drawing.Bitmap($w, $h)
+    $g2 = [System.Drawing.Graphics]::FromImage($bmp)
+    $g2.CopyFromScreen($rect.Left, $rect.Top, 0, 0, (New-Object System.Drawing.Size($w, $h)))
+    $g2.Dispose()
+}}
 $bmp.Save('{}')
 $bmp.Dispose()
 "#,
