@@ -124,9 +124,9 @@
   }
 
   /** Called when a screenshot is captured from the picker. */
-  function handleScreenshotCapture(path) {
+  function handleScreenshotCapture(path, dataUrl) {
     showScreenshotPicker = false;
-    pendingAttachments = [...pendingAttachments, { path, type: 'image/png', name: 'Screenshot' }];
+    pendingAttachments = [...pendingAttachments, { path, dataUrl, type: 'image/png', name: 'Screenshot' }];
   }
 
   /** Remove an attachment by index from the pending list. */

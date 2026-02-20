@@ -6,7 +6,6 @@
    * "+" action menu (screenshot, save, clear), voice recording indicator,
    * and send button.
    */
-  import { convertFileSrc } from '@tauri-apps/api/core';
   import { chatStore } from '../../lib/stores/chat.svelte.js';
 
   let {
@@ -104,7 +103,7 @@
   }
 
   const thumbnailUrls = $derived(
-    attachments.map(att => ({ ...att, url: convertFileSrc(att.path) }))
+    attachments.map(att => ({ ...att, url: att.dataUrl || att.path }))
   );
   const hasAttachments = $derived(attachments.length > 0);
   const sendDisabled = $derived(disabled || (text.trim().length === 0 && !hasAttachments));

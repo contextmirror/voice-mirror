@@ -95,7 +95,7 @@
       }
       const data = result?.data || result;
       if (data?.path) {
-        onCapture(data.path);
+        onCapture(data.path, data.dataUrl || null);
       }
     } catch (err) {
       error = err?.message || String(err);

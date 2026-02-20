@@ -27,10 +27,7 @@
       }
     ],
     "security": {
-      "csp": null,
-      "assetProtocol": {
-        "scope": ["**"]
-      }
+      "csp": null
     }
   },
   "bundle": {

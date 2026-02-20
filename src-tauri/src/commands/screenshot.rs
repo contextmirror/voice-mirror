@@ -5,6 +5,13 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use super::IpcResponse;
 use tauri::{AppHandle, Manager};
 
+/// Read a PNG file and return a `data:image/png;base64,...` URL.
+fn read_as_data_url(path: &Path) -> Option<String> {
+    let bytes = fs::read(path).ok()?;
+    let b64 = crate::voice::tts::crypto::base64_encode(&bytes);
+    Some(format!("data:image/png;base64,{}", b64))
+}
+
 /// Temporarily disable always-on-top, run an async closure, then re-enable.
 ///
 /// In dashboard mode AOT is already off, so this is a no-op. In orb mode
@@ -499,7 +506,13 @@ pub async fn capture_monitor(app: AppHandle, index: u32) -> IpcResponse {
         .await;
 
         match result {
-            Ok(Ok(())) => IpcResponse::ok(serde_json::json!({ "path": filepath.to_string_lossy() })),
+            Ok(Ok(())) => {
+                let data_url = read_as_data_url(&filepath).unwrap_or_default();
+                IpcResponse::ok(serde_json::json!({
+                    "path": filepath.to_string_lossy(),
+                    "dataUrl": data_url
+                }))
+            }
             Ok(Err(e)) => IpcResponse::err(e),
             Err(e) => IpcResponse::err(format!("capture_monitor task panicked: {}", e)),
         }
@@ -606,7 +619,13 @@ $bmp.Dispose()
         .await;
 
         match result {
-            Ok(Ok(())) => IpcResponse::ok(serde_json::json!({ "path": filepath.to_string_lossy() })),
+            Ok(Ok(())) => {
+                let data_url = read_as_data_url(&filepath).unwrap_or_default();
+                IpcResponse::ok(serde_json::json!({
+                    "path": filepath.to_string_lossy(),
+                    "dataUrl": data_url
+                }))
+            }
             Ok(Err(e)) => IpcResponse::err(e),
             Err(e) => IpcResponse::err(format!("capture_window task panicked: {}", e)),
         }

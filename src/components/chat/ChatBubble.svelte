@@ -4,7 +4,6 @@
    * streaming support, tool cards, and copy button.
    */
   import { fly } from 'svelte/transition';
-  import { convertFileSrc } from '@tauri-apps/api/core';
   import { renderMarkdown } from '../../lib/markdown.js';
   import StreamingCursor from './StreamingCursor.svelte';
   import ToolCard from './ToolCard.svelte';
@@ -47,7 +46,7 @@
     {#if hasAttachments}
       <div class="bubble-attachments">
         {#each attachments as att}
-          <img src={convertFileSrc(att.path)} alt={att.name || 'Attachment'} class="bubble-attachment-img" />
+          <img src={att.dataUrl || att.path} alt={att.name || 'Attachment'} class="bubble-attachment-img" />
         {/each}
       </div>
     {/if}

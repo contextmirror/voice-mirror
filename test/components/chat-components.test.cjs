@@ -103,18 +103,14 @@ describe('ChatBubble.svelte', () => {
     assert.ok(src.includes('@keyframes pulse'), 'Should have pulse animation');
   });
 
-  it('imports convertFileSrc for image attachments', () => {
-    assert.ok(src.includes("import { convertFileSrc } from '@tauri-apps/api/core'"), 'Should import convertFileSrc');
-  });
-
   it('derives hasAttachments from message.attachments', () => {
     assert.ok(src.includes('hasAttachments'), 'Should derive hasAttachments');
     assert.ok(src.includes('attachments.length > 0'), 'Should check attachments length');
   });
 
-  it('renders attachment images with convertFileSrc', () => {
+  it('renders attachment images using dataUrl', () => {
     assert.ok(src.includes('bubble-attachments'), 'Should have bubble-attachments container');
-    assert.ok(src.includes('convertFileSrc(att.path)'), 'Should use convertFileSrc for image src');
+    assert.ok(src.includes('att.dataUrl'), 'Should use att.dataUrl for image src');
     assert.ok(src.includes('bubble-attachment-img'), 'Should have bubble-attachment-img class');
   });
 });
@@ -181,10 +177,6 @@ describe('ChatInput.svelte', () => {
     assert.ok(src.includes('sendDisabled'), 'Should have sendDisabled derived');
   });
 
-  it('imports convertFileSrc for attachment previews', () => {
-    assert.ok(src.includes("import { convertFileSrc } from '@tauri-apps/api/core'"), 'Should import convertFileSrc');
-  });
-
   it('has attachments prop', () => {
     assert.ok(src.includes('attachments'), 'Should have attachments prop');
   });
@@ -203,9 +195,9 @@ describe('ChatInput.svelte', () => {
     assert.ok(src.includes('attachment-remove-btn'), 'Should have attachment remove button');
   });
 
-  it('derives thumbnailUrls using convertFileSrc', () => {
+  it('derives thumbnailUrls using dataUrl', () => {
     assert.ok(src.includes('thumbnailUrls'), 'Should derive thumbnailUrls');
-    assert.ok(src.includes('convertFileSrc(att.path)'), 'Should use convertFileSrc for thumbnail URLs');
+    assert.ok(src.includes('att.dataUrl'), 'Should use att.dataUrl for thumbnail URLs');
   });
 
   it('allows sending with attachments only (no text required)', () => {
