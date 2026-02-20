@@ -97,6 +97,7 @@
     } else if (!voiceStore.isRecording) {
       // Not recording → start dictation recording
       voiceStore.startDictation();
+      overlayStore.setDictatingMode(true);
       pttPress();
     }
   }

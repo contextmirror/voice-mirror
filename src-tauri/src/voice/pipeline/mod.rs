@@ -74,6 +74,8 @@ pub enum VoiceEvent {
     },
     /// Pipeline is shutting down.
     Stopping {},
+    /// Real-time audio levels for waveform visualization (emitted during recording).
+    AudioLevel { levels: Vec<f32> },
 }
 
 /// Audio device info for the frontend.
@@ -674,6 +676,34 @@ async fn audio_processing_loop(shared: Arc<PipelineShared>) {
                             tracing::error!("Failed to lock recording_buf: {}", e);
                             continue;
                         }
+                    }
+                }
+
+                // Emit audio levels for waveform visualization
+                {
+                    const BAR_COUNT: usize = 16;
+                    let segment_len = chunk.len() / BAR_COUNT;
+                    if segment_len > 0 {
+                        let mut levels = Vec::with_capacity(BAR_COUNT);
+                        for i in 0..BAR_COUNT {
+                            let start = i * segment_len;
+                            let end = if i == BAR_COUNT - 1 {
+                                chunk.len()
+                            } else {
+                                start + segment_len
+                            };
+                            let segment = &chunk[start..end];
+                            // RMS energy
+                            let rms = (segment.iter().map(|s| s * s).sum::<f32>()
+                                / segment.len() as f32)
+                                .sqrt();
+                            // Normalize: typical speech RMS ~0.01-0.1, scale to 0-1
+                            let level = (rms * 10.0).min(1.0);
+                            levels.push(level);
+                        }
+                        let _ = shared
+                            .app_handle
+                            .emit("voice-event", VoiceEvent::AudioLevel { levels });
                     }
                 }
 

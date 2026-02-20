@@ -17,7 +17,7 @@ const src = fs.readFileSync(
 // ============ VALID_ORB_STATES ============
 
 describe('overlay: VALID_ORB_STATES', () => {
-  const expectedStates = ['idle', 'listening', 'speaking', 'thinking', 'error'];
+  const expectedStates = ['idle', 'listening', 'speaking', 'thinking', 'dictating', 'error'];
 
   it('defines VALID_ORB_STATES as a const', () => {
     assert.ok(src.includes('const VALID_ORB_STATES'), 'Should define const VALID_ORB_STATES');
@@ -285,6 +285,20 @@ describe('overlay: event listeners', () => {
     assert.ok(
       src.includes("'ai-error'") || src.includes('"ai-error"'),
       'Should listen to ai-error'
+    );
+  });
+
+  it('uses dictatingMode flag to set dictating orb state', () => {
+    assert.ok(
+      src.includes('dictatingMode') && src.includes("'dictating'"),
+      'Should check dictatingMode flag and set dictating state'
+    );
+  });
+
+  it('has setDictatingMode method', () => {
+    assert.ok(
+      src.includes('setDictatingMode'),
+      'Should expose setDictatingMode for App.svelte to call'
     );
   });
 

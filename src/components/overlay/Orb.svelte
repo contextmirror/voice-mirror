@@ -17,7 +17,7 @@
   // ---- Props ----
   // preset: optional override (for settings preview). If null, reads from config.
   // isStatic: render a single frame with no animation (for mini previews)
-  let { state: orbState = 'idle', size = 80, onclick = null, preset = null, isStatic = false } = $props();
+  let { state: orbState = 'idle', size = 80, onclick = null, preset = null, isStatic = false, audioLevels = null } = $props();
   // Note: size default of 80 matches DEFAULT_CONFIG.appearance.orbSize
 
   // ---- Canvas ref ----
@@ -471,14 +471,35 @@
   }
 
   // ---- Waveform bars (for dictating) ----
+  // Smooth audio levels with exponential decay for visual polish
+  let smoothedLevels = null;
+
   function drawWaveformBars(ctx, cx, cy, innerRadius, phase) {
-    const barCount = 7;
-    const barWidth = innerRadius * 0.08;
-    const barGap = innerRadius * 0.05;
+    const levels = audioLevels;
+    const hasRealData = levels && levels.length > 0;
+    const barCount = hasRealData ? levels.length : 7;
+    const barWidth = hasRealData ? innerRadius * 0.065 : innerRadius * 0.08;
+    const barGap = hasRealData ? innerRadius * 0.02 : innerRadius * 0.05;
     const totalWidth = barCount * barWidth + (barCount - 1) * barGap;
     const startX = cx - totalWidth / 2;
-    const maxBarHeight = innerRadius * 1.4;
-    const minBarHeight = innerRadius * 0.12;
+    const maxBarHeight = innerRadius * 1.6;
+    const minBarHeight = innerRadius * 0.06;
+
+    // Smooth real data with exponential moving average
+    if (hasRealData) {
+      if (!smoothedLevels || smoothedLevels.length !== barCount) {
+        smoothedLevels = new Float32Array(barCount);
+      }
+      const attack = 0.6;  // Fast rise
+      const decay = 0.15;  // Slow fall
+      for (let i = 0; i < barCount; i++) {
+        const target = levels[i] || 0;
+        const rate = target > smoothedLevels[i] ? attack : decay;
+        smoothedLevels[i] += (target - smoothedLevels[i]) * rate;
+      }
+    } else {
+      smoothedLevels = null;
+    }
 
     ctx.save();
     ctx.beginPath();
@@ -487,13 +508,38 @@
 
     const alpha = activePreset.icons.alpha;
     for (let i = 0; i < barCount; i++) {
-      const amplitude = 0.3 + 0.7 * Math.abs(Math.sin(phase * TAU + i * 0.9));
+      let amplitude;
+      if (smoothedLevels) {
+        amplitude = smoothedLevels[i];
+      } else {
+        // Fallback: animated sine wave
+        amplitude = 0.3 + 0.7 * Math.abs(Math.sin(phase * TAU + i * 0.9));
+      }
+
       const barHeight = minBarHeight + amplitude * (maxBarHeight - minBarHeight);
       const bx = startX + i * (barWidth + barGap);
       const byTop = cy - barHeight / 2;
 
-      ctx.fillStyle = `rgba(180, 220, 255, ${alpha})`;
-      ctx.fillRect(bx, byTop, barWidth, barHeight);
+      // Gradient from center (bright) to edges (dim)
+      const distFromCenter = Math.abs(i - (barCount - 1) / 2) / ((barCount - 1) / 2);
+      const edgeFade = 1.0 - distFromCenter * 0.3;
+      const barAlpha = alpha * edgeFade;
+
+      ctx.fillStyle = `rgba(160, 200, 255, ${barAlpha})`;
+
+      // Rounded bar caps
+      const radius = barWidth / 2;
+      ctx.beginPath();
+      ctx.moveTo(bx + radius, byTop);
+      ctx.lineTo(bx + barWidth - radius, byTop);
+      ctx.arc(bx + barWidth - radius, byTop + radius, radius, -Math.PI / 2, 0);
+      ctx.lineTo(bx + barWidth, byTop + barHeight - radius);
+      ctx.arc(bx + barWidth - radius, byTop + barHeight - radius, radius, 0, Math.PI / 2);
+      ctx.lineTo(bx + radius, byTop + barHeight);
+      ctx.arc(bx + radius, byTop + barHeight - radius, radius, Math.PI / 2, Math.PI);
+      ctx.lineTo(bx, byTop + radius);
+      ctx.arc(bx + radius, byTop + radius, radius, Math.PI, -Math.PI / 2);
+      ctx.fill();
     }
 
     ctx.restore();

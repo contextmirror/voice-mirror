@@ -10,7 +10,7 @@ import { setAlwaysOnTop, setWindowSize, setResizable } from '../api.js';
 import { updateConfig, configStore } from '../stores/config.svelte.js';
 
 /** Valid orb states */
-const VALID_ORB_STATES = ['idle', 'listening', 'speaking', 'thinking', 'error'];
+const VALID_ORB_STATES = ['idle', 'listening', 'speaking', 'thinking', 'dictating', 'error'];
 
 /** Window dimensions for each mode */
 const OVERLAY_SIZE = { width: 120, height: 120 };
@@ -26,15 +26,27 @@ const EXPANDED_SIZE = { width: 420, height: 700 };
 function createOverlayStore() {
   let isOverlayMode = $state(false);
   let orbState = $state('idle');
+  let audioLevels = $state(null); // Float32 array of audio bar amplitudes (0-1)
   let eventUnlisteners = [];
+  let dictatingMode = false; // Set by App.svelte when dictation starts
 
   return {
     get isOverlayMode() { return isOverlayMode; },
     get orbState() { return orbState; },
+    get audioLevels() { return audioLevels; },
+
+    /**
+     * Tell the overlay whether we're in dictation mode.
+     * When true, recording state shows 'dictating' instead of 'listening'.
+     * Called from App.svelte which has access to both voice and overlay stores.
+     */
+    setDictatingMode(mode) {
+      dictatingMode = mode;
+    },
 
     /**
      * Set the orb visual state.
-     * @param {'idle'|'listening'|'speaking'|'thinking'|'error'} state
+     * @param {'idle'|'listening'|'speaking'|'thinking'|'dictating'|'error'} state
      */
     setOrbState(state) {
       if (!VALID_ORB_STATES.includes(state)) {
@@ -137,7 +149,8 @@ function createOverlayStore() {
                   orbState = 'idle'; // Passive listening (wake word) = idle visual
                   break;
                 case 'recording':
-                  orbState = 'listening'; // Active speech capture = human icon
+                  // Dictation shows waveform; normal recording shows human icon
+                  orbState = dictatingMode ? 'dictating' : 'listening';
                   break;
                 case 'speaking':
                   orbState = 'speaking';
@@ -146,8 +159,15 @@ function createOverlayStore() {
                   orbState = 'thinking';
                   break;
                 case 'idle':
+                  dictatingMode = false;
+                  audioLevels = null;
                   orbState = 'idle';
                   break;
+              }
+              break;
+            case 'audio_level':
+              if (data.levels) {
+                audioLevels = data.levels;
               }
               break;
             case 'error':

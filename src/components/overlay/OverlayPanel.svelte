@@ -17,6 +17,7 @@
 
   let orbState = $derived(overlayStore.orbState);
   let orbSize = $derived(configStore.value?.appearance?.orbSize || 64);
+  let audioLevels = $derived(overlayStore.audioLevels);
 
   // ---- Drag vs. click detection ----
   let dragStart = null;
@@ -54,7 +55,7 @@
     onpointerdown={onPointerDown}
     onpointermove={onPointerMove}
   >
-    <Orb state={orbState} size={orbSize} onclick={handleOrbClick} />
+    <Orb state={orbState} size={orbSize} onclick={handleOrbClick} {audioLevels} />
   </div>
 </div>
 
