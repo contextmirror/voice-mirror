@@ -13,9 +13,33 @@ use std::sync::Arc;
 use tokio::time::{Duration, Instant};
 use tracing::{info, warn};
 
-use super::McpToolResult;
+use super::{McpContent, McpToolResult};
 use crate::ipc::pipe_client::PipeClient;
 use crate::ipc::protocol::{AppToMcp, McpToApp};
+
+/// Extract base64 from a `data:image/png;base64,...` URL and build an MCP image content block.
+fn image_content_from_data_url(data_url: &str) -> Option<McpContent> {
+    let b64 = data_url.strip_prefix("data:image/png;base64,")?;
+    Some(McpContent::Image {
+        data: b64.to_string(),
+        mime_type: "image/png".into(),
+    })
+}
+
+/// Build a McpToolResult with text + optional image from a data URL.
+fn text_with_optional_image(text: String, image_data_url: Option<&str>) -> McpToolResult {
+    let mut content = Vec::new();
+    if let Some(url) = image_data_url {
+        if let Some(img) = image_content_from_data_url(url) {
+            content.push(img);
+        }
+    }
+    content.push(McpContent::Text { text });
+    McpToolResult {
+        content,
+        is_error: false,
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -50,6 +74,8 @@ struct InboxMessage {
     reply_to: Option<String>,
     #[serde(default)]
     image_path: Option<String>,
+    #[serde(default)]
+    image_data_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -349,6 +375,7 @@ pub async fn handle_voice_send(
         thread_id: Some(resolved_thread_id.clone()),
         reply_to: reply_to.map(|s| s.to_string()),
         image_path: None,
+        image_data_url: None,
     };
 
     store.messages.push(new_message.clone());
@@ -491,28 +518,37 @@ pub async fn handle_voice_inbox(args: &Value, data_dir: &Path) -> McpToolResult 
         return McpToolResult::text("No new messages.");
     }
 
-    let formatted: Vec<String> = inbox
-        .iter()
-        .map(|m| {
-            let mut text = format!(
-                "[{}] [{}] (id: {}):\n{}",
-                format_time(&m.timestamp),
-                m.from,
-                m.id,
-                m.message
-            );
-            if let Some(ref img) = m.image_path {
-                text.push_str(&format!("\n[Attached image: {}]", img));
-            }
-            text
-        })
-        .collect();
+    // Build content blocks: text summary + any images
+    let mut content: Vec<McpContent> = Vec::new();
+    let mut text_parts: Vec<String> = Vec::new();
 
-    McpToolResult::text(format!(
+    for m in inbox {
+        text_parts.push(format!(
+            "[{}] [{}] (id: {}):\n{}",
+            format_time(&m.timestamp),
+            m.from,
+            m.id,
+            m.message
+        ));
+        // Include image content block if present
+        if let Some(ref data_url) = m.image_data_url {
+            if let Some(img) = image_content_from_data_url(data_url) {
+                content.push(img);
+            }
+        }
+    }
+
+    let summary = format!(
         "=== Inbox ({} message(s)) ===\n\n{}",
-        inbox.len(),
-        formatted.join("\n\n")
-    ))
+        text_parts.len(),
+        text_parts.join("\n\n")
+    );
+    content.push(McpContent::Text { text: summary });
+
+    McpToolResult {
+        content,
+        is_error: false,
+    }
 }
 
 /// `voice_listen` -- Wait for new messages from a specific sender.
@@ -601,6 +637,7 @@ pub async fn handle_voice_listen(
                     thread_id: msg_thread,
                     timestamp,
                     image_path: _,
+                    image_data_url,
                 }))) => {
                     // Check sender match
                     if from.to_lowercase() != from_sender.to_lowercase() {
@@ -616,7 +653,7 @@ pub async fn handle_voice_listen(
                     let wait_secs = start.elapsed().as_secs();
                     release_listener_lock(data_dir, instance_id).await;
 
-                    return McpToolResult::text(format!(
+                    let text = format!(
                         "=== Message from {} (after {}s) ===\n\
                          Thread: {}\n\
                          Time: {}\n\
@@ -627,7 +664,8 @@ pub async fn handle_voice_listen(
                         timestamp,
                         id,
                         message,
-                    ));
+                    );
+                    return text_with_optional_image(text, image_data_url.as_deref());
                 }
                 Ok(Ok(Some(AppToMcp::Shutdown))) => {
                     release_listener_lock(data_dir, instance_id).await;
@@ -696,33 +734,20 @@ pub async fn handle_voice_listen(
             // Release lock before returning
             release_listener_lock(data_dir, instance_id).await;
 
-            let mut response = format!(
+            let response = format!(
                 "=== Message from {} (after {}s) ===\n\
                  Thread: {}\n\
                  Time: {}\n\
-                 ID: {}\n",
+                 ID: {}\n\n{}",
                 from_sender,
                 wait_secs,
                 msg.thread_id.as_deref().unwrap_or("none"),
                 msg.timestamp,
                 msg.id,
+                msg.message,
             );
 
-            if let Some(ref img) = msg.image_path {
-                response.push_str(&format!("Image: {}\n", img));
-            }
-
-            response.push('\n');
-            response.push_str(&msg.message);
-
-            if let Some(ref img) = msg.image_path {
-                response.push_str(&format!(
-                    "\n\n[Attached image at: {} - use the Read tool to view it]",
-                    img
-                ));
-            }
-
-            return McpToolResult::text(response);
+            return text_with_optional_image(response, msg.image_data_url.as_deref());
         }
 
         // Wait before polling again (5 seconds, similar to Node.js fallback interval)

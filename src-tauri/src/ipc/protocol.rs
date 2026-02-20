@@ -50,6 +50,8 @@ pub enum AppToMcp {
         timestamp: String,
         #[serde(skip_serializing_if = "Option::is_none")]
         image_path: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        image_data_url: Option<String>,
     },
     /// Request the MCP binary to shut down.
     Shutdown,
@@ -142,6 +144,7 @@ mod tests {
             thread_id: None,
             timestamp: "2025-01-01T00:00:00.000Z".into(),
             image_path: None,
+            image_data_url: None,
         };
         let json = serde_json::to_string(&msg).unwrap();
         let parsed: AppToMcp = serde_json::from_str(&json).unwrap();

@@ -366,6 +366,13 @@ pub async fn write_user_message(
     });
     let tid = thread_id.clone().unwrap_or_else(|| "voice-mirror".to_string());
 
+    // Build data URL for image if present (used by both pipe and inbox paths)
+    let image_data_url = image_path.as_deref().and_then(|p| {
+        let bytes = std::fs::read(p).ok()?;
+        let b64 = crate::voice::tts::crypto::base64_encode(&bytes);
+        Some(format!("data:image/png;base64,{}", b64))
+    });
+
     // Try pipe first for instant delivery
     if pipe_state.is_connected().await {
         let pipe_msg = crate::ipc::protocol::AppToMcp::UserMessage {
@@ -375,6 +382,7 @@ pub async fn write_user_message(
             thread_id: Some(tid.clone()),
             timestamp: chrono_now_iso(),
             image_path: image_path.clone(),
+            image_data_url: image_data_url.clone(),
         };
         if pipe_state.send(pipe_msg).is_ok() {
             // Also write to inbox.json for persistence/fallback
