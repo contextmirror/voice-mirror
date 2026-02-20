@@ -119,14 +119,18 @@
   );
 
   // ---- Sync from config store ----
+  // IMPORTANT: Do NOT read local $state variables (activeProfile, enabledGroups)
+  // inside this effect — that creates circular dependencies where user edits
+  // get overwritten by the config value before saving.
 
   $effect(() => {
     const cfg = configStore.value;
     if (!cfg) return;
 
-    activeProfile = cfg.ai?.toolProfile || 'voice-assistant';
+    const cfgProfile = cfg.ai?.toolProfile || 'voice-assistant';
+    activeProfile = cfgProfile;
     const profiles = cfg.ai?.toolProfiles || {};
-    const profile = profiles[activeProfile];
+    const profile = profiles[cfgProfile];
     if (profile?.groups) {
       enabledGroups = new Set(profile.groups);
     }
