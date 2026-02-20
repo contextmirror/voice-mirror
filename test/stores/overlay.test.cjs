@@ -323,3 +323,71 @@ describe('overlay: event listeners', () => {
     );
   });
 });
+
+// ============ restoreFromConfig (startup) ============
+
+describe('overlay: restoreFromConfig', () => {
+  it('has restoreFromConfig method', () => {
+    assert.ok(src.includes('restoreFromConfig('), 'Should have restoreFromConfig method');
+  });
+
+  it('checks window.expanded flag', () => {
+    assert.ok(
+      src.includes('window?.expanded') || src.includes("window?.expanded"),
+      'restoreFromConfig should check window.expanded config flag'
+    );
+  });
+
+  it('is synchronous (no window resize on startup)', () => {
+    // restoreFromConfig should NOT be async — Rust handles window sizing
+    const restoreBlock = src.slice(src.indexOf('restoreFromConfig('));
+    const methodEnd = restoreBlock.indexOf('},');
+    const method = restoreBlock.slice(0, methodEnd);
+    assert.ok(
+      !method.includes('setWindowSize') && !method.includes('setAlwaysOnTop'),
+      'restoreFromConfig should not call setWindowSize or setAlwaysOnTop (Rust handles it)'
+    );
+  });
+
+  it('sets isOverlayMode and CSS class for orb mode', () => {
+    assert.ok(
+      src.includes("isOverlayMode = true") && src.includes("overlay-mode"),
+      'restoreFromConfig should set isOverlayMode and add overlay-mode CSS class'
+    );
+  });
+});
+
+// ============ Mode-aware position persistence ============
+
+describe('overlay: mode-aware position saving', () => {
+  it('imports getWindowPosition', () => {
+    assert.ok(src.includes('getWindowPosition'), 'Should import getWindowPosition for position saving');
+  });
+
+  it('imports setWindowPosition', () => {
+    assert.ok(src.includes('setWindowPosition'), 'Should import setWindowPosition for position restore');
+  });
+
+  it('saves dashboard position when entering orb mode', () => {
+    assert.ok(
+      src.includes('dashboardX') && src.includes('dashboardY'),
+      'Should save dashboardX/dashboardY when entering orb mode'
+    );
+  });
+
+  it('saves orb position when leaving orb mode', () => {
+    // When leaving orb mode, the current (orb) position should be saved
+    const toggleBlock = src.slice(src.indexOf('async toggleOverlay()'));
+    assert.ok(
+      toggleBlock.includes('orbX') && toggleBlock.includes('orbY'),
+      'Should save orbX/orbY when leaving orb mode'
+    );
+  });
+
+  it('restores dashboard position when expanding', () => {
+    assert.ok(
+      src.includes("cfg?.window?.dashboardX") || src.includes("cfg?.window?.dashboardY"),
+      'Should restore dashboard position from config when expanding'
+    );
+  });
+});

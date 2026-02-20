@@ -27,6 +27,18 @@ use tracing::{info, warn};
 pub type PreloadedTtsState = std::sync::Mutex<Option<Box<dyn voice::tts::TtsEngine>>>;
 
 
+/// Check if a window at (x, y) with given dimensions fits entirely within any monitor.
+fn position_fits_monitor(window: &tauri::WebviewWindow, x: i32, y: i32, w: u32, h: u32) -> bool {
+    window.available_monitors().unwrap_or_default().iter().any(|m| {
+        let mp = m.position();
+        let ms = m.size();
+        x >= mp.x
+            && y >= mp.y
+            && x + w as i32 <= mp.x + ms.width as i32
+            && y + h as i32 <= mp.y + ms.height as i32
+    })
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Initialize structured logging (file + console)
@@ -213,13 +225,6 @@ pub fn run() {
             if let Some(window) = app.get_webview_window("main") {
                 use tauri::window::Color;
                 let _ = window.set_background_color(Some(Color(0, 0, 0, 0)));
-
-                // Apply start_minimized from config
-                let cfg = commands::config::get_config_snapshot();
-                if cfg.behavior.start_minimized {
-                    info!("Config: start_minimized=true, minimizing window");
-                    let _ = window.minimize();
-                }
             }
 
             // Pre-load TTS engine in background so it's ready for the first message.
@@ -287,49 +292,66 @@ pub fn run() {
                 }
             }
 
-            // Restore saved window size and position from config on startup.
-            // The tauri.conf.json uses a default size; this overrides it with the
-            // user's last-used size so the window reopens where they left it.
+            // Restore saved window size, position, and mode from config.
+            // The window starts hidden (visible: false in tauri.conf.json)
+            // so the user never sees the wrong size/mode flash.
+            // Orb and dashboard positions are stored independently.
             if let Some(window) = app.get_webview_window("main") {
                 let cfg = commands::config::get_config_snapshot();
-                let pw = cfg.appearance.panel_width;
-                let ph = cfg.appearance.panel_height;
+                let is_dashboard = cfg.window.expanded;
 
-                // Always restore size if it looks valid
-                if pw >= 300 && ph >= 300 {
-                    let size = tauri::PhysicalSize::new(pw, ph);
+                if is_dashboard {
+                    // Dashboard mode: restore panelWidth × panelHeight
+                    let pw = cfg.appearance.panel_width;
+                    let ph = cfg.appearance.panel_height;
+                    if pw >= 300 && ph >= 300 {
+                        let size = tauri::PhysicalSize::new(pw, ph);
+                        let _ = window.set_size(tauri::Size::Physical(size));
+                        info!("Restored dashboard size: {}x{}", pw, ph);
+                    }
+
+                    // Restore dashboard position (dashboardX/Y), fall back to orbX/Y for migration
+                    let pos_x = cfg.window.dashboard_x.or(cfg.window.orb_x);
+                    let pos_y = cfg.window.dashboard_y.or(cfg.window.orb_y);
+                    if let (Some(x), Some(y)) = (pos_x, pos_y) {
+                        let win_w = if pw >= 300 { pw } else { 900 };
+                        let win_h = if ph >= 300 { ph } else { 800 };
+                        if position_fits_monitor(&window, x as i32, y as i32, win_w, win_h) {
+                            let pos = tauri::PhysicalPosition::new(x as i32, y as i32);
+                            let _ = window.set_position(tauri::Position::Physical(pos));
+                            info!("Restored dashboard position: ({}, {})", x, y);
+                        } else {
+                            let _ = window.center();
+                            info!("Dashboard position ({},{}) off-screen, centering", x, y);
+                        }
+                    }
+                } else {
+                    // Orb mode: restore 120×120, always-on-top, not resizable
+                    let size = tauri::PhysicalSize::new(120u32, 120u32);
                     let _ = window.set_size(tauri::Size::Physical(size));
-                    info!("Restored window size: {}x{}", pw, ph);
+                    let _ = window.set_always_on_top(true);
+                    let _ = window.set_resizable(false);
+                    info!("Restored orb mode: 120x120, always-on-top");
+
+                    if let (Some(x), Some(y)) = (cfg.window.orb_x, cfg.window.orb_y) {
+                        if position_fits_monitor(&window, x as i32, y as i32, 120, 120) {
+                            let pos = tauri::PhysicalPosition::new(x as i32, y as i32);
+                            let _ = window.set_position(tauri::Position::Physical(pos));
+                            info!("Restored orb position: ({}, {})", x, y);
+                        } else {
+                            let _ = window.center();
+                            info!("Orb position ({},{}) off-screen, centering", x, y);
+                        }
+                    }
                 }
 
-                // Restore position only if it fits within a single monitor.
-                // If it would span across screens or be off-screen, center instead.
-                if let (Some(x), Some(y)) = (cfg.window.orb_x, cfg.window.orb_y) {
-                    let win_w = if pw >= 300 { pw } else { 900 };
-                    let win_h = if ph >= 300 { ph } else { 800 };
-                    let ix = x as i32;
-                    let iy = y as i32;
-
-                    let fits = window.available_monitors().unwrap_or_default().iter().any(|m| {
-                        let mp = m.position();
-                        let ms = m.size();
-                        let mx = mp.x;
-                        let my = mp.y;
-                        let mw = ms.width as i32;
-                        let mh = ms.height as i32;
-                        ix >= mx && iy >= my
-                            && ix + win_w as i32 <= mx + mw
-                            && iy + win_h as i32 <= my + mh
-                    });
-
-                    if fits {
-                        let pos = tauri::PhysicalPosition::new(ix, iy);
-                        let _ = window.set_position(tauri::Position::Physical(pos));
-                        info!("Restored window position: ({}, {})", x, y);
-                    } else {
-                        let _ = window.center();
-                        info!("Saved position ({},{}) doesn't fit any monitor, centering", x, y);
-                    }
+                // Now show the window — size, position, and mode are already correct.
+                if cfg.behavior.start_minimized {
+                    let _ = window.show();
+                    let _ = window.minimize();
+                    info!("Config: start_minimized=true");
+                } else {
+                    let _ = window.show();
                 }
             }
 
@@ -337,8 +359,8 @@ pub fn run() {
         })
         .on_window_event(|_window, event| {
             // Save window bounds when the window is about to close.
-            // This runs synchronously in Rust — much more reliable than
-            // the frontend's beforeunload handler for async invoke calls.
+            // Mode-aware: dashboard saves to dashboardX/Y + panelWidth/Height,
+            // orb saves to orbX/Y only (preserving dashboard dimensions).
             if let tauri::WindowEvent::CloseRequested { .. } = event {
                 use crate::config::persistence;
                 use crate::services::platform;
@@ -347,21 +369,37 @@ pub fn run() {
                     if let Ok(size) = _window.outer_size() {
                         let config_dir = platform::get_config_dir();
                         let current_config = persistence::load_config(&config_dir);
+                        let is_dashboard = current_config.window.expanded;
+
+                        let patch = if is_dashboard {
+                            serde_json::json!({
+                                "window": {
+                                    "dashboardX": pos.x as f64,
+                                    "dashboardY": pos.y as f64,
+                                },
+                                "appearance": {
+                                    "panelWidth": size.width,
+                                    "panelHeight": size.height,
+                                }
+                            })
+                        } else {
+                            serde_json::json!({
+                                "window": {
+                                    "orbX": pos.x as f64,
+                                    "orbY": pos.y as f64,
+                                }
+                            })
+                        };
+
                         let current_val = serde_json::to_value(&current_config).unwrap_or_default();
-                        let patch = serde_json::json!({
-                            "window": {
-                                "orbX": pos.x as f64,
-                                "orbY": pos.y as f64,
-                            },
-                            "appearance": {
-                                "panelWidth": size.width,
-                                "panelHeight": size.height,
-                            }
-                        });
                         let merged = persistence::deep_merge(current_val, patch);
                         if let Ok(updated) = serde_json::from_value::<crate::config::schema::AppConfig>(merged) {
                             let _ = persistence::save_config(&config_dir, &updated);
-                            info!("Saved window bounds on close: pos=({},{}) size={}x{}", pos.x, pos.y, size.width, size.height);
+                            info!(
+                                "Saved {} bounds on close: pos=({},{}) size={}x{}",
+                                if is_dashboard { "dashboard" } else { "orb" },
+                                pos.x, pos.y, size.width, size.height
+                            );
                         }
                     }
                 }

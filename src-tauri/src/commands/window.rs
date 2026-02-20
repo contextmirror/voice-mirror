@@ -37,45 +37,51 @@ pub fn set_window_position(app: AppHandle, x: f64, y: f64) -> IpcResponse {
 }
 
 /// Save current window position and size to config.
+/// Mode-aware: dashboard saves to dashboardX/Y + panelWidth/Height,
+/// orb saves to orbX/Y only (preserving dashboard dimensions).
 #[tauri::command]
 pub fn save_window_bounds(app: AppHandle) -> IpcResponse {
     let Some(window) = app.get_webview_window("main") else {
         return IpcResponse::err("Main window not found");
     };
 
-    // Read current position
     let position = match window.outer_position() {
         Ok(pos) => pos,
         Err(e) => return IpcResponse::err(format!("Failed to get position: {}", e)),
     };
 
-    // Read current size
     let size = match window.outer_size() {
         Ok(s) => s,
         Err(e) => return IpcResponse::err(format!("Failed to get size: {}", e)),
     };
 
-    // Build a config patch: save position + size
-    // Position goes to window.orbX/orbY, size goes to appearance.panelWidth/panelHeight
-    let patch = serde_json::json!({
-        "window": {
-            "orbX": position.x as f64,
-            "orbY": position.y as f64,
-        },
-        "appearance": {
-            "panelWidth": size.width,
-            "panelHeight": size.height,
-        }
-    });
-
-    // Use the set_config command logic to persist
-    // We import the persistence and platform modules directly to avoid
-    // circular dependencies with the config command's static CONFIG.
     use crate::config::persistence;
     use crate::services::platform;
 
     let config_dir = platform::get_config_dir();
     let current_config = persistence::load_config(&config_dir);
+    let is_dashboard = current_config.window.expanded;
+
+    // Mode-aware: don't overwrite dashboard size when in orb mode
+    let patch = if is_dashboard {
+        serde_json::json!({
+            "window": {
+                "dashboardX": position.x as f64,
+                "dashboardY": position.y as f64,
+            },
+            "appearance": {
+                "panelWidth": size.width,
+                "panelHeight": size.height,
+            }
+        })
+    } else {
+        serde_json::json!({
+            "window": {
+                "orbX": position.x as f64,
+                "orbY": position.y as f64,
+            }
+        })
+    };
 
     let current_val = match serde_json::to_value(&current_config) {
         Ok(v) => v,

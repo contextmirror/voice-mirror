@@ -92,6 +92,15 @@ describe('config.svelte.js -- critical field values', () => {
   it('defaults contextLength to 32768', () => {
     assert.ok(src.includes('contextLength: 32768'), 'contextLength should default to 32768');
   });
+
+  it('has dashboardX and dashboardY in window config', () => {
+    assert.ok(src.includes('dashboardX:'), 'Should have dashboardX for dashboard position');
+    assert.ok(src.includes('dashboardY:'), 'Should have dashboardY for dashboard position');
+  });
+
+  it('defaults window.expanded to true', () => {
+    assert.ok(src.includes('expanded: true'), 'expanded should default to true (dashboard mode)');
+  });
 });
 
 describe('config.svelte.js -- ai.endpoints', () => {

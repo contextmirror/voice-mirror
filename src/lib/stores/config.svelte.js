@@ -61,6 +61,8 @@ const DEFAULT_CONFIG = {
   window: {
     orbX: null,
     orbY: null,
+    dashboardX: null,
+    dashboardY: null,
     expanded: true,
   },
   overlay: {

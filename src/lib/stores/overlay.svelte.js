@@ -3,10 +3,14 @@
  *
  * Manages compact overlay mode (orb-only) vs expanded app mode,
  * and tracks the current orb visual state based on voice/AI events.
+ *
+ * Window size/position is restored by Rust (lib.rs setup) BEFORE the
+ * window becomes visible. This store only manages frontend rendering
+ * state and handles runtime mode toggles.
  */
 
 import { listen } from '@tauri-apps/api/event';
-import { setAlwaysOnTop, setWindowSize, setResizable } from '../api.js';
+import { setAlwaysOnTop, setWindowSize, setResizable, getWindowPosition, setWindowPosition } from '../api.js';
 import { updateConfig, configStore } from '../stores/config.svelte.js';
 
 /** Valid orb states */
@@ -58,7 +62,8 @@ function createOverlayStore() {
 
     /**
      * Toggle between compact overlay mode and expanded app mode.
-     * Resizes window and sets always-on-top accordingly.
+     * Saves current mode's position before switching, restores the
+     * other mode's position from config.
      */
     async toggleOverlay() {
       const entering = !isOverlayMode;
@@ -66,6 +71,22 @@ function createOverlayStore() {
 
       try {
         if (entering) {
+          // Entering orb mode — save dashboard position first
+          try {
+            const posResult = await getWindowPosition();
+            const pos = posResult?.data || posResult;
+            if (pos?.x != null && pos?.y != null) {
+              await updateConfig({
+                window: { dashboardX: pos.x, dashboardY: pos.y, expanded: false }
+              });
+            } else {
+              await updateConfig({ window: { expanded: false } });
+            }
+          } catch (e) {
+            console.warn('[overlay] Failed to save dashboard position:', e);
+            updateConfig({ window: { expanded: false } }).catch(() => {});
+          }
+
           // Make body/html transparent so only the orb is visible
           document.body.classList.add('overlay-mode');
           document.documentElement.style.background = 'transparent';
@@ -76,6 +97,22 @@ function createOverlayStore() {
           await setResizable(false);
           await setWindowSize(OVERLAY_SIZE.width, OVERLAY_SIZE.height);
         } else {
+          // Leaving orb mode — save orb position first
+          try {
+            const posResult = await getWindowPosition();
+            const pos = posResult?.data || posResult;
+            if (pos?.x != null && pos?.y != null) {
+              await updateConfig({
+                window: { orbX: pos.x, orbY: pos.y, expanded: true }
+              });
+            } else {
+              await updateConfig({ window: { expanded: true } });
+            }
+          } catch (e) {
+            console.warn('[overlay] Failed to save orb position:', e);
+            updateConfig({ window: { expanded: true } }).catch(() => {});
+          }
+
           // Restore opaque background for expanded app mode
           document.body.classList.remove('overlay-mode');
           document.documentElement.style.background = '';
@@ -86,13 +123,17 @@ function createOverlayStore() {
           const expandedWidth = cfg?.appearance?.panelWidth || EXPANDED_SIZE.width;
           const expandedHeight = cfg?.appearance?.panelHeight || EXPANDED_SIZE.height;
           await setWindowSize(expandedWidth, expandedHeight);
+
+          // Restore dashboard position if saved
+          const dx = cfg?.window?.dashboardX;
+          const dy = cfg?.window?.dashboardY;
+          if (dx != null && dy != null) {
+            await setWindowPosition(dx, dy);
+          }
+
           await setResizable(true);
           await setAlwaysOnTop(false);
         }
-        // Persist mode to config (expanded=true means full app)
-        updateConfig({ window: { expanded: !entering } }).catch((err) => {
-          console.error('[overlay] Failed to persist overlay mode:', err);
-        });
       } catch (err) {
         console.error('[overlay] Failed to toggle overlay mode:', err);
         // Revert state on failure
@@ -112,13 +153,18 @@ function createOverlayStore() {
 
     /**
      * Restore overlay mode from saved config on startup.
-     * If the config says the user was in compact/orb mode, switch to it.
+     * Rust already sized/positioned the window — this just sets the
+     * frontend rendering state (CSS class + isOverlayMode flag).
+     * No window resize or IPC calls needed.
      */
-    async restoreFromConfig(cfg) {
+    restoreFromConfig(cfg) {
       const wasExpanded = cfg?.window?.expanded;
-      // expanded=false (or undefined) means orb mode; expanded=true means dashboard
+      // expanded=false means orb mode; expanded=true (or undefined) means dashboard
       if (wasExpanded === false && !isOverlayMode) {
-        await this.toggleOverlay(); // enter compact orb mode
+        isOverlayMode = true;
+        document.body.classList.add('overlay-mode');
+        document.documentElement.style.background = 'transparent';
+        document.body.style.background = 'transparent';
       }
     },
 

@@ -228,13 +228,22 @@ impl Default for BehaviorConfig {
 }
 
 /// Window position and state.
+/// Orb and dashboard modes store positions independently so switching
+/// between them (or restarting) restores each mode to its own location.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WindowConfig {
+    /// Orb (compact) mode position.
     #[serde(default)]
     pub orb_x: Option<f64>,
     #[serde(default)]
     pub orb_y: Option<f64>,
+    /// Dashboard (expanded) mode position.
+    #[serde(default)]
+    pub dashboard_x: Option<f64>,
+    #[serde(default)]
+    pub dashboard_y: Option<f64>,
+    /// true = dashboard mode, false = orb mode.
     #[serde(default = "default_expanded")]
     pub expanded: bool,
 }
