@@ -58,6 +58,7 @@ describe('api.js -- critical Tauri command names', () => {
     'set_window_size',
     'set_always_on_top',
     'set_resizable',
+    'show_window',
     // Voice
     'start_voice',
     'stop_voice',
@@ -138,6 +139,7 @@ describe('api.js -- exported async functions', () => {
     'setWindowSize',
     'setAlwaysOnTop',
     'setResizable',
+    'showWindow',
     // Voice
     'startVoice',
     'stopVoice',

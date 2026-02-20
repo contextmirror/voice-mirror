@@ -77,6 +77,7 @@ pub fn run() {
             window_cmds::set_window_size,
             window_cmds::set_always_on_top,
             window_cmds::set_resizable,
+            window_cmds::show_window,
             window_cmds::quit_app,
             // Screenshot / screen capture
             screenshot_cmds::take_screenshot,
@@ -345,13 +346,13 @@ pub fn run() {
                     }
                 }
 
-                // Now show the window — size, position, and mode are already correct.
+                // Window stays hidden until the frontend calls show_window
+                // after Svelte has mounted and set the correct mode (overlay vs
+                // dashboard). This prevents the black-square flash that occurs
+                // when the window is shown before CSS/HTML has loaded.
+                // See: window_cmds::show_window, called from App.svelte.
                 if cfg.behavior.start_minimized {
-                    let _ = window.show();
-                    let _ = window.minimize();
-                    info!("Config: start_minimized=true");
-                } else {
-                    let _ = window.show();
+                    info!("Config: start_minimized=true (will minimize after frontend show)");
                 }
             }
 

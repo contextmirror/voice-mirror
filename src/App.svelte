@@ -8,7 +8,7 @@
   import { shortcutsStore, setActionHandler, setReleaseHandler, setupInAppShortcuts } from './lib/stores/shortcuts.svelte.js';
   import { initStartupGreeting } from './lib/voice-greeting.js';
   import { listen } from '@tauri-apps/api/event';
-  import { writeUserMessage, aiPtyInput, pttPress, pttRelease, configurePttKey, configureDictationKey, injectText, saveWindowBounds } from './lib/api.js';
+  import { writeUserMessage, aiPtyInput, pttPress, pttRelease, configurePttKey, configureDictationKey, injectText, saveWindowBounds, showWindow, minimizeWindow } from './lib/api.js';
   import { chatStore } from './lib/stores/chat.svelte.js';
 
   import TitleBar from './components/shared/TitleBar.svelte';
@@ -38,11 +38,18 @@
         navigationStore.initSidebarState(collapsed);
       }
       // Restore overlay (orb) mode if user was in compact mode last session.
-      // After restore, reveal the UI (body starts opacity:0 to prevent flash).
+      // After restore, show the window (it starts hidden to prevent flash).
       if (!overlayRestored) {
         overlayRestored = true;
         overlayStore.restoreFromConfig(configStore.value);
         document.body.classList.add('app-ready');
+        // Window starts hidden (visible:false in tauri.conf.json).
+        // Now that Svelte has mounted and the correct mode is set, show it.
+        showWindow().then(() => {
+          if (configStore.value?.behavior?.startMinimized) {
+            minimizeWindow().catch(() => {});
+          }
+        }).catch(() => {});
       }
     }
   });

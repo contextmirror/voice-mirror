@@ -66,6 +66,15 @@ export async function setResizable(value) {
   return invoke('set_resizable', { value });
 }
 
+/**
+ * Show the main window.
+ * Called after Svelte mounts and sets the correct mode (overlay vs dashboard)
+ * to prevent a flash of wrong content on startup.
+ */
+export async function showWindow() {
+  return invoke('show_window');
+}
+
 // ============ Voice ============
 
 export async function startVoice() {

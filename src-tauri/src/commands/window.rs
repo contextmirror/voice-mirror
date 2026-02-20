@@ -177,6 +177,21 @@ pub fn set_resizable(app: AppHandle, value: bool) -> IpcResponse {
     }
 }
 
+/// Show the main window.
+/// Called by the frontend after Svelte has mounted and set the correct
+/// mode (overlay vs dashboard). This prevents the black-square flash
+/// that occurs when Rust shows the window before CSS/HTML has loaded.
+#[tauri::command]
+pub fn show_window(app: AppHandle) -> IpcResponse {
+    let Some(window) = app.get_webview_window("main") else {
+        return IpcResponse::err("Main window not found");
+    };
+    match window.show() {
+        Ok(()) => IpcResponse::ok_empty(),
+        Err(e) => IpcResponse::err(format!("Failed to show window: {}", e)),
+    }
+}
+
 /// Quit the application.
 /// Uses window.close() instead of app.exit() so that the CloseRequested
 /// event fires first, allowing the on_window_event handler in lib.rs to
