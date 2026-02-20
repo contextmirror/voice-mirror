@@ -43,6 +43,7 @@
       autocomplete="off"
     />
   </form>
+
 </div>
 
 <style>
@@ -111,4 +112,5 @@
   .url-input::placeholder {
     color: var(--muted);
   }
+
 </style>

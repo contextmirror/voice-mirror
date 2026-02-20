@@ -362,6 +362,18 @@ describe('TitleBar.svelte', () => {
   it('tracks maximized state', () => {
     assert.ok(src.includes('maximized'), 'Should track maximized state');
   });
+
+  it('accepts centerContent snippet prop', () => {
+    assert.ok(src.includes('centerContent'), 'Should accept centerContent snippet');
+  });
+
+  it('has titlebar-center for injected content', () => {
+    assert.ok(src.includes('titlebar-center'), 'Should have titlebar-center div');
+  });
+
+  it('renders centerContent with @render', () => {
+    assert.ok(src.includes('{@render centerContent()}'), 'Should render centerContent snippet');
+  });
 });
 
 // ---- Toast.svelte ----

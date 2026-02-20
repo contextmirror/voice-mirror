@@ -16,7 +16,7 @@
   import ChatPanel from './components/chat/ChatPanel.svelte';
   import Terminal from './components/terminal/Terminal.svelte';
   import SettingsPanel from './components/settings/SettingsPanel.svelte';
-  import LensPanel from './components/lens/LensPanel.svelte';
+  import LensWorkspace from './components/lens/LensWorkspace.svelte';
   import OverlayPanel from './components/overlay/OverlayPanel.svelte';
   import ResizeEdges from './components/shared/ResizeEdges.svelte';
   import StatsBar from './components/shared/StatsBar.svelte';
@@ -309,7 +309,20 @@
 {:else}
   <ResizeEdges />
   <div class="app-shell">
-    <TitleBar />
+    <TitleBar>
+      {#snippet centerContent()}
+        {#if activeView === 'lens'}
+          <div class="titlebar-lens-center">
+            <div class="titlebar-search-box">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <span>Search Voice Mirror</span>
+              <kbd>Ctrl+P</kbd>
+            </div>
+            <span class="titlebar-status-badge">Status</span>
+          </div>
+        {/if}
+      {/snippet}
+    </TitleBar>
 
     <div class="app-body">
       <Sidebar />
@@ -325,7 +338,7 @@
           </div>
         {:else if activeView === 'lens'}
           <div class="view-panel">
-            <LensPanel />
+            <LensWorkspace />
           </div>
         {:else if activeView === 'settings'}
           <div class="view-panel">
@@ -400,5 +413,43 @@
     color: var(--muted);
     opacity: 0.5;
     margin-bottom: 8px;
+  }
+
+  /* Lens-mode titlebar center content */
+  .titlebar-lens-center {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .titlebar-search-box {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg);
+    color: var(--muted);
+    font-size: 12px;
+    min-width: 220px;
+    cursor: pointer;
+    transition: border-color var(--duration-fast) var(--ease-out);
+  }
+  .titlebar-search-box:hover { border-color: var(--accent); }
+  .titlebar-search-box kbd {
+    margin-left: auto;
+    font-size: 10px;
+    opacity: 0.5;
+    font-family: var(--font-mono);
+  }
+
+  .titlebar-status-badge {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: var(--accent);
+    color: var(--bg);
+    font-weight: 600;
   }
 </style>

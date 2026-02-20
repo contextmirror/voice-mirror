@@ -126,10 +126,6 @@
     min-height: 0;
     overflow: hidden;
     background: var(--bg);
-    /* Inset from window edges so the native child webview (which renders
-       above all DOM elements) doesn't cover the ResizeEdges handles. */
-    margin-right: 6px;
-    margin-bottom: 6px;
   }
 
   .lens-loading {

@@ -33,6 +33,7 @@ describe('config.svelte.js -- DEFAULT_CONFIG structure', () => {
     'overlay',
     'advanced',
     'sidebar',
+    'workspace',
     'user',
     'system',
     'ai',

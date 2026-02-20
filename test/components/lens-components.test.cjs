@@ -97,6 +97,11 @@ describe('LensToolbar.svelte', () => {
   it('uses no-drag for frameless window', () => {
     assert.ok(src.includes('-webkit-app-region: no-drag'));
   });
+
+  it('is a browser-only toolbar (no toggle props)', () => {
+    assert.ok(!src.includes('showChat'), 'LensToolbar should not have showChat prop');
+    assert.ok(!src.includes('showTerminal'), 'LensToolbar should not have showTerminal prop');
+  });
 });
 
 // ============ LensPreview ============

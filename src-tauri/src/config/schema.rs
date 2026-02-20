@@ -22,6 +22,8 @@ pub struct AppConfig {
     #[serde(default)]
     pub sidebar: SidebarConfig,
     #[serde(default)]
+    pub workspace: WorkspaceConfig,
+    #[serde(default)]
     pub user: UserConfig,
     #[serde(default)]
     pub system: SystemConfig,
@@ -276,6 +278,39 @@ pub struct AdvancedConfig {
 pub struct SidebarConfig {
     #[serde(default)]
     pub collapsed: bool,
+}
+
+/// Lens workspace panel layout state.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceConfig {
+    #[serde(default)]
+    pub show_chat: bool,
+    #[serde(default)]
+    pub show_terminal: bool,
+    #[serde(default = "default_chat_ratio")]
+    pub chat_ratio: f64,
+    #[serde(default = "default_terminal_ratio")]
+    pub terminal_ratio: f64,
+}
+
+impl Default for WorkspaceConfig {
+    fn default() -> Self {
+        Self {
+            show_chat: false,
+            show_terminal: false,
+            chat_ratio: 0.3,
+            terminal_ratio: 0.7,
+        }
+    }
+}
+
+fn default_chat_ratio() -> f64 {
+    0.3
+}
+
+fn default_terminal_ratio() -> f64 {
+    0.7
 }
 
 /// User identity settings.

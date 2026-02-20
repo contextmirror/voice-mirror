@@ -75,6 +75,12 @@ const DEFAULT_CONFIG = {
   sidebar: {
     collapsed: false,
   },
+  workspace: {
+    showChat: false,
+    showTerminal: false,
+    chatRatio: 0.3,
+    terminalRatio: 0.7,
+  },
   user: {
     name: null,
   },

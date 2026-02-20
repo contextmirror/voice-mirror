@@ -2,6 +2,9 @@
   import { minimizeWindow, maximizeWindow, quitApp } from '../../lib/api.js';
   import { overlayStore } from '../../lib/stores/overlay.svelte.js';
 
+  /** @type {{ centerContent?: import('svelte').Snippet }} */
+  let { centerContent } = $props();
+
   let maximized = $state(false);
 
   async function handleMinimize() {
@@ -52,6 +55,12 @@
     </svg>
     <span class="titlebar-title" data-tauri-drag-region>Voice Mirror</span>
   </div>
+
+  {#if centerContent}
+    <div class="titlebar-center">
+      {@render centerContent()}
+    </div>
+  {/if}
 
   <div class="window-controls">
     <button
@@ -111,6 +120,7 @@
 <style>
   /* ========== Title Bar ========== */
   .titlebar {
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -143,6 +153,16 @@
     font-weight: 600;
     white-space: nowrap;
     letter-spacing: -0.01em;
+  }
+
+  .titlebar-center {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    pointer-events: auto;
+    -webkit-app-region: no-drag;
   }
 
   /* ========== Window Control Buttons ========== */
