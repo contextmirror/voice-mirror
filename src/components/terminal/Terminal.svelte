@@ -172,10 +172,20 @@
     switch (data.type) {
       case 'clear':
         term.write('\x1b[2J\x1b[3J\x1b[H');
+        if (term.forceFullRedraw) term.forceFullRedraw();
         break;
       case 'start':
-        // Clear stale content from previous provider before writing new info
-        term.clear();
+        // Nuclear reset for clean provider switch: free the old WASM terminal
+        // and create a fresh one. This synchronously destroys all state —
+        // alt screen buffer, mouse tracking modes, scrollback, colors — and
+        // clears the canvas. Escape-sequence-based resets don't work reliably
+        // because term.write() is async (queued for WASM processing), so
+        // forceFullRedraw() fires before the sequences are processed.
+        if (term.reset) {
+          term.reset();
+        } else {
+          term.clear();
+        }
         if (data.text) {
           term.writeln(`\x1b[34m${data.text}\x1b[0m`);
         }
@@ -196,6 +206,15 @@
         }
         break;
       case 'exit':
+        // Reset terminal modes on provider exit so stale state
+        // (mouse tracking, alt screen) doesn't leak to next provider.
+        // Use escape sequences here (not term.reset()) to preserve the
+        // exit message in the scrollback for user visibility.
+        term.write(
+          '\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l' + // Disable mouse tracking
+          '\x1b[?1049l' +  // Exit alternate screen
+          '\x1b[0m'        // Reset attributes
+        );
         term.writeln('');
         term.writeln(`\x1b[33m[Process exited with code ${data.code ?? '?'}]\x1b[0m`);
         break;
@@ -405,12 +424,14 @@
     height: 100%;
     overflow: hidden;
     background: var(--bg);
+    /* Visual spacing around terminal — applied here (not on inner container)
+       so ghostty-web's canvas fills the container exactly without clipping */
+    padding: 4px;
   }
 
   .terminal-container {
     flex: 1;
     overflow: hidden;
-    padding: 4px;
     /* Ensure ghostty-web fills the container */
     min-height: 0;
     position: relative;

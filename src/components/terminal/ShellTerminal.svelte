@@ -369,12 +369,14 @@
     height: 100%;
     overflow: hidden;
     background: var(--bg);
+    /* Visual spacing around terminal — applied here (not on inner container)
+       so ghostty-web's canvas fills the container exactly without clipping */
+    padding: 4px;
   }
 
   .shell-terminal-container {
     flex: 1;
     overflow: hidden;
-    padding: 4px;
     min-height: 0;
     position: relative;
     contain: strict;
