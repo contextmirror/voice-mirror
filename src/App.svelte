@@ -185,11 +185,26 @@
     }
   });
 
-  // In-app DOM shortcuts (Ctrl+,, Ctrl+N, Ctrl+T, Escape)
+  // In-app DOM shortcuts (Ctrl+,, Ctrl+N, Ctrl+T, Ctrl+P, Escape)
   $effect(() => {
     if (!shortcutsInitialized) return;
     const cleanup = setupInAppShortcuts();
     return cleanup;
+  });
+
+  // Forward shortcuts from the lens webview via custom URI scheme protocol.
+  // Child WebView2 instances are separate processes (NOT iframes), so
+  // window.top.postMessage() doesn't work.  The injected JS fires an Image
+  // request to the `lens-shortcut://` protocol, Rust intercepts it and emits
+  // this Tauri event.
+  $effect(() => {
+    let unlistenFn;
+    listen('lens-shortcut', (event) => {
+      const key = event.payload?.key;
+      if (key === 'p') { commandPaletteVisible = true; }
+      else if (key === ',') { navigationStore.setView('settings'); }
+    }).then(fn => { unlistenFn = fn; });
+    return () => { unlistenFn?.(); };
   });
 
   // Clean up on window close (bounds are saved by Rust's CloseRequested handler)

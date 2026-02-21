@@ -17,6 +17,7 @@
   let loadingFiles = $state(false);
 
   const commands = [
+    { id: 'open-lens', label: 'Open Lens', category: 'command' },
     { id: 'new-session', label: 'New Session', hint: 'Ctrl+Shift+S', category: 'command' },
     { id: 'toggle-terminal', label: 'Toggle Terminal', hint: 'Ctrl+`', category: 'command' },
     { id: 'toggle-chat', label: 'Toggle Chat', category: 'command' },
@@ -25,6 +26,7 @@
   ];
 
   const commandHandlers = {
+    'open-lens': () => navigationStore.setMode('lens'),
     'toggle-terminal': () => layoutStore.toggleTerminal(),
     'toggle-chat': () => layoutStore.toggleChat(),
     'toggle-file-tree': () => layoutStore.toggleFileTree(),

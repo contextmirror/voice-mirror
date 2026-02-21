@@ -75,6 +75,30 @@ pub async fn lens_create_webview(
     let w = width;
     let h = height;
 
+    // Build the shortcut interception script.  Child WebView2 instances are
+    // separate processes (NOT iframes), so window.top.postMessage() doesn't
+    // reach the parent.  Instead we fire a request to a custom Tauri URI
+    // scheme (`lens-shortcut://`) which is handled in lib.rs and re-emitted
+    // as a Tauri event the frontend can listen to.
+    let shortcut_base = if cfg!(target_os = "windows") {
+        "https://lens-shortcut.localhost/"
+    } else {
+        "lens-shortcut://localhost/"
+    };
+    let shortcut_script = format!(
+        r#"document.addEventListener('keydown', function(e) {{
+            var key = e.key.toLowerCase();
+            if ((e.ctrlKey || e.metaKey) && ['p','n','t',','].includes(key)) {{
+                e.preventDefault();
+                e.stopPropagation();
+                try {{
+                    (new Image()).src = '{}' + key + '?t=' + Date.now();
+                }} catch(err) {{}}
+            }}
+        }}, true);"#,
+        shortcut_base
+    );
+
     // Run WebView2 creation on a blocking thread to prevent hanging the
     // tokio runtime. WebView2 initialization on Windows can block for
     // several hundred milliseconds while the browser process starts.
@@ -84,7 +108,8 @@ pub async fn lens_create_webview(
         };
 
         let builder =
-            WebviewBuilder::new(&label_clone, tauri::WebviewUrl::External(parsed_url));
+            WebviewBuilder::new(&label_clone, tauri::WebviewUrl::External(parsed_url))
+                .initialization_script(&shortcut_script);
 
         info!("[lens] Calling window.add_child for {}", label_clone);
 

@@ -58,6 +58,47 @@ pub fn run() {
             info!("Second instance detected, focusing existing window");
         }))
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        // Custom URI scheme for forwarding keyboard shortcuts from the lens
+        // child webview back to the app.  Child WebView2 instances are separate
+        // processes (NOT iframes), so window.top.postMessage() doesn't work.
+        // Instead the injected JS fires `new Image().src` to this scheme,
+        // Rust intercepts it here and emits a Tauri event the frontend listens to.
+        .register_uri_scheme_protocol("lens-shortcut", |ctx, request| {
+            let uri = request.uri().to_string();
+            // URL format — Windows: https://lens-shortcut.localhost/{key}?t=...
+            //               macOS/Linux: lens-shortcut://localhost/{key}?t=...
+            let path = uri
+                .split("localhost")
+                .nth(1)
+                .unwrap_or("")
+                .trim_start_matches('/')
+                .trim_start_matches(':');
+            let key = path
+                .split('?')
+                .next()
+                .unwrap_or("")
+                .trim_matches('/');
+
+            if !key.is_empty() {
+                info!("[lens-shortcut] Forwarding shortcut key: {}", key);
+                let _ = ctx.app_handle().emit("lens-shortcut", serde_json::json!({ "key": key }));
+            }
+
+            // Return 1×1 transparent GIF so the Image() load succeeds silently
+            tauri::http::Response::builder()
+                .status(200)
+                .header("content-type", "image/gif")
+                .header("access-control-allow-origin", "*")
+                .body(vec![
+                    0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x01, 0x00,
+                    0x01, 0x00, 0x80, 0x00, 0x00, 0xff, 0xff, 0xff,
+                    0x00, 0x00, 0x00, 0x21, 0xf9, 0x04, 0x00, 0x00,
+                    0x00, 0x00, 0x00, 0x2c, 0x00, 0x00, 0x00, 0x00,
+                    0x01, 0x00, 0x01, 0x00, 0x00, 0x02, 0x02, 0x44,
+                    0x01, 0x00, 0x3b,
+                ])
+                .unwrap()
+        })
         .manage(ai_cmds::AiManagerState(std::sync::Mutex::new(
             AiManager::new(),
         )))
