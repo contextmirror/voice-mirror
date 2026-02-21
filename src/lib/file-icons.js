@@ -1,7 +1,10 @@
 /**
  * file-icons.js -- Maps file/folder names to SVG sprite icon IDs.
  *
- * Adapted from OpenCode Desktop (MIT license).
+ * Adapted from OpenCode Desktop (https://github.com/anomalyco/opencode).
+ * Copyright (c) 2025 opencode — MIT License.
+ * See src/assets/icons/LICENSE-file-icons for the full license text.
+ *
  * Icons come from src/assets/icons/file-icons-sprite.svg (1089 symbols).
  * Usage: chooseIconName(path, type, expanded) => icon ID string
  */
