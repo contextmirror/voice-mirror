@@ -239,3 +239,88 @@ describe('TerminalTabs.svelte -- CSS', () => {
     assert.ok(src.includes('position: absolute'), 'Should use absolute positioning');
   });
 });
+
+describe('TerminalTabs.svelte -- provider switching context menu', () => {
+  it('imports switchProvider from ai-status store', () => {
+    assert.ok(src.includes('switchProvider'), 'Should import switchProvider');
+  });
+
+  it('imports stopProvider from ai-status store', () => {
+    assert.ok(src.includes('stopProvider'), 'Should import stopProvider');
+  });
+
+  it('imports PROVIDER_GROUPS from providers.js', () => {
+    assert.ok(src.includes('PROVIDER_GROUPS'), 'Should import PROVIDER_GROUPS');
+  });
+
+  it('imports PROVIDER_ICONS from providers.js', () => {
+    assert.ok(src.includes('PROVIDER_ICONS'), 'Should import PROVIDER_ICONS');
+  });
+
+  it('imports PROVIDER_NAMES from providers.js', () => {
+    assert.ok(src.includes('PROVIDER_NAMES'), 'Should import PROVIDER_NAMES');
+  });
+
+  it('imports updateConfig from config store', () => {
+    assert.ok(src.includes('updateConfig'), 'Should import updateConfig');
+  });
+
+  it('has contextSwitchProvider function', () => {
+    assert.ok(src.includes('contextSwitchProvider'), 'Should have contextSwitchProvider');
+  });
+
+  it('has contextStopProvider function', () => {
+    assert.ok(src.includes('contextStopProvider'), 'Should have contextStopProvider');
+  });
+
+  it('shows provider section only for AI tab', () => {
+    assert.ok(src.includes("contextMenu.tabId === 'ai'"), 'Should conditionally show provider section');
+  });
+
+  it('iterates PROVIDER_GROUPS in context menu', () => {
+    assert.ok(src.includes('{#each PROVIDER_GROUPS as group}'), 'Should iterate provider groups');
+  });
+
+  it('renders provider icons', () => {
+    assert.ok(src.includes('ctx-provider-icon'), 'Should have provider icon class');
+  });
+
+  it('shows checkmark for current provider', () => {
+    assert.ok(src.includes('ctx-check'), 'Should have checkmark element');
+  });
+
+  it('shows starting state for current provider', () => {
+    assert.ok(src.includes('aiStatusStore.starting'), 'Should check starting state');
+    assert.ok(src.includes('Starting...'), 'Should show starting text');
+  });
+
+  it('has Stop Provider button when running', () => {
+    assert.ok(src.includes('Stop Provider'), 'Should have Stop Provider action');
+  });
+
+  it('has group label styling', () => {
+    assert.ok(src.includes('context-menu-group-label'), 'Should have group label class');
+  });
+
+  it('has wide context menu variant for AI tab', () => {
+    assert.ok(src.includes('class:wide='), 'Should have wide class binding');
+  });
+
+  it('persists provider choice via updateConfig', () => {
+    assert.ok(src.includes('updateConfig('), 'Should persist provider in config');
+  });
+
+  it('closes context menu before switching', () => {
+    const fnStart = src.indexOf('async function contextSwitchProvider');
+    const fnBody = src.slice(fnStart, fnStart + 300);
+    assert.ok(fnBody.includes('closeContextMenu()'), 'Should close menu before async work');
+  });
+
+  it('shows toast on successful switch', () => {
+    assert.ok(src.includes('Switched to'), 'Should show success toast with provider name');
+  });
+
+  it('skips switch when clicking current provider', () => {
+    assert.ok(src.includes('aiStatusStore.providerType') && src.includes('closeContextMenu'), 'Should no-op on same provider');
+  });
+});

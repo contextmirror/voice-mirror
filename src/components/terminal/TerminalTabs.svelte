@@ -16,9 +16,10 @@
   import { projectStore } from '../../lib/stores/project.svelte.js';
   import { sendVoiceLoop } from '../../lib/api.js';
   import { voiceStore } from '../../lib/stores/voice.svelte.js';
-  import { aiStatusStore } from '../../lib/stores/ai-status.svelte.js';
-  import { configStore } from '../../lib/stores/config.svelte.js';
+  import { aiStatusStore, switchProvider, stopProvider } from '../../lib/stores/ai-status.svelte.js';
+  import { configStore, updateConfig } from '../../lib/stores/config.svelte.js';
   import { toastStore } from '../../lib/stores/toast.svelte.js';
+  import { PROVIDER_GROUPS, PROVIDER_ICONS, PROVIDER_NAMES } from '../../lib/providers.js';
 
   // ---- Terminal action registration ----
   let termActions = {};
@@ -124,7 +125,10 @@
 
   function showContextMenu(e, tabId) {
     e.preventDefault();
-    contextMenu = { visible: true, x: e.clientX, y: e.clientY, tabId };
+    const estimatedHeight = tabId === 'ai' ? 380 : 140;
+    const maxY = window.innerHeight - estimatedHeight;
+    const y = Math.min(e.clientY, Math.max(0, maxY));
+    contextMenu = { visible: true, x: e.clientX, y, tabId };
   }
 
   function closeContextMenu() {
@@ -146,6 +150,55 @@
       terminalTabsStore.closeTab(contextMenu.tabId);
     }
     closeContextMenu();
+  }
+
+  async function contextSwitchProvider(providerId) {
+    if (providerId === aiStatusStore.providerType) {
+      closeContextMenu();
+      return;
+    }
+    closeContextMenu();
+    try {
+      await updateConfig({ ai: { provider: providerId } });
+      const cfg = configStore.value;
+      const endpoints = cfg?.ai?.endpoints || {};
+      const apiKeys = cfg?.ai?.apiKeys || {};
+      await switchProvider(providerId, {
+        model: cfg?.ai?.model || undefined,
+        baseUrl: endpoints[providerId] || undefined,
+        apiKey: apiKeys[providerId] || undefined,
+        contextLength: cfg?.ai?.contextLength || undefined,
+      });
+      toastStore.addToast({
+        message: `Switched to ${PROVIDER_NAMES[providerId] || providerId}`,
+        severity: 'success',
+        duration: 3000,
+      });
+    } catch (err) {
+      console.error('[TerminalTabs] Provider switch failed:', err);
+      toastStore.addToast({
+        message: `Failed to switch provider: ${err?.message || err}`,
+        severity: 'error',
+      });
+    }
+  }
+
+  async function contextStopProvider() {
+    closeContextMenu();
+    try {
+      await stopProvider();
+      toastStore.addToast({
+        message: 'Provider stopped',
+        severity: 'success',
+        duration: 3000,
+      });
+    } catch (err) {
+      console.error('[TerminalTabs] Stop provider failed:', err);
+      toastStore.addToast({
+        message: 'Failed to stop provider',
+        severity: 'error',
+      });
+    }
   }
 
   // Close context menu on outside click
@@ -351,6 +404,7 @@
   {#if contextMenu.visible}
     <div
       class="context-menu"
+      class:wide={contextMenu.tabId === 'ai'}
       style="left: {contextMenu.x}px; top: {contextMenu.y}px;"
     >
       <button class="context-menu-item" onclick={contextRename}>
@@ -366,7 +420,48 @@
         </svg>
         Clear
       </button>
-      {#if contextMenu.tabId !== 'ai'}
+
+      {#if contextMenu.tabId === 'ai'}
+        <div class="context-menu-divider"></div>
+        {#each PROVIDER_GROUPS as group}
+          <div class="context-menu-group-label">{group.label}</div>
+          {#each group.providers as opt}
+            <button
+              class="context-menu-item provider-item"
+              class:current={aiStatusStore.providerType === opt.value}
+              onclick={() => contextSwitchProvider(opt.value)}
+            >
+              {#if PROVIDER_ICONS[opt.value]?.type === 'cover'}
+                <span class="ctx-provider-icon" style="background: url({PROVIDER_ICONS[opt.value].src}) center/cover no-repeat; border-radius: 3px;"></span>
+              {:else if PROVIDER_ICONS[opt.value]}
+                <span class="ctx-provider-icon" style="background: {PROVIDER_ICONS[opt.value].bg};">
+                  <img src={PROVIDER_ICONS[opt.value].src} alt="" class="ctx-provider-icon-inner" />
+                </span>
+              {/if}
+              <span class="ctx-provider-label">{opt.label}</span>
+              {#if aiStatusStore.providerType === opt.value}
+                {#if aiStatusStore.starting}
+                  <span class="ctx-provider-status">Starting...</span>
+                {:else}
+                  <svg class="ctx-check" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <polyline points="20 6 9 17 4 12"/>
+                  </svg>
+                {/if}
+              {/if}
+            </button>
+          {/each}
+        {/each}
+
+        {#if aiStatusStore.running || aiStatusStore.starting}
+          <div class="context-menu-divider"></div>
+          <button class="context-menu-item danger" onclick={contextStopProvider}>
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="3" width="18" height="18" rx="2"/>
+            </svg>
+            Stop Provider
+          </button>
+        {/if}
+      {:else}
         <div class="context-menu-divider"></div>
         <button class="context-menu-item danger" onclick={contextClose}>
           <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
@@ -680,6 +775,63 @@
     height: 1px;
     background: var(--border, rgba(255,255,255,0.06));
     margin: 4px 0;
+  }
+
+  .context-menu.wide {
+    min-width: 200px;
+  }
+
+  .context-menu-group-label {
+    padding: 6px 10px 3px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: var(--muted);
+    pointer-events: none;
+  }
+
+  .context-menu-item.provider-item {
+    gap: 6px;
+    padding: 5px 10px;
+  }
+
+  .context-menu-item.current {
+    color: var(--accent);
+  }
+
+  .ctx-provider-icon {
+    width: 16px;
+    height: 16px;
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    overflow: hidden;
+  }
+
+  .ctx-provider-icon-inner {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+  }
+
+  .ctx-provider-label {
+    flex: 1;
+  }
+
+  .ctx-check {
+    flex-shrink: 0;
+    color: var(--accent);
+  }
+
+  .ctx-provider-status {
+    font-size: 10px;
+    color: var(--muted);
+    font-style: italic;
+    flex-shrink: 0;
   }
 
   /* ── Terminal panels ── */
