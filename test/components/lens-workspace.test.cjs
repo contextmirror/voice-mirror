@@ -120,6 +120,20 @@ describe('LensWorkspace.svelte', () => {
     assert.ok(src.includes('pinTab'), 'Should call pinTab on double-click');
   });
 
+  // Panel toggles via layoutStore
+  it('imports layoutStore', () => {
+    assert.ok(src.includes('layoutStore'), 'Should import layoutStore');
+  });
+  it('conditionally renders chat panel', () => {
+    assert.ok(src.includes('layoutStore.showChat'), 'Should use layoutStore for chat toggle');
+  });
+  it('conditionally renders terminal panel', () => {
+    assert.ok(src.includes('layoutStore.showTerminal'), 'Should use layoutStore for terminal toggle');
+  });
+  it('conditionally renders file tree panel', () => {
+    assert.ok(src.includes('layoutStore.showFileTree'), 'Should use layoutStore for file tree toggle');
+  });
+
   // Webview visibility
   it('imports lensSetVisible', () => {
     assert.ok(src.includes('lensSetVisible'), 'Should import lensSetVisible for webview toggle');

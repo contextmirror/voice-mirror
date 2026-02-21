@@ -19,6 +19,7 @@
   import SettingsPanel from './components/settings/SettingsPanel.svelte';
   import LensWorkspace from './components/lens/LensWorkspace.svelte';
   import StatusDropdown from './components/lens/StatusDropdown.svelte';
+  import { layoutStore } from './lib/stores/layout.svelte.js';
   import OverlayPanel from './components/overlay/OverlayPanel.svelte';
   import ResizeEdges from './components/shared/ResizeEdges.svelte';
   import StatsBar from './components/shared/StatsBar.svelte';
@@ -333,6 +334,45 @@
           </div>
         {/if}
       {/snippet}
+      {#snippet rightContent()}
+        {#if activeView === 'lens'}
+          <div class="titlebar-panel-toggles">
+            <button
+              class="titlebar-toggle"
+              class:active={layoutStore.showChat}
+              onclick={() => layoutStore.toggleChat()}
+              aria-label="Toggle chat"
+              title="Toggle chat"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/>
+              </svg>
+            </button>
+            <button
+              class="titlebar-toggle"
+              class:active={layoutStore.showTerminal}
+              onclick={() => layoutStore.toggleTerminal()}
+              aria-label="Toggle terminal"
+              title="Toggle terminal"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="15" x2="21" y2="15"/>
+              </svg>
+            </button>
+            <button
+              class="titlebar-toggle"
+              class:active={layoutStore.showFileTree}
+              onclick={() => layoutStore.toggleFileTree()}
+              aria-label="Toggle file tree"
+              title="Toggle file tree"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2"/><line x1="15" y1="3" x2="15" y2="21"/>
+              </svg>
+            </button>
+          </div>
+        {/if}
+      {/snippet}
     </TitleBar>
 
     <div class="app-body">
@@ -453,6 +493,48 @@
     font-size: 10px;
     opacity: 0.5;
     font-family: var(--font-mono);
+  }
+
+  .titlebar-panel-toggles {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    margin-right: 4px;
+    -webkit-app-region: no-drag;
+    z-index: 10001;
+  }
+
+  .titlebar-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: var(--radius-sm, 4px);
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    padding: 0;
+    transition: color 0.15s ease, background 0.15s ease;
+  }
+
+  .titlebar-toggle svg {
+    width: 15px;
+    height: 15px;
+  }
+
+  .titlebar-toggle:hover {
+    background: var(--card-highlight, var(--bg));
+    color: var(--text);
+  }
+
+  .titlebar-toggle.active {
+    color: var(--accent);
+  }
+
+  .titlebar-toggle.active:hover {
+    color: var(--text);
   }
 
 </style>

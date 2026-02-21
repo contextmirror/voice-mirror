@@ -8,8 +8,8 @@
     navigationStore.setMode(mode);
   }
 
-  /** @type {{ centerContent?: import('svelte').Snippet }} */
-  let { centerContent } = $props();
+  /** @type {{ centerContent?: import('svelte').Snippet, rightContent?: import('svelte').Snippet }} */
+  let { centerContent, rightContent } = $props();
 
   async function handleCompact() {
     try {
@@ -54,6 +54,9 @@
   {/if}
 
   <div class="window-controls">
+    {#if rightContent}
+      {@render rightContent()}
+    {/if}
     <button
       class="win-btn win-compact"
       onclick={handleCompact}

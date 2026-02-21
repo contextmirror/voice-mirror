@@ -9,6 +9,7 @@
   import ChatPanel from '../chat/ChatPanel.svelte';
   import TerminalTabs from '../terminal/TerminalTabs.svelte';
   import { tabsStore } from '../../lib/stores/tabs.svelte.js';
+  import { layoutStore } from '../../lib/stores/layout.svelte.js';
   import { lensSetVisible } from '../../lib/api.js';
 
   let {
@@ -27,55 +28,84 @@
   });
 </script>
 
-<div class="lens-workspace">
-  <div class="workspace-content">
-    <!-- Vertical split: main panels (top) | terminal (bottom) -->
-    <SplitPanel direction="vertical" bind:ratio={verticalRatio} minA={200} minB={80}>
+{#snippet previewContent()}
+  <div class="preview-area">
+    <TabBar />
+    {#if tabsStore.activeTab?.type === 'browser'}
+      <LensToolbar />
+      <LensPreview />
+    {:else if tabsStore.activeTab?.type === 'file'}
+      {#key tabsStore.activeTabId}
+        <FileEditor tab={tabsStore.activeTab} />
+      {/key}
+    {:else if tabsStore.activeTab?.type === 'diff'}
+      {#key tabsStore.activeTabId}
+        <DiffViewer tab={tabsStore.activeTab} />
+      {/key}
+    {/if}
+  </div>
+{/snippet}
+
+{#snippet fileTreeContent()}
+  <FileTree
+    onFileClick={(entry) => tabsStore.openFile(entry)}
+    onFileDblClick={(entry) => tabsStore.pinTab(entry.path)}
+    onChangeClick={(change) => tabsStore.openDiff(change)}
+  />
+{/snippet}
+
+{#snippet centerAndRight()}
+  {#if layoutStore.showFileTree}
+    <SplitPanel direction="horizontal" bind:ratio={previewRatio} minA={300} minB={140}>
       {#snippet panelA()}
-        <!-- Horizontal split: chat (left) | center+right -->
-        <SplitPanel direction="horizontal" bind:ratio={chatRatio} minA={180} minB={400}>
-          {#snippet panelA()}
-            <div class="chat-area">
-              <ChatPanel {onSend} />
-            </div>
-          {/snippet}
-          {#snippet panelB()}
-            <!-- Horizontal split: preview (center) | file tree (right) -->
-            <SplitPanel direction="horizontal" bind:ratio={previewRatio} minA={300} minB={140}>
-              {#snippet panelA()}
-                <div class="preview-area">
-                  <TabBar />
-                  {#if tabsStore.activeTab?.type === 'browser'}
-                    <LensToolbar />
-                    <LensPreview />
-                  {:else if tabsStore.activeTab?.type === 'file'}
-                    {#key tabsStore.activeTabId}
-                      <FileEditor tab={tabsStore.activeTab} />
-                    {/key}
-                  {:else if tabsStore.activeTab?.type === 'diff'}
-                    {#key tabsStore.activeTabId}
-                      <DiffViewer tab={tabsStore.activeTab} />
-                    {/key}
-                  {/if}
-                </div>
-              {/snippet}
-              {#snippet panelB()}
-                <FileTree
-                  onFileClick={(entry) => tabsStore.openFile(entry)}
-                  onFileDblClick={(entry) => tabsStore.pinTab(entry.path)}
-                  onChangeClick={(change) => tabsStore.openDiff(change)}
-                />
-              {/snippet}
-            </SplitPanel>
-          {/snippet}
-        </SplitPanel>
+        {@render previewContent()}
       {/snippet}
       {#snippet panelB()}
-        <div class="terminal-area">
-          <TerminalTabs />
-        </div>
+        {@render fileTreeContent()}
       {/snippet}
     </SplitPanel>
+  {:else}
+    {@render previewContent()}
+  {/if}
+{/snippet}
+
+{#snippet chatContent()}
+  <div class="chat-area">
+    <ChatPanel {onSend} />
+  </div>
+{/snippet}
+
+{#snippet mainArea()}
+  {#if layoutStore.showChat}
+    <SplitPanel direction="horizontal" bind:ratio={chatRatio} minA={180} minB={400}>
+      {#snippet panelA()}
+        {@render chatContent()}
+      {/snippet}
+      {#snippet panelB()}
+        {@render centerAndRight()}
+      {/snippet}
+    </SplitPanel>
+  {:else}
+    {@render centerAndRight()}
+  {/if}
+{/snippet}
+
+<div class="lens-workspace">
+  <div class="workspace-content">
+    {#if layoutStore.showTerminal}
+      <SplitPanel direction="vertical" bind:ratio={verticalRatio} minA={200} minB={80}>
+        {#snippet panelA()}
+          {@render mainArea()}
+        {/snippet}
+        {#snippet panelB()}
+          <div class="terminal-area">
+            <TerminalTabs />
+          </div>
+        {/snippet}
+      </SplitPanel>
+    {:else}
+      {@render mainArea()}
+    {/if}
   </div>
 </div>
 
