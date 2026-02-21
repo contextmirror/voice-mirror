@@ -239,13 +239,16 @@
   .chat-scroll-area {
     flex: 1;
     overflow-y: auto;
-    padding: 16px;
+    overflow-x: hidden;
+    padding: 12px 8px;
     position: relative;
   }
 
   .messages-container {
     display: flex;
     flex-direction: column;
+    min-width: 0;
+    overflow: hidden;
   }
 
   .scroll-spacer {

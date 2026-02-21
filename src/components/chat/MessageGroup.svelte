@@ -62,8 +62,10 @@
 <style>
   .message-group {
     display: flex;
-    gap: 12px;
+    gap: 8px;
     margin-bottom: 16px;
+    min-width: 0;
+    max-width: 100%;
   }
 
   .message-group.user {
@@ -107,7 +109,7 @@
     flex-direction: column;
     gap: 6px;
     flex: 1;
-    max-width: calc(100% - 48px);
+    max-width: calc(100% - 44px);
     min-width: 0;
   }
 

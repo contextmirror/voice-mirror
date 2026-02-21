@@ -506,6 +506,14 @@ export async function searchFiles(root) {
   return invoke('search_files', { root: root || null });
 }
 
+export async function startFileWatching(projectRoot) {
+  return invoke('start_file_watching', { projectRoot });
+}
+
+export async function stopFileWatching() {
+  return invoke('stop_file_watching');
+}
+
 // ============ Shell Terminals ============
 
 /**

@@ -186,3 +186,46 @@ describe('api.js -- getFileGitContent', () => {
     );
   });
 });
+
+describe('api.js -- startFileWatching', () => {
+  it('exports async function startFileWatching', () => {
+    assert.ok(
+      src.includes('export async function startFileWatching('),
+      'Should export startFileWatching'
+    );
+  });
+
+  it('invokes start_file_watching command', () => {
+    assert.ok(
+      src.includes("invoke('start_file_watching'"),
+      'Should call invoke with start_file_watching'
+    );
+  });
+
+  it('passes projectRoot parameter', () => {
+    assert.ok(
+      src.includes('startFileWatching(projectRoot)'),
+      'Should accept projectRoot parameter'
+    );
+    assert.ok(
+      src.includes('{ projectRoot }') || src.includes('projectRoot'),
+      'Should pass projectRoot to invoke'
+    );
+  });
+});
+
+describe('api.js -- stopFileWatching', () => {
+  it('exports async function stopFileWatching', () => {
+    assert.ok(
+      src.includes('export async function stopFileWatching('),
+      'Should export stopFileWatching'
+    );
+  });
+
+  it('invokes stop_file_watching command', () => {
+    assert.ok(
+      src.includes("invoke('stop_file_watching')"),
+      'Should call invoke with stop_file_watching'
+    );
+  });
+});

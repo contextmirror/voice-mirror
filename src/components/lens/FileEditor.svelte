@@ -1,5 +1,6 @@
 <script>
   import { onDestroy, tick } from 'svelte';
+  import { listen } from '@tauri-apps/api/event';
   import { readFile, writeFile } from '../../lib/api.js';
   import { tabsStore } from '../../lib/stores/tabs.svelte.js';
   import { projectStore } from '../../lib/stores/project.svelte.js';
@@ -188,6 +189,43 @@
     if (tab?.path) {
       loadFile(tab.path);
     }
+  });
+
+  // Live file sync: reload editor content when the file changes on disk.
+  // Uses CodeMirror's dispatch to apply a minimal diff (preserves cursor + scroll).
+  $effect(() => {
+    let unlisten;
+    (async () => {
+      unlisten = await listen('fs-file-changed', async (event) => {
+        const { files } = event.payload;
+        if (!view || !currentPath || !files?.includes(currentPath)) return;
+
+        // Skip reload if the editor has unsaved changes (user is actively editing)
+        const dirty = tabsStore.tabs.find(t => t.path === currentPath)?.dirty;
+        if (dirty) return;
+
+        try {
+          const root = projectStore.activeProject?.path || null;
+          const result = await readFile(currentPath, root);
+          const data = result?.data || result;
+          if (!data?.content || data.content == null) return;
+
+          const currentContent = view.state.doc.toString();
+          if (data.content === currentContent) return; // No change
+
+          // Apply as a transaction to preserve cursor position and scroll
+          view.dispatch({
+            changes: { from: 0, to: currentContent.length, insert: data.content },
+          });
+        } catch (err) {
+          console.warn('[FileEditor] Live reload failed:', err);
+        }
+      });
+    })();
+
+    return () => {
+      unlisten?.();
+    };
   });
 
   onDestroy(() => {

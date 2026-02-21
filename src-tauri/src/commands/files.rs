@@ -1,6 +1,7 @@
 use super::IpcResponse;
 use crate::util::find_project_root;
 use std::path::PathBuf;
+use tauri::{AppHandle, Emitter};
 use tracing::{error, info, warn};
 
 /// List the contents of a directory within the project root.
@@ -368,7 +369,7 @@ pub fn get_file_git_content(path: String, root: Option<String>) -> IpcResponse {
 /// Creates parent directories if they don't exist.
 /// Returns `{ path, size }` on success.
 #[tauri::command]
-pub fn write_file(path: String, content: String, root: Option<String>) -> IpcResponse {
+pub fn write_file(app: AppHandle, path: String, content: String, root: Option<String>) -> IpcResponse {
     let root = match root {
         Some(r) => PathBuf::from(r),
         None => match find_project_root() {
@@ -430,6 +431,29 @@ pub fn write_file(path: String, content: String, root: Option<String>) -> IpcRes
 
     let size = content.len();
     info!("write_file: {} ({} bytes)", rel_path, size);
+
+    // Emit fs-tree-changed for the parent directory
+    let parent_rel = match canon_target.parent() {
+        Some(p) => p
+            .strip_prefix(&canon_root)
+            .ok()
+            .map(|r| r.to_string_lossy().replace('\\', "/")),
+        None => None,
+    };
+    let parent_is_root = parent_rel.as_ref().map_or(true, |p| p.is_empty());
+    let dirs: Vec<&str> = match &parent_rel {
+        Some(p) if !p.is_empty() => vec![p.as_str()],
+        _ => vec![],
+    };
+    let _ = app.emit(
+        "fs-tree-changed",
+        serde_json::json!({ "directories": dirs, "root": parent_is_root }),
+    );
+    let _ = app.emit(
+        "fs-file-changed",
+        serde_json::json!({ "files": [rel_path] }),
+    );
+
     IpcResponse::ok(serde_json::json!({ "path": rel_path, "size": size }))
 }
 
@@ -438,7 +462,7 @@ pub fn write_file(path: String, content: String, root: Option<String>) -> IpcRes
 /// `path` is relative to the project root (or the provided `root`).
 /// Creates parent directories if needed. Errors if file already exists.
 #[tauri::command]
-pub fn create_file(path: String, content: Option<String>, root: Option<String>) -> IpcResponse {
+pub fn create_file(app: AppHandle, path: String, content: Option<String>, root: Option<String>) -> IpcResponse {
     let root = match root {
         Some(r) => PathBuf::from(r),
         None => match find_project_root() {
@@ -494,6 +518,25 @@ pub fn create_file(path: String, content: Option<String>, root: Option<String>) 
     };
 
     info!("create_file: {}", rel_path);
+
+    // Emit fs-tree-changed for the parent directory
+    let parent_rel = match canon_target.parent() {
+        Some(p) => p
+            .strip_prefix(&canon_root)
+            .ok()
+            .map(|r| r.to_string_lossy().replace('\\', "/")),
+        None => None,
+    };
+    let parent_is_root = parent_rel.as_ref().map_or(true, |p| p.is_empty());
+    let dirs: Vec<&str> = match &parent_rel {
+        Some(p) if !p.is_empty() => vec![p.as_str()],
+        _ => vec![],
+    };
+    let _ = app.emit(
+        "fs-tree-changed",
+        serde_json::json!({ "directories": dirs, "root": parent_is_root }),
+    );
+
     IpcResponse::ok(serde_json::json!({ "path": rel_path }))
 }
 
@@ -502,7 +545,7 @@ pub fn create_file(path: String, content: Option<String>, root: Option<String>) 
 /// `path` is relative to the project root (or the provided `root`).
 /// Errors if directory already exists.
 #[tauri::command]
-pub fn create_directory(path: String, root: Option<String>) -> IpcResponse {
+pub fn create_directory(app: AppHandle, path: String, root: Option<String>) -> IpcResponse {
     let root = match root {
         Some(r) => PathBuf::from(r),
         None => match find_project_root() {
@@ -551,6 +594,21 @@ pub fn create_directory(path: String, root: Option<String>) -> IpcResponse {
 
     let rel_path = path.replace('\\', "/");
     info!("create_directory: {}", rel_path);
+
+    // Emit fs-tree-changed for the parent directory
+    let parent_rel = std::path::Path::new(&rel_path)
+        .parent()
+        .map(|p| p.to_string_lossy().replace('\\', "/"));
+    let parent_is_root = parent_rel.as_ref().map_or(true, |p| p.is_empty());
+    let dirs: Vec<&str> = match &parent_rel {
+        Some(p) if !p.is_empty() => vec![p.as_str()],
+        _ => vec![],
+    };
+    let _ = app.emit(
+        "fs-tree-changed",
+        serde_json::json!({ "directories": dirs, "root": parent_is_root }),
+    );
+
     IpcResponse::ok(serde_json::json!({ "path": rel_path }))
 }
 
@@ -558,7 +616,7 @@ pub fn create_directory(path: String, root: Option<String>) -> IpcResponse {
 ///
 /// Both `old_path` and `new_path` are relative to the project root.
 #[tauri::command]
-pub fn rename_entry(old_path: String, new_path: String, root: Option<String>) -> IpcResponse {
+pub fn rename_entry(app: AppHandle, old_path: String, new_path: String, root: Option<String>) -> IpcResponse {
     let root = match root {
         Some(r) => PathBuf::from(r),
         None => match find_project_root() {
@@ -610,9 +668,43 @@ pub fn rename_entry(old_path: String, new_path: String, root: Option<String>) ->
     }
 
     info!("rename_entry: {} -> {}", old_path, new_path);
+
+    // Emit fs-tree-changed for both old and new parent directories
+    let old_rel = old_path.replace('\\', "/");
+    let new_rel = new_path.replace('\\', "/");
+    let old_parent = std::path::Path::new(&old_rel)
+        .parent()
+        .map(|p| p.to_string_lossy().replace('\\', "/"));
+    let new_parent = std::path::Path::new(&new_rel)
+        .parent()
+        .map(|p| p.to_string_lossy().replace('\\', "/"));
+
+    let mut dirs: Vec<String> = Vec::new();
+    let mut root_changed = false;
+
+    for parent in [&old_parent, &new_parent] {
+        match parent {
+            Some(p) if !p.is_empty() => {
+                if !dirs.contains(p) {
+                    dirs.push(p.clone());
+                }
+            }
+            _ => root_changed = true,
+        }
+    }
+
+    let _ = app.emit(
+        "fs-tree-changed",
+        serde_json::json!({ "directories": dirs, "root": root_changed }),
+    );
+    let _ = app.emit(
+        "fs-file-changed",
+        serde_json::json!({ "files": [&old_rel, &new_rel] }),
+    );
+
     IpcResponse::ok(serde_json::json!({
-        "oldPath": old_path.replace('\\', "/"),
-        "newPath": new_path.replace('\\', "/"),
+        "oldPath": old_rel,
+        "newPath": new_rel,
     }))
 }
 
@@ -621,7 +713,7 @@ pub fn rename_entry(old_path: String, new_path: String, root: Option<String>) ->
 /// Falls back to permanent delete if trash is unavailable.
 /// `path` is relative to the project root.
 #[tauri::command]
-pub fn delete_entry(path: String, root: Option<String>) -> IpcResponse {
+pub fn delete_entry(app: AppHandle, path: String, root: Option<String>) -> IpcResponse {
     let root = match root {
         Some(r) => PathBuf::from(r),
         None => match find_project_root() {
@@ -650,10 +742,26 @@ pub fn delete_entry(path: String, root: Option<String>) -> IpcResponse {
         return IpcResponse::err("Path is outside the project root");
     }
 
+    // Compute parent directory info for event emission (before delete)
+    let parent_rel = match canon_target.parent() {
+        Some(p) => p
+            .strip_prefix(&canon_root)
+            .ok()
+            .map(|r| r.to_string_lossy().replace('\\', "/")),
+        None => None,
+    };
+    let parent_is_root = parent_rel.as_ref().map_or(true, |p| p.is_empty());
+    let dirs: Vec<&str> = match &parent_rel {
+        Some(p) if !p.is_empty() => vec![p.as_str()],
+        _ => vec![],
+    };
+    let event_payload = serde_json::json!({ "directories": dirs, "root": parent_is_root });
+
     // Try OS trash first, fall back to permanent delete
     match trash::delete(&canon_target) {
         Ok(()) => {
             info!("delete_entry (trash): {}", path);
+            let _ = app.emit("fs-tree-changed", &event_payload);
             IpcResponse::ok(serde_json::json!({ "path": path.replace('\\', "/"), "method": "trash" }))
         }
         Err(trash_err) => {
@@ -666,6 +774,7 @@ pub fn delete_entry(path: String, root: Option<String>) -> IpcResponse {
             match result {
                 Ok(()) => {
                     info!("delete_entry (permanent): {}", path);
+                    let _ = app.emit("fs-tree-changed", &event_payload);
                     IpcResponse::ok(serde_json::json!({ "path": path.replace('\\', "/"), "method": "permanent" }))
                 }
                 Err(e) => {

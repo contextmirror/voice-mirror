@@ -218,6 +218,11 @@ describe('StatusDropdown.svelte: Manage Servers dialog', () => {
     const closeFn = src.slice(src.indexOf('function closeDialog'), src.indexOf('function handleWindowClick'));
     assert.ok(closeFn.includes('lensStore.unfreeze()'));
   });
+  it('uses portal action to escape overflow ancestors', () => {
+    assert.ok(src.includes('function portal(node)'), 'Should define portal action');
+    assert.ok(src.includes('document.body.appendChild(node)'), 'Should append to body');
+    assert.ok(src.includes('use:portal'), 'Should apply portal to dialog backdrop');
+  });
   it('has dialog backdrop', () => {
     assert.ok(src.includes('dialog-backdrop'));
   });

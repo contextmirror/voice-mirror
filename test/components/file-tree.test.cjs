@@ -418,6 +418,83 @@ describe('FileTree.svelte -- F2 keyboard shortcut', () => {
   });
 });
 
+describe('FileTree.svelte -- file watcher integration', () => {
+  it('imports listen from @tauri-apps/api/event', () => {
+    assert.ok(src.includes("import { listen }") || src.includes("{ listen }"), 'Should import listen');
+    assert.ok(src.includes("@tauri-apps/api/event"), 'Should import from @tauri-apps/api/event');
+  });
+
+  it('listens for fs-tree-changed event', () => {
+    assert.ok(
+      src.includes("'fs-tree-changed'"),
+      'Should listen for fs-tree-changed event'
+    );
+  });
+
+  it('listens for fs-git-changed event', () => {
+    assert.ok(
+      src.includes("'fs-git-changed'"),
+      'Should listen for fs-git-changed event'
+    );
+  });
+
+  it('has handleTreeChanged function', () => {
+    assert.ok(
+      src.includes('handleTreeChanged'),
+      'Should have handleTreeChanged function'
+    );
+  });
+
+  it('has handleGitChanged function', () => {
+    assert.ok(
+      src.includes('handleGitChanged'),
+      'Should have handleGitChanged function'
+    );
+  });
+
+  it('only refreshes expanded directories on tree change', () => {
+    assert.ok(
+      src.includes('expandedDirs.has(dir)'),
+      'Should check expandedDirs.has before refreshing a directory'
+    );
+  });
+
+  it('cleans up event listeners on unmount', () => {
+    assert.ok(src.includes('unlistenTree'), 'Should store tree unlisten function');
+    assert.ok(src.includes('unlistenGit'), 'Should store git unlisten function');
+    assert.ok(
+      src.includes('unlistenTree?.()') || src.includes('unlistenTree()'),
+      'Should call unlistenTree on cleanup'
+    );
+    assert.ok(
+      src.includes('unlistenGit?.()') || src.includes('unlistenGit()'),
+      'Should call unlistenGit on cleanup'
+    );
+  });
+
+  it('uses $effect with cleanup return for listener lifecycle', () => {
+    // The listener setup should be inside a $effect that returns a cleanup function
+    const effectIdx = src.indexOf('$effect', src.indexOf('unlistenTree'));
+    // Check that there's a return statement in the effect for cleanup
+    assert.ok(src.includes('return () =>'), 'Should return cleanup function from $effect');
+  });
+
+  it('reloads root when rootChanged flag is true', () => {
+    // handleTreeChanged should call loadRoot when root flag is set
+    const handlerStart = src.indexOf('async function handleTreeChanged');
+    const handlerEnd = src.indexOf('async function handleGitChanged');
+    const handlerBody = src.slice(handlerStart, handlerEnd);
+    assert.ok(handlerBody.includes('loadRoot'), 'Should call loadRoot when root changed');
+  });
+
+  it('handleGitChanged calls loadGitChanges', () => {
+    const handlerStart = src.indexOf('function handleGitChanged');
+    const handlerEnd = src.indexOf('}', handlerStart + 10);
+    const handlerBody = src.slice(handlerStart, handlerEnd);
+    assert.ok(handlerBody.includes('loadGitChanges'), 'Should call loadGitChanges');
+  });
+});
+
 describe('FileTree.svelte -- tree refresh', () => {
   it('has refreshParent function', () => {
     assert.ok(src.includes('refreshParent'), 'Should have refreshParent');

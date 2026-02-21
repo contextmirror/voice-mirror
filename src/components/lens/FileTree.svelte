@@ -1,5 +1,6 @@
 <script>
   import { listDirectory, getGitChanges, createFile, createDirectory, renameEntry } from '../../lib/api.js';
+  import { listen } from '@tauri-apps/api/event';
   import { chooseIconName } from '../../lib/file-icons.js';
   import { projectStore } from '../../lib/stores/project.svelte.js';
   import spriteUrl from '../../assets/icons/file-icons-sprite.svg';
@@ -36,6 +37,58 @@
     loadRoot();
     loadGitChanges();
   });
+
+  // Listen for file-system watcher events from the Rust backend
+  $effect(() => {
+    let unlistenTree;
+    let unlistenGit;
+
+    (async () => {
+      unlistenTree = await listen('fs-tree-changed', handleTreeChanged);
+      unlistenGit = await listen('fs-git-changed', handleGitChanged);
+    })();
+
+    return () => {
+      unlistenTree?.();
+      unlistenGit?.();
+    };
+  });
+
+  async function handleTreeChanged(event) {
+    const { directories, root: rootChanged } = event.payload;
+    const currentRoot = projectStore.activeProject?.path || null;
+
+    // Reload root listing if the root directory itself was affected
+    if (rootChanged) {
+      await loadRoot();
+    }
+
+    // Re-fetch any expanded directories that were affected
+    if (directories && directories.length > 0) {
+      const updated = new Map(dirChildren);
+      let changed = false;
+      for (const dir of directories) {
+        if (expandedDirs.has(dir)) {
+          try {
+            const resp = await listDirectory(dir, currentRoot);
+            if (resp && resp.data) {
+              updated.set(dir, resp.data);
+              changed = true;
+            }
+          } catch (err) {
+            console.error('FileTree: watcher refresh failed for', dir, err);
+          }
+        }
+      }
+      if (changed) {
+        dirChildren = updated;
+      }
+    }
+  }
+
+  function handleGitChanged() {
+    loadGitChanges();
+  }
 
   async function loadRoot() {
     const root = projectStore.activeProject?.path || null;

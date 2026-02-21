@@ -109,13 +109,15 @@
     align-self: flex-start;
     word-wrap: break-word;
     overflow-wrap: break-word;
+    overflow: hidden;
+    min-width: 0;
     position: relative;
   }
 
   .chat-bubble.user {
     align-self: flex-end;
-    width: max-content;
-    max-width: 600px;
+    width: fit-content;
+    max-width: min(100%, 600px);
     background: var(--msg-user-bg);
     border-color: var(--msg-user-border);
     border-radius: var(--msg-user-radius);

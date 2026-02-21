@@ -147,6 +147,35 @@ describe('LensWorkspace.svelte', () => {
     assert.ok(src.includes('$effect'), 'Should have effect for webview visibility');
   });
 
+  // File watcher lifecycle
+  it('imports startFileWatching and stopFileWatching from api', () => {
+    assert.ok(src.includes('startFileWatching'), 'Should import startFileWatching');
+    assert.ok(src.includes('stopFileWatching'), 'Should import stopFileWatching');
+    assert.ok(src.includes("from '../../lib/api.js'"), 'Should import from api.js');
+  });
+
+  it('imports projectStore for active project path', () => {
+    assert.ok(src.includes('projectStore'), 'Should import projectStore');
+  });
+
+  it('starts file watcher via $effect when project path is available', () => {
+    assert.ok(src.includes('startFileWatching(path)') || src.includes('startFileWatching('),
+      'Should call startFileWatching');
+    assert.ok(src.includes('activeProject?.path'), 'Should read activeProject path');
+  });
+
+  it('stops file watcher on cleanup (project change or unmount)', () => {
+    assert.ok(src.includes('stopFileWatching()'), 'Should call stopFileWatching on cleanup');
+  });
+
+  it('guards file watcher start on valid path', () => {
+    assert.ok(src.includes('if (!path) return'), 'Should guard against null/undefined path');
+  });
+
+  it('handles file watcher errors gracefully', () => {
+    assert.ok(src.includes('.catch('), 'Should catch file watcher errors');
+  });
+
   // CSS
   it('has workspace-content with flex and margins', () => {
     assert.ok(src.includes('.workspace-content'));

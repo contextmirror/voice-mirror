@@ -112,6 +112,9 @@ pub fn run() {
             webview_label: std::sync::Mutex::new(None),
             bounds: std::sync::Mutex::new(None),
         })
+        .manage(services::file_watcher::FileWatcherState {
+            handle: std::sync::Mutex::new(None),
+        })
         .manage(shell_cmds::ShellManagerState(std::sync::Mutex::new(
             crate::shell::ShellManager::new(),
         )))
@@ -213,6 +216,9 @@ pub fn run() {
             shell_cmds::shell_resize,
             shell_cmds::shell_kill,
             shell_cmds::shell_list,
+            // File watcher
+            services::file_watcher::start_file_watching,
+            services::file_watcher::stop_file_watching,
         ])
         .setup(|app| {
             // Clear stale listener locks from previous sessions.

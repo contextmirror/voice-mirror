@@ -67,6 +67,17 @@
       else if (open) close();
     }
   }
+
+  // Portal action: move element to document.body so it escapes
+  // SplitPanel overflow:hidden ancestors and renders above everything
+  function portal(node) {
+    document.body.appendChild(node);
+    return {
+      destroy() {
+        node.remove();
+      }
+    };
+  }
 </script>
 
 <svelte:window onclick={handleWindowClick} onkeydown={handleKeydown} />
@@ -181,7 +192,7 @@
 
 <!-- ── Manage Servers Dialog ── -->
 {#if dialogOpen}
-  <div class="dialog-backdrop">
+  <div class="dialog-backdrop" use:portal>
     <div bind:this={dialogEl} class="dialog-panel" role="dialog" aria-label="Manage servers" aria-modal="true">
       <div class="dialog-header">
         <h2 class="dialog-title">Servers</h2>

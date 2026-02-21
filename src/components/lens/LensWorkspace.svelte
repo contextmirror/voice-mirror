@@ -11,7 +11,8 @@
   import { tabsStore } from '../../lib/stores/tabs.svelte.js';
   import { layoutStore } from '../../lib/stores/layout.svelte.js';
   import { lensStore } from '../../lib/stores/lens.svelte.js';
-  import { lensSetVisible } from '../../lib/api.js';
+  import { lensSetVisible, startFileWatching, stopFileWatching } from '../../lib/api.js';
+  import { projectStore } from '../../lib/stores/project.svelte.js';
 
   let {
     onSend = () => {},
@@ -33,6 +34,20 @@
   $effect(() => {
     if (!lensStore.webviewReady) return;
     lensSetVisible(isBrowser).catch(() => {});
+  });
+
+  // Start/stop file watcher when entering Lens mode or switching projects
+  $effect(() => {
+    const path = projectStore.activeProject?.path;
+    if (!path) return;
+
+    startFileWatching(path).catch((err) => {
+      console.warn('[LensWorkspace] Failed to start file watcher:', err);
+    });
+
+    return () => {
+      stopFileWatching().catch(() => {});
+    };
   });
 </script>
 
