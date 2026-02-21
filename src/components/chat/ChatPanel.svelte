@@ -127,12 +127,20 @@
     if (lensStore.webviewReady) {
       try {
         const result = await lensCapturePreview();
-        const data = result?.data || result;
-        browserSnapshot = data || null;
-      } catch {
+        console.log('[ChatPanel] lensCapturePreview result:', result);
+        // IpcResponse: { success, data?: { path, thumbnail, dataUrl }, error? }
+        if (result?.success && result?.data) {
+          browserSnapshot = result.data;
+        } else {
+          console.warn('[ChatPanel] Browser capture returned error:', result?.error || result);
+          browserSnapshot = null;
+        }
+      } catch (err) {
+        console.error('[ChatPanel] lensCapturePreview threw:', err);
         browserSnapshot = null;
       }
     } else {
+      console.log('[ChatPanel] webviewReady is false, skipping browser capture');
       browserSnapshot = null;
     }
     showScreenshotPicker = true;

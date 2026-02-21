@@ -133,6 +133,7 @@
   // Load initial data for the default tab
   $effect(() => {
     if (activeTab === 'screen') loadMonitors();
+    else if (activeTab === 'browser') loading = false;
   });
 </script>
 

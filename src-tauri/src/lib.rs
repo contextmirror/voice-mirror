@@ -64,6 +64,7 @@ pub fn run() {
         .manage(std::sync::Mutex::new(None::<Box<dyn voice::tts::TtsEngine>>) as PreloadedTtsState)
         .manage(lens_cmds::LensState {
             webview_label: std::sync::Mutex::new(None),
+            bounds: std::sync::Mutex::new(None),
         })
         .invoke_handler(tauri::generate_handler![
             // Config

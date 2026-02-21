@@ -4,9 +4,11 @@ use tauri::{LogicalPosition, LogicalSize, Position, Size, WebviewBuilder};
 use std::sync::Mutex;
 use tracing::{info, warn};
 
-/// Managed state tracking the active lens webview label.
+/// Managed state tracking the active lens webview label and bounds.
 pub struct LensState {
     pub webview_label: Mutex<Option<String>>,
+    /// Last-known webview bounds (x, y, width, height) in logical pixels.
+    pub bounds: Mutex<Option<(f64, f64, f64, f64)>>,
 }
 
 /// Get the active lens webview from state, or return an IpcResponse error.
@@ -105,11 +107,16 @@ pub async fn lens_create_webview(
     .map_err(|e| format!("Spawn blocking failed: {}", e))?
     .map_err(|e| e)?;
 
-    // Store the label
+    // Store the label and initial bounds
     {
         let mut label_guard = state.webview_label.lock()
             .map_err(|e| format!("Lock error: {}", e))?;
         *label_guard = Some(create_result.clone());
+    }
+    {
+        let mut bounds_guard = state.bounds.lock()
+            .map_err(|e| format!("Lock error: {}", e))?;
+        *bounds_guard = Some((x, y, width, height));
     }
 
     let _ = app.emit("lens-url-changed", serde_json::json!({ "url": url }));
@@ -214,7 +221,13 @@ pub fn lens_resize_webview(
     }
 
     match webview.set_size(Size::Logical(LogicalSize::new(width, height))) {
-        Ok(()) => IpcResponse::ok_empty(),
+        Ok(()) => {
+            // Store the updated bounds for screenshot cropping
+            if let Ok(mut bounds_guard) = state.bounds.lock() {
+                *bounds_guard = Some((x, y, width, height));
+            }
+            IpcResponse::ok_empty()
+        }
         Err(e) => IpcResponse::err(format!("Failed to set size: {}", e)),
     }
 }
@@ -237,6 +250,9 @@ pub fn lens_close_webview(
                 Err(e) => return IpcResponse::err(format!("Lock error: {}", e)),
             };
             *label_guard = None;
+            if let Ok(mut bounds_guard) = state.bounds.lock() {
+                *bounds_guard = None;
+            }
             info!("[lens] Webview closed");
             IpcResponse::ok_empty()
         }

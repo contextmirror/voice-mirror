@@ -645,22 +645,34 @@ pub async fn lens_capture_browser(
     app: AppHandle,
     state: tauri::State<'_, LensState>,
 ) -> Result<IpcResponse, String> {
-    // Verify the lens webview exists (read state synchronously before any .await)
-    {
+    tracing::info!("[screenshot] lens_capture_browser called");
+
+    // Read state synchronously before any .await
+    let webview_bounds = {
         let label_guard = state.webview_label.lock()
             .map_err(|e| format!("Lock error: {}", e))?;
         if label_guard.is_none() {
+            tracing::warn!("[screenshot] No lens webview active");
             return Ok(IpcResponse::err("No lens webview active"));
         }
-    }
+        tracing::info!("[screenshot] Lens webview label: {:?}", *label_guard);
 
-    // Get the main window's HWND to find the WebView2 child
-    let main_hwnd = {
-        let window = app.get_webview_window("main")
+        let bounds_guard = state.bounds.lock()
+            .map_err(|e| format!("Lock error: {}", e))?;
+        *bounds_guard
+    };
+
+    // Capture the main window directly — PrintWindow with PW_RENDERFULLCONTENT
+    // renders all child windows including WebView2 surfaces.
+    let (capture_hwnd, scale_factor) = {
+        let window = app.get_window("main")
             .ok_or_else(|| "Main window not found".to_string())?;
-        window.hwnd()
+        let hwnd_val = window.hwnd()
             .map(|h| h.0 as i64)
-            .map_err(|e| format!("Failed to get main HWND: {}", e))?
+            .map_err(|e| format!("Failed to get main HWND: {}", e))?;
+        let scale = window.scale_factor().unwrap_or(1.0);
+        tracing::info!("[screenshot] Capture HWND: {}, scale: {}, bounds: {:?}", hwnd_val, scale, webview_bounds);
+        (hwnd_val, scale)
     };
 
     let screenshots_dir = crate::services::platform::get_data_dir().join("screenshots");
@@ -678,12 +690,24 @@ pub async fn lens_capture_browser(
     let filepath = screenshots_dir.join(&filename);
     let filepath_str = filepath.to_string_lossy().to_string();
 
+    // Compute crop bounds in physical pixels (for cropping webview area from window)
+    let (crop_x, crop_y, crop_w, crop_h) = if let Some((bx, by, bw, bh)) = webview_bounds {
+        (
+            (bx * scale_factor) as i32,
+            (by * scale_factor) as i32,
+            (bw * scale_factor) as i32,
+            (bh * scale_factor) as i32,
+        )
+    } else {
+        (0, 0, 0, 0)
+    };
+
     let result = tokio::task::spawn_blocking(move || {
         #[cfg(target_os = "windows")]
         {
             // PowerShell script that:
-            // 1. Finds the largest child window of the main HWND (WebView2 surface)
-            // 2. Uses PrintWindow to capture it
+            // 1. Captures the main window via PrintWindow (PW_RENDERFULLCONTENT)
+            // 2. Crops to the lens webview bounds
             // 3. Creates a thumbnail (max 300px wide)
             // 4. Saves full capture + returns thumbnail as base64
             let ps_script = format!(
@@ -691,51 +715,27 @@ pub async fn lens_capture_browser(
 Add-Type -AssemblyName System.Drawing
 Add-Type @"
 using System;
-using System.Collections.Generic;
 using System.Runtime.InteropServices;
 public class BrowserCapture {{
-    public delegate bool EnumChildProc(IntPtr hWnd, IntPtr lParam);
-    [DllImport("user32.dll")] public static extern bool EnumChildWindows(IntPtr hWndParent, EnumChildProc lpEnumFunc, IntPtr lParam);
-    [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
-    [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
-    [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr hWnd, IntPtr hdcBlt, uint nFlags);
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetClassName(IntPtr hWnd, System.Text.StringBuilder lpClassName, int nMaxCount);
-    [StructLayout(LayoutKind.Sequential)] public struct RECT {{ public int Left, Top, Right, Bottom; }}
-    public static List<IntPtr> children = new List<IntPtr>();
-    public static bool Callback(IntPtr hWnd, IntPtr lParam) {{
-        children.Add(hWnd);
-        return true;
-    }}
+    [DllImport("user32.dll")]
+    public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+    [DllImport("user32.dll")]
+    public static extern bool PrintWindow(IntPtr hWnd, IntPtr hdcBlt, uint nFlags);
+    [StructLayout(LayoutKind.Sequential)]
+    public struct RECT {{ public int Left, Top, Right, Bottom; }}
 }}
 "@
-$parentHwnd = [IntPtr]{main_hwnd}
-[BrowserCapture]::children.Clear()
-[BrowserCapture]::EnumChildWindows($parentHwnd, [BrowserCapture+EnumChildProc]::new([BrowserCapture], 'Callback'), [IntPtr]::Zero)
-# Find the WebView2 rendering surface: largest visible child window
-$bestHwnd = [IntPtr]::Zero
-$bestArea = 0
-foreach ($child in [BrowserCapture]::children) {{
-    if (-not [BrowserCapture]::IsWindowVisible($child)) {{ continue }}
-    $rect = New-Object BrowserCapture+RECT
-    [void][BrowserCapture]::GetWindowRect($child, [ref]$rect)
-    $w = $rect.Right - $rect.Left
-    $h = $rect.Bottom - $rect.Top
-    $area = $w * $h
-    if ($area -gt $bestArea -and $w -gt 50 -and $h -gt 50) {{
-        $bestArea = $area
-        $bestHwnd = $child
-    }}
-}}
-if ($bestHwnd -eq [IntPtr]::Zero) {{ throw "No WebView2 child window found" }}
+$targetHwnd = [IntPtr]{capture_hwnd}
 $rect = New-Object BrowserCapture+RECT
-[void][BrowserCapture]::GetWindowRect($bestHwnd, [ref]$rect)
+[void][BrowserCapture]::GetWindowRect($targetHwnd, [ref]$rect)
 $w = $rect.Right - $rect.Left
 $h = $rect.Bottom - $rect.Top
+if ($w -le 0 -or $h -le 0) {{ throw "Window has zero size ($w x $h)" }}
 # Capture using PrintWindow PW_RENDERFULLCONTENT
 $bmp = New-Object System.Drawing.Bitmap($w, $h)
 $g = [System.Drawing.Graphics]::FromImage($bmp)
 $hdc = $g.GetHdc()
-$ok = [BrowserCapture]::PrintWindow($bestHwnd, $hdc, 2)
+$ok = [BrowserCapture]::PrintWindow($targetHwnd, $hdc, 2)
 $g.ReleaseHdc($hdc)
 $g.Dispose()
 if (-not $ok) {{
@@ -746,7 +746,25 @@ if (-not $ok) {{
     $g2.CopyFromScreen($rect.Left, $rect.Top, 0, 0, (New-Object System.Drawing.Size($w, $h)))
     $g2.Dispose()
 }}
-# Save full-res capture
+# Crop to webview bounds if specified
+$cropX = {crop_x}
+$cropY = {crop_y}
+$cropW = {crop_w}
+$cropH = {crop_h}
+if ($cropW -gt 0 -and $cropH -gt 0) {{
+    # Clamp crop to actual bitmap size
+    if ($cropX + $cropW -gt $w) {{ $cropW = $w - $cropX }}
+    if ($cropY + $cropH -gt $h) {{ $cropH = $h - $cropY }}
+    if ($cropW -gt 0 -and $cropH -gt 0) {{
+        $srcRect = New-Object System.Drawing.Rectangle($cropX, $cropY, $cropW, $cropH)
+        $cropped = $bmp.Clone($srcRect, $bmp.PixelFormat)
+        $bmp.Dispose()
+        $bmp = $cropped
+        $w = $cropW
+        $h = $cropH
+    }}
+}}
+# Save capture
 $bmp.Save('{filepath}')
 # Create thumbnail (max 300px wide)
 $maxW = 300
@@ -773,7 +791,11 @@ if ($w -gt $maxW) {{
 $bmp.Dispose()
 Write-Output $thumbB64
 "#,
-                main_hwnd = main_hwnd,
+                capture_hwnd = capture_hwnd,
+                crop_x = crop_x,
+                crop_y = crop_y,
+                crop_w = crop_w,
+                crop_h = crop_h,
                 filepath = filepath_str.replace('\'', "''"),
             );
 
@@ -800,6 +822,7 @@ Write-Output $thumbB64
 
     match result {
         Ok(Ok(thumbnail)) => {
+            tracing::info!("[screenshot] Browser capture succeeded, thumbnail len: {}", thumbnail.len());
             let data_url = read_as_data_url(&filepath).unwrap_or_default();
             Ok(IpcResponse::ok(serde_json::json!({
                 "path": filepath.to_string_lossy(),
@@ -807,7 +830,13 @@ Write-Output $thumbB64
                 "dataUrl": data_url
             })))
         }
-        Ok(Err(e)) => Ok(IpcResponse::err(e)),
-        Err(e) => Ok(IpcResponse::err(format!("Browser capture task panicked: {}", e))),
+        Ok(Err(e)) => {
+            tracing::error!("[screenshot] Browser capture error: {}", e);
+            Ok(IpcResponse::err(e))
+        }
+        Err(e) => {
+            tracing::error!("[screenshot] Browser capture task panicked: {}", e);
+            Ok(IpcResponse::err(format!("Browser capture task panicked: {}", e)))
+        }
     }
 }
