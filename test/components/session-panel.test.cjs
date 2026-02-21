@@ -85,8 +85,9 @@ describe('SessionPanel.svelte', () => {
 
   // ── Context Menu (Delete) ──
 
-  it('imports chatDelete from API', () => {
+  it('imports chatDelete and chatRename from API', () => {
     assert.ok(src.includes('chatDelete'), 'Should import chatDelete');
+    assert.ok(src.includes('chatRename'), 'Should import chatRename');
   });
 
   it('has context menu support', () => {
@@ -99,10 +100,23 @@ describe('SessionPanel.svelte', () => {
     assert.ok(src.includes('handleDeleteSession'), 'Should have delete session handler');
   });
 
-  it('has context menu with Delete option', () => {
+  it('has context menu with Rename and Delete options', () => {
     assert.ok(src.includes('role="menu"'), 'Should have menu role');
     assert.ok(src.includes('role="menuitem"'), 'Should have menuitem role');
+    assert.ok(src.includes('Rename'), 'Should have Rename text');
     assert.ok(src.includes('Delete'), 'Should have Delete text');
+  });
+
+  it('has inline rename support', () => {
+    assert.ok(src.includes('startRename'), 'Should have startRename');
+    assert.ok(src.includes('commitRename'), 'Should have commitRename');
+    assert.ok(src.includes('cancelRename'), 'Should have cancelRename');
+    assert.ok(src.includes('rename-input'), 'Should have rename input class');
+    assert.ok(src.includes('renamingId'), 'Should track renaming state');
+  });
+
+  it('supports double-click to rename', () => {
+    assert.ok(src.includes('ondblclick'), 'Should handle double-click for rename');
   });
 
   // ── State ──

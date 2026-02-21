@@ -1,7 +1,7 @@
 <script>
   import { projectStore } from '../../lib/stores/project.svelte.js';
   import { chatStore } from '../../lib/stores/chat.svelte.js';
-  import { chatLoad, chatSave, chatDelete } from '../../lib/api.js';
+  import { chatLoad, chatSave, chatDelete, chatRename } from '../../lib/api.js';
   import { uid } from '../../lib/utils.js';
 
   let activeProject = $derived(projectStore.activeProject);
@@ -10,6 +10,10 @@
   /** Context menu state */
   let contextMenu = $state({ visible: false, x: 0, y: 0, sessionId: null });
 
+  /** Inline rename state */
+  let renamingId = $state(null);
+  let renameValue = $state('');
+
   function handleContextMenu(event, id) {
     event.preventDefault();
     contextMenu = { visible: true, x: event.clientX, y: event.clientY, sessionId: id };
@@ -17,6 +21,43 @@
 
   function hideContextMenu() {
     contextMenu = { visible: false, x: 0, y: 0, sessionId: null };
+  }
+
+  function startRename() {
+    const id = contextMenu.sessionId;
+    hideContextMenu();
+    if (!id) return;
+    const session = sessions.find((s) => s.id === id);
+    renameValue = session?.name || '';
+    renamingId = id;
+  }
+
+  async function commitRename() {
+    const id = renamingId;
+    const name = renameValue.trim();
+    renamingId = null;
+    if (!id || !name) return;
+
+    try {
+      await chatRename(id, name);
+      projectStore.loadSessions();
+    } catch (err) {
+      console.error('[SessionPanel] Failed to rename session:', err);
+    }
+  }
+
+  function cancelRename() {
+    renamingId = null;
+    renameValue = '';
+  }
+
+  function handleRenameKeydown(e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      commitRename();
+    } else if (e.key === 'Escape') {
+      cancelRename();
+    }
   }
 
   async function handleDeleteSession() {
@@ -130,15 +171,29 @@
 
   <div class="session-list">
     {#each sessions as session (session.id)}
-      <button
-        class="session-item"
-        class:active={session.id === chatStore.activeChatId}
-        onclick={() => handleLoadSession(session.id)}
-        oncontextmenu={(e) => handleContextMenu(e, session.id)}
-      >
-        <span class="session-name">{session.name || 'Untitled'}</span>
-        <span class="session-time">{formatRelativeTime(session.updatedAt)}</span>
-      </button>
+      {#if renamingId === session.id}
+        <div class="session-item renaming">
+          <input
+            class="rename-input"
+            type="text"
+            bind:value={renameValue}
+            onkeydown={handleRenameKeydown}
+            onblur={commitRename}
+            autofocus
+          />
+        </div>
+      {:else}
+        <button
+          class="session-item"
+          class:active={session.id === chatStore.activeChatId}
+          onclick={() => handleLoadSession(session.id)}
+          ondblclick={() => { renameValue = session.name || ''; renamingId = session.id; }}
+          oncontextmenu={(e) => handleContextMenu(e, session.id)}
+        >
+          <span class="session-name">{session.name || 'Untitled'}</span>
+          <span class="session-time">{formatRelativeTime(session.updatedAt)}</span>
+        </button>
+      {/if}
     {:else}
       <div class="session-empty">No sessions yet</div>
     {/each}
@@ -159,6 +214,13 @@
     style="left: {contextMenu.x}px; top: {contextMenu.y}px;"
     role="menu"
   >
+    <button class="context-menu-item" onclick={startRename} role="menuitem">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+      </svg>
+      Rename
+    </button>
     <button class="context-menu-item danger" onclick={handleDeleteSession} role="menuitem">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <polyline points="3 6 5 6 21 6"/>
@@ -240,6 +302,23 @@
     color: var(--muted);
     font-size: 10px;
     flex-shrink: 0;
+  }
+
+  .rename-input {
+    flex: 1;
+    min-width: 0;
+    background: var(--bg);
+    border: 1px solid var(--accent);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-size: 12px;
+    font-family: var(--font-family);
+    padding: 2px 6px;
+    outline: none;
+  }
+
+  .session-item.renaming {
+    padding: 5px 10px;
   }
 
   .session-empty {
