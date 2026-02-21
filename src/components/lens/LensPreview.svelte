@@ -5,7 +5,7 @@
 
   let containerEl = $state(null);
   let resizeObserver = $state(null);
-  let resizeTimeout = $state(null);
+  let rafId = $state(null);
   let unlistenUrl = $state(null);
 
   function getAbsoluteBounds() {
@@ -88,10 +88,10 @@
         return;
       }
 
-      // Observe container resize for bounds syncing
+      // Observe container resize — sync bounds on next animation frame (no debounce delay)
       const observer = new ResizeObserver(() => {
-        if (resizeTimeout) clearTimeout(resizeTimeout);
-        resizeTimeout = setTimeout(() => syncBounds(), 50);
+        if (rafId) cancelAnimationFrame(rafId);
+        rafId = requestAnimationFrame(() => { rafId = null; syncBounds(); });
       });
       observer.observe(containerEl);
       resizeObserver = observer;
@@ -103,7 +103,7 @@
 
     return () => {
       cancelled = true;
-      if (resizeTimeout) clearTimeout(resizeTimeout);
+      if (rafId) cancelAnimationFrame(rafId);
       if (resizeObserver) {
         resizeObserver.disconnect();
         resizeObserver = null;

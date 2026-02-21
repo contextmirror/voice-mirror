@@ -163,7 +163,7 @@ describe('LensPreview.svelte', () => {
     assert.ok(src.includes('$effect'), 'Should use $effect for setup/cleanup');
   });
 
-  it('debounces resize observer', () => {
-    assert.ok(src.includes('setTimeout'), 'Should debounce resize updates');
+  it('throttles resize observer with rAF', () => {
+    assert.ok(src.includes('requestAnimationFrame'), 'Should throttle resize with rAF');
   });
 });
