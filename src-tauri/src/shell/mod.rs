@@ -180,6 +180,11 @@ impl ShellManager {
             cmd.env("LC_ALL", "C.UTF-8");
             cmd.env("LC_CTYPE", "C.UTF-8");
             cmd.env("LANG", "C.UTF-8");
+
+            // Set CLAUDE_CODE_GIT_BASH_PATH so Claude Code works inside our shell
+            if shell_lower.contains("bash") {
+                cmd.env("CLAUDE_CODE_GIT_BASH_PATH", &shell);
+            }
         }
 
         // Spawn the child process
