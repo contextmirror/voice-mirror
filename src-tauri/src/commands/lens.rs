@@ -87,16 +87,23 @@ pub async fn lens_create_webview(
     };
     let shortcut_script = format!(
         r#"document.addEventListener('keydown', function(e) {{
-            var key = e.key.toLowerCase();
-            if ((e.ctrlKey || e.metaKey) && ['p','n','t',','].includes(key)) {{
+            var key = e.key;
+            var lower = key.toLowerCase();
+            if (key === 'F1') {{
                 e.preventDefault();
                 e.stopPropagation();
                 try {{
-                    (new Image()).src = '{}' + key + '?t=' + Date.now();
+                    (new Image()).src = '{}' + 'F1' + '?t=' + Date.now();
+                }} catch(err) {{}}
+            }} else if ((e.ctrlKey || e.metaKey) && ['n','t',','].includes(lower)) {{
+                e.preventDefault();
+                e.stopPropagation();
+                try {{
+                    (new Image()).src = '{}' + lower + '?t=' + Date.now();
                 }} catch(err) {{}}
             }}
         }}, true);"#,
-        shortcut_base
+        shortcut_base, shortcut_base
     );
 
     // Run WebView2 creation on a blocking thread to prevent hanging the

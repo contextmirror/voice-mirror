@@ -56,6 +56,10 @@ export default defineConfig(async () => ({
   },
   assetsInclude: ['**/*.wasm'],
 
+  build: {
+    // Default single-page build from index.html
+  },
+
   server: {
     port: 1420,
     strictPort: true,

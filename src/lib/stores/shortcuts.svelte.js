@@ -78,7 +78,7 @@ export const IN_APP_SHORTCUTS = {
     category: 'in-app',
   },
   'open-file-search': {
-    keys: 'Ctrl+P',
+    keys: 'F1',
     label: 'Search files and commands',
     category: 'in-app',
   },
@@ -404,8 +404,8 @@ export function setupInAppShortcuts() {
       return;
     }
 
-    // Ctrl+P -> Open file search / command palette
-    if (ctrl && event.key === 'p') {
+    // F1 -> Open file search / command palette
+    if (event.key === 'F1') {
       event.preventDefault();
       actionHandlers['open-file-search']?.();
       return;

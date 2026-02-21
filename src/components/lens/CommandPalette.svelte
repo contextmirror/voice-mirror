@@ -165,9 +165,14 @@
     }
   }
 
-  // Hide native webview when palette is open (WebView2 renders above DOM)
+  // Freeze/unfreeze webview when palette opens/closes (WebView2 renders above DOM).
+  // freeze() captures a screenshot so the browser area shows a static image instead of going black.
   $effect(() => {
-    lensStore.setHidden(visible);
+    if (visible) {
+      lensStore.freeze();
+    } else {
+      lensStore.unfreeze();
+    }
   });
 
   // Watch visible: focus input and fetch files

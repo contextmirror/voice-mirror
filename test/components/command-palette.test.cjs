@@ -58,6 +58,29 @@ describe('CommandPalette: imports', () => {
       'Should import navigationStore from navigation.svelte.js'
     );
   });
+
+  it('imports lensStore for freeze-frame', () => {
+    assert.ok(
+      src.includes("import { lensStore }") && src.includes('lens.svelte.js'),
+      'Should import lensStore from lens.svelte.js'
+    );
+  });
+});
+
+describe('CommandPalette: freeze-frame', () => {
+  it('freezes webview when visible', () => {
+    assert.ok(
+      src.includes('lensStore.freeze()'),
+      'Should call lensStore.freeze() when visible'
+    );
+  });
+
+  it('unfreezes webview when closed', () => {
+    assert.ok(
+      src.includes('lensStore.unfreeze()'),
+      'Should call lensStore.unfreeze() when closed'
+    );
+  });
 });
 
 // ============ Props ============
@@ -128,6 +151,7 @@ describe('CommandPalette: search input', () => {
 
 describe('CommandPalette: built-in commands', () => {
   const expectedCommands = [
+    { id: 'open-lens', label: 'Open Lens' },
     { id: 'new-session', label: 'New Session' },
     { id: 'toggle-terminal', label: 'Toggle Terminal' },
     { id: 'toggle-chat', label: 'Toggle Chat' },
@@ -142,7 +166,7 @@ describe('CommandPalette: built-in commands', () => {
     );
   });
 
-  it('has exactly 5 built-in commands', () => {
+  it('has all built-in commands', () => {
     for (const cmd of expectedCommands) {
       assert.ok(
         src.includes(`id: '${cmd.id}'`),

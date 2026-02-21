@@ -290,16 +290,21 @@
   <!-- Unified tab bar: tabs (left) + toolbar actions (right) -->
   <div class="terminal-tab-bar">
     {#each terminalTabsStore.tabs as tab (tab.id)}
-      <button
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div
         class="terminal-tab"
         class:active={terminalTabsStore.activeTabId === tab.id}
         class:exited={!tab.running}
         class:drag-over={dragOverTabId === tab.id && dragTabId !== tab.id}
         class:dragging={dragTabId === tab.id}
+        role="tab"
+        tabindex="0"
+        aria-selected={terminalTabsStore.activeTabId === tab.id}
         data-tab-id={tab.id}
         onclick={() => terminalTabsStore.setActive(tab.id)}
         oncontextmenu={(e) => showContextMenu(e, tab.id)}
         onmousedown={(e) => handleTabMousedown(e, tab.id)}
+        onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') terminalTabsStore.setActive(tab.id); }}
         title={tab.title}
       >
         {#if tab.type === 'ai'}
@@ -324,8 +329,10 @@
             use:autofocus
           />
         {:else}
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
           <span
             class="tab-label"
+            role="textbox"
             ondblclick={(e) => { e.preventDefault(); startRename(tab.id); }}
           >{tab.title}</span>
         {/if}
@@ -341,7 +348,7 @@
             </svg>
           </button>
         {/if}
-      </button>
+      </div>
     {/each}
 
     <button class="tab-add" onclick={handleAddShell} title="New shell terminal" aria-label="New terminal">

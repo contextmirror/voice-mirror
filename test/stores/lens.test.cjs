@@ -86,7 +86,7 @@ describe('lens: store setters', () => {
 });
 
 describe('lens: store methods', () => {
-  for (const method of ['navigate', 'goBack', 'goForward', 'reload', 'reset']) {
+  for (const method of ['navigate', 'goBack', 'goForward', 'reload', 'reset', 'freeze', 'unfreeze']) {
     it(`has ${method} method`, () => {
       assert.ok(src.includes(`${method}(`), `Should have ${method} method`);
     });

@@ -35,13 +35,18 @@
 
 <div class="tab-bar">
   {#each tabsStore.tabs as tab (tab.id)}
-    <button
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div
       class="tab"
       class:active={tab.id === tabsStore.activeTabId}
       class:preview={tab.preview}
       class:dirty={tab.dirty}
+      role="tab"
+      tabindex="0"
+      aria-selected={tab.id === tabsStore.activeTabId}
       onclick={() => tabsStore.setActive(tab.id)}
       ondblclick={() => tabsStore.pinTab(tab.id)}
+      onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') tabsStore.setActive(tab.id); }}
       title={tab.path || tab.title}
     >
       <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -76,7 +81,7 @@
           <svg class="icon-pin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 2h6l-1 7h4l-8 8-1-7H5z"/></svg>
         </button>
       {/if}
-    </button>
+    </div>
   {/each}
   <button class="tab-add" onclick={handleAddFile} aria-label="Open file" title="Open file">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>

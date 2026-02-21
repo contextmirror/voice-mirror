@@ -125,10 +125,10 @@
     if (e.target === e.currentTarget) onClose();
   }
 
-  // Hide the native webview so this modal renders above it
+  // Freeze the webview so this modal renders above it (screenshot replaces black area)
   $effect(() => {
-    lensStore.setHidden(true);
-    return () => lensStore.setHidden(false);
+    lensStore.freeze();
+    return () => lensStore.unfreeze();
   });
 
   // Load initial data for the default tab

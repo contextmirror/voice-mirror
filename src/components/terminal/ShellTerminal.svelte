@@ -139,8 +139,11 @@
     }
   }
 
-  // Register toolbar actions for parent TerminalTabs
-  onRegisterActions?.({ clear: handleClear, copy: handleCopy, paste: handlePaste });
+  // Register toolbar actions for parent TerminalTabs.
+  // Wrapped in $effect so we capture the latest prop value (not just initial).
+  $effect(() => {
+    onRegisterActions?.({ clear: handleClear, copy: handleCopy, paste: handlePaste });
+  });
 
   // ---- Shell output handler ----
 

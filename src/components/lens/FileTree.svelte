@@ -4,6 +4,7 @@
   import { projectStore } from '../../lib/stores/project.svelte.js';
   import spriteUrl from '../../assets/icons/file-icons-sprite.svg';
   import FileContextMenu from './FileContextMenu.svelte';
+  import StatusDropdown from './StatusDropdown.svelte';
 
   let { onFileClick = () => {}, onFileDblClick = () => {}, onChangeClick = () => {} } = $props();
 
@@ -301,9 +302,11 @@
       class:active={activeTab === 'changes'}
       onclick={() => { activeTab = 'changes'; }}
     >{gitChanges.length} Changes</button>
+    <StatusDropdown />
   </div>
 
   {#if activeTab === 'files'}
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div class="tree-scroll" oncontextmenu={handleEmptyContextMenu}>
       {#snippet treeNode(entries, depth)}
         {#each entries as entry}

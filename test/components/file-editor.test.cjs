@@ -148,6 +148,27 @@ describe('FileEditor.svelte: language support', () => {
   });
 });
 
+describe('FileEditor.svelte: autocomplete', () => {
+  it('imports @codemirror/autocomplete', () => {
+    assert.ok(src.includes('@codemirror/autocomplete'), 'Should import autocomplete package');
+  });
+
+  it('imports autocompletion function', () => {
+    assert.ok(src.includes('autocompletion'), 'Should import autocompletion');
+  });
+
+  it('enables autocomplete in extensions', () => {
+    assert.ok(
+      src.includes('cm.autocompletion('),
+      'Should add autocompletion to editor extensions'
+    );
+  });
+
+  it('activates on typing', () => {
+    assert.ok(src.includes('activateOnTyping: true'), 'Should activate autocomplete on typing');
+  });
+});
+
 describe('FileEditor.svelte: lifecycle', () => {
   it('uses $effect to react to tab changes', () => {
     assert.ok(src.includes('$effect'), 'Should use $effect for reactive loading');

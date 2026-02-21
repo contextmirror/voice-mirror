@@ -19,7 +19,6 @@
   import Terminal from './components/terminal/Terminal.svelte';
   import SettingsPanel from './components/settings/SettingsPanel.svelte';
   import LensWorkspace from './components/lens/LensWorkspace.svelte';
-  import StatusDropdown from './components/lens/StatusDropdown.svelte';
   import CommandPalette from './components/lens/CommandPalette.svelte';
   import { layoutStore } from './lib/stores/layout.svelte.js';
   import OverlayPanel from './components/overlay/OverlayPanel.svelte';
@@ -185,7 +184,7 @@
     }
   });
 
-  // In-app DOM shortcuts (Ctrl+,, Ctrl+N, Ctrl+T, Ctrl+P, Escape)
+  // In-app DOM shortcuts (Ctrl+,, Ctrl+N, Ctrl+T, F1, Escape)
   $effect(() => {
     if (!shortcutsInitialized) return;
     const cleanup = setupInAppShortcuts();
@@ -201,7 +200,7 @@
     let unlistenFn;
     listen('lens-shortcut', (event) => {
       const key = event.payload?.key;
-      if (key === 'p') { commandPaletteVisible = true; }
+      if (key === 'F1') { commandPaletteVisible = true; }
       else if (key === ',') { navigationStore.setView('settings'); }
     }).then(fn => { unlistenFn = fn; });
     return () => { unlistenFn?.(); };
@@ -366,17 +365,14 @@
             {aiStatusStore.running ? 'Running' : aiStatusStore.starting ? 'Starting...' : 'Stopped'}
           </span>
         </div>
-        {#if activeView === 'lens'}
-          <div class="titlebar-lens-center">
-            <!-- svelte-ignore a11y_no_static_element_interactions -->
-            <div class="titlebar-search-box" onclick={() => { commandPaletteVisible = true; }}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-              <span>Search Voice Mirror</span>
-              <kbd>Ctrl+P</kbd>
-            </div>
-            <StatusDropdown />
+        <div class="titlebar-search-trigger">
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <div class="titlebar-search-box" onclick={() => { commandPaletteVisible = true; }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <span>Search Voice Mirror</span>
+            <kbd>F1</kbd>
           </div>
-        {/if}
+        </div>
       {/snippet}
       {#snippet rightContent()}
         {#if activeView === 'lens'}
@@ -605,8 +601,8 @@
     }
   }
 
-  /* Lens-mode titlebar center content */
-  .titlebar-lens-center {
+  /* Command palette search trigger (always visible in titlebar) */
+  .titlebar-search-trigger {
     display: flex;
     align-items: center;
     gap: 12px;

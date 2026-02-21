@@ -1,151 +1,315 @@
 <script>
+  import { aiStatusStore } from '../../lib/stores/ai-status.svelte.js';
+  import { lensStore } from '../../lib/stores/lens.svelte.js';
+
   let open = $state(false);
   let activeTab = $state('servers');
+  let badgeEl = $state(null);
+  let panelEl = $state(null);
+
+  // ── Manage servers dialog ──
+  let dialogOpen = $state(false);
+  let dialogEl = $state(null);
+  let searchQuery = $state('');
+
+  // Overall health
+  let healthy = $derived(aiStatusStore.running);
+
+  // Server count (provider + dev server)
+  let serverCount = $derived((healthy || aiStatusStore.starting ? 1 : 0) + 1);
+
+  // MCP status
+  let mcpConnected = $derived(
+    aiStatusStore.isCliProvider && aiStatusStore.running
+  );
+
+  // Provider info
+  let providerName = $derived(aiStatusStore.displayName || 'No provider');
+  let providerType = $derived(
+    aiStatusStore.isCliProvider ? 'CLI / PTY'
+    : aiStatusStore.isApiProvider ? 'HTTP API'
+    : aiStatusStore.isDictationProvider ? 'Dictation'
+    : ''
+  );
 
   function toggle() { open = !open; }
   function close() { open = false; }
-  function selectTab(tab) { activeTab = tab; }
+
+  function openDialog() {
+    close();
+    lensStore.freeze();
+    dialogOpen = true;
+    searchQuery = '';
+  }
+
+  function closeDialog() {
+    dialogOpen = false;
+    lensStore.unfreeze();
+  }
 
   // Close on click outside
   function handleWindowClick(e) {
-    if (open && !e.target.closest('.status-dropdown')) {
-      close();
+    if (dialogOpen) {
+      if (dialogEl && !dialogEl.contains(e.target)) {
+        closeDialog();
+      }
+      return;
+    }
+    if (!open) return;
+    if (badgeEl?.contains(e.target)) return;
+    if (panelEl?.contains(e.target)) return;
+    close();
+  }
+
+  function handleKeydown(e) {
+    if (e.key === 'Escape') {
+      if (dialogOpen) closeDialog();
+      else if (open) close();
     }
   }
 </script>
 
-<svelte:window onclick={handleWindowClick} />
+<svelte:window onclick={handleWindowClick} onkeydown={handleKeydown} />
 
-<div class="status-dropdown">
-  <button class="status-badge" onclick={toggle} aria-expanded={open} aria-haspopup="true">
-    <span class="status-dot"></span>
+<div class="status-wrapper">
+  <button
+    bind:this={badgeEl}
+    class="status-badge"
+    class:active={open}
+    onclick={toggle}
+    aria-expanded={open}
+    aria-haspopup="true"
+  >
+    <div class="status-dot-wrap">
+      <div
+        class="status-dot"
+        class:ok={healthy}
+        class:stopped={!healthy && !aiStatusStore.starting}
+        class:starting={aiStatusStore.starting}
+      ></div>
+    </div>
     <span>Status</span>
   </button>
 
   {#if open}
-    <div class="status-panel" role="dialog" aria-label="Status panel">
-      <div class="status-tabs">
+    <div bind:this={panelEl} class="status-popover" role="dialog" aria-label="Status panel">
+      <div class="popover-tabs" role="tablist">
         <button
-          class="status-tab"
+          class="popover-tab"
           class:active={activeTab === 'servers'}
-          onclick={() => selectTab('servers')}
-        >2 Servers</button>
+          onclick={() => { activeTab = 'servers'; }}
+          role="tab"
+          aria-selected={activeTab === 'servers'}
+        >{serverCount} Servers</button>
         <button
-          class="status-tab"
+          class="popover-tab"
           class:active={activeTab === 'mcp'}
-          onclick={() => selectTab('mcp')}
-        >MCP</button>
+          onclick={() => { activeTab = 'mcp'; }}
+          role="tab"
+          aria-selected={activeTab === 'mcp'}
+        >{mcpConnected ? '1 ' : ''}MCP</button>
         <button
-          class="status-tab"
-          class:active={activeTab === 'provider'}
-          onclick={() => selectTab('provider')}
-        >Provider</button>
+          class="popover-tab"
+          class:active={activeTab === 'lsp'}
+          onclick={() => { activeTab = 'lsp'; }}
+          role="tab"
+          aria-selected={activeTab === 'lsp'}
+        >LSP</button>
       </div>
 
-      <div class="status-content">
-        {#if activeTab === 'servers'}
-          <div class="status-list">
-            <div class="status-entry">
-              <span class="entry-dot ok"></span>
-              <span class="entry-name">Dev Server</span>
-              <span class="entry-version">Vite 6.x</span>
-              <svg class="entry-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-            </div>
-            <div class="entry-detail">localhost:1420</div>
+      <div class="popover-body" role="tabpanel">
+        <div class="popover-content">
+          {#if activeTab === 'servers'}
+            <div class="status-list">
+              <button class="status-row" type="button">
+                <div
+                  class="row-dot"
+                  class:ok={healthy}
+                  class:stopped={!healthy && !aiStatusStore.starting}
+                  class:starting={aiStatusStore.starting}
+                ></div>
+                <span class="row-name">{providerName}</span>
+                <span class="row-version">{providerType}</span>
+                {#if healthy}
+                  <svg class="row-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                {/if}
+              </button>
 
-            <div class="status-entry">
-              <span class="entry-dot warn"></span>
-              <span class="entry-name">App Server</span>
-              <span class="entry-version"></span>
+              <button class="status-row" type="button">
+                <div class="row-dot ok"></div>
+                <span class="row-name">Dev Server</span>
+                <span class="row-version">Vite</span>
+                <svg class="row-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              </button>
             </div>
-            <div class="entry-detail inactive">No server detected</div>
-          </div>
 
-        {:else if activeTab === 'mcp'}
-          <div class="status-list">
-            <div class="status-entry">
-              <span class="entry-dot ok"></span>
-              <span class="entry-name">Voice Mirror MCP</span>
-              <span class="entry-version">55 tools</span>
-              <svg class="entry-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            <button class="manage-btn" type="button" onclick={openDialog}>Manage servers</button>
+
+          {:else if activeTab === 'mcp'}
+            <div class="status-list">
+              {#if aiStatusStore.isCliProvider}
+                <button class="status-row" type="button">
+                  <div
+                    class="row-dot"
+                    class:ok={mcpConnected}
+                    class:stopped={!mcpConnected && !aiStatusStore.starting}
+                    class:starting={aiStatusStore.starting}
+                  ></div>
+                  <span class="row-name">voice-mirror</span>
+                  <span class="row-version">55 tools</span>
+                  <div class="row-toggle" class:on={mcpConnected}>
+                    <div class="toggle-track">
+                      <div class="toggle-thumb"></div>
+                    </div>
+                  </div>
+                </button>
+              {:else}
+                <div class="status-empty">No MCP tools configured</div>
+              {/if}
             </div>
-            <div class="entry-detail">8 tool groups active</div>
-          </div>
 
-        {:else if activeTab === 'provider'}
-          <div class="status-list">
-            <div class="status-entry">
-              <span class="entry-dot ok"></span>
-              <span class="entry-name">Claude Code</span>
-              <span class="entry-version">CLI</span>
-              <svg class="entry-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          {:else if activeTab === 'lsp'}
+            <div class="status-list">
+              <div class="status-empty">LSPs auto-detected from file types</div>
             </div>
-            <div class="entry-detail">Connected via PTY</div>
-          </div>
-        {/if}
-      </div>
-
-      <div class="status-footer">
-        <button class="manage-btn">Manage servers</button>
+          {/if}
+        </div>
       </div>
     </div>
   {/if}
 </div>
 
+<!-- ── Manage Servers Dialog ── -->
+{#if dialogOpen}
+  <div class="dialog-backdrop">
+    <div bind:this={dialogEl} class="dialog-panel" role="dialog" aria-label="Manage servers" aria-modal="true">
+      <div class="dialog-header">
+        <h2 class="dialog-title">Servers</h2>
+        <button class="dialog-close" onclick={closeDialog} aria-label="Close">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="dialog-search">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" placeholder="Search servers" bind:value={searchQuery} />
+      </div>
+
+      <div class="dialog-list">
+        <button class="dialog-row" type="button">
+          <div class="row-dot" class:ok={healthy} class:stopped={!healthy && !aiStatusStore.starting} class:starting={aiStatusStore.starting}></div>
+          <span class="dialog-row-name">{providerName}</span>
+          <span class="dialog-row-version">{providerType}</span>
+          {#if healthy}
+            <span class="dialog-row-badge">Current Server</span>
+          {/if}
+        </button>
+        <div class="dialog-row" role="button" tabindex="0">
+          <div class="row-dot ok"></div>
+          <span class="dialog-row-name">Dev Server (Vite)</span>
+          <span class="dialog-row-version">localhost:1420</span>
+          <button class="dialog-row-menu" type="button" aria-label="Server options" onclick={(e) => e.stopPropagation()}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <button class="dialog-add" type="button">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+        Add server
+      </button>
+    </div>
+  </div>
+{/if}
+
 <style>
-  .status-dropdown {
+  .status-wrapper {
     position: relative;
+    margin-left: auto;
+    -webkit-app-region: no-drag;
   }
+
+  /* ── Badge trigger ── */
 
   .status-badge {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 3px 10px;
+    gap: 2px;
+    padding: 6px 10px 6px 4px;
     border: none;
-    border-radius: 12px;
-    background: var(--ok);
-    color: var(--bg);
-    font-size: 11px;
-    font-weight: 600;
+    border-bottom: 2px solid transparent;
+    background: transparent;
+    color: var(--muted);
+    font-size: 12px;
     cursor: pointer;
-    transition: opacity var(--duration-fast) var(--ease-out);
+    transition: color var(--duration-fast) var(--ease-out);
+    -webkit-app-region: no-drag;
   }
-  .status-badge:hover { opacity: 0.85; }
+  .status-badge:hover {
+    color: var(--text);
+  }
+  .status-badge.active {
+    color: var(--text);
+    border-bottom-color: var(--accent);
+  }
+
+  .status-dot-wrap {
+    width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
 
   .status-dot {
     width: 6px;
     height: 6px;
     border-radius: 50%;
-    background: var(--bg);
+  }
+  .status-dot.ok { background: var(--ok); }
+  .status-dot.starting { background: var(--warn); animation: dot-pulse 1.2s ease-in-out infinite; }
+  .status-dot.stopped { background: var(--muted); }
+
+  @keyframes dot-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
   }
 
-  /* ── Panel ── */
+  /* ── Popover panel ── */
 
-  .status-panel {
+  .status-popover {
     position: absolute;
-    top: calc(100% + 8px);
+    top: calc(100% + 4px);
     right: 0;
-    width: 300px;
-    background: var(--bg-elevated);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
-    z-index: 10002;
+    width: 320px;
+    max-width: calc(100vw - 40px);
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35), 0 0 0 1px var(--border);
     overflow: hidden;
+    z-index: 10002;
+    -webkit-app-region: no-drag;
   }
 
   /* ── Tabs ── */
 
-  .status-tabs {
+  .popover-tabs {
     display: flex;
-    gap: 0;
-    padding: 0 12px;
-    border-bottom: 1px solid var(--border);
+    gap: 16px;
+    padding: 0 16px;
+    height: 36px;
+    align-items: stretch;
+    background: var(--bg-elevated);
+    border-bottom: none;
   }
 
-  .status-tab {
-    padding: 8px 10px;
+  .popover-tab {
+    padding: 0;
     font-size: 12px;
     border: none;
     background: transparent;
@@ -153,90 +317,329 @@
     cursor: pointer;
     border-bottom: 2px solid transparent;
     white-space: nowrap;
+    display: flex;
+    align-items: center;
+    transition: color var(--duration-fast) var(--ease-out);
+    -webkit-app-region: no-drag;
   }
-  .status-tab.active {
+  .popover-tab.active {
     color: var(--text);
     border-bottom-color: var(--accent);
   }
-  .status-tab:hover:not(.active) { color: var(--text); }
+  .popover-tab:hover:not(.active) { color: var(--text); }
 
-  /* ── Content ── */
+  /* ── Body ── */
 
-  .status-content {
-    padding: 8px 0;
-    max-height: 200px;
-    overflow-y: auto;
+  .popover-body {
+    padding: 8px;
+    background: var(--bg-elevated);
   }
+
+  .popover-content {
+    background: var(--bg);
+    border-radius: 6px;
+    min-height: 56px;
+    padding: 8px;
+  }
+
+  /* ── Status rows ── */
 
   .status-list {
     display: flex;
     flex-direction: column;
   }
 
-  .status-entry {
+  .status-row {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 6px 12px;
+    width: 100%;
+    height: 32px;
+    padding: 0 12px 0 8px;
+    border: none;
+    background: transparent;
+    border-radius: 6px;
+    cursor: pointer;
+    text-align: left;
+    transition: background var(--duration-fast) var(--ease-out);
+    -webkit-app-region: no-drag;
+  }
+  .status-row:hover {
+    background: var(--bg-elevated);
   }
 
-  .entry-dot {
-    width: 7px;
-    height: 7px;
+  .row-dot {
+    width: 6px;
+    height: 6px;
     border-radius: 50%;
     flex-shrink: 0;
   }
-  .entry-dot.ok { background: var(--ok); }
-  .entry-dot.warn { background: var(--warn); }
-  .entry-dot.danger { background: var(--danger); }
+  .row-dot.ok { background: var(--ok); }
+  .row-dot.starting { background: var(--warn); animation: dot-pulse 1.2s ease-in-out infinite; }
+  .row-dot.stopped { background: var(--danger); }
 
-  .entry-name {
-    font-size: 13px;
+  .row-name {
+    font-size: 14px;
     color: var(--text);
-    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1;
+    min-width: 0;
   }
 
-  .entry-version {
-    font-size: 11px;
+  .row-version {
+    font-size: 12px;
     color: var(--muted);
-    margin-left: auto;
+    white-space: nowrap;
   }
 
-  .entry-check {
+  .row-check {
     color: var(--ok);
     flex-shrink: 0;
   }
 
-  .entry-detail {
-    padding: 0 12px 6px 27px;
-    font-size: 11px;
-    color: var(--muted);
-    font-family: var(--font-mono);
-  }
-  .entry-detail.inactive {
-    font-style: italic;
-    font-family: inherit;
-  }
-
-  /* ── Footer ── */
-
-  .status-footer {
-    padding: 8px 12px;
-    border-top: 1px solid var(--border);
-  }
+  /* ── Manage servers button ── */
 
   .manage-btn {
-    width: 100%;
+    display: inline-flex;
+    align-items: center;
+    margin-top: 8px;
     padding: 6px 12px;
     font-size: 12px;
+    font-weight: 500;
     border: 1px solid var(--border);
     border-radius: 6px;
     background: transparent;
     color: var(--text);
     cursor: pointer;
     transition: background var(--duration-fast) var(--ease-out);
+    -webkit-app-region: no-drag;
   }
   .manage-btn:hover {
+    background: var(--bg-elevated);
+  }
+
+  /* ── Toggle switch ── */
+
+  .row-toggle {
+    flex-shrink: 0;
+    margin-left: auto;
+  }
+
+  .toggle-track {
+    width: 32px;
+    height: 18px;
+    border-radius: 9px;
+    background: var(--border-strong);
+    position: relative;
+    transition: background var(--duration-fast) var(--ease-out);
+  }
+
+  .row-toggle.on .toggle-track {
+    background: var(--ok);
+  }
+
+  .toggle-thumb {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: white;
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    transition: transform var(--duration-fast) var(--ease-out);
+  }
+
+  .row-toggle.on .toggle-thumb {
+    transform: translateX(14px);
+  }
+
+  /* ── Empty state ── */
+
+  .status-empty {
+    font-size: 14px;
+    color: var(--muted);
+    text-align: center;
+    padding: 12px 0;
+  }
+
+  /* ── Dialog (Manage Servers) ── */
+
+  .dialog-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 20000;
+    -webkit-app-region: no-drag;
+  }
+
+  .dialog-panel {
+    width: 560px;
+    max-width: calc(100vw - 40px);
+    max-height: calc(100vh - 80px);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .dialog-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px 12px;
+  }
+
+  .dialog-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-strong);
+    margin: 0;
+  }
+
+  .dialog-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    transition: background var(--duration-fast) var(--ease-out),
+                color var(--duration-fast) var(--ease-out);
+    -webkit-app-region: no-drag;
+  }
+  .dialog-close:hover {
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  .dialog-search {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 20px 12px;
+    padding: 8px 12px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--muted);
+  }
+  .dialog-search input {
+    flex: 1;
+    border: none;
+    background: transparent;
+    color: var(--text);
+    font-size: 14px;
+    outline: none;
+    font-family: inherit;
+  }
+  .dialog-search input::placeholder {
+    color: var(--muted);
+  }
+
+  .dialog-list {
+    margin: 0 20px;
+    background: var(--bg);
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    overflow: hidden;
+  }
+
+  .dialog-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 12px 16px;
+    border: none;
+    border-bottom: 1px solid var(--border);
+    background: transparent;
+    cursor: pointer;
+    text-align: left;
+    transition: background var(--duration-fast) var(--ease-out);
+    -webkit-app-region: no-drag;
+  }
+  .dialog-row:last-child {
+    border-bottom: none;
+  }
+  .dialog-row:hover {
+    background: var(--bg-elevated);
+  }
+
+  .dialog-row-name {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .dialog-row-version {
+    font-size: 12px;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+
+  .dialog-row-badge {
+    font-size: 11px;
+    color: var(--text);
+    background: var(--bg-elevated);
+    padding: 2px 8px;
+    border-radius: 4px;
+    margin-left: auto;
+    white-space: nowrap;
+  }
+
+  .dialog-row-menu {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    margin-left: auto;
+    flex-shrink: 0;
+    transition: background var(--duration-fast) var(--ease-out);
+    -webkit-app-region: no-drag;
+  }
+  .dialog-row-menu:hover {
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  .dialog-add {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 12px 20px 16px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 500;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text);
+    cursor: pointer;
+    transition: background var(--duration-fast) var(--ease-out);
+    -webkit-app-region: no-drag;
+  }
+  .dialog-add:hover {
     background: var(--bg);
   }
 </style>

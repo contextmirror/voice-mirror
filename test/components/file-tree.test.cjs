@@ -116,6 +116,11 @@ describe('FileTree.svelte', () => {
     assert.ok(src.includes("class:active={activeTab === 'changes'}"), 'changes tab has active class');
   });
 
+  it('imports and renders StatusDropdown in header', () => {
+    assert.ok(src.includes("import StatusDropdown from"), 'Should import StatusDropdown');
+    assert.ok(src.includes('<StatusDropdown'), 'Should render StatusDropdown in header');
+  });
+
   // ── UI: Tree structure ──
 
   it('has chevron icons for expand/collapse', () => {

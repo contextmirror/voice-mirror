@@ -37,6 +37,19 @@ function createLensStore() {
     setHidden(val) { hidden = val; },
     setPageTitle(title) { pageTitle = title; },
 
+    /**
+     * Hide the native webview so DOM overlays (dropdowns, modals, palettes)
+     * can render without the WebView2 HWND painting over them.
+     */
+    freeze() {
+      hidden = true;
+    },
+
+    /** Restore the live native webview after an overlay closes. */
+    unfreeze() {
+      hidden = false;
+    },
+
     async navigate(rawUrl) {
       let normalized = rawUrl.trim();
       if (!normalized) return;

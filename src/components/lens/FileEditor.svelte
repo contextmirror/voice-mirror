@@ -24,13 +24,15 @@
       { EditorState },
       { keymap },
       { oneDark },
+      { autocompletion },
     ] = await Promise.all([
       import('codemirror'),
       import('@codemirror/state'),
       import('@codemirror/view'),
       import('@codemirror/theme-one-dark'),
+      import('@codemirror/autocomplete'),
     ]);
-    cmCache = { EditorView, basicSetup, EditorState, keymap, oneDark };
+    cmCache = { EditorView, basicSetup, EditorState, keymap, oneDark, autocompletion };
     return cmCache;
   }
 
@@ -134,6 +136,10 @@
       const extensions = [
         cm.basicSetup,
         cm.oneDark,
+        cm.autocompletion({
+          activateOnTyping: true,
+          maxRenderedOptions: 20,
+        }),
         cm.EditorView.updateListener.of((update) => {
           if (update.docChanged) {
             tabsStore.setDirty(tab.id, true);
