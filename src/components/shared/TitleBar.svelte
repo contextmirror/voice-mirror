@@ -1,5 +1,4 @@
 <script>
-  import { minimizeWindow, maximizeWindow, quitApp } from '../../lib/api.js';
   import { overlayStore } from '../../lib/stores/overlay.svelte.js';
   import { navigationStore } from '../../lib/stores/navigation.svelte.js';
 
@@ -11,38 +10,6 @@
 
   /** @type {{ centerContent?: import('svelte').Snippet }} */
   let { centerContent } = $props();
-
-  let maximized = $state(false);
-
-  async function handleMinimize() {
-    try {
-      await minimizeWindow();
-    } catch (err) {
-      console.error('[TitleBar] Minimize failed:', err);
-    }
-  }
-
-  async function handleMaximize() {
-    try {
-      const result = await maximizeWindow();
-      if (result?.data?.maximized !== undefined) {
-        maximized = result.data.maximized;
-      } else {
-        // Toggle local state as fallback
-        maximized = !maximized;
-      }
-    } catch (err) {
-      console.error('[TitleBar] Maximize failed:', err);
-    }
-  }
-
-  async function handleClose() {
-    try {
-      await quitApp();
-    } catch (err) {
-      console.error('[TitleBar] Quit failed:', err);
-    }
-  }
 
   async function handleCompact() {
     try {
@@ -97,47 +64,9 @@
         <circle cx="12" cy="12" r="5"/>
       </svg>
     </button>
-
-    <button
-      class="win-btn win-minimize"
-      onclick={handleMinimize}
-      aria-label="Minimize window"
-      title="Minimize"
-    >
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <line x1="5" y1="12" x2="19" y2="12"/>
-      </svg>
-    </button>
-
-    <button
-      class="win-btn win-maximize"
-      onclick={handleMaximize}
-      aria-label={maximized ? 'Restore window' : 'Maximize window'}
-      title={maximized ? 'Restore' : 'Maximize'}
-    >
-      {#if maximized}
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <rect x="7" y="3" width="14" height="14" rx="1"/>
-          <path d="M3 7v12a2 2 0 0 0 2 2h12"/>
-        </svg>
-      {:else}
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <rect x="5" y="5" width="14" height="14" rx="1"/>
-        </svg>
-      {/if}
-    </button>
-
-    <button
-      class="win-btn win-close"
-      onclick={handleClose}
-      aria-label="Close window"
-      title="Close"
-    >
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <line x1="18" y1="6" x2="6" y2="18"/>
-        <line x1="6" y1="6" x2="18" y2="18"/>
-      </svg>
-    </button>
+    <!-- Native window controls injected by tauri-plugin-decorum on Windows -->
+    <div class="native-controls-spacer"></div>
+    <div data-tauri-decorum-tb class="decorum-controls"></div>
   </div>
 </header>
 
@@ -150,7 +79,7 @@
     justify-content: space-between;
     height: 40px;
     min-height: 40px;
-    padding: 0 12px;
+    padding: 0 0 0 12px;
     background: var(--chrome, var(--bg-elevated));
     border-bottom: 1px solid var(--border);
     user-select: none;
@@ -222,7 +151,7 @@
   .window-controls {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 2px;
   }
 
   .win-btn {
@@ -239,6 +168,8 @@
     transition: background var(--duration-fast) var(--ease-out),
                 color var(--duration-fast) var(--ease-out);
     padding: 0;
+    -webkit-app-region: no-drag;
+    z-index: 10001;
   }
 
   .win-btn svg {
@@ -256,19 +187,25 @@
     color: var(--accent);
   }
 
-  .win-btn.win-minimize:hover {
-    background: var(--warn-subtle);
-    color: var(--warn);
+  /* Spacer before native controls */
+  .native-controls-spacer {
+    width: 4px;
   }
 
-  .win-btn.win-maximize:hover {
-    background: var(--ok-subtle);
-    color: var(--ok);
+  /* Container for decorum-injected native buttons */
+  .decorum-controls {
+    display: flex;
+    flex-direction: row;
+    -webkit-app-region: no-drag;
   }
 
-  .win-btn.win-close:hover {
-    background: var(--danger-subtle);
-    color: var(--danger);
+  /* Style the native decorum buttons to match our titlebar height */
+  :global(button.decorum-tb-btn),
+  :global(button#decorum-tb-minimize),
+  :global(button#decorum-tb-maximize),
+  :global(button#decorum-tb-close),
+  :global(div[data-tauri-decorum-tb]) {
+    height: 40px !important;
   }
 
   @media (prefers-reduced-motion: reduce) {

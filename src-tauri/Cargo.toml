@@ -64,6 +64,7 @@ sysinfo = { version = "0.33", default-features = false, features = ["system"] }
 
 # Clipboard access for text injection (dictation feature)
 arboard = "3"
+tauri-plugin-decorum = "1.1.1"
 
 [[bin]]
 name = "voice-mirror-mcp"

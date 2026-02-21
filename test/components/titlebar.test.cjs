@@ -75,19 +75,15 @@ describe('TitleBar.svelte', () => {
 });
 
 describe('TitleBar: window controls', () => {
-  it('has minimize button', () => {
-    assert.ok(src.includes('win-minimize'), 'Should have minimize button');
-  });
-
-  it('has maximize button', () => {
-    assert.ok(src.includes('win-maximize'), 'Should have maximize button');
-  });
-
-  it('has close button', () => {
-    assert.ok(src.includes('win-close'), 'Should have close button');
+  it('uses native decorum controls for min/max/close', () => {
+    assert.ok(src.includes('data-tauri-decorum-tb'), 'Should use decorum plugin for native controls');
   });
 
   it('has compact/orb button', () => {
     assert.ok(src.includes('win-compact'), 'Should have compact button');
+  });
+
+  it('has decorum-controls container', () => {
+    assert.ok(src.includes('decorum-controls'), 'Should have decorum-controls class');
   });
 });

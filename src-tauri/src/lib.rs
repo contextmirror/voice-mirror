@@ -48,6 +48,7 @@ pub fn run() {
     services::logger::init();
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_decorum::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_single_instance::init(|_app, _argv, _cwd| {
@@ -247,6 +248,13 @@ pub fn run() {
             if let Some(window) = app.get_webview_window("main") {
                 use tauri::window::Color;
                 let _ = window.set_background_color(Some(Color(0, 0, 0, 0)));
+
+                // Create native overlay titlebar (Windows: native min/max/close buttons)
+                #[cfg(windows)]
+                {
+                    use tauri_plugin_decorum::WebviewWindowExt;
+                    let _ = window.create_overlay_titlebar();
+                }
             }
 
             // Pre-load TTS engine in background so it's ready for the first message.

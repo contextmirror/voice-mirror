@@ -295,32 +295,13 @@ describe('Slider.svelte', () => {
 describe('TitleBar.svelte', () => {
   const src = readComponent('TitleBar.svelte');
 
-  it('imports minimizeWindow from api', () => {
-    assert.ok(src.includes('minimizeWindow'), 'Should import minimizeWindow');
-  });
-
-  it('imports maximizeWindow from api', () => {
-    assert.ok(src.includes('maximizeWindow'), 'Should import maximizeWindow');
-  });
-
-  it('imports quitApp from api', () => {
-    assert.ok(src.includes('quitApp'), 'Should import quitApp');
-  });
-
   it('imports overlayStore for compact mode', () => {
     assert.ok(src.includes('overlayStore'), 'Should import overlayStore');
   });
 
-  it('has minimize button with aria-label', () => {
-    assert.ok(src.includes('aria-label="Minimize window"'), 'Should have minimize aria-label');
-  });
-
-  it('has maximize button with aria-label', () => {
-    assert.ok(src.includes('Maximize window'), 'Should have maximize aria-label');
-  });
-
-  it('has close button with aria-label', () => {
-    assert.ok(src.includes('aria-label="Close window"'), 'Should have close aria-label');
+  it('uses native decorum controls for window buttons', () => {
+    assert.ok(src.includes('data-tauri-decorum-tb'), 'Should use decorum native controls');
+    assert.ok(src.includes('decorum-controls'), 'Should have decorum-controls class');
   });
 
   it('has compact/orb button with aria-label', () => {
@@ -383,24 +364,12 @@ describe('TitleBar.svelte', () => {
     assert.ok(src.includes('data-tauri-drag-region'), 'Should have drag region attribute');
   });
 
-  it('has win-minimize CSS class', () => {
-    assert.ok(src.includes('.win-minimize'), 'Should have minimize button CSS');
-  });
-
-  it('has win-maximize CSS class', () => {
-    assert.ok(src.includes('.win-maximize'), 'Should have maximize button CSS');
-  });
-
-  it('has win-close CSS class', () => {
-    assert.ok(src.includes('.win-close'), 'Should have close button CSS');
-  });
-
   it('has win-compact CSS class', () => {
     assert.ok(src.includes('.win-compact'), 'Should have compact button CSS');
   });
 
-  it('tracks maximized state', () => {
-    assert.ok(src.includes('maximized'), 'Should track maximized state');
+  it('styles native decorum buttons to match titlebar height', () => {
+    assert.ok(src.includes('decorum-tb-btn') || src.includes('decorum-tb-minimize'), 'Should style native buttons');
   });
 
   it('accepts centerContent snippet prop', () => {

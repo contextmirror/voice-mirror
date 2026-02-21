@@ -22,6 +22,7 @@
     "core:window:allow-set-always-on-top",
     "core:window:allow-set-resizable",
     "dialog:default",
+    "decorum:allow-show-snap-overlay",
     "core:webview:allow-create-webview",
     "core:webview:allow-webview-close",
     "core:webview:allow-set-webview-size",
