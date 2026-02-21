@@ -412,3 +412,17 @@ export async function lensCloseWebview() {
 export async function lensSetVisible(visible) {
   return invoke('lens_set_visible', { visible });
 }
+
+// ============ Files ============
+
+export async function listDirectory(path) {
+  return invoke('list_directory', { path: path || null });
+}
+
+export async function getGitChanges() {
+  return invoke('get_git_changes');
+}
+
+export async function getProjectRoot() {
+  return invoke('get_project_root');
+}

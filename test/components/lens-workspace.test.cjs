@@ -67,18 +67,12 @@ describe('LensWorkspace.svelte', () => {
     assert.ok(src.includes('<Terminal'));
   });
 
-  // Files panel skeleton (still placeholder)
-  it('has files area with tab headers', () => {
-    assert.ok(src.includes('files-area'));
-    assert.ok(src.includes('files-header'));
+  // Files panel (FileTree component)
+  it('imports FileTree component', () => {
+    assert.ok(src.includes("import FileTree from"));
   });
-  it('has All files and Changes tabs', () => {
-    assert.ok(src.includes('All files'));
-    assert.ok(src.includes('Changes'));
-  });
-  it('has file tree with folders and files', () => {
-    assert.ok(src.includes('files-tree'));
-    assert.ok(src.includes('tree-item'));
+  it('renders FileTree in the right panel', () => {
+    assert.ok(src.includes('<FileTree'));
   });
 
   // Preview area

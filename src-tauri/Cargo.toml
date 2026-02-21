@@ -33,6 +33,9 @@ portable-pty = "0.8"
 reqwest = { version = "0.12", features = ["stream", "json"] }
 futures-util = "0.3"
 
+# File tree (.gitignore pattern matching)
+ignore = "0.4"
+
 # MCP handler dependencies
 notify = "7"
 url = "2"

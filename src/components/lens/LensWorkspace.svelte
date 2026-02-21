@@ -1,6 +1,7 @@
 <script>
   import LensToolbar from './LensToolbar.svelte';
   import LensPreview from './LensPreview.svelte';
+  import FileTree from './FileTree.svelte';
   import SplitPanel from '../shared/SplitPanel.svelte';
   import ChatPanel from '../chat/ChatPanel.svelte';
   import Terminal from '../terminal/Terminal.svelte';
@@ -42,25 +43,7 @@
                 </div>
               {/snippet}
               {#snippet panelB()}
-                <div class="files-area">
-                  <div class="files-header">
-                    <button class="files-tab active">All files</button>
-                    <button class="files-tab">0 Changes</button>
-                  </div>
-                  <div class="files-tree">
-                    <div class="tree-item folder"><span class="tree-icon">></span> .github</div>
-                    <div class="tree-item folder"><span class="tree-icon">></span> docs</div>
-                    <div class="tree-item folder"><span class="tree-icon">></span> src</div>
-                    <div class="tree-item folder"><span class="tree-icon">></span> src-tauri</div>
-                    <div class="tree-item folder"><span class="tree-icon">></span> test</div>
-                    <div class="tree-item file"><span class="tree-icon-file"></span> .gitignore</div>
-                    <div class="tree-item file"><span class="tree-icon-file"></span> CLAUDE.md</div>
-                    <div class="tree-item file"><span class="tree-icon-file"></span> index.html</div>
-                    <div class="tree-item file"><span class="tree-icon-file"></span> package.json</div>
-                    <div class="tree-item file"><span class="tree-icon-file"></span> README.md</div>
-                    <div class="tree-item file"><span class="tree-icon-file"></span> vite.config.js</div>
-                  </div>
-                </div>
+                <FileTree />
               {/snippet}
             </SplitPanel>
           {/snippet}
@@ -140,67 +123,6 @@
     background: var(--bg);
     border-right: 1px solid var(--border);
   }
-
-  /* ── Files Panel Skeleton ── */
-
-  .files-area {
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-    overflow: hidden;
-    background: var(--bg);
-    border-left: 1px solid var(--border);
-  }
-
-  .files-header {
-    display: flex;
-    gap: 0;
-    padding: 0 8px;
-    border-bottom: 1px solid var(--border);
-    flex-shrink: 0;
-  }
-  .files-tab {
-    padding: 6px 10px;
-    font-size: 12px;
-    border: none;
-    background: transparent;
-    color: var(--muted);
-    cursor: pointer;
-    border-bottom: 2px solid transparent;
-  }
-  .files-tab.active {
-    color: var(--text);
-    border-bottom-color: var(--accent);
-  }
-  .files-tab:hover:not(.active) { color: var(--text); }
-
-  .files-tree {
-    flex: 1;
-    overflow-y: auto;
-    padding: 4px 0;
-  }
-  .tree-item {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    padding: 3px 12px;
-    font-size: 12px;
-    color: var(--text);
-    cursor: pointer;
-    font-family: var(--font-mono);
-  }
-  .tree-item:hover { background: var(--bg-elevated); }
-  .tree-icon {
-    width: 14px;
-    text-align: center;
-    color: var(--muted);
-    font-size: 10px;
-  }
-  .tree-icon-file {
-    width: 14px;
-  }
-  .tree-item.folder { color: var(--text); }
-  .tree-item.file { color: var(--muted); padding-left: 20px; }
 
   /* ── Terminal Panel ── */
 

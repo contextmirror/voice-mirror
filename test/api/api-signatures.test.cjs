@@ -119,6 +119,10 @@ describe('api.js -- critical Tauri command names', () => {
     'lens_resize_webview',
     'lens_close_webview',
     'lens_set_visible',
+    // Files
+    'list_directory',
+    'get_git_changes',
+    'get_project_root',
   ];
 
   for (const cmd of criticalCommands) {
@@ -213,6 +217,10 @@ describe('api.js -- exported async functions', () => {
     'lensResizeWebview',
     'lensCloseWebview',
     'lensSetVisible',
+    // Files
+    'listDirectory',
+    'getGitChanges',
+    'getProjectRoot',
   ];
 
   for (const fn of expectedExports) {
@@ -236,7 +244,7 @@ describe('api.js -- exported async functions', () => {
 });
 
 describe('api.js -- section organization', () => {
-  const sections = ['Config', 'Window', 'Voice', 'AI', 'Inbox', 'Chat', 'Tools', 'Shortcuts', 'Performance Stats', 'Config Migration', 'Lens'];
+  const sections = ['Config', 'Window', 'Voice', 'AI', 'Inbox', 'Chat', 'Tools', 'Shortcuts', 'Performance Stats', 'Config Migration', 'Lens', 'Files'];
 
   for (const section of sections) {
     it(`has "${section}" section comment`, () => {

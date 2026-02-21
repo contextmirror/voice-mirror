@@ -4,6 +4,7 @@ pub mod ipc;
 pub mod mcp;
 pub mod providers;
 pub mod services;
+pub mod util;
 pub mod voice;
 
 use commands::ai as ai_cmds;
@@ -14,6 +15,7 @@ use commands::shortcuts as shortcut_cmds;
 use commands::tools as tools_cmds;
 use commands::voice as voice_cmds;
 use commands::window as window_cmds;
+use commands::files as files_cmds;
 use commands::lens as lens_cmds;
 
 use providers::manager::AiManager;
@@ -145,6 +147,10 @@ pub fn run() {
             lens_cmds::lens_resize_webview,
             lens_cmds::lens_close_webview,
             lens_cmds::lens_set_visible,
+            // File tree
+            files_cmds::list_directory,
+            files_cmds::get_git_changes,
+            files_cmds::get_project_root,
         ])
         .setup(|app| {
             // Clear stale listener locks from previous sessions.
