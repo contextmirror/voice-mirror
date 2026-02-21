@@ -6,8 +6,8 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "dev": "tauri dev",
-    "build": "tauri build",
+    "dev": "cargo build --manifest-path src-tauri/Cargo.toml --bin voice-mirror-mcp && tauri dev",
+    "build": "cargo build --manifest-path src-tauri/Cargo.toml --release --bin voice-mirror-mcp && tauri build",
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./jsconfig.json",
     "test": "node --test \"test/**/*.test.cjs\" \"test/**/*.test.mjs\"",
