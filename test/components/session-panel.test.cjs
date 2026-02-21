@@ -119,6 +119,62 @@ describe('SessionPanel.svelte', () => {
     assert.ok(src.includes('ondblclick'), 'Should handle double-click for rename');
   });
 
+  // ── Auto-Save & Persistence ──
+
+  it('has auto-save effect that watches message count', () => {
+    assert.ok(src.includes('lastSavedMessageCount'), 'Should track saved message count');
+    assert.ok(src.includes('saveTimeout'), 'Should have debounce timeout');
+    assert.ok(src.includes('saveActiveSession'), 'Should have saveActiveSession function');
+  });
+
+  it('debounces auto-save at 500ms', () => {
+    assert.ok(src.includes('500'), 'Should debounce at 500ms');
+  });
+
+  it('saves session with projectPath and messages', () => {
+    assert.ok(src.includes('projectPath'), 'Should include projectPath in saved data');
+    assert.ok(src.includes('m.text'), 'Should map message text to content');
+    assert.ok(src.includes('chatSave(toSave)'), 'Should call chatSave with session data');
+  });
+
+  it('saves current session before switching to another', () => {
+    // handleLoadSession should call saveActiveSession before clearing
+    assert.ok(
+      /handleLoadSession[\s\S]*?saveActiveSession[\s\S]*?clearMessages/.test(src),
+      'Should save before clearing messages on session switch'
+    );
+  });
+
+  it('saves current session before creating a new one', () => {
+    // handleNewSession should call saveActiveSession before clearing
+    assert.ok(
+      /handleNewSession[\s\S]*?saveActiveSession[\s\S]*?clearMessages/.test(src),
+      'Should save before clearing messages on new session'
+    );
+  });
+
+  it('resets lastSavedMessageCount when loading a session', () => {
+    assert.ok(
+      /handleLoadSession[\s\S]*?lastSavedMessageCount\s*=\s*0/.test(src) ||
+      /handleLoadSession[\s\S]*?lastSavedMessageCount\s*=\s*chat/.test(src),
+      'Should reset save counter on session load'
+    );
+  });
+
+  // ── Auto-Title ──
+
+  it('auto-titles new sessions from first user message', () => {
+    assert.ok(src.includes('generateTitle'), 'Should have generateTitle function');
+    assert.ok(src.includes('New Session'), 'Should check for default session name');
+    assert.ok(src.includes("m.role === 'user'") || src.includes('role === \'user\''), 'Should find first user message');
+  });
+
+  // ── Terminal Stub ──
+
+  it('has terminal session stub for future linking', () => {
+    assert.ok(src.includes('terminalSessionId'), 'Should have terminalSessionId TODO stub');
+  });
+
   // ── State ──
 
   it('uses $state or $derived for reactivity', () => {

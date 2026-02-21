@@ -7,6 +7,95 @@
   let activeProject = $derived(projectStore.activeProject);
   let sessions = $derived(projectStore.sessions);
 
+  /** Auto-save tracking */
+  let lastSavedMessageCount = 0;
+  let saveTimeout = null;
+
+  /**
+   * Auto-save: persist messages to disk when they change.
+   * Debounced 500ms — same pattern as ChatList.
+   */
+  $effect(() => {
+    const msgCount = chatStore.messages.length;
+    const activeId = chatStore.activeChatId;
+    if (!activeId) return;
+    if (msgCount === lastSavedMessageCount) return;
+
+    if (saveTimeout) clearTimeout(saveTimeout);
+    saveTimeout = setTimeout(() => {
+      saveActiveSession();
+      lastSavedMessageCount = msgCount;
+    }, 500);
+  });
+
+  /**
+   * Auto-title: when first user message arrives in a "New Session",
+   * generate a title from the message text.
+   */
+  $effect(() => {
+    const activeId = chatStore.activeChatId;
+    const msgs = chatStore.messages;
+    if (!activeId || msgs.length === 0) return;
+
+    const session = sessions.find((s) => s.id === activeId);
+    if (!session || session.name !== 'New Session') return;
+
+    const firstUserMsg = msgs.find((m) => m.role === 'user');
+    if (!firstUserMsg) return;
+
+    const title = generateTitle(firstUserMsg.text);
+    if (title) {
+      chatRename(activeId, title)
+        .then(() => projectStore.loadSessions())
+        .catch((err) => console.error('[SessionPanel] Auto-title failed:', err));
+    }
+  });
+
+  /**
+   * Generate a short title from message text.
+   * Takes first ~50 characters, trims at word boundary.
+   */
+  function generateTitle(text) {
+    const cleaned = text.replace(/\s+/g, ' ').trim();
+    if (!cleaned) return null;
+    if (cleaned.length <= 50) return cleaned;
+    const cut = cleaned.slice(0, 50);
+    const lastSpace = cut.lastIndexOf(' ');
+    return (lastSpace > 20 ? cut.slice(0, lastSpace) : cut) + '...';
+  }
+
+  /**
+   * Save the current messages to the active session file.
+   */
+  async function saveActiveSession() {
+    const activeId = chatStore.activeChatId;
+    if (!activeId) return;
+
+    const session = sessions.find((s) => s.id === activeId);
+    if (!session) return;
+
+    const toSave = {
+      id: activeId,
+      name: session.name || 'New Session',
+      createdAt: session.createdAt || Date.now(),
+      updatedAt: Date.now(),
+      projectPath: activeProject?.path || null,
+      // TODO: terminalSessionId — link to terminal instance for replay
+      messages: chatStore.messages.map((m) => ({
+        id: m.id,
+        role: m.role,
+        content: m.text,
+        timestamp: m.timestamp,
+      })),
+    };
+
+    try {
+      await chatSave(toSave);
+    } catch (err) {
+      console.error('[SessionPanel] Auto-save failed:', err);
+    }
+  }
+
   /** Context menu state */
   let contextMenu = $state({ visible: false, x: 0, y: 0, sessionId: null });
 
@@ -115,18 +204,28 @@
   }
 
   async function handleLoadSession(id) {
+    // Don't reload the already-active session
+    if (id === chatStore.activeChatId) return;
+
     try {
+      // Save current session before switching
+      if (chatStore.activeChatId && chatStore.messages.length > 0) {
+        await saveActiveSession();
+      }
+
       const result = await chatLoad(id);
       const chat = result?.success !== false ? (result?.data || result) : null;
       if (!chat) return;
 
       chatStore.setActiveChatId(chat.id);
       chatStore.clearMessages();
+      lastSavedMessageCount = 0;
 
       if (chat.messages && chat.messages.length > 0) {
         for (const msg of chat.messages) {
           chatStore.addMessage(msg.role, msg.content || msg.text, msg.metadata || {});
         }
+        lastSavedMessageCount = chat.messages.length;
       }
 
       // Stay in Lens mode — the LensWorkspace chat panel picks up the active chat
@@ -139,6 +238,11 @@
   async function handleNewSession() {
     if (!activeProject) return;
 
+    // Save current session before creating a new one
+    if (chatStore.activeChatId && chatStore.messages.length > 0) {
+      await saveActiveSession();
+    }
+
     const id = uid();
     const now = Date.now();
     const chat = {
@@ -148,12 +252,14 @@
       createdAt: now,
       updatedAt: now,
       projectPath: activeProject.path,
+      // TODO: terminalSessionId — allocate terminal instance for this session
     };
 
     try {
       await chatSave(chat);
       chatStore.setActiveChatId(id);
       chatStore.clearMessages();
+      lastSavedMessageCount = 0;
       // Stay in Lens mode — reload sessions to show the new one
       projectStore.loadSessions();
     } catch (err) {
