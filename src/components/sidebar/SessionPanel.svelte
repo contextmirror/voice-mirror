@@ -295,6 +295,7 @@
           onclick={() => handleLoadSession(session.id)}
           ondblclick={() => { renameValue = session.name || ''; renamingId = session.id; }}
           oncontextmenu={(e) => handleContextMenu(e, session.id)}
+          title={session.name || 'Untitled'}
         >
           <span class="session-name">{session.name || 'Untitled'}</span>
           <span class="session-time">{formatRelativeTime(session.updatedAt)}</span>
