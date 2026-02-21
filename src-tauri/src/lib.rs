@@ -4,7 +4,9 @@ pub mod ipc;
 pub mod mcp;
 pub mod providers;
 pub mod services;
+pub mod util;
 pub mod voice;
+pub mod shell;
 
 use commands::ai as ai_cmds;
 use commands::chat as chat_cmds;
@@ -14,6 +16,9 @@ use commands::shortcuts as shortcut_cmds;
 use commands::tools as tools_cmds;
 use commands::voice as voice_cmds;
 use commands::window as window_cmds;
+use commands::files as files_cmds;
+use commands::lens as lens_cmds;
+use commands::shell as shell_cmds;
 
 use providers::manager::AiManager;
 use providers::ProviderEvent;
@@ -45,6 +50,7 @@ pub fn run() {
     services::logger::init();
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_decorum::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_single_instance::init(|_app, _argv, _cwd| {
@@ -61,6 +67,13 @@ pub fn run() {
         ))
         .manage(std::sync::Mutex::new(sysinfo::System::new()) as window_cmds::PerfMonitorState)
         .manage(std::sync::Mutex::new(None::<Box<dyn voice::tts::TtsEngine>>) as PreloadedTtsState)
+        .manage(lens_cmds::LensState {
+            webview_label: std::sync::Mutex::new(None),
+            bounds: std::sync::Mutex::new(None),
+        })
+        .manage(shell_cmds::ShellManagerState(std::sync::Mutex::new(
+            crate::shell::ShellManager::new(),
+        )))
         .invoke_handler(tauri::generate_handler![
             // Config
             config_cmds::get_config,
@@ -85,6 +98,7 @@ pub fn run() {
             screenshot_cmds::list_windows,
             screenshot_cmds::capture_monitor,
             screenshot_cmds::capture_window,
+            screenshot_cmds::lens_capture_browser,
             // Voice
             voice_cmds::start_voice,
             voice_cmds::stop_voice,
@@ -130,6 +144,27 @@ pub fn run() {
             shortcut_cmds::unregister_all_shortcuts,
             // Performance stats
             window_cmds::get_process_stats,
+            // Lens (embedded browser)
+            lens_cmds::lens_create_webview,
+            lens_cmds::lens_navigate,
+            lens_cmds::lens_go_back,
+            lens_cmds::lens_go_forward,
+            lens_cmds::lens_reload,
+            lens_cmds::lens_resize_webview,
+            lens_cmds::lens_close_webview,
+            lens_cmds::lens_set_visible,
+            // File tree
+            files_cmds::list_directory,
+            files_cmds::get_git_changes,
+            files_cmds::get_project_root,
+            files_cmds::read_file,
+            files_cmds::write_file,
+            // Shell terminals
+            shell_cmds::shell_spawn,
+            shell_cmds::shell_input,
+            shell_cmds::shell_resize,
+            shell_cmds::shell_kill,
+            shell_cmds::shell_list,
         ])
         .setup(|app| {
             // Clear stale listener locks from previous sessions.
@@ -221,11 +256,45 @@ pub fn run() {
                 warn!("AI manager event receiver was already taken — event forwarding not started");
             }
 
+            // Shell terminal event forwarding loop
+            {
+                let shell_state = app.state::<shell_cmds::ShellManagerState>();
+                let shell_event_rx = {
+                    let mut manager = shell_state
+                        .0
+                        .lock()
+                        .map_err(|e| format!("Failed to lock shell manager during setup: {}", e))?;
+                    manager.take_event_rx()
+                };
+
+                if let Some(mut rx) = shell_event_rx {
+                    let app_handle_shell = app.handle().clone();
+                    info!("Starting shell event forwarding loop");
+
+                    tauri::async_runtime::spawn(async move {
+                        while let Some(event) = rx.recv().await {
+                            if app_handle_shell.emit("shell-output", &event).is_err() {
+                                warn!("Failed to emit shell-output event, stopping loop");
+                                break;
+                            }
+                        }
+                        info!("Shell event forwarding loop ended");
+                    });
+                }
+            }
+
             // Ensure WebView2 background is fully transparent on Windows
             // (transparent: true in config handles the window, but WebView2 needs this too)
             if let Some(window) = app.get_webview_window("main") {
                 use tauri::window::Color;
                 let _ = window.set_background_color(Some(Color(0, 0, 0, 0)));
+
+                // Create native overlay titlebar (Windows: native min/max/close buttons)
+                #[cfg(windows)]
+                {
+                    use tauri_plugin_decorum::WebviewWindowExt;
+                    let _ = window.create_overlay_titlebar();
+                }
             }
 
             // Pre-load TTS engine in background so it's ready for the first message.
@@ -363,6 +432,13 @@ pub fn run() {
             // Mode-aware: dashboard saves to dashboardX/Y + panelWidth/Height,
             // orb saves to orbX/Y only (preserving dashboard dimensions).
             if let tauri::WindowEvent::CloseRequested { .. } = event {
+                // Kill all shell terminal sessions
+                if let Some(state) = _window.try_state::<shell_cmds::ShellManagerState>() {
+                    if let Ok(mut manager) = state.0.lock() {
+                        manager.kill_all();
+                    }
+                }
+
                 use crate::config::persistence;
                 use crate::services::platform;
 

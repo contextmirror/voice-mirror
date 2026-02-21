@@ -125,13 +125,22 @@ pub fn chat_list() -> IpcResponse {
             .map(|a| a.len())
             .unwrap_or(0);
 
-        chats.push(serde_json::json!({
+        // Include projectPath if present (for Lens mode project-scoped sessions)
+        let project_path = chat.get("projectPath").and_then(|v| v.as_str());
+
+        let mut meta = serde_json::json!({
             "id": id,
             "name": name,
             "createdAt": created_at,
             "updatedAt": updated_at,
             "messageCount": message_count,
-        }));
+        });
+
+        if let Some(pp) = project_path {
+            meta["projectPath"] = serde_json::json!(pp);
+        }
+
+        chats.push(meta);
     }
 
     // Sort by updatedAt descending (most recent first)

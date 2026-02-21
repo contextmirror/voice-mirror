@@ -61,8 +61,8 @@ pub enum AppToMcp {
 // Length-prefixed framing
 // ---------------------------------------------------------------------------
 
-/// Maximum message size (1 MB). Prevents runaway reads.
-const MAX_MESSAGE_SIZE: u32 = 1024 * 1024;
+/// Maximum message size (10 MB). Screenshots can be several MB as base64.
+const MAX_MESSAGE_SIZE: u32 = 10 * 1024 * 1024;
 
 /// Write a length-prefixed JSON message to the given writer.
 pub async fn write_message<W, T>(writer: &mut W, msg: &T) -> Result<(), std::io::Error>

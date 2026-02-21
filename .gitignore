@@ -52,3 +52,4 @@ tools/espeak-ng/
 # Local-only
 CLAUDE.md
 scripts/
+docs/internal/

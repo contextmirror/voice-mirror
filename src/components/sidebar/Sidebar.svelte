@@ -4,6 +4,8 @@
   import { voiceStore } from '../../lib/stores/voice.svelte.js';
   import { PROVIDER_ICONS } from '../../lib/providers.js';
   import ChatList from './ChatList.svelte';
+  import ProjectStrip from './ProjectStrip.svelte';
+  import SessionPanel from './SessionPanel.svelte';
 
   let aiDisplayName = $derived(aiStatusStore.displayName || 'AI Provider');
   let aiRunning = $derived(aiStatusStore.running);
@@ -13,12 +15,11 @@
 
   const collapsed = $derived(navigationStore.sidebarCollapsed);
   const activeView = $derived(navigationStore.activeView);
+  const appMode = $derived(navigationStore.appMode);
 
   const tabs = [
     { id: 'chat', label: 'Chat', tooltip: 'Chat' },
     { id: 'terminal', label: 'Terminal', tooltip: 'Terminal' },
-    { id: 'browser', label: 'Browser', tooltip: 'Browser' },
-    { id: 'settings', label: 'Settings', tooltip: 'Settings' },
   ];
 
   function handleTabClick(tabId) {
@@ -61,38 +62,57 @@
     {/if}
   </div>
 
-  <!-- Chat List (only visible when on chat view and expanded) -->
-  {#if activeView === 'chat' && !collapsed}
-    <div class="sidebar-chat-section">
-      <ChatList />
+  {#if appMode === 'mirror'}
+    <!-- Chat List (only visible when on chat view and expanded) -->
+    {#if activeView === 'chat' && !collapsed}
+      <div class="sidebar-chat-section">
+        <ChatList />
+      </div>
+    {/if}
+
+    <!-- Navigation Tabs -->
+    <nav class="sidebar-nav">
+      {#each tabs as tab}
+        <button
+          class="nav-item"
+          class:active={activeView === tab.id}
+          data-tooltip={tab.tooltip}
+          onclick={() => handleTabClick(tab.id)}
+          aria-label={tab.label}
+        >
+          {#if tab.id === 'chat'}
+            <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          {:else if tab.id === 'terminal'}
+            <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+          {/if}
+          {#if !collapsed}
+            <span class="nav-label">{tab.label}</span>
+          {/if}
+        </button>
+      {/each}
+    </nav>
+  {:else}
+    <div class="lens-sidebar">
+      <ProjectStrip />
+      {#if !collapsed}
+        <SessionPanel />
+      {/if}
     </div>
   {/if}
 
-  <!-- Navigation Tabs -->
-  <nav class="sidebar-nav">
-    {#each tabs as tab}
-      <button
-        class="nav-item"
-        class:active={activeView === tab.id}
-        data-tooltip={tab.tooltip}
-        onclick={() => handleTabClick(tab.id)}
-        aria-label={tab.label}
-      >
-        {#if tab.id === 'chat'}
-          <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-        {:else if tab.id === 'terminal'}
-          <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
-        {:else if tab.id === 'browser'}
-          <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-        {:else if tab.id === 'settings'}
-          <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-        {/if}
-        {#if !collapsed}
-          <span class="nav-label">{tab.label}</span>
-        {/if}
-      </button>
-    {/each}
-  </nav>
+  <!-- Settings (pinned above footer) -->
+  <button
+    class="nav-item settings-item"
+    class:active={activeView === 'settings'}
+    data-tooltip="Settings"
+    onclick={() => handleTabClick('settings')}
+    aria-label="Settings"
+  >
+    <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    {#if !collapsed}
+      <span class="nav-label">Settings</span>
+    {/if}
+  </button>
 
   <!-- Voice Status + Collapse Toggle -->
   <div class="sidebar-footer">
@@ -276,6 +296,14 @@
     color: #f59e0b;
   }
 
+  /* ========== Lens Sidebar ========== */
+  .lens-sidebar {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+    min-height: 0;
+  }
+
   /* ========== Chat List Section ========== */
   .sidebar-chat-section {
     border-bottom: 1px solid var(--border);
@@ -384,6 +412,18 @@
     .status-dot {
       transition: none;
     }
+  }
+
+  /* ========== Settings (pinned to bottom) ========== */
+  .settings-item {
+    margin: 0 8px 0;
+    width: calc(100% - 16px);
+    flex-shrink: 0;
+  }
+
+  .collapsed .settings-item {
+    margin: 0 4px 0;
+    width: calc(100% - 8px);
   }
 
   /* ========== Footer ========== */

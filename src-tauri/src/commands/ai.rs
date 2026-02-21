@@ -368,10 +368,24 @@ pub async fn write_user_message(
 
     // Build data URL for image if present (used by both pipe and inbox paths)
     let image_data_url = image_path.as_deref().and_then(|p| {
-        let bytes = std::fs::read(p).ok()?;
-        let b64 = crate::voice::tts::crypto::base64_encode(&bytes);
-        Some(format!("data:image/png;base64,{}", b64))
+        tracing::info!("[write_user_message] Image path: {}", p);
+        match std::fs::read(p) {
+            Ok(bytes) => {
+                tracing::info!("[write_user_message] Image file read OK, {} bytes", bytes.len());
+                let b64 = crate::voice::tts::crypto::base64_encode(&bytes);
+                let url = format!("data:image/png;base64,{}", b64);
+                tracing::info!("[write_user_message] Data URL generated, {} chars", url.len());
+                Some(url)
+            }
+            Err(e) => {
+                tracing::error!("[write_user_message] Failed to read image file: {}", e);
+                None
+            }
+        }
     });
+    if image_path.is_some() && image_data_url.is_none() {
+        tracing::warn!("[write_user_message] Image path provided but data URL is None — image will be lost");
+    }
 
     // Try pipe first for instant delivery
     if pipe_state.is_connected().await {

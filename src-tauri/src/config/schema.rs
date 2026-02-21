@@ -22,11 +22,15 @@ pub struct AppConfig {
     #[serde(default)]
     pub sidebar: SidebarConfig,
     #[serde(default)]
+    pub workspace: WorkspaceConfig,
+    #[serde(default)]
     pub user: UserConfig,
     #[serde(default)]
     pub system: SystemConfig,
     #[serde(default)]
     pub ai: AiConfig,
+    #[serde(default)]
+    pub projects: ProjectsConfig,
 }
 
 /// Wake word detection settings.
@@ -271,11 +275,59 @@ pub struct AdvancedConfig {
 }
 
 /// Sidebar UI state.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SidebarConfig {
     #[serde(default)]
     pub collapsed: bool,
+    #[serde(default = "default_sidebar_mode")]
+    pub mode: String,
+}
+
+impl Default for SidebarConfig {
+    fn default() -> Self {
+        Self {
+            collapsed: false,
+            mode: "mirror".into(),
+        }
+    }
+}
+
+fn default_sidebar_mode() -> String {
+    "mirror".to_string()
+}
+
+/// Lens workspace panel layout state.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceConfig {
+    #[serde(default)]
+    pub show_chat: bool,
+    #[serde(default)]
+    pub show_terminal: bool,
+    #[serde(default = "default_chat_ratio")]
+    pub chat_ratio: f64,
+    #[serde(default = "default_terminal_ratio")]
+    pub terminal_ratio: f64,
+}
+
+impl Default for WorkspaceConfig {
+    fn default() -> Self {
+        Self {
+            show_chat: false,
+            show_terminal: false,
+            chat_ratio: 0.3,
+            terminal_ratio: 0.7,
+        }
+    }
+}
+
+fn default_chat_ratio() -> f64 {
+    0.3
+}
+
+fn default_terminal_ratio() -> f64 {
+    0.7
 }
 
 /// User identity settings.
@@ -344,6 +396,25 @@ impl Default for AiConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolProfile {
     pub groups: Vec<String>,
+}
+
+/// Multi-project configuration.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectsConfig {
+    #[serde(default)]
+    pub entries: Vec<ProjectEntry>,
+    #[serde(default)]
+    pub active_index: usize,
+}
+
+/// A single project entry (path + display name + color tag).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectEntry {
+    pub path: String,
+    pub name: String,
+    pub color: String,
 }
 
 // ============ Default value functions ============

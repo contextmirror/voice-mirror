@@ -295,32 +295,13 @@ describe('Slider.svelte', () => {
 describe('TitleBar.svelte', () => {
   const src = readComponent('TitleBar.svelte');
 
-  it('imports minimizeWindow from api', () => {
-    assert.ok(src.includes('minimizeWindow'), 'Should import minimizeWindow');
-  });
-
-  it('imports maximizeWindow from api', () => {
-    assert.ok(src.includes('maximizeWindow'), 'Should import maximizeWindow');
-  });
-
-  it('imports quitApp from api', () => {
-    assert.ok(src.includes('quitApp'), 'Should import quitApp');
-  });
-
   it('imports overlayStore for compact mode', () => {
     assert.ok(src.includes('overlayStore'), 'Should import overlayStore');
   });
 
-  it('has minimize button with aria-label', () => {
-    assert.ok(src.includes('aria-label="Minimize window"'), 'Should have minimize aria-label');
-  });
-
-  it('has maximize button with aria-label', () => {
-    assert.ok(src.includes('Maximize window'), 'Should have maximize aria-label');
-  });
-
-  it('has close button with aria-label', () => {
-    assert.ok(src.includes('aria-label="Close window"'), 'Should have close aria-label');
+  it('uses native decorum controls for window buttons', () => {
+    assert.ok(src.includes('data-tauri-decorum-tb'), 'Should use decorum native controls');
+    assert.ok(src.includes('decorum-controls'), 'Should have decorum-controls class');
   });
 
   it('has compact/orb button with aria-label', () => {
@@ -335,32 +316,72 @@ describe('TitleBar.svelte', () => {
     assert.ok(src.includes('.titlebar'), 'Should have titlebar CSS');
   });
 
-  it('shows Voice Mirror title', () => {
-    assert.ok(src.includes('Voice Mirror'), 'Should show Voice Mirror title');
+  it('imports navigationStore', () => {
+    assert.ok(src.includes('navigationStore'), 'Should import navigationStore');
+  });
+
+  it('has mode-toggle container', () => {
+    assert.ok(src.includes('mode-toggle'), 'Should have mode-toggle container');
+  });
+
+  it('has Mirror button text', () => {
+    assert.ok(src.includes('>Mirror<'), 'Should have Mirror button text');
+  });
+
+  it('has Lens button text', () => {
+    assert.ok(src.includes('>Lens<'), 'Should have Lens button text');
+  });
+
+  it('has role="radiogroup" for accessibility', () => {
+    assert.ok(src.includes('role="radiogroup"'), 'Should have radiogroup role');
+  });
+
+  it('has role="radio" on mode buttons', () => {
+    assert.ok(src.includes('role="radio"'), 'Should have radio role on buttons');
+  });
+
+  it('has aria-checked on mode buttons', () => {
+    assert.ok(src.includes('aria-checked='), 'Should have aria-checked on mode buttons');
+  });
+
+  it('has -webkit-app-region: no-drag on mode toggle', () => {
+    assert.ok(src.includes('-webkit-app-region: no-drag'), 'Should have no-drag on mode toggle');
+  });
+
+  it('has pointer-events: auto on mode toggle', () => {
+    assert.ok(src.includes('pointer-events: auto'), 'Should have pointer-events: auto');
+  });
+
+  it('calls handleModeSwitch on click', () => {
+    assert.ok(src.includes('handleModeSwitch'), 'Should call handleModeSwitch');
+  });
+
+  it('handleModeSwitch calls navigationStore.setMode', () => {
+    assert.ok(src.includes('navigationStore.setMode'), 'Should call setMode on store');
   });
 
   it('has data-tauri-drag-region for dragging', () => {
     assert.ok(src.includes('data-tauri-drag-region'), 'Should have drag region attribute');
   });
 
-  it('has win-minimize CSS class', () => {
-    assert.ok(src.includes('.win-minimize'), 'Should have minimize button CSS');
-  });
-
-  it('has win-maximize CSS class', () => {
-    assert.ok(src.includes('.win-maximize'), 'Should have maximize button CSS');
-  });
-
-  it('has win-close CSS class', () => {
-    assert.ok(src.includes('.win-close'), 'Should have close button CSS');
-  });
-
   it('has win-compact CSS class', () => {
     assert.ok(src.includes('.win-compact'), 'Should have compact button CSS');
   });
 
-  it('tracks maximized state', () => {
-    assert.ok(src.includes('maximized'), 'Should track maximized state');
+  it('styles native decorum buttons to match titlebar height', () => {
+    assert.ok(src.includes('decorum-tb-btn') || src.includes('decorum-tb-minimize'), 'Should style native buttons');
+  });
+
+  it('accepts centerContent snippet prop', () => {
+    assert.ok(src.includes('centerContent'), 'Should accept centerContent snippet');
+  });
+
+  it('has titlebar-center for injected content', () => {
+    assert.ok(src.includes('titlebar-center'), 'Should have titlebar-center div');
+  });
+
+  it('renders centerContent with @render', () => {
+    assert.ok(src.includes('{@render centerContent()}'), 'Should render centerContent snippet');
   });
 });
 
@@ -680,5 +701,51 @@ describe('OnboardingModal.svelte', () => {
 
   it('has onboarding-modal CSS class', () => {
     assert.ok(src.includes('.onboarding-modal'), 'Should have modal CSS');
+  });
+});
+
+// ---- ResizeEdges.svelte ----
+
+describe('ResizeEdges.svelte', () => {
+  const src = readComponent('ResizeEdges.svelte');
+
+  it('imports getCurrentWindow from tauri', () => {
+    assert.ok(src.includes("from '@tauri-apps/api/window'"));
+  });
+
+  it('calls startResizeDragging', () => {
+    assert.ok(src.includes('startResizeDragging'));
+  });
+
+  it('has all four edge directions', () => {
+    for (const dir of ['North', 'South', 'East', 'West']) {
+      assert.ok(src.includes(`'${dir}'`), `Should have ${dir} direction`);
+    }
+  });
+
+  it('has all four corner directions', () => {
+    for (const dir of ['NorthWest', 'NorthEast', 'SouthWest', 'SouthEast']) {
+      assert.ok(src.includes(`'${dir}'`), `Should have ${dir} direction`);
+    }
+  });
+
+  it('has resize-edge CSS class', () => {
+    assert.ok(src.includes('.resize-edge'));
+  });
+
+  it('has resize-corner CSS class', () => {
+    assert.ok(src.includes('.resize-corner'));
+  });
+
+  it('uses high z-index to stay above content', () => {
+    assert.ok(src.includes('z-index: 99999'));
+  });
+
+  it('uses no-drag for frameless window', () => {
+    assert.ok(src.includes('-webkit-app-region: no-drag'));
+  });
+
+  it('uses position fixed', () => {
+    assert.ok(src.includes('position: fixed'));
   });
 });

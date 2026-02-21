@@ -31,7 +31,10 @@ fn text_with_optional_image(text: String, image_data_url: Option<&str>) -> McpTo
     let mut content = Vec::new();
     if let Some(url) = image_data_url {
         if let Some(img) = image_content_from_data_url(url) {
+            info!("[voice] Including image content in MCP response ({} chars base64)", url.len());
             content.push(img);
+        } else {
+            warn!("[voice] Failed to extract image from data URL (len={})", url.len());
         }
     }
     content.push(McpContent::Text { text });
@@ -653,6 +656,13 @@ pub async fn handle_voice_listen(
                     let wait_secs = start.elapsed().as_secs();
                     release_listener_lock(data_dir, instance_id).await;
 
+                    info!(
+                        "[voice_listen] Pipe message received from '{}', has_image: {}, image_data_url_len: {}",
+                        from,
+                        image_data_url.is_some(),
+                        image_data_url.as_ref().map(|u| u.len()).unwrap_or(0),
+                    );
+
                     let text = format!(
                         "=== Message from {} (after {}s) ===\n\
                          Thread: {}\n\
@@ -733,6 +743,13 @@ pub async fn handle_voice_listen(
 
             // Release lock before returning
             release_listener_lock(data_dir, instance_id).await;
+
+            info!(
+                "[voice_listen] Inbox message found from '{}', has_image: {}, image_data_url_len: {}",
+                msg.from,
+                msg.image_data_url.is_some(),
+                msg.image_data_url.as_ref().map(|u| u.len()).unwrap_or(0),
+            );
 
             let response = format!(
                 "=== Message from {} (after {}s) ===\n\

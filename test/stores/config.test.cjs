@@ -33,6 +33,7 @@ describe('config.svelte.js -- DEFAULT_CONFIG structure', () => {
     'overlay',
     'advanced',
     'sidebar',
+    'workspace',
     'user',
     'system',
     'ai',
@@ -100,6 +101,10 @@ describe('config.svelte.js -- critical field values', () => {
 
   it('defaults window.expanded to true', () => {
     assert.ok(src.includes('expanded: true'), 'expanded should default to true (dashboard mode)');
+  });
+
+  it('defaults sidebar.mode to mirror', () => {
+    assert.ok(src.includes("mode: 'mirror'"), 'sidebar.mode should default to mirror');
   });
 });
 

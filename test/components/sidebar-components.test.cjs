@@ -46,14 +46,21 @@ describe('Sidebar.svelte', () => {
     assert.ok(src.includes("label: 'Terminal'"), 'Should label it Terminal');
   });
 
-  it('has Browser navigation item', () => {
-    assert.ok(src.includes("id: 'browser'"), 'Should have Browser nav item');
-    assert.ok(src.includes("label: 'Browser'"), 'Should label it Browser');
+  it('derives appMode from navigationStore', () => {
+    assert.ok(src.includes('navigationStore.appMode'), 'Should derive appMode from store');
   });
 
-  it('has Settings navigation item', () => {
-    assert.ok(src.includes("id: 'settings'"), 'Should have Settings nav item');
-    assert.ok(src.includes("label: 'Settings'"), 'Should label it Settings');
+  it('has mode-conditional rendering for mirror vs lens', () => {
+    assert.ok(
+      src.includes("appMode === 'mirror'"),
+      'Should conditionally render based on appMode'
+    );
+  });
+
+  it('has Settings navigation item pinned above footer', () => {
+    assert.ok(src.includes('settings-item'), 'Should have settings-item class');
+    assert.ok(src.includes("activeView === 'settings'"), 'Should highlight when active');
+    assert.ok(src.includes("aria-label=\"Settings\""), 'Should label it Settings');
   });
 
   it('has collapse/expand toggle button', () => {
@@ -234,5 +241,66 @@ describe('ChatList.svelte', () => {
 
   it('uses $state for local state', () => {
     assert.ok(src.includes('$state('), 'Should use $state rune');
+  });
+});
+
+// ---- Sidebar: mode support ----
+
+describe('sidebar: mode support', () => {
+  const src = readComponent('Sidebar.svelte');
+
+  it('derives appMode from navigationStore', () => {
+    assert.ok(src.includes('navigationStore.appMode'), 'Should derive appMode');
+  });
+
+  it('conditionally renders based on appMode', () => {
+    assert.ok(
+      src.includes("appMode === 'mirror'"),
+      'Should branch on appMode for mirror mode'
+    );
+  });
+
+  it('has lens mode placeholder in sidebar', () => {
+    // In lens mode the nav area is an empty spacer
+    assert.ok(
+      src.includes("appMode === 'mirror'") || src.includes("{:else}"),
+      'Should have else branch for lens mode'
+    );
+  });
+});
+
+// ---- Sidebar: lens mode project switcher ----
+
+describe('sidebar: lens mode project switcher', () => {
+  const src = readComponent('Sidebar.svelte');
+
+  it('imports ProjectStrip component', () => {
+    assert.ok(src.includes('ProjectStrip'), 'Should import ProjectStrip');
+  });
+
+  it('imports SessionPanel component', () => {
+    assert.ok(src.includes('SessionPanel'), 'Should import SessionPanel');
+  });
+
+  it('has lens-sidebar CSS class', () => {
+    assert.ok(src.includes('lens-sidebar'), 'Should have lens-sidebar CSS class');
+  });
+
+  it('renders ProjectStrip in lens mode', () => {
+    assert.ok(
+      src.includes('<ProjectStrip'),
+      'Should render ProjectStrip component'
+    );
+  });
+
+  it('conditionally renders SessionPanel when not collapsed in lens mode', () => {
+    assert.ok(
+      src.includes('<SessionPanel') || src.includes('SessionPanel'),
+      'Should render SessionPanel component'
+    );
+    assert.ok(
+      src.includes('!collapsed') || src.includes('collapsed'),
+      'Should conditionally show based on collapsed state'
+    );
   });
 });

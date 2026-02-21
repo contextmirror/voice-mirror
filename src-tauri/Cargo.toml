@@ -14,7 +14,7 @@ crate-type = ["lib", "cdylib", "staticlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["tray-icon"] }
+tauri = { version = "2", features = ["tray-icon", "unstable"] }
 tauri-plugin-shell = "2"
 tauri-plugin-updater = "2"
 tauri-plugin-global-shortcut = "2"
@@ -32,6 +32,9 @@ tracing-appender = "0.2"
 portable-pty = "0.8"
 reqwest = { version = "0.12", features = ["stream", "json"] }
 futures-util = "0.3"
+
+# File tree (.gitignore pattern matching)
+ignore = "0.4"
 
 # MCP handler dependencies
 notify = "7"
@@ -61,6 +64,7 @@ sysinfo = { version = "0.33", default-features = false, features = ["system"] }
 
 # Clipboard access for text injection (dictation feature)
 arboard = "3"
+tauri-plugin-decorum = "1.1.1"
 
 [[bin]]
 name = "voice-mirror-mcp"

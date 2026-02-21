@@ -393,8 +393,9 @@ describe('ScreenshotPicker.svelte', () => {
     assert.ok(src.includes("e.key === 'Escape'"), 'Should close on Escape');
   });
 
-  it('disables browser tab with Coming soon', () => {
-    assert.ok(src.includes('Coming soon'), 'Should show Coming soon for browser tab');
+  it('enables browser tab when snapshot available', () => {
+    assert.ok(src.includes('hasBrowser'), 'Should check for browser snapshot availability');
+    assert.ok(src.includes('browserSnapshot'), 'Should accept browserSnapshot prop');
   });
 
   it('has backdrop-filter for blur effect', () => {

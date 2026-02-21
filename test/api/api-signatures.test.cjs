@@ -110,6 +110,21 @@ describe('api.js -- critical Tauri command names', () => {
     'unregister_all_shortcuts',
     // Migration
     'migrate_electron_config',
+    // Lens
+    'lens_create_webview',
+    'lens_navigate',
+    'lens_go_back',
+    'lens_go_forward',
+    'lens_reload',
+    'lens_resize_webview',
+    'lens_close_webview',
+    'lens_set_visible',
+    // Files
+    'list_directory',
+    'get_git_changes',
+    'get_project_root',
+    'read_file',
+    'write_file',
   ];
 
   for (const cmd of criticalCommands) {
@@ -181,6 +196,7 @@ describe('api.js -- exported async functions', () => {
     'listWindows',
     'captureMonitor',
     'captureWindow',
+    'lensCapturePreview',
     // Tools
     'scanCliTools',
     'checkNpmVersions',
@@ -194,6 +210,27 @@ describe('api.js -- exported async functions', () => {
     'getProcessStats',
     // Migration
     'migrateElectronConfig',
+    // Lens
+    'lensCreateWebview',
+    'lensNavigate',
+    'lensGoBack',
+    'lensGoForward',
+    'lensReload',
+    'lensResizeWebview',
+    'lensCloseWebview',
+    'lensSetVisible',
+    // Files
+    'listDirectory',
+    'getGitChanges',
+    'getProjectRoot',
+    'readFile',
+    'writeFile',
+    // Shell Terminals
+    'shellSpawn',
+    'shellInput',
+    'shellResize',
+    'shellKill',
+    'shellList',
   ];
 
   for (const fn of expectedExports) {
@@ -217,7 +254,7 @@ describe('api.js -- exported async functions', () => {
 });
 
 describe('api.js -- section organization', () => {
-  const sections = ['Config', 'Window', 'Voice', 'AI', 'Inbox', 'Chat', 'Tools', 'Shortcuts', 'Performance Stats', 'Config Migration'];
+  const sections = ['Config', 'Window', 'Voice', 'AI', 'Inbox', 'Chat', 'Tools', 'Shortcuts', 'Performance Stats', 'Config Migration', 'Lens', 'Files'];
 
   for (const section of sections) {
     it(`has "${section}" section comment`, () => {

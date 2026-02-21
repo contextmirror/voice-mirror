@@ -2,6 +2,7 @@
   import { configStore, loadConfig } from './lib/stores/config.svelte.js';
   import { currentThemeName, applyTheme, PRESETS } from './lib/stores/theme.svelte.js';
   import { navigationStore } from './lib/stores/navigation.svelte.js';
+  import { projectStore } from './lib/stores/project.svelte.js';
   import { overlayStore } from './lib/stores/overlay.svelte.js';
   import { aiStatusStore, initAiStatusListeners, startProvider } from './lib/stores/ai-status.svelte.js';
   import { voiceStore, initVoiceListeners, startVoiceEngine } from './lib/stores/voice.svelte.js';
@@ -16,7 +17,10 @@
   import ChatPanel from './components/chat/ChatPanel.svelte';
   import Terminal from './components/terminal/Terminal.svelte';
   import SettingsPanel from './components/settings/SettingsPanel.svelte';
+  import LensWorkspace from './components/lens/LensWorkspace.svelte';
+  import StatusDropdown from './components/lens/StatusDropdown.svelte';
   import OverlayPanel from './components/overlay/OverlayPanel.svelte';
+  import ResizeEdges from './components/shared/ResizeEdges.svelte';
   import StatsBar from './components/shared/StatsBar.svelte';
 
   // Load config on mount and init event listeners
@@ -37,6 +41,15 @@
       if (collapsed !== undefined) {
         navigationStore.initSidebarState(collapsed);
       }
+      const mode = configStore.value?.sidebar?.mode;
+      if (mode) {
+        navigationStore.initMode(mode);
+      }
+      const projects = configStore.value?.projects;
+      if (projects) {
+        projectStore.init(projects);
+      }
+
       // Restore overlay (orb) mode if user was in compact mode last session.
       // After restore, show the window (it starts hidden to prevent flash).
       if (!overlayRestored) {
@@ -305,8 +318,22 @@
 {#if isOverlay}
   <OverlayPanel />
 {:else}
+  <ResizeEdges />
   <div class="app-shell">
-    <TitleBar />
+    <TitleBar>
+      {#snippet centerContent()}
+        {#if activeView === 'lens'}
+          <div class="titlebar-lens-center">
+            <div class="titlebar-search-box">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <span>Search Voice Mirror</span>
+              <kbd>Ctrl+P</kbd>
+            </div>
+            <StatusDropdown />
+          </div>
+        {/if}
+      {/snippet}
+    </TitleBar>
 
     <div class="app-body">
       <Sidebar />
@@ -320,17 +347,9 @@
           <div class="view-panel">
             <Terminal />
           </div>
-        {:else if activeView === 'browser'}
+        {:else if activeView === 'lens'}
           <div class="view-panel">
-            <div class="view-placeholder">
-              <svg class="placeholder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="10"/>
-                <line x1="2" y1="12" x2="22" y2="12"/>
-                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
-              </svg>
-              <h2>Browser</h2>
-              <p>Embedded browser will go here.</p>
-            </div>
+            <LensWorkspace onSend={handleChatSend} />
           </div>
         {:else if activeView === 'settings'}
           <div class="view-panel">
@@ -406,4 +425,34 @@
     opacity: 0.5;
     margin-bottom: 8px;
   }
+
+  /* Lens-mode titlebar center content */
+  .titlebar-lens-center {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .titlebar-search-box {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg);
+    color: var(--muted);
+    font-size: 12px;
+    min-width: 220px;
+    cursor: pointer;
+    transition: border-color var(--duration-fast) var(--ease-out);
+  }
+  .titlebar-search-box:hover { border-color: var(--accent); }
+  .titlebar-search-box kbd {
+    margin-left: auto;
+    font-size: 10px;
+    opacity: 0.5;
+    font-family: var(--font-mono);
+  }
+
 </style>

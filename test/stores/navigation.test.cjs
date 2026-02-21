@@ -17,7 +17,7 @@ const src = fs.readFileSync(
 // ============ VALID_VIEWS ============
 
 describe('navigation: VALID_VIEWS', () => {
-  const expectedViews = ['chat', 'terminal', 'browser', 'settings'];
+  const expectedViews = ['chat', 'terminal', 'lens', 'settings'];
 
   it('defines VALID_VIEWS as a const', () => {
     assert.ok(src.includes('const VALID_VIEWS'), 'Should define const VALID_VIEWS');
@@ -185,6 +185,101 @@ describe('navigation: initSidebarState', () => {
     assert.ok(
       src.includes('!!collapsed'),
       'Should coerce collapsed to boolean with !!'
+    );
+  });
+});
+
+// ============ VALID_MODES ============
+
+describe('navigation: VALID_MODES', () => {
+  it('defines VALID_MODES as a const', () => {
+    assert.ok(src.includes('const VALID_MODES'), 'Should define const VALID_MODES');
+  });
+
+  it('contains "mirror"', () => {
+    assert.ok(
+      src.includes("'mirror'") || src.includes('"mirror"'),
+      'VALID_MODES should contain "mirror"'
+    );
+  });
+
+  it('contains "lens"', () => {
+    assert.ok(
+      src.includes("'lens'") || src.includes('"lens"'),
+      'VALID_MODES should contain "lens"'
+    );
+  });
+
+  it('exports VALID_MODES', () => {
+    assert.ok(
+      src.includes('VALID_MODES') && src.includes('export'),
+      'Should export VALID_MODES'
+    );
+  });
+});
+
+// ============ appMode ============
+
+describe('navigation: appMode', () => {
+  it('uses $state for appMode', () => {
+    assert.ok(/let\s+appMode\s*=\s*\$state\(/.test(src), 'Should use $state for appMode');
+  });
+
+  it('appMode initialized to "mirror"', () => {
+    assert.ok(
+      src.includes("$state('mirror')") || src.includes('$state("mirror")'),
+      'appMode should start as "mirror"'
+    );
+  });
+
+  it('has getter "appMode"', () => {
+    assert.ok(src.includes('get appMode()'), 'Should have getter "appMode"');
+  });
+
+  it('has setMode method', () => {
+    assert.ok(src.includes('setMode('), 'Store should have setMode method');
+  });
+
+  it('has initMode method', () => {
+    assert.ok(src.includes('initMode('), 'Store should have initMode method');
+  });
+
+  it('setMode validates against VALID_MODES', () => {
+    assert.ok(
+      src.includes('VALID_MODES.includes(mode)'),
+      'setMode should validate against VALID_MODES'
+    );
+  });
+
+  it('setMode persists mode to config', () => {
+    assert.ok(
+      src.includes('updateConfig({ sidebar: { mode }'),
+      'setMode should persist mode via updateConfig'
+    );
+  });
+
+  it('setMode switches activeView to chat for mirror mode', () => {
+    assert.ok(
+      src.includes("activeView = 'chat'"),
+      'setMode should switch activeView to chat for mirror mode'
+    );
+  });
+
+  it('setMode switches activeView to lens for lens mode', () => {
+    assert.ok(
+      src.includes("activeView = 'lens'"),
+      'setMode should switch activeView to lens for lens mode'
+    );
+  });
+
+  it('initMode does not persist to config', () => {
+    // initMode should set state without calling updateConfig
+    const initModeBlock = src.slice(src.indexOf('initMode(mode)'));
+    const nextMethod = initModeBlock.indexOf('};');
+    const body = initModeBlock.slice(0, nextMethod);
+    assert.ok(
+      !body.includes('updateConfig'),
+      'initMode should not call updateConfig'
     );
   });
 });

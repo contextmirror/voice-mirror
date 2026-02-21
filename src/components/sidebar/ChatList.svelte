@@ -27,8 +27,11 @@
       const result = await chatList();
       const data = result?.data || result || [];
       // Sort by most recent (backend returns updatedAt as u64 ms)
+      // Filter out project-tagged chats — those belong to Lens mode sessions
       chats = Array.isArray(data)
-        ? data.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+        ? data
+            .filter((c) => !c.projectPath)
+            .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
         : [];
     } catch (err) {
       console.error('[ChatList] Failed to load chats:', err);

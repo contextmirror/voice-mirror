@@ -3,6 +3,7 @@ use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::IpcResponse;
+use super::lens::LensState;
 use tauri::{AppHandle, Manager};
 
 /// Read a PNG file and return a `data:image/png;base64,...` URL.
@@ -631,4 +632,211 @@ $bmp.Dispose()
         }
     })
     .await
+}
+
+/// Capture the Lens browser webview content.
+///
+/// Finds the WebView2 rendering surface (child window of the main window)
+/// and uses PrintWindow to capture it. Returns `{ path, thumbnail, dataUrl }`.
+///
+/// Must be called while the webview is still visible (before hiding it).
+#[tauri::command]
+pub async fn lens_capture_browser(
+    app: AppHandle,
+    state: tauri::State<'_, LensState>,
+) -> Result<IpcResponse, String> {
+    tracing::info!("[screenshot] lens_capture_browser called");
+
+    // Read state synchronously before any .await
+    let webview_bounds = {
+        let label_guard = state.webview_label.lock()
+            .map_err(|e| format!("Lock error: {}", e))?;
+        if label_guard.is_none() {
+            tracing::warn!("[screenshot] No lens webview active");
+            return Ok(IpcResponse::err("No lens webview active"));
+        }
+        tracing::info!("[screenshot] Lens webview label: {:?}", *label_guard);
+
+        let bounds_guard = state.bounds.lock()
+            .map_err(|e| format!("Lock error: {}", e))?;
+        *bounds_guard
+    };
+
+    // Capture the main window directly — PrintWindow with PW_RENDERFULLCONTENT
+    // renders all child windows including WebView2 surfaces.
+    let (capture_hwnd, scale_factor) = {
+        let window = app.get_window("main")
+            .ok_or_else(|| "Main window not found".to_string())?;
+        let hwnd_val = window.hwnd()
+            .map(|h| h.0 as i64)
+            .map_err(|e| format!("Failed to get main HWND: {}", e))?;
+        let scale = window.scale_factor().unwrap_or(1.0);
+        tracing::info!("[screenshot] Capture HWND: {}, scale: {}, bounds: {:?}", hwnd_val, scale, webview_bounds);
+        (hwnd_val, scale)
+    };
+
+    let screenshots_dir = crate::services::platform::get_data_dir().join("screenshots");
+    if let Err(e) = fs::create_dir_all(&screenshots_dir) {
+        return Ok(IpcResponse::err(format!("Failed to create screenshots dir: {}", e)));
+    }
+
+    cleanup_old_screenshots(&screenshots_dir, 5);
+
+    let now_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+    let filename = format!("browser-{}.png", now_ms);
+    let filepath = screenshots_dir.join(&filename);
+    let filepath_str = filepath.to_string_lossy().to_string();
+
+    // Compute crop bounds in physical pixels (for cropping webview area from window)
+    let (crop_x, crop_y, crop_w, crop_h) = if let Some((bx, by, bw, bh)) = webview_bounds {
+        (
+            (bx * scale_factor) as i32,
+            (by * scale_factor) as i32,
+            (bw * scale_factor) as i32,
+            (bh * scale_factor) as i32,
+        )
+    } else {
+        (0, 0, 0, 0)
+    };
+
+    let result = tokio::task::spawn_blocking(move || {
+        #[cfg(target_os = "windows")]
+        {
+            // PowerShell script that:
+            // 1. Captures the main window via PrintWindow (PW_RENDERFULLCONTENT)
+            // 2. Crops to the lens webview bounds
+            // 3. Creates a thumbnail (max 300px wide)
+            // 4. Saves full capture + returns thumbnail as base64
+            let ps_script = format!(
+                r#"
+Add-Type -AssemblyName System.Drawing
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public class BrowserCapture {{
+    [DllImport("user32.dll")]
+    public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+    [DllImport("user32.dll")]
+    public static extern bool PrintWindow(IntPtr hWnd, IntPtr hdcBlt, uint nFlags);
+    [StructLayout(LayoutKind.Sequential)]
+    public struct RECT {{ public int Left, Top, Right, Bottom; }}
+}}
+"@
+$targetHwnd = [IntPtr]{capture_hwnd}
+$rect = New-Object BrowserCapture+RECT
+[void][BrowserCapture]::GetWindowRect($targetHwnd, [ref]$rect)
+$w = $rect.Right - $rect.Left
+$h = $rect.Bottom - $rect.Top
+if ($w -le 0 -or $h -le 0) {{ throw "Window has zero size ($w x $h)" }}
+# Capture using PrintWindow PW_RENDERFULLCONTENT
+$bmp = New-Object System.Drawing.Bitmap($w, $h)
+$g = [System.Drawing.Graphics]::FromImage($bmp)
+$hdc = $g.GetHdc()
+$ok = [BrowserCapture]::PrintWindow($targetHwnd, $hdc, 2)
+$g.ReleaseHdc($hdc)
+$g.Dispose()
+if (-not $ok) {{
+    # Fallback: CopyFromScreen
+    $bmp.Dispose()
+    $bmp = New-Object System.Drawing.Bitmap($w, $h)
+    $g2 = [System.Drawing.Graphics]::FromImage($bmp)
+    $g2.CopyFromScreen($rect.Left, $rect.Top, 0, 0, (New-Object System.Drawing.Size($w, $h)))
+    $g2.Dispose()
+}}
+# Crop to webview bounds if specified
+$cropX = {crop_x}
+$cropY = {crop_y}
+$cropW = {crop_w}
+$cropH = {crop_h}
+if ($cropW -gt 0 -and $cropH -gt 0) {{
+    # Clamp crop to actual bitmap size
+    if ($cropX + $cropW -gt $w) {{ $cropW = $w - $cropX }}
+    if ($cropY + $cropH -gt $h) {{ $cropH = $h - $cropY }}
+    if ($cropW -gt 0 -and $cropH -gt 0) {{
+        $srcRect = New-Object System.Drawing.Rectangle($cropX, $cropY, $cropW, $cropH)
+        $cropped = $bmp.Clone($srcRect, $bmp.PixelFormat)
+        $bmp.Dispose()
+        $bmp = $cropped
+        $w = $cropW
+        $h = $cropH
+    }}
+}}
+# Save capture
+$bmp.Save('{filepath}')
+# Create thumbnail (max 300px wide)
+$maxW = 300
+$thumbB64 = ""
+if ($w -gt $maxW) {{
+    $ratio = $maxW / $w
+    $newH = [int]($h * $ratio)
+    $thumb = New-Object System.Drawing.Bitmap($maxW, $newH)
+    $tg = [System.Drawing.Graphics]::FromImage($thumb)
+    $tg.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+    $tg.DrawImage($bmp, 0, 0, $maxW, $newH)
+    $tg.Dispose()
+    $ms = New-Object System.IO.MemoryStream
+    $thumb.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)
+    $thumbB64 = [Convert]::ToBase64String($ms.ToArray())
+    $ms.Dispose()
+    $thumb.Dispose()
+}} else {{
+    $ms = New-Object System.IO.MemoryStream
+    $bmp.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)
+    $thumbB64 = [Convert]::ToBase64String($ms.ToArray())
+    $ms.Dispose()
+}}
+$bmp.Dispose()
+Write-Output $thumbB64
+"#,
+                capture_hwnd = capture_hwnd,
+                crop_x = crop_x,
+                crop_y = crop_y,
+                crop_w = crop_w,
+                crop_h = crop_h,
+                filepath = filepath_str.replace('\'', "''"),
+            );
+
+            let output = std::process::Command::new("powershell")
+                .args(["-NoProfile", "-NonInteractive", "-Command", &ps_script])
+                .output()
+                .map_err(|e| format!("Failed to run PowerShell: {}", e))?;
+
+            if !output.status.success() {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                return Err(format!("Browser capture failed: {}", stderr.trim()));
+            }
+
+            let thumbnail = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            Ok(thumbnail)
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            Err("Browser capture not yet supported on this platform".into())
+        }
+    })
+    .await;
+
+    match result {
+        Ok(Ok(thumbnail)) => {
+            tracing::info!("[screenshot] Browser capture succeeded, thumbnail len: {}", thumbnail.len());
+            let data_url = read_as_data_url(&filepath).unwrap_or_default();
+            Ok(IpcResponse::ok(serde_json::json!({
+                "path": filepath.to_string_lossy(),
+                "thumbnail": thumbnail,
+                "dataUrl": data_url
+            })))
+        }
+        Ok(Err(e)) => {
+            tracing::error!("[screenshot] Browser capture error: {}", e);
+            Ok(IpcResponse::err(e))
+        }
+        Err(e) => {
+            tracing::error!("[screenshot] Browser capture task panicked: {}", e);
+            Ok(IpcResponse::err(format!("Browser capture task panicked: {}", e)))
+        }
+    }
 }

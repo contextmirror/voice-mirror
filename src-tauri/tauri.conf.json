@@ -26,6 +26,7 @@
         "visible": false
       }
     ],
+    "withGlobalTauri": true,
     "security": {
       "csp": null
     }

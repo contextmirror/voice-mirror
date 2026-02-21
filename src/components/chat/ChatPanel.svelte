@@ -9,7 +9,8 @@
   import { chatStore } from '../../lib/stores/chat.svelte.js';
   import { voiceStore } from '../../lib/stores/voice.svelte.js';
   import { attachmentsStore } from '../../lib/stores/attachments.svelte.js';
-  import { exportChatToFile } from '../../lib/api.js';
+  import { exportChatToFile, lensCapturePreview } from '../../lib/api.js';
+  import { lensStore } from '../../lib/stores/lens.svelte.js';
   import { save } from '@tauri-apps/plugin-dialog';
   import MessageGroup from './MessageGroup.svelte';
   import ChatInput from './ChatInput.svelte';
@@ -23,6 +24,7 @@
   let isRecording = $derived(voiceStore.isRecording);
   let saveFlash = $state(false);
   let showScreenshotPicker = $state(false);
+  let browserSnapshot = $state(null);
 
   let pendingAttachments = $derived(attachmentsStore.pending);
   let scrollContainer = $state(null);
@@ -119,8 +121,28 @@
     }
   }
 
-  /** Open the screenshot picker modal. */
-  function handleScreenshot() {
+  /** Open the screenshot picker modal. Captures browser preview first if active. */
+  async function handleScreenshot() {
+    // Capture the Lens browser while it's still visible
+    if (lensStore.webviewReady) {
+      try {
+        const result = await lensCapturePreview();
+        console.log('[ChatPanel] lensCapturePreview result:', result);
+        // IpcResponse: { success, data?: { path, thumbnail, dataUrl }, error? }
+        if (result?.success && result?.data) {
+          browserSnapshot = result.data;
+        } else {
+          console.warn('[ChatPanel] Browser capture returned error:', result?.error || result);
+          browserSnapshot = null;
+        }
+      } catch (err) {
+        console.error('[ChatPanel] lensCapturePreview threw:', err);
+        browserSnapshot = null;
+      }
+    } else {
+      console.log('[ChatPanel] webviewReady is false, skipping browser capture');
+      browserSnapshot = null;
+    }
     showScreenshotPicker = true;
   }
 
@@ -200,6 +222,7 @@
     <ScreenshotPicker
       onCapture={handleScreenshotCapture}
       onClose={handleScreenshotClose}
+      {browserSnapshot}
     />
   {/if}
 </div>

@@ -1,38 +1,15 @@
 <script>
-  import { minimizeWindow, maximizeWindow, quitApp } from '../../lib/api.js';
   import { overlayStore } from '../../lib/stores/overlay.svelte.js';
+  import { navigationStore } from '../../lib/stores/navigation.svelte.js';
 
-  let maximized = $state(false);
+  let appMode = $derived(navigationStore.appMode);
 
-  async function handleMinimize() {
-    try {
-      await minimizeWindow();
-    } catch (err) {
-      console.error('[TitleBar] Minimize failed:', err);
-    }
+  function handleModeSwitch(mode) {
+    navigationStore.setMode(mode);
   }
 
-  async function handleMaximize() {
-    try {
-      const result = await maximizeWindow();
-      if (result?.data?.maximized !== undefined) {
-        maximized = result.data.maximized;
-      } else {
-        // Toggle local state as fallback
-        maximized = !maximized;
-      }
-    } catch (err) {
-      console.error('[TitleBar] Maximize failed:', err);
-    }
-  }
-
-  async function handleClose() {
-    try {
-      await quitApp();
-    } catch (err) {
-      console.error('[TitleBar] Quit failed:', err);
-    }
-  }
+  /** @type {{ centerContent?: import('svelte').Snippet }} */
+  let { centerContent } = $props();
 
   async function handleCompact() {
     try {
@@ -50,8 +27,31 @@
       <path d="M8 12a4 4 0 0 1 8 0"/>
       <circle cx="12" cy="12" r="1"/>
     </svg>
-    <span class="titlebar-title" data-tauri-drag-region>Voice Mirror</span>
+    <div class="mode-toggle" role="radiogroup" aria-label="App mode">
+      <button
+        class="mode-btn"
+        class:active={appMode === 'mirror'}
+        onclick={() => handleModeSwitch('mirror')}
+        role="radio"
+        aria-checked={appMode === 'mirror'}
+        aria-label="Mirror mode"
+      >Mirror</button>
+      <button
+        class="mode-btn"
+        class:active={appMode === 'lens'}
+        onclick={() => handleModeSwitch('lens')}
+        role="radio"
+        aria-checked={appMode === 'lens'}
+        aria-label="Lens mode"
+      >Lens</button>
+    </div>
   </div>
+
+  {#if centerContent}
+    <div class="titlebar-center">
+      {@render centerContent()}
+    </div>
+  {/if}
 
   <div class="window-controls">
     <button
@@ -64,59 +64,22 @@
         <circle cx="12" cy="12" r="5"/>
       </svg>
     </button>
-
-    <button
-      class="win-btn win-minimize"
-      onclick={handleMinimize}
-      aria-label="Minimize window"
-      title="Minimize"
-    >
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <line x1="5" y1="12" x2="19" y2="12"/>
-      </svg>
-    </button>
-
-    <button
-      class="win-btn win-maximize"
-      onclick={handleMaximize}
-      aria-label={maximized ? 'Restore window' : 'Maximize window'}
-      title={maximized ? 'Restore' : 'Maximize'}
-    >
-      {#if maximized}
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <rect x="7" y="3" width="14" height="14" rx="1"/>
-          <path d="M3 7v12a2 2 0 0 0 2 2h12"/>
-        </svg>
-      {:else}
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <rect x="5" y="5" width="14" height="14" rx="1"/>
-        </svg>
-      {/if}
-    </button>
-
-    <button
-      class="win-btn win-close"
-      onclick={handleClose}
-      aria-label="Close window"
-      title="Close"
-    >
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <line x1="18" y1="6" x2="6" y2="18"/>
-        <line x1="6" y1="6" x2="18" y2="18"/>
-      </svg>
-    </button>
+    <!-- Native window controls injected by tauri-plugin-decorum on Windows -->
+    <div class="native-controls-spacer"></div>
+    <div data-tauri-decorum-tb class="decorum-controls"></div>
   </div>
 </header>
 
 <style>
   /* ========== Title Bar ========== */
   .titlebar {
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: space-between;
     height: 40px;
     min-height: 40px;
-    padding: 0 12px;
+    padding: 0 0 0 12px;
     background: var(--chrome, var(--bg-elevated));
     border-bottom: 1px solid var(--border);
     user-select: none;
@@ -137,19 +100,58 @@
     flex-shrink: 0;
   }
 
-  .titlebar-title {
-    color: var(--text-strong);
-    font-size: 13px;
-    font-weight: 600;
+  .mode-toggle {
+    display: flex;
+    align-items: center;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 9999px;
+    padding: 2px;
+    pointer-events: auto;
+    -webkit-app-region: no-drag;
+    z-index: 10001;
+  }
+
+  .mode-btn {
+    padding: 3px 12px;
+    border: none;
+    border-radius: 9999px;
+    background: transparent;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 500;
+    font-family: var(--font-family);
+    cursor: pointer;
+    transition: all var(--duration-fast) var(--ease-out);
     white-space: nowrap;
-    letter-spacing: -0.01em;
+    line-height: 1;
+  }
+
+  .mode-btn:hover:not(.active) {
+    color: var(--text);
+  }
+
+  .mode-btn.active {
+    background: var(--accent-subtle);
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  .titlebar-center {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    pointer-events: auto;
+    -webkit-app-region: no-drag;
   }
 
   /* ========== Window Control Buttons ========== */
   .window-controls {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 2px;
   }
 
   .win-btn {
@@ -166,6 +168,8 @@
     transition: background var(--duration-fast) var(--ease-out),
                 color var(--duration-fast) var(--ease-out);
     padding: 0;
+    -webkit-app-region: no-drag;
+    z-index: 10001;
   }
 
   .win-btn svg {
@@ -183,23 +187,32 @@
     color: var(--accent);
   }
 
-  .win-btn.win-minimize:hover {
-    background: var(--warn-subtle);
-    color: var(--warn);
+  /* Spacer before native controls */
+  .native-controls-spacer {
+    width: 4px;
   }
 
-  .win-btn.win-maximize:hover {
-    background: var(--ok-subtle);
-    color: var(--ok);
+  /* Container for decorum-injected native buttons */
+  .decorum-controls {
+    display: flex;
+    flex-direction: row;
+    -webkit-app-region: no-drag;
   }
 
-  .win-btn.win-close:hover {
-    background: var(--danger-subtle);
-    color: var(--danger);
+  /* Style the native decorum buttons to match our titlebar height */
+  :global(button.decorum-tb-btn),
+  :global(button#decorum-tb-minimize),
+  :global(button#decorum-tb-maximize),
+  :global(button#decorum-tb-close),
+  :global(div[data-tauri-decorum-tb]) {
+    height: 40px !important;
   }
 
   @media (prefers-reduced-motion: reduce) {
     .win-btn {
+      transition: none;
+    }
+    .mode-btn {
       transition: none;
     }
   }

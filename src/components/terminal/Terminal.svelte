@@ -14,7 +14,8 @@
   import { listen } from '@tauri-apps/api/event';
   import { aiRawInput, aiPtyResize } from '../../lib/api.js';
   import { currentThemeName } from '../../lib/stores/theme.svelte.js';
-  import TerminalToolbar from './TerminalToolbar.svelte';
+
+  let { onRegisterActions } = $props();
 
   // ---- State ----
   let containerEl = $state(null);
@@ -142,6 +143,9 @@
       console.warn('[Terminal] Paste failed:', err);
     }
   }
+
+  // Register toolbar actions for parent TerminalTabs
+  onRegisterActions?.({ clear: handleClear, copy: handleCopy, paste: handlePaste });
 
   // ---- AI output handler ----
 
@@ -379,11 +383,6 @@
 </script>
 
 <div class="terminal-view">
-  <TerminalToolbar
-    onClear={handleClear}
-    onCopy={handleCopy}
-    onPaste={handlePaste}
-  />
   <div class="terminal-container" bind:this={containerEl}></div>
 </div>
 

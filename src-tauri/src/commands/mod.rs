@@ -1,11 +1,14 @@
 pub mod ai;
 pub mod chat;
 pub mod config;
+pub mod files;
 pub mod screenshot;
 pub mod shortcuts;
 pub mod tools;
 pub mod voice;
 pub mod window;
+pub mod lens;
+pub mod shell;
 
 use serde_json::Value;
 
