@@ -63,14 +63,14 @@
   let lastDetectedProject = null;
   let previousProjectIndex = null;
 
-  // Trigger detection when active project changes.
+  // Trigger detection + navigation when active project changes.
   // IMPORTANT: Set lastDetectedProject synchronously to prevent re-trigger loops.
   // The updateProjectField call is deferred to avoid mutating entries (which this
   // effect reads via activeProject), preventing an infinite reactive cascade.
   $effect(() => {
     const project = projectStore.activeProject;
     const currentIndex = projectStore.activeIndex;
-    if (!project || project.path === lastDetectedProject) {
+    if (!project) {
       previousProjectIndex = currentIndex;
       return;
     }
@@ -82,6 +82,9 @@
     // Set guard SYNCHRONOUSLY so re-triggers see it immediately
     lastDetectedProject = project.path;
     previousProjectIndex = currentIndex;
+
+    // Same project, same index → no change (prevents re-trigger on unrelated store updates)
+    if (project.path === oldPath && currentIndex === oldIndex) return;
 
     const timer = setTimeout(() => {
       // Save current URL for the outgoing project (deferred to avoid entries mutation loop)

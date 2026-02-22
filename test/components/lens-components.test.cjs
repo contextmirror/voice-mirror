@@ -247,6 +247,14 @@ describe('LensPreview.svelte', () => {
     assert.ok(src.includes('lastDetectedProject'), 'Should track last detected project path');
   });
 
+  it('re-runs detection when switching back to a previously-visited project', () => {
+    // The guard should compare path+index, not just path, so revisiting triggers detection
+    assert.ok(
+      src.includes('project.path === oldPath && currentIndex === oldIndex'),
+      'Should only skip when both path AND index are unchanged'
+    );
+  });
+
   // ---- Auto-start dev server integration ----
 
   it('imports devServerManager from dev-server-manager store', () => {

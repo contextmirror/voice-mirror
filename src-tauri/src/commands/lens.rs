@@ -112,12 +112,20 @@ pub async fn lens_create_webview(
         shortcut_base, shortcut_base, shortcut_base
     );
 
-    // Localhost-only cache-disable script.
-    // Overrides fetch() and XMLHttpRequest to bypass HTTP cache for dev servers.
+    // Localhost-only dev-mode script.
+    // 1. Unregisters all service workers (they intercept Vite HMR and cause stale/blank pages).
+    // 2. Overrides fetch() and XMLHttpRequest to bypass HTTP cache for dev servers.
     // Only activates when the page hostname is localhost or 127.0.0.1.
     let cache_script = r#"
 (function() {
     if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
+        // Unregister all service workers — they break dev servers by serving
+        // cached responses instead of Vite-transformed files.
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistrations().then(function(regs) {
+                regs.forEach(function(reg) { reg.unregister(); });
+            });
+        }
         var originalFetch = window.fetch;
         window.fetch = function(url, opts) {
             opts = opts || {};
