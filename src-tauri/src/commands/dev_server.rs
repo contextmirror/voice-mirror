@@ -17,6 +17,19 @@ pub fn detect_dev_servers(project_root: String) -> Result<IpcResponse, String> {
     let servers = dev_server::detect_dev_servers(&project_root);
     let pkg_manager = dev_server::detect_package_manager(&project_root);
 
+    tracing::info!(
+        "[dev-server] detect_dev_servers root={} found={} pkg_manager={}",
+        project_root,
+        servers.len(),
+        pkg_manager
+    );
+    for s in &servers {
+        tracing::info!(
+            "[dev-server]   {} :{} running={} source={}",
+            s.framework, s.port, s.running, s.source
+        );
+    }
+
     Ok(IpcResponse::ok(serde_json::json!({
         "servers": servers,
         "packageManager": pkg_manager,

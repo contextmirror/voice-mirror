@@ -291,6 +291,67 @@ fn match_script_pattern(cmd: &str, script_key: &str, pkg_manager: &str) -> Optio
         });
     }
 
+    if cmd.contains("astro dev") || cmd.contains("astro preview") {
+        let port = port_override.unwrap_or(4321);
+        return Some(DetectedDevServer {
+            framework: "Astro".to_string(),
+            port,
+            url: format!("http://localhost:{}", port),
+            start_command: make_start_command(pkg_manager, script_key),
+            source: "package.json".to_string(),
+            running: false,
+        });
+    }
+
+    if cmd.contains("nuxt dev") || cmd.contains("nuxi dev") {
+        let port = port_override.unwrap_or(3000);
+        return Some(DetectedDevServer {
+            framework: "Nuxt".to_string(),
+            port,
+            url: format!("http://localhost:{}", port),
+            start_command: make_start_command(pkg_manager, script_key),
+            source: "package.json".to_string(),
+            running: false,
+        });
+    }
+
+    if cmd.contains("remix dev") || (cmd.contains("remix") && cmd.contains("dev")) {
+        let port = port_override.unwrap_or(3000);
+        return Some(DetectedDevServer {
+            framework: "Remix".to_string(),
+            port,
+            url: format!("http://localhost:{}", port),
+            start_command: make_start_command(pkg_manager, script_key),
+            source: "package.json".to_string(),
+            running: false,
+        });
+    }
+
+    if cmd.contains("gatsby develop") {
+        let port = port_override.unwrap_or(8000);
+        return Some(DetectedDevServer {
+            framework: "Gatsby".to_string(),
+            port,
+            url: format!("http://localhost:{}", port),
+            start_command: make_start_command(pkg_manager, script_key),
+            source: "package.json".to_string(),
+            running: false,
+        });
+    }
+
+    // Generic webpack-dev-server / webpack serve
+    if cmd.contains("webpack-dev-server") || cmd.contains("webpack serve") {
+        let port = port_override.unwrap_or(8080);
+        return Some(DetectedDevServer {
+            framework: "Webpack".to_string(),
+            port,
+            url: format!("http://localhost:{}", port),
+            start_command: make_start_command(pkg_manager, script_key),
+            source: "package.json".to_string(),
+            running: false,
+        });
+    }
+
     // Generic vite (must be after framework-specific checks that use vite internally)
     if cmd.contains("vite") {
         let port = port_override.unwrap_or(5173);
