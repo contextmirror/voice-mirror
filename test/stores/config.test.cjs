@@ -86,6 +86,10 @@ describe('config.svelte.js -- critical field values', () => {
     assert.ok(src.includes("provider: 'claude'"), 'provider should default to claude');
   });
 
+  it('has ai.autoStart field defaulting to false', () => {
+    assert.ok(src.includes('autoStart: false'), 'autoStart should default to false');
+  });
+
   it('has contextLength field', () => {
     assert.ok(src.includes('contextLength:'), 'Should have contextLength');
   });

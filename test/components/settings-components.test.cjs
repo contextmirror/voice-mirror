@@ -627,6 +627,15 @@ describe('BehaviorSettings.svelte', () => {
     assert.ok(src.includes('Start with System'), 'Should show Start with System label');
   });
 
+  it('has autoStartProvider toggle', () => {
+    assert.ok(src.includes('autoStartProvider'), 'Should have autoStartProvider state');
+    assert.ok(src.includes('Auto-Start AI Provider'), 'Should show Auto-Start AI Provider label');
+  });
+
+  it('includes ai.autoStart in save patch', () => {
+    assert.ok(src.includes('autoStart: autoStartProvider'), 'Should save autoStart to ai config');
+  });
+
   it('has debugMode toggle', () => {
     assert.ok(src.includes('debugMode'), 'Should have debugMode');
     assert.ok(src.includes('Debug Mode'), 'Should show Debug Mode label');

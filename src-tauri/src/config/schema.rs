@@ -366,6 +366,8 @@ pub struct AiConfig {
     #[serde(default = "default_provider")]
     pub provider: String,
     #[serde(default)]
+    pub auto_start: bool,
+    #[serde(default)]
     pub model: Option<String>,
     #[serde(default = "default_context_length")]
     pub context_length: u32,
@@ -387,6 +389,7 @@ impl Default for AiConfig {
     fn default() -> Self {
         Self {
             provider: "claude".into(),
+            auto_start: false,
             model: None,
             context_length: 32768,
             auto_detect: true,

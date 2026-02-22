@@ -99,6 +99,7 @@ const DEFAULT_CONFIG = {
   },
   ai: {
     provider: 'claude',
+    autoStart: false,
     model: null,
     contextLength: 32768,
     autoDetect: true,

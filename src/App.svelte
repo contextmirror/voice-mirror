@@ -70,12 +70,16 @@
     }
   });
 
-  // Auto-start AI provider once config is loaded
+  // Auto-start AI provider once config is loaded (gated by ai.autoStart config)
   let providerStarted = $state(false);
   $effect(() => {
     if (configStore.loaded && !providerStarted) {
       providerStarted = true;
-      startProvider();
+      const cfg = configStore.value;
+      const provider = cfg?.ai?.provider || 'claude';
+      if (provider === 'dictation' || cfg?.ai?.autoStart) {
+        startProvider();
+      }
     }
   });
 
