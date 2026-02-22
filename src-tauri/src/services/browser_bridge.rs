@@ -409,8 +409,11 @@ pub async fn handle_browser_action(
                 Ok(png_bytes) => {
                     use base64::Engine;
                     let b64 = base64::engine::general_purpose::STANDARD.encode(&png_bytes);
+                    // Return in the format browser.rs expects: { base64, contentType }
+                    // browser.rs will convert this to an MCP image content block
                     Ok(json!({
-                        "image_data_url": format!("data:image/png;base64,{}", b64),
+                        "base64": b64,
+                        "contentType": "image/png",
                         "size_bytes": png_bytes.len(),
                         "page": meta,
                     }))
