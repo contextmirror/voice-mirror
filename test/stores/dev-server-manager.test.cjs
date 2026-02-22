@@ -262,9 +262,17 @@ describe('dev-server-manager.svelte.js -- startServer behavior', () => {
 // -- Stop server behavior --
 
 describe('dev-server-manager.svelte.js -- stopServer behavior', () => {
-  it('calls shellKill', () => {
+  it('clears shellId before killing to prevent false crash detection', () => {
     const block = src.split('async function stopServer')[1]?.split('async function')[0] || '';
-    assert.ok(block.includes('shellKill(state.shellId)'), 'Should call shellKill');
+    const clearIdx = block.indexOf("shellId: null");
+    const killIdx = block.indexOf('shellKill(');
+    assert.ok(clearIdx > 0 && killIdx > 0, 'Should have both state clear and shellKill');
+    assert.ok(clearIdx < killIdx, 'Should clear shellId BEFORE calling shellKill');
+  });
+
+  it('calls shellKill with captured shellId', () => {
+    const block = src.split('async function stopServer')[1]?.split('async function')[0] || '';
+    assert.ok(block.includes('shellKill(shellId)'), 'Should call shellKill with captured shellId');
   });
 
   it('marks tab as exited', () => {

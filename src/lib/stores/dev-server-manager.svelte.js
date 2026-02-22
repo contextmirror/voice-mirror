@@ -280,17 +280,21 @@ function createDevServerManager() {
     cancelPoll(projectPath);
     cancelIdleTimer(projectPath);
 
-    try {
-      await shellKill(state.shellId);
-    } catch (err) {
-      console.warn('[dev-server-manager] Kill failed:', err);
-    }
-
-    terminalTabsStore.markExited(state.shellId);
+    // Capture shellId, then clear it BEFORE killing so handleShellExit
+    // won't match this shell and wrongly report it as a crash.
+    const shellId = state.shellId;
     updateState(projectPath, {
       status: 'stopped',
       shellId: null,
     });
+
+    try {
+      await shellKill(shellId);
+    } catch (err) {
+      console.warn('[dev-server-manager] Kill failed:', err);
+    }
+
+    terminalTabsStore.markExited(shellId);
   }
 
   /**
