@@ -300,6 +300,50 @@ describe('FileEditor.svelte: conflict detection', () => {
   });
 });
 
+describe('FileEditor.svelte: gutter context menu fallback (BUG-004)', () => {
+  it('has oncontextmenu handler on .file-editor container', () => {
+    assert.ok(
+      src.includes('oncontextmenu='),
+      'Should have oncontextmenu fallback on container div'
+    );
+  });
+
+  it('skips fallback when CM handler already fired', () => {
+    assert.ok(
+      src.includes('if (editorMenu.visible) return'),
+      'Should skip fallback when editor menu is already visible'
+    );
+  });
+
+  it('tries posAtCoords for line resolution', () => {
+    // The fallback handler resolves line number from click coordinates
+    const handlerStart = src.indexOf('oncontextmenu=');
+    const chunk = src.slice(handlerStart, handlerStart + 800);
+    assert.ok(
+      chunk.includes('posAtCoords'),
+      'Should attempt posAtCoords in fallback handler'
+    );
+  });
+
+  it('falls back to lineBlockAtHeight for gutter clicks', () => {
+    const handlerStart = src.indexOf('oncontextmenu=');
+    const chunk = src.slice(handlerStart, handlerStart + 1200);
+    assert.ok(
+      chunk.includes('lineBlockAtHeight'),
+      'Should try lineBlockAtHeight as secondary line resolution'
+    );
+  });
+
+  it('checks diagnostics by line number for gutter markers', () => {
+    const handlerStart = src.indexOf('oncontextmenu=');
+    const chunk = src.slice(handlerStart, handlerStart + 1500);
+    assert.ok(
+      chunk.includes('cachedDiagnostics'),
+      'Should check cached diagnostics in fallback handler'
+    );
+  });
+});
+
 describe('FileEditor.svelte: lifecycle', () => {
   it('uses $effect to react to tab changes', () => {
     assert.ok(src.includes('$effect'), 'Should use $effect for reactive loading');

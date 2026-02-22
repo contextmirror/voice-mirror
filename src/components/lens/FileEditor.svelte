@@ -727,7 +727,52 @@
       <button class="conflict-btn conflict-dismiss" onclick={dismissConflict}>Dismiss</button>
     </div>
   {/if}
-  <div class="file-editor" bind:this={editorEl}>
+  <div class="file-editor" bind:this={editorEl}
+    oncontextmenu={(e) => {
+      // Fallback: catch right-clicks on gutter markers, tooltips, and other
+      // CodeMirror DOM layers that bypass the EditorView.domEventHandlers callback.
+      // If the CM handler already fired this event cycle, editorMenu is already visible.
+      if (editorMenu.visible) return;
+      e.preventDefault();
+
+      // Try to resolve editor position from click coordinates
+      let lineNumber = 0;
+      let diagnostic = null;
+      if (view) {
+        const pos = view.posAtCoords({ x: e.clientX, y: e.clientY });
+        if (pos != null) {
+          const line = view.state.doc.lineAt(pos);
+          lineNumber = line.number;
+          const diagnostics = cachedDiagnostics.get(currentPath) || [];
+          diagnostic = diagnostics.find(d => pos >= d.from && pos <= d.to);
+        }
+      }
+
+      // If we couldn't get a precise position, try line-from-Y as best effort
+      if (!lineNumber && view) {
+        const block = view.lineBlockAtHeight(e.clientY - view.documentTop);
+        if (block) {
+          try { lineNumber = view.state.doc.lineAt(block.from).number; } catch {}
+        }
+      }
+
+      // Check for diagnostics on this line even if pos wasn't exact
+      if (!diagnostic && lineNumber && currentPath) {
+        const diagnostics = cachedDiagnostics.get(currentPath) || [];
+        diagnostic = diagnostics.find(d => {
+          try { return view.state.doc.lineAt(d.from).number === lineNumber; } catch { return false; }
+        });
+      }
+
+      editorMenu = { visible: true, x: e.clientX, y: e.clientY };
+      menuContext = {
+        hasSelection: false,
+        selectedText: '',
+        hasDiagnostic: !!diagnostic,
+        diagnosticMessage: diagnostic?.message || '',
+        lineNumber,
+      };
+    }}>
     {#if loading}
       <div class="editor-loading">
         <span class="loading-text">Loading...</span>
