@@ -119,7 +119,10 @@
       // On Windows, pathname starts with /C:/... — strip leading slash
       if (/^\/[A-Za-z]:\//.test(filePath)) filePath = filePath.slice(1);
       const normalizedRoot = root.replace(/\\/g, '/').replace(/\/$/, '');
-      if (filePath.startsWith(normalizedRoot + '/')) {
+      // Windows paths are case-insensitive — compare lowercase for prefix check
+      const filePathLower = filePath.toLowerCase();
+      const rootLower = normalizedRoot.toLowerCase();
+      if (filePathLower.startsWith(rootLower + '/')) {
         return { path: filePath.slice(normalizedRoot.length + 1), external: false };
       }
       // Outside project root — return absolute path marked as external
@@ -713,13 +716,6 @@
       <span>Read-only — {tab.external ? 'external file' : 'cannot edit'}</span>
     </div>
   {/if}
-  <div class="file-editor" bind:this={editorEl}>
-    {#if loading}
-      <div class="editor-loading">
-        <span class="loading-text">Loading...</span>
-      </div>
-    {/if}
-  </div>
   {#if conflictDetected}
     <div class="conflict-banner">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
@@ -731,6 +727,13 @@
       <button class="conflict-btn conflict-dismiss" onclick={dismissConflict}>Dismiss</button>
     </div>
   {/if}
+  <div class="file-editor" bind:this={editorEl}>
+    {#if loading}
+      <div class="editor-loading">
+        <span class="loading-text">Loading...</span>
+      </div>
+    {/if}
+  </div>
 {/if}
 
 <EditorContextMenu
@@ -819,10 +822,6 @@
   }
 
   .conflict-banner {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -832,7 +831,6 @@
     color: var(--warn, #f59e0b);
     font-size: 12px;
     font-family: var(--font-family);
-    z-index: 10;
   }
 
   .conflict-banner svg {
