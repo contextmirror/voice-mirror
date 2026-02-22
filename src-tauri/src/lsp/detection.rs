@@ -17,6 +17,10 @@ pub struct ServerInfo {
 /// On Windows, npm-installed servers are `.cmd` batch wrappers that break
 /// stdio piping. Resolve the actual Node.js entry script and return
 /// `("node", [script_path, ...original_args])` instead.
+///
+/// Reads each package's `package.json` `bin` field to find the correct
+/// entry script (e.g. `lib/cli.mjs` for typescript-language-server,
+/// `bin/vscode-json-language-server` for vscode-langservers-extracted).
 #[cfg(target_os = "windows")]
 pub fn resolve_node_script(info: &ServerInfo) -> Option<(String, Vec<String>)> {
     let resolved = info.resolved_path.as_ref()?;
@@ -30,22 +34,47 @@ pub fn resolve_node_script(info: &ServerInfo) -> Option<(String, Vec<String>)> {
         return None;
     }
 
-    // npm global .cmd wrappers point to:
-    //   <npm_dir>/node_modules/<pkg>/bin/<binary>
-    // The .cmd sits at <npm_dir>/<binary>.cmd, so the script is at:
-    //   <npm_dir>/node_modules/*/bin/<binary>
     let npm_dir = resolved.parent()?;
-    let binary_name = resolved.file_stem()?;
-
-    // Walk node_modules looking for the matching bin script
+    let binary_name = resolved.file_stem()?.to_string_lossy().to_string();
     let node_modules = npm_dir.join("node_modules");
-    if node_modules.is_dir() {
-        for entry in std::fs::read_dir(&node_modules).ok()? {
-            let entry = entry.ok()?;
-            let bin_script = entry.path().join("bin").join(binary_name);
-            if bin_script.exists() {
+
+    if !node_modules.is_dir() {
+        return None;
+    }
+
+    // Walk node_modules packages, read package.json bin field
+    for entry in std::fs::read_dir(&node_modules).ok()? {
+        let pkg_dir = entry.ok()?.path();
+        let pkg_json = pkg_dir.join("package.json");
+        if !pkg_json.exists() {
+            continue;
+        }
+
+        let content = std::fs::read_to_string(&pkg_json).ok()?;
+        let json: serde_json::Value = serde_json::from_str(&content).ok()?;
+
+        // bin can be a string (single binary) or an object (multiple)
+        let script_rel = match &json["bin"] {
+            serde_json::Value::String(s) => {
+                // Single binary: package name must match
+                let pkg_name = json["name"].as_str().unwrap_or("");
+                if pkg_name == binary_name {
+                    Some(s.clone())
+                } else {
+                    None
+                }
+            }
+            serde_json::Value::Object(map) => {
+                map.get(&binary_name).and_then(|v| v.as_str()).map(|s| s.to_string())
+            }
+            _ => None,
+        };
+
+        if let Some(rel_path) = script_rel {
+            let script = pkg_dir.join(&rel_path);
+            if script.exists() {
                 let node = which::which("node").ok()?;
-                let mut args = vec![bin_script.to_string_lossy().to_string()];
+                let mut args = vec![script.to_string_lossy().to_string()];
                 args.extend(info.args.iter().cloned());
                 return Some((node.to_string_lossy().to_string(), args));
             }
