@@ -159,7 +159,7 @@ impl LspManager {
             .take()
             .ok_or("Failed to get LSP server stdout")?;
 
-        // Spawn a task to log stderr output for debugging
+        // Spawn a task to log stderr output (deduped + rate-limited)
         if let Some(stderr) = process.stderr.take() {
             let lang_id_clone = lang_id.to_string();
             let binary_clone = server_info.binary.clone();
@@ -167,21 +167,46 @@ impl LspManager {
                 use tokio::io::{AsyncBufReadExt, BufReader};
                 let mut reader = BufReader::new(stderr);
                 let mut line = String::new();
+                let mut last_msg = String::new();
+                let mut repeat_count: u32 = 0;
+
                 loop {
                     line.clear();
                     match reader.read_line(&mut line).await {
                         Ok(0) => break, // EOF
                         Ok(_) => {
                             let trimmed = line.trim();
-                            if !trimmed.is_empty() {
-                                warn!(
-                                    "[{}/{}] stderr: {}",
-                                    lang_id_clone, binary_clone, trimmed
-                                );
+                            if trimmed.is_empty() {
+                                continue;
                             }
+                            if trimmed == last_msg {
+                                repeat_count += 1;
+                                continue;
+                            }
+                            // Flush previous repeated message
+                            if repeat_count > 0 {
+                                warn!(
+                                    "[{}/{}] stderr: (repeated {} more times)",
+                                    lang_id_clone, binary_clone, repeat_count
+                                );
+                                repeat_count = 0;
+                            }
+                            warn!(
+                                "[{}/{}] stderr: {}",
+                                lang_id_clone, binary_clone, trimmed
+                            );
+                            last_msg.clear();
+                            last_msg.push_str(trimmed);
                         }
                         Err(_) => break,
                     }
+                }
+                // Flush any remaining repeats
+                if repeat_count > 0 {
+                    warn!(
+                        "[{}/{}] stderr: (repeated {} more times)",
+                        lang_id_clone, binary_clone, repeat_count
+                    );
                 }
             });
         }
