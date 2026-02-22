@@ -141,6 +141,9 @@
     display: flex;
     flex-direction: column;
     gap: 4px;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
   }
 
   .message-group.user .message-bubbles {

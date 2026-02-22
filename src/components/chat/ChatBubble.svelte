@@ -136,6 +136,12 @@
     box-shadow: var(--shadow-sm), inset 0 1px 0 var(--card-highlight);
   }
 
+  .bubble-content {
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+  }
+
   /* Markdown content styling */
   .bubble-content :global(p) {
     margin: 0 0 8px 0;
