@@ -91,7 +91,11 @@
   }
 
   async function loadRoot() {
-    const root = projectStore.activeProject?.path || null;
+    const root = projectStore.activeProject?.path;
+    if (!root) {
+      rootEntries = [];
+      return;
+    }
     try {
       const resp = await listDirectory(null, root);
       if (resp && resp.data) {
@@ -103,7 +107,11 @@
   }
 
   async function loadGitChanges() {
-    const root = projectStore.activeProject?.path || null;
+    const root = projectStore.activeProject?.path;
+    if (!root) {
+      gitChanges = [];
+      return;
+    }
     try {
       const resp = await getGitChanges(root);
       if (resp && resp.data && Array.isArray(resp.data.changes)) {
