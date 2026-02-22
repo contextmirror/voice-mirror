@@ -82,7 +82,8 @@
 
   // ---- Close confirmation for dev-server tabs ----
 
-  let closeConfirm = $state({ visible: false, tabId: null, tab: null });
+  let closeConfirmVisible = $state(false);
+  let closeConfirmTab = $state(null);
 
   /**
    * Attempt to close a tab. If it's a running dev-server tab, show confirmation.
@@ -93,7 +94,8 @@
     if (tabId === 'ai') return;
     const tab = terminalTabsStore.tabs.find(t => t.id === tabId);
     if (tab && tab.type === 'dev-server' && tab.running) {
-      closeConfirm = { visible: true, tabId, tab };
+      closeConfirmTab = tab;
+      closeConfirmVisible = true;
     } else {
       terminalTabsStore.closeTab(tabId);
     }
@@ -101,29 +103,35 @@
 
   /** Stop server, then close the tab */
   async function confirmStopAndClose() {
-    const { tab } = closeConfirm;
-    if (!tab) { closeConfirm = { visible: false, tabId: null, tab: null }; return; }
-    // Verify tab still exists in store (may have been closed by another action)
+    const tab = closeConfirmTab;
+    closeConfirmVisible = false;
+    closeConfirmTab = null;
+    if (!tab) return;
     const current = terminalTabsStore.tabs.find(t => t.id === tab.id);
-    if (!current) { closeConfirm = { visible: false, tabId: null, tab: null }; return; }
+    if (!current) return;
     if (tab.projectPath) {
-      await devServerManager.stopServer(tab.projectPath);
+      try {
+        await devServerManager.stopServer(tab.projectPath);
+      } catch (err) {
+        console.error('[TerminalTabs] stopServer failed:', err);
+      }
     }
     terminalTabsStore.closeTab(tab.id);
-    closeConfirm = { visible: false, tabId: null, tab: null };
   }
 
   /** Hide tab (keep process alive) */
   function confirmHideTab() {
-    const { tab } = closeConfirm;
+    const tab = closeConfirmTab;
+    closeConfirmVisible = false;
+    closeConfirmTab = null;
     if (!tab) return;
     terminalTabsStore.hideTab(tab.id);
-    closeConfirm = { visible: false, tabId: null, tab: null };
   }
 
   /** Cancel close confirmation */
   function cancelCloseConfirm() {
-    closeConfirm = { visible: false, tabId: null, tab: null };
+    closeConfirmVisible = false;
+    closeConfirmTab = null;
   }
 
   // ---- Tab renaming (double-click) ----
@@ -528,28 +536,30 @@
   {/if}
 
   <!-- Close confirmation dialog for dev-server tabs -->
-  {#if closeConfirm.visible}
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div class="close-confirm-overlay" onkeydown={(e) => { if (e.key === 'Escape') cancelCloseConfirm(); }}>
-      <div class="close-confirm-dialog" role="alertdialog" aria-modal="true" aria-label="Close dev server confirmation">
-        <div class="close-confirm-title">Dev server running</div>
-        <div class="close-confirm-message">
-          {closeConfirm.tab?.framework || 'Server'}{closeConfirm.tab?.port ? ` on :${closeConfirm.tab.port}` : ''} is still running.
-        </div>
-        <div class="close-confirm-actions">
-          <button class="close-confirm-btn stop" type="button" onclick={confirmStopAndClose} aria-label="Stop server and close tab">
-            Stop Server
-          </button>
-          <button class="close-confirm-btn hide" type="button" onclick={confirmHideTab} aria-label="Hide tab but keep server running">
-            Hide Tab
-          </button>
-          <button class="close-confirm-btn cancel" type="button" onclick={cancelCloseConfirm} aria-label="Cancel closing" use:autofocus>
-            Cancel
-          </button>
-        </div>
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div
+    class="close-confirm-overlay"
+    class:close-confirm-hidden={!closeConfirmVisible}
+    onkeydown={(e) => { if (e.key === 'Escape') cancelCloseConfirm(); }}
+  >
+    <div class="close-confirm-dialog" role="alertdialog" aria-modal="true" aria-label="Close dev server confirmation">
+      <div class="close-confirm-title">Dev server running</div>
+      <div class="close-confirm-message">
+        {closeConfirmTab?.framework || 'Server'}{closeConfirmTab?.port ? ` on :${closeConfirmTab.port}` : ''} is still running.
+      </div>
+      <div class="close-confirm-actions">
+        <button class="close-confirm-btn stop" type="button" onclick={confirmStopAndClose} aria-label="Stop server and close tab">
+          Stop Server
+        </button>
+        <button class="close-confirm-btn hide" type="button" onclick={confirmHideTab} aria-label="Hide tab but keep server running">
+          Hide Tab
+        </button>
+        <button class="close-confirm-btn cancel" type="button" onclick={cancelCloseConfirm} aria-label="Cancel closing">
+          Cancel
+        </button>
       </div>
     </div>
-  {/if}
+  </div>
 
   <!-- Terminal panels -->
   <div class="terminal-panels">
@@ -940,6 +950,10 @@
     align-items: center;
     justify-content: center;
     background: rgba(0, 0, 0, 0.5);
+  }
+
+  .close-confirm-overlay.close-confirm-hidden {
+    display: none !important;
   }
 
   .close-confirm-dialog {

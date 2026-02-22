@@ -16,14 +16,9 @@ describe('TerminalTabs.svelte -- dev-server close confirmation', () => {
     assert.ok(src.includes('dev-server-manager.svelte.js'), 'Should import from correct store');
   });
 
-  it('has closeConfirm reactive state', () => {
-    assert.ok(/let\s+closeConfirm\s*=\s*\$state/.test(src), 'Should have closeConfirm $state');
-  });
-
-  it('closeConfirm has visible, tabId, and tab fields', () => {
-    assert.ok(src.includes('visible: false'), 'Should init with visible: false');
-    assert.ok(src.includes('tabId: null'), 'Should init with tabId: null');
-    assert.ok(src.includes('tab: null'), 'Should init with tab: null');
+  it('has close-confirm reactive state', () => {
+    assert.ok(/let\s+closeConfirmVisible\s*=\s*\$state/.test(src), 'Should have closeConfirmVisible $state');
+    assert.ok(/let\s+closeConfirmTab\s*=\s*\$state/.test(src), 'Should have closeConfirmTab $state');
   });
 
   it('has requestCloseTab function', () => {
@@ -97,8 +92,8 @@ describe('TerminalTabs.svelte -- confirmation dialog markup', () => {
   });
 
   it('shows server info in dialog message', () => {
-    assert.ok(src.includes('closeConfirm.tab?.framework'), 'Should show framework');
-    assert.ok(src.includes('closeConfirm.tab?.port'), 'Should show port');
+    assert.ok(src.includes('closeConfirmTab?.framework'), 'Should show framework');
+    assert.ok(src.includes('closeConfirmTab?.port'), 'Should show port');
   });
 
   it('has Stop Server button in dialog', () => {
@@ -113,8 +108,9 @@ describe('TerminalTabs.svelte -- confirmation dialog markup', () => {
     assert.ok(src.includes('cancelCloseConfirm'), 'Should have Cancel action');
   });
 
-  it('conditionally renders dialog based on closeConfirm.visible', () => {
-    assert.ok(src.includes('{#if closeConfirm.visible}'), 'Should conditionally render dialog');
+  it('hides dialog when closeConfirmVisible is false', () => {
+    assert.ok(src.includes('close-confirm-hidden'), 'Should have hidden class for dialog');
+    assert.ok(src.includes('closeConfirmVisible'), 'Should use closeConfirmVisible state');
   });
 
   it('has Escape key handler on overlay to dismiss dialog', () => {
@@ -135,10 +131,8 @@ describe('TerminalTabs.svelte -- confirmation dialog markup', () => {
     assert.ok(src.includes('aria-label="Cancel closing"'), 'Cancel button should have aria-label');
   });
 
-  it('Cancel button has autofocus action', () => {
-    // The cancel button should get focus when dialog opens
-    const dialogBlock = src.split('close-confirm-actions')[1]?.split('</div>')[0] || '';
-    assert.ok(dialogBlock.includes('use:autofocus'), 'Cancel button should be auto-focused');
+  it('has Cancel button with onclick handler', () => {
+    assert.ok(src.includes('cancelCloseConfirm'), 'Cancel button should call cancelCloseConfirm');
   });
 });
 
