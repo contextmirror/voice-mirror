@@ -3,7 +3,9 @@
 //! Scans a project directory for common dev server configurations (Vite, Next.js,
 //! CRA, Angular, SvelteKit, Tauri) and probes whether the detected port is active.
 
+use std::net::SocketAddr;
 use std::path::Path;
+use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
@@ -72,16 +74,38 @@ pub fn detect_dev_servers(project_root: &str) -> Vec<DetectedDevServer> {
         server.running = is_port_listening(server.port);
     }
 
+    // Self-detection guard: when scanning our own project root, exclude the
+    // Tauri dev server entry. During `tauri dev`, Voice Mirror's own Vite
+    // dev server on port 1420 is always running — reporting it as a detected
+    // "external" dev server is misleading.
+    if is_own_project(root) {
+        if let Some(own_port) = own_tauri_dev_port(root) {
+            servers.retain(|s| s.port != own_port);
+        }
+    }
+
     servers
 }
 
 /// Check if a TCP port is accepting connections on localhost.
+///
+/// Tries IPv4 (`127.0.0.1`) first, then falls back to IPv6 (`[::1]`)
+/// since some dev servers bind only to one address family.
 pub fn is_port_listening(port: u16) -> bool {
+    let timeout = Duration::from_millis(200);
+    // Try IPv4 first
+    if std::net::TcpStream::connect_timeout(
+        &SocketAddr::from(([127, 0, 0, 1], port)),
+        timeout,
+    )
+    .is_ok()
+    {
+        return true;
+    }
+    // Fallback to IPv6
     std::net::TcpStream::connect_timeout(
-        &format!("127.0.0.1:{}", port)
-            .parse()
-            .expect("valid socket addr"),
-        std::time::Duration::from_millis(200),
+        &SocketAddr::from(([0, 0, 0, 0, 0, 0, 0, 1], port)),
+        timeout,
     )
     .is_ok()
 }
@@ -281,6 +305,33 @@ fn match_script_pattern(cmd: &str, script_key: &str, pkg_manager: &str) -> Optio
     }
 
     None
+}
+
+// ---------------------------------------------------------------------------
+// Self-detection helpers
+// ---------------------------------------------------------------------------
+
+/// Check if the current running binary lives under the project's `src-tauri/target/` directory.
+/// This indicates we're a Tauri app built from and running inside this project.
+fn is_own_project(project_root: &Path) -> bool {
+    let target_dir = project_root.join("src-tauri").join("target");
+    if let Ok(exe) = std::env::current_exe() {
+        // Canonicalize both to resolve symlinks / UNC prefixes on Windows
+        let exe_canon = std::fs::canonicalize(&exe).unwrap_or(exe);
+        let target_canon = std::fs::canonicalize(&target_dir).unwrap_or(target_dir);
+        exe_canon.starts_with(&target_canon)
+    } else {
+        false
+    }
+}
+
+/// Read the Tauri devUrl port from the project's `tauri.conf.json`.
+fn own_tauri_dev_port(project_root: &Path) -> Option<u16> {
+    let conf_path = project_root.join("src-tauri").join("tauri.conf.json");
+    let content = std::fs::read_to_string(conf_path).ok()?;
+    let json: serde_json::Value = serde_json::from_str(&content).ok()?;
+    let dev_url = json.get("build")?.get("devUrl")?.as_str()?;
+    extract_port_from_url(dev_url)
 }
 
 // ---------------------------------------------------------------------------
@@ -560,5 +611,45 @@ mod tests {
         assert_eq!(vite.source, "package.json");
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_own_tauri_dev_port() {
+        let dir = std::env::temp_dir().join("vm_test_own_tauri_port");
+        let tauri_dir = dir.join("src-tauri");
+        let _ = std::fs::create_dir_all(&tauri_dir);
+
+        std::fs::write(
+            tauri_dir.join("tauri.conf.json"),
+            r#"{ "build": { "devUrl": "http://localhost:1420" } }"#,
+        )
+        .unwrap();
+
+        assert_eq!(own_tauri_dev_port(&dir), Some(1420));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_own_tauri_dev_port_missing_file() {
+        let dir = std::env::temp_dir().join("vm_test_own_tauri_port_missing");
+        let _ = std::fs::create_dir_all(&dir);
+        assert_eq!(own_tauri_dev_port(&dir), None);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_is_own_project_different_dir() {
+        // A temp dir won't contain our exe, so this should return false
+        let dir = std::env::temp_dir().join("vm_test_is_own_project");
+        let _ = std::fs::create_dir_all(&dir);
+        assert!(!is_own_project(&dir));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_is_port_listening_closed_ipv6() {
+        // Port 1 should not be listening on IPv6 either
+        assert!(!is_port_listening(1));
     }
 }

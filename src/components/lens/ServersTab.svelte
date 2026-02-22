@@ -116,7 +116,9 @@
   onMount(() => {
     runDetection();
 
-    const interval = setInterval(pollPorts, 5000);
+    const interval = setInterval(() => {
+      if (lensStore.devServers.length > 0) pollPorts();
+    }, 5000);
     return () => clearInterval(interval);
   });
 </script>

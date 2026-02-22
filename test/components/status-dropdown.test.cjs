@@ -195,6 +195,15 @@ describe('StatusDropdown.svelte: MCP tab content', () => {
     assert.ok(mcpSrc.includes('toggle-track'));
     assert.ok(mcpSrc.includes('toggle-thumb'));
   });
+  it('toggle has cursor: default (non-interactive, auto-managed)', () => {
+    assert.ok(mcpSrc.includes('cursor: default'), 'Toggle should have cursor: default');
+  });
+  it('toggle has title tooltip explaining auto-management', () => {
+    assert.ok(mcpSrc.includes('title="Auto-managed by provider"'), 'Toggle should have explanatory tooltip');
+  });
+  it('uses --muted for stopped dot (not --danger)', () => {
+    assert.ok(mcpSrc.includes('.row-dot.stopped { background: var(--muted)'), 'MCP stopped dot should be muted gray');
+  });
   it('shows empty state for non-CLI providers', () => {
     assert.ok(mcpSrc.includes('No MCP tools configured'));
   });
@@ -280,6 +289,19 @@ describe('StatusDropdown.svelte: manage search', () => {
     assert.ok(src.includes('Search servers'));
     assert.ok(src.includes('bind:value={searchQuery}'));
   });
+  it('has filteredServers derived that filters by searchQuery', () => {
+    assert.ok(src.includes('filteredServers'), 'Should have filteredServers');
+    assert.ok(src.includes('searchQuery'), 'Should use searchQuery for filtering');
+  });
+  it('filters by framework name (case-insensitive)', () => {
+    assert.ok(src.includes("(s.framework || '').toLowerCase().includes(searchQuery.toLowerCase())"), 'Should filter by framework');
+  });
+  it('filters by port number', () => {
+    assert.ok(src.includes('String(s.port).includes(searchQuery)'), 'Should filter by port');
+  });
+  it('uses filteredServers in each loop', () => {
+    assert.ok(src.includes('{#each filteredServers as server}'), 'Should iterate filteredServers, not devServers');
+  });
 });
 
 describe('StatusDropdown.svelte: manage server list', () => {
@@ -301,16 +323,21 @@ describe('StatusDropdown.svelte: manage server list', () => {
     assert.ok(src.includes('server.framework'));
     assert.ok(src.includes('server.port'));
   });
-  it('has server options menu button', () => {
-    assert.ok(src.includes('manage-row-menu'));
-    assert.ok(src.includes('Server options'));
-  });
-  it('stops propagation on menu click', () => {
-    assert.ok(src.includes('e.stopPropagation()'));
+  it('does not have noop server options menu button', () => {
+    assert.ok(!src.includes('manage-row-menu'), 'Noop menu button should be removed');
+    assert.ok(!src.includes('Server options'), 'Server options aria-label should be removed');
   });
   it('has Add server button', () => {
     assert.ok(src.includes('manage-add'));
     assert.ok(src.includes('Add server'));
+  });
+});
+
+describe('StatusDropdown.svelte: row-dot stopped color consistency', () => {
+  it('uses --muted for stopped dot (not --danger)', () => {
+    // .row-dot.stopped should use var(--muted), consistent with ServersTab
+    assert.ok(src.includes('.row-dot.stopped { background: var(--muted)'), 'Stopped dot should be muted gray, not danger red');
+    assert.ok(!src.includes('.row-dot.stopped { background: var(--danger)'), 'Stopped dot should NOT use --danger');
   });
 });
 

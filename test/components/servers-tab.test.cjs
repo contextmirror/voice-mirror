@@ -124,6 +124,10 @@ describe('ServersTab', () => {
     assert.ok(src.includes('5000'));
   });
 
+  it('guards port polling with server count check', () => {
+    assert.ok(src.includes('lensStore.devServers.length > 0'), 'Should only poll when servers exist');
+  });
+
   it('clears poll interval on unmount', () => {
     assert.ok(src.includes('clearInterval'));
   });
@@ -276,8 +280,8 @@ describe('StatusDropdown dev server integration', () => {
     assert.ok(dropdownSrc.includes('devServers.length'));
   });
 
-  it('iterates devServers in manage view', () => {
-    assert.ok(dropdownSrc.includes('{#each devServers as server}'));
+  it('iterates filteredServers in manage view (search-filtered)', () => {
+    assert.ok(dropdownSrc.includes('{#each filteredServers as server}'));
   });
 
   it('shows server.framework in manage row', () => {

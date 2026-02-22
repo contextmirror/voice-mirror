@@ -16,6 +16,16 @@
   let managing = $state(false);
   let searchQuery = $state('');
 
+  // ── Manage servers search filter ──
+  let filteredServers = $derived(
+    searchQuery
+      ? devServers.filter(s =>
+          (s.framework || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+          String(s.port).includes(searchQuery)
+        )
+      : devServers
+  );
+
   // Overall health
   let healthy = $derived(aiStatusStore.running);
 
@@ -142,7 +152,7 @@
               <span class="manage-row-badge">Current Server</span>
             {/if}
           </button>
-          {#each devServers as server}
+          {#each filteredServers as server}
             {@const crashed = devServerManager.crashedServers.find(c => c.port === server.port)}
             {@const isCrashLoop = crashed?.crashLoopDetected}
             {@const hiddenTab = server.shellId ? terminalTabsStore.hiddenTabs.find(t => t.shellId === server.shellId) : null}
@@ -162,12 +172,6 @@
               {:else if hiddenTab}
                 <button class="manage-show-terminal-btn" type="button" onclick={(e) => { e.stopPropagation(); terminalTabsStore.unhideTab(hiddenTab.id); }}>
                   Show Terminal
-                </button>
-              {:else}
-                <button class="manage-row-menu" type="button" aria-label="Server options" onclick={(e) => e.stopPropagation()}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/>
-                  </svg>
                 </button>
               {/if}
             </div>
@@ -352,7 +356,7 @@
   }
   .row-dot.ok { background: var(--ok); }
   .row-dot.starting { background: var(--warn); animation: dot-pulse 1.2s ease-in-out infinite; }
-  .row-dot.stopped { background: var(--danger); }
+  .row-dot.stopped { background: var(--muted); }
 
   .manage-header {
     display: flex;
@@ -486,27 +490,6 @@
     border-radius: 4px;
     margin-left: auto;
     white-space: nowrap;
-  }
-
-  .manage-row-menu {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 22px;
-    height: 22px;
-    border: none;
-    border-radius: 4px;
-    background: transparent;
-    color: var(--muted);
-    cursor: pointer;
-    margin-left: auto;
-    flex-shrink: 0;
-    transition: background var(--duration-fast) var(--ease-out);
-    -webkit-app-region: no-drag;
-  }
-  .manage-row-menu:hover {
-    background: var(--bg);
-    color: var(--text);
   }
 
   .manage-add {

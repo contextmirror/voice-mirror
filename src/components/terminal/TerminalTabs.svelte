@@ -10,6 +10,7 @@
    * - Ctrl+Tab / Ctrl+Shift+Tab to cycle tabs
    * - Smart shell numbering (fills gaps)
    */
+  import { onMount } from 'svelte';
   import Terminal from './Terminal.svelte';
   import ShellTerminal from './ShellTerminal.svelte';
   import { terminalTabsStore } from '../../lib/stores/terminal-tabs.svelte.js';
@@ -316,7 +317,7 @@
 
   // ---- Keyboard tab cycling (Ctrl+Tab / Ctrl+Shift+Tab) ----
 
-  $effect(() => {
+  onMount(() => {
     function handleKeydown(e) {
       if (e.ctrlKey && e.key === 'Tab') {
         e.preventDefault();
@@ -379,7 +380,6 @@
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <span
             class="tab-label"
-            role="textbox"
             ondblclick={(e) => { e.preventDefault(); startRename(tab.id); }}
           >{tab.title}</span>
         {/if}
@@ -529,20 +529,21 @@
 
   <!-- Close confirmation dialog for dev-server tabs -->
   {#if closeConfirm.visible}
-    <div class="close-confirm-overlay">
-      <div class="close-confirm-dialog">
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="close-confirm-overlay" onkeydown={(e) => { if (e.key === 'Escape') cancelCloseConfirm(); }}>
+      <div class="close-confirm-dialog" role="alertdialog" aria-modal="true" aria-label="Close dev server confirmation">
         <div class="close-confirm-title">Dev server running</div>
         <div class="close-confirm-message">
           {closeConfirm.tab?.framework || 'Server'}{closeConfirm.tab?.port ? ` on :${closeConfirm.tab.port}` : ''} is still running.
         </div>
         <div class="close-confirm-actions">
-          <button class="close-confirm-btn stop" type="button" onclick={confirmStopAndClose}>
+          <button class="close-confirm-btn stop" type="button" onclick={confirmStopAndClose} aria-label="Stop server and close tab">
             Stop Server
           </button>
-          <button class="close-confirm-btn hide" type="button" onclick={confirmHideTab}>
+          <button class="close-confirm-btn hide" type="button" onclick={confirmHideTab} aria-label="Hide tab but keep server running">
             Hide Tab
           </button>
-          <button class="close-confirm-btn cancel" type="button" onclick={cancelCloseConfirm}>
+          <button class="close-confirm-btn cancel" type="button" onclick={cancelCloseConfirm} aria-label="Cancel closing" use:autofocus>
             Cancel
           </button>
         </div>

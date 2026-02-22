@@ -238,6 +238,13 @@ describe('toast.svelte.js -- key-based deduplication', () => {
   });
 });
 
+describe('toast.svelte.js -- suppressed toast returns null', () => {
+  it('returns null (not empty string) when toasts are suppressed', () => {
+    assert.ok(src.includes('return null'), 'Should return null when suppressed');
+    assert.ok(!src.includes("return ''"), 'Should NOT return empty string when suppressed');
+  });
+});
+
 describe('toast.svelte.js -- severity levels documented', () => {
   it('documents info severity', () => {
     assert.ok(src.includes('info'), 'Should document info severity');

@@ -57,7 +57,7 @@ function createToastStore() {
     key = null,
   }) {
     // Respect the showToasts config setting (errors always shown)
-    if (severity !== 'error' && configStore.value?.behavior?.showToasts === false) return '';
+    if (severity !== 'error' && configStore.value?.behavior?.showToasts === false) return null;
 
     // Deduplicate by key — dismiss existing toast with same key
     if (key) {

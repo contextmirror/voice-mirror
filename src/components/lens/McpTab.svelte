@@ -17,7 +17,7 @@
       ></div>
       <span class="row-name">voice-mirror</span>
       <span class="row-version">55 tools</span>
-      <div class="row-toggle" class:on={mcpConnected}>
+      <div class="row-toggle" class:on={mcpConnected} title="Auto-managed by provider">
         <div class="toggle-track">
           <div class="toggle-thumb"></div>
         </div>
@@ -56,7 +56,7 @@
   }
   .row-dot.ok { background: var(--ok); }
   .row-dot.starting { background: var(--warn); animation: dot-pulse 1.2s ease-in-out infinite; }
-  .row-dot.stopped { background: var(--danger); }
+  .row-dot.stopped { background: var(--muted); }
 
   @keyframes dot-pulse {
     0%, 100% { opacity: 1; }
@@ -89,6 +89,7 @@
   .row-toggle {
     flex-shrink: 0;
     margin-left: auto;
+    cursor: default;
   }
 
   .toggle-track {

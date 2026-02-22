@@ -116,6 +116,30 @@ describe('TerminalTabs.svelte -- confirmation dialog markup', () => {
   it('conditionally renders dialog based on closeConfirm.visible', () => {
     assert.ok(src.includes('{#if closeConfirm.visible}'), 'Should conditionally render dialog');
   });
+
+  it('has Escape key handler on overlay to dismiss dialog', () => {
+    assert.ok(src.includes("if (e.key === 'Escape') cancelCloseConfirm()"), 'Should dismiss on Escape key');
+  });
+
+  it('dialog has role="alertdialog" for accessibility', () => {
+    assert.ok(src.includes('role="alertdialog"'), 'Should have alertdialog role');
+  });
+
+  it('dialog has aria-modal="true"', () => {
+    assert.ok(src.includes('aria-modal="true"'), 'Should have aria-modal');
+  });
+
+  it('dialog buttons have aria-labels', () => {
+    assert.ok(src.includes('aria-label="Stop server and close tab"'), 'Stop button should have aria-label');
+    assert.ok(src.includes('aria-label="Hide tab but keep server running"'), 'Hide button should have aria-label');
+    assert.ok(src.includes('aria-label="Cancel closing"'), 'Cancel button should have aria-label');
+  });
+
+  it('Cancel button has autofocus action', () => {
+    // The cancel button should get focus when dialog opens
+    const dialogBlock = src.split('close-confirm-actions')[1]?.split('</div>')[0] || '';
+    assert.ok(dialogBlock.includes('use:autofocus'), 'Cancel button should be auto-focused');
+  });
 });
 
 describe('TerminalTabs.svelte -- dev-server terminal rendering', () => {

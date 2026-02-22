@@ -19,15 +19,14 @@
 
   // Listen for LSP server status updates
   $effect(() => {
+    let cancelled = false;
     let unlisten;
-    (async () => {
-      unlisten = await listen('lsp-server-status', (event) => {
-        if (event.payload?.servers) {
-          lspServers = event.payload.servers;
-        }
-      });
-    })();
-    return () => { unlisten?.(); };
+    listen('lsp-server-status', (event) => {
+      if (!cancelled && event.payload?.servers) {
+        lspServers = event.payload.servers;
+      }
+    }).then(fn => { unlisten = fn; if (cancelled) fn(); });
+    return () => { cancelled = true; unlisten?.(); };
   });
 </script>
 
