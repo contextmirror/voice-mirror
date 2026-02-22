@@ -400,7 +400,9 @@
     <StatusDropdown />
   </div>
 
-  {#if activeTab === 'files'}
+  {#if !projectStore.activeProject}
+    <div class="tree-empty">No project open</div>
+  {:else if activeTab === 'files'}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div class="tree-scroll" oncontextmenu={handleEmptyContextMenu}>
       {#snippet treeNode(entries, depth)}
@@ -736,6 +738,7 @@
     text-overflow: ellipsis;
   }
 
+  .tree-empty,
   .changes-empty {
     color: var(--muted);
     text-align: center;
