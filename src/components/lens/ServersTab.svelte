@@ -33,12 +33,13 @@
    */
   function getServerState(server) {
     const project = projectStore.activeProject;
-    if (!project?.path) return { status: server.running ? 'running' : 'stopped', crashLoopDetected: false };
+    if (!project?.path) return { status: server.running ? 'running' : 'stopped', crashLoopDetected: false, managed: false };
     const managed = devServerManager.getServerStatus(project.path);
     if (managed && managed.port === server.port) {
-      return { status: managed.status, crashLoopDetected: managed.crashLoopDetected };
+      return { status: managed.status, crashLoopDetected: managed.crashLoopDetected, managed: true };
     }
-    return { status: server.running ? 'running' : 'stopped', crashLoopDetected: false };
+    // External server (detected but not started by us)
+    return { status: server.running ? 'running' : 'stopped', crashLoopDetected: false, managed: false };
   }
 
   /** Detect dev servers for the active project */
@@ -173,9 +174,11 @@
             <span class="starting-dot"></span> Starting...
           </button>
         {:else if state.status === 'running'}
-          <button class="action-btn stop-btn" type="button" onclick={handleStop}>
-            Stop
-          </button>
+          {#if state.managed}
+            <button class="action-btn stop-btn" type="button" onclick={handleStop}>
+              Stop
+            </button>
+          {/if}
           <button class="open-btn" type="button" onclick={() => openInBrowser(server)}>
             Open in Browser
           </button>
