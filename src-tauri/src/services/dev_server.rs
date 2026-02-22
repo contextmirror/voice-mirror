@@ -368,6 +368,103 @@ fn match_script_pattern(cmd: &str, script_key: &str, pkg_manager: &str) -> Optio
     None
 }
 
+/// Kill the process listening on a given port.
+///
+/// Platform-specific: uses `netstat` + `taskkill` on Windows, `lsof` + `kill`
+/// on Unix. Returns Ok(()) if a process was found and killed, Err otherwise.
+pub fn kill_port_process(port: u16) -> Result<(), String> {
+    kill_port_process_impl(port)
+}
+
+#[cfg(windows)]
+fn kill_port_process_impl(port: u16) -> Result<(), String> {
+    use std::process::Command;
+
+    // Run netstat directly (no pipe) and parse in Rust — avoids cmd.exe shell issues
+    let output = Command::new("netstat")
+        .args(["-ano"])
+        .output()
+        .map_err(|e| format!("Failed to run netstat: {}", e))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let port_suffix = format!(":{}", port);
+    let mut killed = false;
+
+    for line in stdout.lines() {
+        let trimmed = line.trim();
+        if !trimmed.contains("LISTENING") {
+            continue;
+        }
+
+        let parts: Vec<&str> = trimmed.split_whitespace().collect();
+        // netstat -ano format: "TCP  addr:port  addr:port  LISTENING  PID"
+        if parts.len() < 5 {
+            continue;
+        }
+
+        // Verify the local address ends with our exact port
+        let local_addr = parts[1];
+        if !local_addr.ends_with(&port_suffix) {
+            continue;
+        }
+
+        // Parse PID (trim \r from Windows line endings)
+        let pid_str = parts[4].trim();
+        if let Ok(pid) = pid_str.parse::<u32>() {
+            if pid > 0 {
+                tracing::info!("[dev-server] Killing PID {} on port {} (addr={})", pid, port, local_addr);
+                let kill = Command::new("taskkill")
+                    .args(["/PID", &pid.to_string(), "/F"])
+                    .output()
+                    .map_err(|e| format!("Failed to run taskkill: {}", e))?;
+
+                if kill.status.success() {
+                    killed = true;
+                } else {
+                    let stderr = String::from_utf8_lossy(&kill.stderr);
+                    tracing::warn!("[dev-server] taskkill PID {} failed: {}", pid, stderr.trim());
+                }
+            }
+        }
+    }
+
+    if killed {
+        Ok(())
+    } else {
+        Err(format!("No process found listening on port {}", port))
+    }
+}
+
+#[cfg(not(windows))]
+fn kill_port_process_impl(port: u16) -> Result<(), String> {
+    use std::process::Command;
+
+    let output = Command::new("lsof")
+        .args(["-ti", &format!(":{}", port)])
+        .output()
+        .map_err(|e| format!("Failed to run lsof: {}", e))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let pid_str = stdout.trim();
+
+    if pid_str.is_empty() {
+        return Err(format!("No process found listening on port {}", port));
+    }
+
+    tracing::info!("[dev-server] Killing PID {} on port {}", pid_str, port);
+    let kill = Command::new("kill")
+        .args(["-9", pid_str])
+        .output()
+        .map_err(|e| format!("Failed to run kill: {}", e))?;
+
+    if kill.status.success() {
+        Ok(())
+    } else {
+        let stderr = String::from_utf8_lossy(&kill.stderr);
+        Err(format!("Failed to kill PID {}: {}", pid_str, stderr.trim()))
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Self-detection helpers
 // ---------------------------------------------------------------------------

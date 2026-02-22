@@ -233,6 +233,7 @@ describe('api.js -- exported async functions', () => {
     // Dev Server
     'detectDevServers',
     'probePort',
+    'killPortProcess',
     // Files
     'listDirectory',
     'getGitChanges',

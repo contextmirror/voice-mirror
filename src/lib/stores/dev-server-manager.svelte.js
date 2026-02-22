@@ -6,7 +6,7 @@
  * to cap concurrent running servers.
  */
 
-import { shellSpawn, shellInput, shellKill, probePort, lensNavigate } from '../api.js';
+import { shellSpawn, shellInput, shellKill, probePort, lensNavigate, killPortProcess } from '../api.js';
 import { terminalTabsStore } from './terminal-tabs.svelte.js';
 import { lensStore } from './lens.svelte.js';
 import { toastStore } from './toast.svelte.js';
@@ -294,6 +294,44 @@ function createDevServerManager() {
   }
 
   /**
+   * Stop an externally-running server by killing its port process.
+   * Used for servers we didn't start (no shellId), detected as already running.
+   * @param {number} port
+   */
+  async function stopExternalServer(port) {
+    let killed = false;
+    try {
+      const result = await killPortProcess(port);
+      if (result?.success && result?.data?.killed) {
+        killed = true;
+        toastStore.addToast({
+          message: `Stopped process on :${port}`,
+          severity: 'success',
+        });
+      } else {
+        toastStore.addToast({
+          message: result?.error || `Failed to stop process on :${port}`,
+          severity: 'error',
+        });
+      }
+    } catch (err) {
+      console.error('[dev-server-manager] Kill port failed:', err);
+      toastStore.addToast({
+        message: `Failed to stop process on :${port}: ${err.message || err}`,
+        severity: 'error',
+      });
+    }
+    // Only update the server list if we actually killed the process
+    if (killed) {
+      const current = lensStore.devServers;
+      const updated = current.map(s =>
+        s.port === port ? { ...s, running: false } : s
+      );
+      lensStore.setDevServers(updated);
+    }
+  }
+
+  /**
    * Restart a dev server -- stops then starts again.
    * Requires the original server config to be stored or passed again.
    * @param {string} projectPath
@@ -439,6 +477,7 @@ function createDevServerManager() {
 
     startServer,
     stopServer,
+    stopExternalServer,
     restartServer,
     getServerStatus,
     handleShellExit,

@@ -89,6 +89,10 @@ describe('dev-server-manager.svelte.js -- imports', () => {
     assert.ok(src.includes('lensNavigate'), 'Should import lensNavigate');
   });
 
+  it('imports killPortProcess from api', () => {
+    assert.ok(src.includes('killPortProcess'), 'Should import killPortProcess');
+  });
+
   it('imports terminalTabsStore', () => {
     assert.ok(src.includes('terminalTabsStore'), 'Should import terminalTabsStore');
   });
@@ -190,6 +194,25 @@ describe('dev-server-manager.svelte.js -- methods', () => {
 
   it('has handleProjectSwitch method', () => {
     assert.ok(src.includes('handleProjectSwitch'), 'Should have handleProjectSwitch');
+  });
+
+  it('has stopExternalServer method', () => {
+    assert.ok(src.includes('stopExternalServer'), 'Should have stopExternalServer');
+    assert.ok(src.includes('async function stopExternalServer('), 'stopExternalServer should be async');
+  });
+
+  it('stopExternalServer calls killPortProcess', () => {
+    const block = src.split('async function stopExternalServer')[1]?.split('async function')[0] || '';
+    assert.ok(block.includes('killPortProcess(port)'), 'Should call killPortProcess with port');
+  });
+
+  it('stopExternalServer updates devServers list after killing', () => {
+    const block = src.split('async function stopExternalServer')[1]?.split('async function')[0] || '';
+    assert.ok(block.includes('lensStore.setDevServers'), 'Should update lensStore devServers');
+  });
+
+  it('exposes stopExternalServer on the returned object', () => {
+    assert.ok(src.includes('stopExternalServer,'), 'Should export stopExternalServer in return object');
   });
 });
 

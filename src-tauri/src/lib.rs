@@ -252,9 +252,10 @@ pub fn run() {
             lsp_cmds::lsp_request_definition,
             lsp_cmds::lsp_get_status,
             lsp_cmds::lsp_shutdown,
-            // Dev server detection
+            // Dev server detection + management
             dev_server_cmds::detect_dev_servers,
             dev_server_cmds::probe_port,
+            dev_server_cmds::kill_port_process,
         ])
         .setup(|app| {
             // Initialize LSP manager state (needs AppHandle)

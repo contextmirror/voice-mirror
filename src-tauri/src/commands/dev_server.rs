@@ -1,8 +1,9 @@
-//! Tauri commands for dev server detection and port probing.
+//! Tauri commands for dev server detection, port probing, and process management.
 //!
-//! Provides two commands:
+//! Provides three commands:
 //! - `detect_dev_servers`: Scan a project directory for dev server configurations
 //! - `probe_port`: Check if a specific port is accepting connections
+//! - `kill_port_process`: Kill the process listening on a specific port
 
 use super::IpcResponse;
 use crate::services::dev_server;
@@ -46,6 +47,25 @@ pub fn probe_port(port: u16) -> Result<IpcResponse, String> {
     Ok(IpcResponse::ok(serde_json::json!({
         "listening": listening,
     })))
+}
+
+/// Kill the process listening on a specific port.
+///
+/// Uses platform-specific commands (netstat+taskkill on Windows, lsof+kill on Unix).
+/// Returns `{ killed: true }` on success.
+#[tauri::command]
+pub fn kill_port_process(port: u16) -> Result<IpcResponse, String> {
+    tracing::info!("[dev-server] kill_port_process port={}", port);
+
+    match dev_server::kill_port_process(port) {
+        Ok(()) => Ok(IpcResponse::ok(serde_json::json!({
+            "killed": true,
+        }))),
+        Err(e) => {
+            tracing::warn!("[dev-server] kill_port_process failed: {}", e);
+            Ok(IpcResponse::err(&e))
+        }
+    }
 }
 
 #[cfg(test)]

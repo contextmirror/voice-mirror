@@ -439,6 +439,15 @@ export async function probePort(port) {
   return invoke('probe_port', { port });
 }
 
+/**
+ * Kill the process listening on a specific port.
+ * @param {number} port - Port number to kill.
+ * @returns {Promise<{success: boolean, data?: {killed: boolean}}>}
+ */
+export async function killPortProcess(port) {
+  return invoke('kill_port_process', { port });
+}
+
 // ============ Files ============
 
 export async function listDirectory(path, root) {
