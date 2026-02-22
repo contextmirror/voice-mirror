@@ -334,11 +334,15 @@ describe('dev-server-manager.svelte.js -- idle timeout and LRU eviction', () => 
     assert.ok(src.includes('function countRunning'), 'Should have countRunning function');
   });
 
-  it('countRunning includes running, starting, and idle statuses', () => {
+  it('countRunning includes running and idle statuses (not starting)', () => {
     const block = src.split('function countRunning')[1]?.split('\n  function')[0] || '';
     assert.ok(
-      block.includes("'running'") && block.includes("'starting'") && block.includes("'idle'"),
-      'Should count running, starting, and idle servers'
+      block.includes("'running'") && block.includes("'idle'"),
+      'Should count running and idle servers'
+    );
+    assert.ok(
+      !block.includes("'starting'"),
+      'Should NOT count starting servers (they have not consumed resources yet)'
     );
   });
 });
@@ -401,5 +405,66 @@ describe('dev-server-manager.svelte.js -- tab title formatting', () => {
   it('falls back to Localhost for unknown framework', () => {
     const block = src.split('async function startServer')[1] || '';
     assert.ok(block.includes('Localhost'), 'Should fall back to Localhost');
+  });
+});
+
+// -- W1: restartServer resets crash state --
+
+describe('dev-server-manager.svelte.js -- restartServer crash state reset', () => {
+  it('resets crashCount to 0 before restarting', () => {
+    const block = src.split('async function restartServer')[1]?.split('async function')[0] || '';
+    assert.ok(block.includes('crashCount: 0'), 'Should reset crashCount to 0');
+  });
+
+  it('resets crashLoopDetected to false before restarting', () => {
+    const block = src.split('async function restartServer')[1]?.split('async function')[0] || '';
+    assert.ok(block.includes('crashLoopDetected: false'), 'Should reset crashLoopDetected');
+  });
+
+  it('resets lastCrashTime to null before restarting', () => {
+    const block = src.split('async function restartServer')[1]?.split('async function')[0] || '';
+    assert.ok(block.includes('lastCrashTime: null'), 'Should reset lastCrashTime');
+  });
+});
+
+// -- W2: pollPort cancellation --
+
+describe('dev-server-manager.svelte.js -- pollPort cancellation', () => {
+  it('pollPort promise has reject callback', () => {
+    const block = src.split('function pollPort')[1]?.split('\n  function')[0] || '';
+    assert.ok(block.includes('resolve, reject'), 'pollPort should use resolve and reject');
+  });
+
+  it('cancelPoll triggers reject with cancelled error', () => {
+    const block = src.split('function cancelPoll')[1]?.split('\n  function')[0] || '';
+    assert.ok(block.includes("reject(new Error('cancelled'))"), 'cancelPoll should reject with cancelled error');
+  });
+
+  it('pollTimers stores interval and reject function', () => {
+    const block = src.split('function pollPort')[1]?.split('\n  function')[0] || '';
+    assert.ok(block.includes('{ interval, reject }'), 'Should store both interval and reject in pollTimers');
+  });
+
+  it('cancelPoll clears interval from poll object', () => {
+    const block = src.split('function cancelPoll')[1]?.split('\n  function')[0] || '';
+    assert.ok(block.includes('poll.interval') || block.includes('clearInterval(poll.interval)'), 'Should clear interval from poll object');
+  });
+
+  it('startServer catches cancelled pollPort rejection', () => {
+    const block = src.split('async function startServer')[1]?.split('async function')[0] || '';
+    assert.ok(block.includes("err?.message === 'cancelled'"), 'Should catch cancelled poll rejection');
+  });
+});
+
+// -- C3: startServer race condition fix --
+
+describe('dev-server-manager.svelte.js -- startServer race condition fix', () => {
+  it('sets status to starting before evictIfNeeded', () => {
+    const block = src.split('async function startServer')[1]?.split('async function')[0] || '';
+    const startingIdx = block.indexOf("status: 'starting'");
+    const evictIdx = block.indexOf('await evictIfNeeded()');
+    assert.ok(startingIdx > -1, 'Should set status to starting');
+    assert.ok(evictIdx > -1, 'Should call evictIfNeeded');
+    assert.ok(startingIdx < evictIdx, 'Should set starting BEFORE evictIfNeeded');
   });
 });

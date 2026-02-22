@@ -54,9 +54,16 @@ function createToastStore() {
     duration,
     action = null,
     actions = null,
+    key = null,
   }) {
     // Respect the showToasts config setting (errors always shown)
     if (severity !== 'error' && configStore.value?.behavior?.showToasts === false) return '';
+
+    // Deduplicate by key — dismiss existing toast with same key
+    if (key) {
+      const existing = toasts.find(t => t.key === key);
+      if (existing) dismissToast(existing.id);
+    }
 
     // Use longer duration for multi-action toasts unless explicitly set
     const effectiveDuration = duration !== undefined
@@ -71,6 +78,7 @@ function createToastStore() {
       duration: effectiveDuration,
       action,
       actions,
+      key,
       createdAt: Date.now(),
     };
 

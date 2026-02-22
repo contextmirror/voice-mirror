@@ -88,7 +88,7 @@ function createDevServerManager() {
   function countRunning() {
     let count = 0;
     for (const [, state] of servers) {
-      if (state.status === 'running' || state.status === 'starting' || state.status === 'idle') {
+      if (state.status === 'running' || state.status === 'idle') {
         count++;
       }
     }
@@ -102,7 +102,7 @@ function createDevServerManager() {
    * @returns {Promise<boolean>}
    */
   function pollPort(port, projectPath) {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       const startTime = Date.now();
       const interval = setInterval(async () => {
         try {
@@ -124,7 +124,7 @@ function createDevServerManager() {
         }
       }, POLL_INTERVAL);
 
-      pollTimers.set(projectPath, interval);
+      pollTimers.set(projectPath, { interval, reject });
     });
   }
 
@@ -133,9 +133,10 @@ function createDevServerManager() {
    * @param {string} projectPath
    */
   function cancelPoll(projectPath) {
-    const timer = pollTimers.get(projectPath);
-    if (timer) {
-      clearInterval(timer);
+    const poll = pollTimers.get(projectPath);
+    if (poll) {
+      clearInterval(poll.interval);
+      poll.reject(new Error('cancelled'));
       pollTimers.delete(projectPath);
     }
   }
@@ -184,9 +185,7 @@ function createDevServerManager() {
       return;
     }
 
-    // Evict LRU if at capacity
-    await evictIfNeeded();
-
+    // Set status to 'starting' synchronously to prevent race conditions
     updateState(projectPath, {
       status: 'starting',
       port: server.port,
@@ -194,6 +193,9 @@ function createDevServerManager() {
       url: server.url,
       lastActiveTime: Date.now(),
     });
+
+    // Evict LRU if at capacity (after marking as starting so guard check works)
+    await evictIfNeeded();
 
     // Spawn PTY
     try {
@@ -233,8 +235,14 @@ function createDevServerManager() {
       // Send start command
       await shellInput(shellId, startCommand + '\n');
 
-      // Poll port
-      const ready = await pollPort(server.port, projectPath);
+      // Poll port (may be cancelled via cancelPoll)
+      let ready = false;
+      try {
+        ready = await pollPort(server.port, projectPath);
+      } catch (err) {
+        if (err?.message === 'cancelled') return;
+        throw err;
+      }
 
       if (ready) {
         updateState(projectPath, { status: 'running', lastActiveTime: Date.now() });
@@ -302,6 +310,9 @@ function createDevServerManager() {
     };
 
     await stopServer(projectPath);
+
+    // Reset crash state so manual restart works even after crash loop
+    updateState(projectPath, { crashCount: 0, crashLoopDetected: false, lastCrashTime: null });
 
     // Small delay to let the process fully exit
     await new Promise(resolve => setTimeout(resolve, 500));

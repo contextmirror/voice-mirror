@@ -196,6 +196,48 @@ describe('toast.svelte.js -- multi-action support', () => {
   });
 });
 
+describe('toast.svelte.js -- key-based deduplication', () => {
+  it('addToast accepts key parameter', () => {
+    assert.ok(src.includes('key = null'), 'addToast should accept key param with null default');
+  });
+
+  it('includes key in toast object', () => {
+    // The toast object literal should include key
+    const toastObj = src.split('const toast = {')[1]?.split('};')[0] || '';
+    assert.ok(toastObj.includes('key'), 'Toast object should include key field');
+  });
+
+  it('deduplicates by key — dismisses existing toast with same key', () => {
+    assert.ok(
+      src.includes("toasts.find(t => t.key === key)"),
+      'Should find existing toast by key'
+    );
+  });
+
+  it('calls dismissToast on existing toast with same key', () => {
+    // After finding existing, should dismiss it
+    const dedupBlock = src.split('if (key)')[1]?.split('}')[0] || '';
+    assert.ok(
+      dedupBlock.includes('dismissToast(existing.id)'),
+      'Should dismiss existing toast with same key'
+    );
+  });
+
+  it('key dedup only runs when key is provided', () => {
+    assert.ok(
+      src.includes('if (key)'),
+      'Should only deduplicate when key is truthy'
+    );
+  });
+
+  it('backward compatible — key defaults to null', () => {
+    assert.ok(
+      src.includes('key = null'),
+      'key should default to null for backward compatibility'
+    );
+  });
+});
+
 describe('toast.svelte.js -- severity levels documented', () => {
   it('documents info severity', () => {
     assert.ok(src.includes('info'), 'Should document info severity');

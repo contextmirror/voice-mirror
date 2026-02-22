@@ -207,7 +207,7 @@ fn match_script_pattern(cmd: &str, script_key: &str, pkg_manager: &str) -> Optio
     let port_override = extract_port_flag(cmd);
 
     // Pattern matching order matters — more specific patterns first
-    if cmd.contains("tauri dev") || cmd.contains("tauri") && cmd.contains("dev") {
+    if cmd.contains("tauri dev") {
         let port = port_override.unwrap_or(1420);
         return Some(DetectedDevServer {
             framework: "Tauri".to_string(),
@@ -255,7 +255,7 @@ fn match_script_pattern(cmd: &str, script_key: &str, pkg_manager: &str) -> Optio
         });
     }
 
-    if cmd.contains("svelte-kit dev") || cmd.contains("svelte-kit") {
+    if cmd.contains("svelte-kit dev") || (cmd.contains("svelte-kit") && cmd.contains("dev")) {
         let port = port_override.unwrap_or(5173);
         return Some(DetectedDevServer {
             framework: "SvelteKit".to_string(),
@@ -301,8 +301,10 @@ fn extract_port_from_url(url: &str) -> Option<u16> {
 
 /// Extract port from vite config content using regex.
 fn extract_vite_port(content: &str) -> Option<u16> {
-    let re = regex::Regex::new(r"(?s)server\s*:\s*\{[^}]*port\s*:\s*(\d+)").ok()?;
-    let caps = re.captures(content)?;
+    static VITE_PORT_RE: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
+        regex::Regex::new(r"(?s)server\s*:?\s*\{[\s\S]*?port\s*:\s*(\d+)").unwrap()
+    });
+    let caps = VITE_PORT_RE.captures(content)?;
     caps.get(1)?.as_str().parse().ok()
 }
 
@@ -318,7 +320,8 @@ fn extract_port_from_env(content: &str) -> Option<u16> {
             .strip_prefix("VITE_PORT=")
             .or_else(|| trimmed.strip_prefix("PORT="))
         {
-            if let Ok(port) = val.trim().parse::<u16>() {
+            let val = val.trim().trim_matches('"').trim_matches('\'');
+            if let Ok(port) = val.parse::<u16>() {
                 return Some(port);
             }
         }
@@ -328,8 +331,10 @@ fn extract_port_from_env(content: &str) -> Option<u16> {
 
 /// Extract `--port NNNN` or `-p NNNN` from a script command string.
 fn extract_port_flag(cmd: &str) -> Option<u16> {
-    let re = regex::Regex::new(r"(?:--port|-p)\s+(\d+)").ok()?;
-    let caps = re.captures(cmd)?;
+    static PORT_FLAG_RE: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
+        regex::Regex::new(r"(?:--port|-p)\s+(\d+)").unwrap()
+    });
+    let caps = PORT_FLAG_RE.captures(cmd)?;
     caps.get(1)?.as_str().parse().ok()
 }
 

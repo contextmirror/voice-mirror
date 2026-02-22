@@ -39,6 +39,7 @@ ignore = "0.4"
 # MCP handler dependencies
 notify = "7"
 url = "2"
+percent-encoding = "2"
 regex = "1"
 
 # Voice engine dependencies

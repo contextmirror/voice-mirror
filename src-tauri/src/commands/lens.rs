@@ -393,7 +393,7 @@ pub fn lens_hard_refresh(
         Err(e) => return e,
     };
 
-    match webview.eval("location.href = location.href.split('?')[0] + '?_cb=' + Date.now()") {
+    match webview.eval("var u = new URL(location.href); u.searchParams.set('_cb', Date.now()); location.href = u.toString()") {
         Ok(()) => {
             let _ = app.emit("lens-url-changed", serde_json::json!({}));
             IpcResponse::ok_empty()

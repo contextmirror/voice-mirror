@@ -47,6 +47,16 @@ describe('TerminalTabs.svelte -- dev-server close confirmation', () => {
     assert.ok(src.includes('devServerManager.stopServer(tab.projectPath)'), 'Should stop via devServerManager');
   });
 
+  it('confirmStopAndClose verifies tab still exists in store', () => {
+    const fnBlock = src.split('function confirmStopAndClose')[1]?.split('\n  function ')[0] || '';
+    assert.ok(fnBlock.includes('terminalTabsStore.tabs.find(t => t.id === tab.id)'), 'Should verify tab exists');
+  });
+
+  it('confirmStopAndClose returns early if tab no longer in store', () => {
+    const fnBlock = src.split('function confirmStopAndClose')[1]?.split('\n  function ')[0] || '';
+    assert.ok(fnBlock.includes('if (!current)'), 'Should check if current tab still exists');
+  });
+
   it('has confirmHideTab function', () => {
     assert.ok(src.includes('confirmHideTab'), 'Should have confirmHideTab');
   });

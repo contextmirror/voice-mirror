@@ -62,7 +62,12 @@
 
   $effect(() => {
     const project = projectStore.activeProject;
-    if (!project || project.path === lastDetectedProject) return;
+    if (!project || project.path === lastDetectedProject) {
+      if (project && previousProjectIndex !== projectStore.activeIndex) {
+        previousProjectIndex = projectStore.activeIndex;
+      }
+      return;
+    }
 
     // Save current URL for the outgoing project before switching
     if (previousProjectIndex !== null && previousProjectIndex !== projectStore.activeIndex && lensStore.webviewReady) {
@@ -73,8 +78,10 @@
     }
 
     const timer = setTimeout(() => {
+      const oldPath = lastDetectedProject;
       lastDetectedProject = project.path;
       previousProjectIndex = projectStore.activeIndex;
+      devServerManager.handleProjectSwitch(oldPath, project.path);
       detectAndNavigate(project);
     }, 300);
 
@@ -120,6 +127,7 @@
           toastStore.addToast({
             message: `${stoppedServer.framework || 'Dev server'} on :${stoppedServer.port} is not running.`,
             severity: 'info',
+            key: 'dev-server-consent-' + project.path,
             actions: [
               {
                 label: 'Always start',

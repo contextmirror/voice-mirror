@@ -101,7 +101,10 @@
   /** Stop server, then close the tab */
   async function confirmStopAndClose() {
     const { tab } = closeConfirm;
-    if (!tab) return;
+    if (!tab) { closeConfirm = { visible: false, tabId: null, tab: null }; return; }
+    // Verify tab still exists in store (may have been closed by another action)
+    const current = terminalTabsStore.tabs.find(t => t.id === tab.id);
+    if (!current) { closeConfirm = { visible: false, tabId: null, tab: null }; return; }
     if (tab.projectPath) {
       await devServerManager.stopServer(tab.projectPath);
     }

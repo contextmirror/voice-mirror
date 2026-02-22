@@ -66,12 +66,10 @@ pub fn run() {
         // processes (NOT iframes), so window.top.postMessage() doesn't work.
         // Instead the injected JS fires `new Image().src` to this scheme,
         // Rust intercepts it here and emits a Tauri event the frontend listens to.
-        // Custom URI scheme for forwarding keyboard shortcuts from the lens
-        // child webview back to the app.
         .register_uri_scheme_protocol("lens-shortcut", |ctx, request| {
             let uri = request.uri().to_string();
-            // URL format — Windows: https://lens-shortcut.localhost/{key}?t=...
-            //               macOS/Linux: lens-shortcut://localhost/{key}?t=...
+            // URL format — Windows: https://lens-shortcut.localhost/{key}?query...
+            //               macOS/Linux: lens-shortcut://localhost/{key}?query...
             let path = uri
                 .split("localhost")
                 .nth(1)
@@ -87,6 +85,21 @@ pub fn run() {
             if key == "hard-refresh" {
                 info!("[lens-shortcut] Hard refresh requested");
                 let _ = ctx.app_handle().emit("lens-hard-refresh", serde_json::json!({}));
+            } else if key == "url-changed" {
+                // Back/forward navigation reports the new URL via query param
+                let query = path.split('?').nth(1).unwrap_or("");
+                let url_param = query
+                    .split('&')
+                    .find_map(|pair| pair.strip_prefix("url="))
+                    .unwrap_or("");
+                let decoded_url = percent_encoding::percent_decode_str(url_param)
+                    .decode_utf8_lossy()
+                    .to_string();
+                info!("[lens-shortcut] URL changed: {}", decoded_url);
+                let _ = ctx.app_handle().emit(
+                    "lens-url-changed",
+                    serde_json::json!({ "url": decoded_url }),
+                );
             } else if !key.is_empty() {
                 info!("[lens-shortcut] Forwarding shortcut key: {}", key);
                 let _ = ctx.app_handle().emit("lens-shortcut", serde_json::json!({ "key": key }));
