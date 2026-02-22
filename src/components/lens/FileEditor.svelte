@@ -478,8 +478,10 @@
       if (hasLsp) {
         domHandlers.click = async (event, v) => {
           if (!event.ctrlKey && !event.metaKey) return false;
+          // Consume the event immediately to prevent browser Ctrl+Click behavior
+          event.preventDefault();
           const pos = v.posAtCoords({ x: event.clientX, y: event.clientY });
-          if (pos == null) return false;
+          if (pos == null) return true;
 
           const lineInfo = v.state.doc.lineAt(pos);
           const line = lineInfo.number - 1;
@@ -488,12 +490,12 @@
 
           try {
             const result = await lspRequestDefinition(currentPath, line, character, r);
-            if (!result?.data?.locations?.length) return false;
+            if (!result?.data?.locations?.length) return true;
 
             const loc = result.data.locations[0];
             const root = projectStore.activeProject?.path || '';
             const locPath = uriToRelativePath(loc.uri, root);
-            if (!locPath) return false;
+            if (!locPath) return true;
 
             if (locPath === currentPath) {
               const targetLine = v.state.doc.line(loc.range.start.line + 1);
@@ -504,10 +506,10 @@
             } else {
               tabsStore.openFile(locPath);
             }
-            return true;
           } catch {
-            return false;
+            // Definition lookup failed — still consume the event
           }
+          return true;
         };
       }
 
