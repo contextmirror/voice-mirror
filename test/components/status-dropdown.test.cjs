@@ -297,9 +297,9 @@ describe('StatusDropdown.svelte: manage server list', () => {
     assert.ok(src.includes('manage-row-badge'));
     assert.ok(src.includes('Current Server'));
   });
-  it('shows dev server with localhost', () => {
-    assert.ok(src.includes('Dev Server (Vite)'));
-    assert.ok(src.includes('localhost:1420'));
+  it('shows dev servers from lensStore with localhost port', () => {
+    assert.ok(src.includes('server.framework'));
+    assert.ok(src.includes('server.port'));
   });
   it('has server options menu button', () => {
     assert.ok(src.includes('manage-row-menu'));

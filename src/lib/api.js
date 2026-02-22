@@ -418,6 +418,27 @@ export async function lensHardRefresh() {
   return invoke('lens_hard_refresh');
 }
 
+// ============ Dev Server ============
+
+/**
+ * Detect dev server configurations in a project directory.
+ * Scans tauri.conf.json, vite.config.*, .env, package.json for framework patterns.
+ * @param {string} projectRoot - Absolute path to the project root directory.
+ * @returns {Promise<{success: boolean, data?: {servers: Array, packageManager: string}}>}
+ */
+export async function detectDevServers(projectRoot) {
+  return invoke('detect_dev_servers', { projectRoot });
+}
+
+/**
+ * Check if a specific port is accepting TCP connections on localhost.
+ * @param {number} port - Port number to probe.
+ * @returns {Promise<{success: boolean, data?: {listening: boolean}}>}
+ */
+export async function probePort(port) {
+  return invoke('probe_port', { port });
+}
+
 // ============ Files ============
 
 export async function listDirectory(path, root) {

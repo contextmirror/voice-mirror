@@ -6,7 +6,7 @@
 
 import { lensNavigate, lensGoBack, lensGoForward, lensReload } from '../api.js';
 
-const DEFAULT_URL = 'https://www.google.com';
+const DEFAULT_URL = 'about:blank';
 
 function createLensStore() {
   let url = $state(DEFAULT_URL);
@@ -64,7 +64,7 @@ function createLensStore() {
     async navigate(rawUrl) {
       let normalized = rawUrl.trim();
       if (!normalized) return;
-      if (!/^https?:\/\//i.test(normalized)) {
+      if (!/^(https?:\/\/|about:)/i.test(normalized)) {
         normalized = 'https://' + normalized;
       }
       url = normalized;

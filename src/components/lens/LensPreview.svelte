@@ -1,7 +1,8 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
   import { lensStore, DEFAULT_URL } from '../../lib/stores/lens.svelte.js';
-  import { lensCreateWebview, lensResizeWebview, lensCloseWebview } from '../../lib/api.js';
+  import { projectStore } from '../../lib/stores/project.svelte.js';
+  import { lensCreateWebview, lensResizeWebview, lensCloseWebview, detectDevServers } from '../../lib/api.js';
   import { listen } from '@tauri-apps/api/event';
 
   let containerEl = $state(null);
@@ -52,6 +53,66 @@
       clearTimeout(loadingTimer);
     }
   });
+
+  // ---- Project switch → dev server detection + browser navigation ----
+  let lastDetectedProject = $state(null);
+  let previousProjectIndex = $state(null);
+
+  $effect(() => {
+    const project = projectStore.activeProject;
+    if (!project || project.path === lastDetectedProject) return;
+
+    // Save current URL for the outgoing project before switching
+    if (previousProjectIndex !== null && previousProjectIndex !== projectStore.activeIndex && lensStore.webviewReady) {
+      const currentUrl = lensStore.url;
+      if (currentUrl && currentUrl !== DEFAULT_URL) {
+        projectStore.updateProjectField(previousProjectIndex, 'lastBrowserUrl', currentUrl);
+      }
+    }
+
+    const timer = setTimeout(() => {
+      lastDetectedProject = project.path;
+      previousProjectIndex = projectStore.activeIndex;
+      detectAndNavigate(project);
+    }, 300);
+
+    return () => clearTimeout(timer);
+  });
+
+  async function detectAndNavigate(project) {
+    if (!lensStore.webviewReady) return;
+
+    lensStore.setDevServerLoading(true);
+
+    try {
+      const result = await detectDevServers(project.path);
+      const data = result?.data || result || {};
+      const servers = data.servers || [];
+      lensStore.setDevServers(servers);
+
+      // Determine URL to navigate to (priority: preferred > running server > last URL)
+      let targetUrl = null;
+
+      if (project.preferredServerUrl) {
+        targetUrl = project.preferredServerUrl;
+      } else {
+        const running = servers.find(s => s.running);
+        if (running) {
+          targetUrl = running.url;
+        } else if (project.lastBrowserUrl) {
+          targetUrl = project.lastBrowserUrl;
+        }
+      }
+
+      if (targetUrl) {
+        lensStore.navigate(targetUrl);
+      }
+    } catch (err) {
+      console.error('[lens] Dev server detection failed:', err);
+    } finally {
+      lensStore.setDevServerLoading(false);
+    }
+  }
 
   // Hide/show webview when lensStore.hidden changes (e.g. screenshot picker overlay)
   $effect(() => {

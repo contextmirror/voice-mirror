@@ -17,8 +17,11 @@
   // Overall health
   let healthy = $derived(aiStatusStore.running);
 
-  // Server count (provider + dev server)
-  let serverCount = $derived((healthy || aiStatusStore.starting ? 1 : 0) + 1);
+  // Server count (provider + detected dev servers)
+  let devServers = $derived(lensStore.devServers);
+  let serverCount = $derived(
+    (healthy || aiStatusStore.starting ? 1 : 0) + devServers.length
+  );
 
   // MCP status
   let mcpConnected = $derived(
@@ -137,16 +140,18 @@
               <span class="manage-row-badge">Current Server</span>
             {/if}
           </button>
-          <div class="manage-row">
-            <div class="row-dot ok"></div>
-            <span class="manage-row-name">Dev Server (Vite)</span>
-            <span class="manage-row-version">localhost:1420</span>
-            <button class="manage-row-menu" type="button" aria-label="Server options" onclick={(e) => e.stopPropagation()}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/>
-              </svg>
-            </button>
-          </div>
+          {#each devServers as server}
+            <div class="manage-row">
+              <div class="row-dot" class:ok={server.running} class:stopped={!server.running}></div>
+              <span class="manage-row-name">{server.framework || 'Dev Server'}</span>
+              <span class="manage-row-version">localhost:{server.port}</span>
+              <button class="manage-row-menu" type="button" aria-label="Server options" onclick={(e) => e.stopPropagation()}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/>
+                </svg>
+              </button>
+            </div>
+          {/each}
         </div>
 
         <button class="manage-add" type="button">

@@ -137,6 +137,10 @@ describe('lens: URL normalization', () => {
   it('trims input', () => {
     assert.ok(src.includes('.trim()'), 'Should trim URL input');
   });
+
+  it('allows about: protocol without prepending https', () => {
+    assert.ok(src.includes('about:'), 'Should handle about: protocol in URL normalization');
+  });
 });
 
 describe('lens: DEFAULT_URL', () => {
@@ -144,8 +148,9 @@ describe('lens: DEFAULT_URL', () => {
     assert.ok(/const\s+DEFAULT_URL\s*=\s*'/.test(src), 'DEFAULT_URL should be a string constant');
   });
 
-  it('DEFAULT_URL is a valid URL', () => {
-    assert.ok(src.includes('https://'), 'DEFAULT_URL should be an https URL');
+  it('DEFAULT_URL is about:blank (no external default)', () => {
+    assert.ok(src.includes("about:blank"), 'DEFAULT_URL should be about:blank');
+    assert.ok(!src.includes('google.com'), 'Should not reference google.com');
   });
 });
 

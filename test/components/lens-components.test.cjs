@@ -197,4 +197,53 @@ describe('LensPreview.svelte', () => {
   it('throttles resize observer with rAF', () => {
     assert.ok(src.includes('requestAnimationFrame'), 'Should throttle resize with rAF');
   });
+
+  // ---- Project-switch → browser navigation integration ----
+
+  it('imports projectStore', () => {
+    assert.ok(src.includes("import { projectStore }"), 'Should import projectStore');
+    assert.ok(src.includes("project.svelte.js"), 'Should import from project.svelte.js');
+  });
+
+  it('imports detectDevServers from api', () => {
+    assert.ok(src.includes('detectDevServers'), 'Should import detectDevServers');
+  });
+
+  it('watches projectStore.activeProject via $effect', () => {
+    assert.ok(src.includes('projectStore.activeProject'), 'Should watch activeProject');
+  });
+
+  it('debounces project detection with 300ms timeout', () => {
+    assert.ok(src.includes('300'), 'Should use 300ms debounce delay');
+    assert.ok(src.includes('clearTimeout'), 'Should clear timeout on re-trigger');
+  });
+
+  it('has detectAndNavigate function', () => {
+    assert.ok(src.includes('async function detectAndNavigate'), 'Should have detectAndNavigate');
+  });
+
+  it('sets devServerLoading during detection', () => {
+    assert.ok(src.includes('setDevServerLoading(true)'), 'Should set loading true at start');
+    assert.ok(src.includes('setDevServerLoading(false)'), 'Should set loading false in finally');
+  });
+
+  it('uses URL priority: preferred > running server > lastBrowserUrl', () => {
+    assert.ok(src.includes('preferredServerUrl'), 'Should check preferredServerUrl first');
+    assert.ok(src.includes('servers.find(s => s.running)'), 'Should check running servers');
+    assert.ok(src.includes('lastBrowserUrl'), 'Should fall back to lastBrowserUrl');
+  });
+
+  it('saves lastBrowserUrl for outgoing project on switch', () => {
+    assert.ok(src.includes('updateProjectField'), 'Should save URL for outgoing project');
+    assert.ok(src.includes("'lastBrowserUrl'"), 'Should update lastBrowserUrl field');
+  });
+
+  it('guards detectAndNavigate on webviewReady', () => {
+    const fnBlock = src.split('async function detectAndNavigate')[1]?.split('async function')[0] || '';
+    assert.ok(fnBlock.includes('webviewReady'), 'Should check webviewReady before detection');
+  });
+
+  it('tracks lastDetectedProject to prevent re-runs', () => {
+    assert.ok(src.includes('lastDetectedProject'), 'Should track last detected project path');
+  });
 });
