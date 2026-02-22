@@ -3,6 +3,8 @@
   import { lensStore } from '../../lib/stores/lens.svelte.js';
   import { devServerManager } from '../../lib/stores/dev-server-manager.svelte.js';
   import { terminalTabsStore } from '../../lib/stores/terminal-tabs.svelte.js';
+  import { projectStore } from '../../lib/stores/project.svelte.js';
+  import { detectDevServers } from '../../lib/api.js';
   import ServersTab from './ServersTab.svelte';
   import McpTab from './McpTab.svelte';
   import LspTab from './LspTab.svelte';
@@ -95,6 +97,72 @@
       else if (open) close();
     }
   }
+
+  // ── Manage view: server state helpers ──
+  let detectedPackageManager = $state(null);
+
+  /**
+   * Get the devServerManager status for a given server (same logic as ServersTab).
+   * @param {Object} server
+   * @returns {{ status: string, crashLoopDetected: boolean, managed: boolean }}
+   */
+  function getServerState(server) {
+    const project = projectStore.activeProject;
+    if (!project?.path) return { status: server.running ? 'running' : 'stopped', crashLoopDetected: false, managed: false };
+    const managed = devServerManager.getServerStatus(project.path);
+    if (managed && managed.port === server.port) {
+      return { status: managed.status, crashLoopDetected: managed.crashLoopDetected, managed: true };
+    }
+    return { status: server.running ? 'running' : 'stopped', crashLoopDetected: false, managed: false };
+  }
+
+  /** Start a dev server via the lifecycle manager (spawns terminal + runs command) */
+  function handleStart(server) {
+    const project = projectStore.activeProject;
+    if (!project?.path) return;
+    devServerManager.startServer(server, project.path, detectedPackageManager);
+  }
+
+  /** Stop a managed server (one we started) via the lifecycle manager */
+  function handleStop() {
+    const project = projectStore.activeProject;
+    if (!project?.path) return;
+    devServerManager.stopServer(project.path);
+  }
+
+  /** Stop an external server by killing its port process */
+  function handleStopExternal(server) {
+    devServerManager.stopExternalServer(server.port);
+  }
+
+  /** Restart a dev server via the lifecycle manager */
+  function handleRestart() {
+    const project = projectStore.activeProject;
+    if (!project?.path) return;
+    devServerManager.restartServer(project.path);
+  }
+
+  /** Re-run detection to refresh server list */
+  async function refreshServers() {
+    const project = projectStore.activeProject;
+    if (!project?.path) return;
+    lensStore.setDevServerLoading(true);
+    try {
+      const result = await detectDevServers(project.path);
+      const data = result?.data || result || {};
+      const list = data.servers || (Array.isArray(data) ? data : []);
+      if (Array.isArray(list)) {
+        lensStore.setDevServers(list);
+      }
+      if (data.packageManager) {
+        detectedPackageManager = data.packageManager;
+      }
+    } catch (err) {
+      console.warn('[status-dropdown] Detection failed:', err);
+    } finally {
+      lensStore.setDevServerLoading(false);
+    }
+  }
 </script>
 
 <svelte:window onclick={handleWindowClick} onkeydown={handleKeydown} />
@@ -144,45 +212,78 @@
         </div>
 
         <div class="manage-list">
-          <button class="manage-row" type="button">
+          <!-- Provider row (informational) -->
+          <div class="manage-row">
             <div class="row-dot" class:ok={healthy} class:stopped={!healthy && !aiStatusStore.starting} class:starting={aiStatusStore.starting}></div>
-            <span class="manage-row-name">{providerName}</span>
-            <span class="manage-row-version">{providerType}</span>
+            <div class="manage-row-info">
+              <span class="manage-row-name">{providerName}</span>
+              <span class="manage-row-type">{providerType}</span>
+            </div>
             {#if healthy}
-              <span class="manage-row-badge">Current Server</span>
+              <span class="manage-row-badge">Active</span>
             {/if}
-          </button>
+          </div>
+
+          <!-- Dev servers with full controls -->
           {#each filteredServers as server}
-            {@const crashed = devServerManager.crashedServers.find(c => c.port === server.port)}
-            {@const isCrashLoop = crashed?.crashLoopDetected}
+            {@const state = getServerState(server)}
             {@const hiddenTab = server.shellId ? terminalTabsStore.hiddenTabs.find(t => t.shellId === server.shellId) : null}
             <div class="manage-row">
-              <div class="row-dot" class:ok={server.running} class:stopped={!server.running && !crashed} class:crashed={!!crashed}></div>
-              <span class="manage-row-name">{server.framework || 'Dev Server'}</span>
-              <span class="manage-row-version">localhost:{server.port}</span>
-              {#if crashed}
-                <span class="manage-row-badge crashed-badge">Crashed</span>
-                {#if isCrashLoop}
-                  <span class="crash-loop-text">Crash loop — check terminal</span>
-                {:else}
-                  <button class="manage-restart-btn" type="button" onclick={(e) => { e.stopPropagation(); devServerManager.restartServer(crashed.projectPath); }}>
-                    Restart
+              <div
+                class="row-dot"
+                class:ok={state.status === 'running'}
+                class:starting={state.status === 'starting'}
+                class:crashed={state.status === 'crashed'}
+                class:stopped={state.status === 'stopped' || state.status === 'idle'}
+              ></div>
+              <div class="manage-row-info">
+                <span class="manage-row-name">{server.framework || 'Dev Server'}</span>
+                <span class="manage-row-type">localhost:{server.port}</span>
+              </div>
+
+              <div class="manage-row-actions">
+                {#if state.status === 'stopped'}
+                  <button class="manage-action-btn manage-start-btn" type="button" onclick={(e) => { e.stopPropagation(); handleStart(server); }}>
+                    Start
+                  </button>
+                {:else if state.status === 'starting'}
+                  <span class="manage-starting-label"><span class="starting-dot"></span> Starting</span>
+                {:else if state.status === 'running'}
+                  <span class="manage-status-label running">Running</span>
+                  <button class="manage-action-btn manage-stop-btn" type="button" onclick={(e) => { e.stopPropagation(); state.managed ? handleStop() : handleStopExternal(server); }}>
+                    Stop
+                  </button>
+                {:else if state.status === 'crashed'}
+                  {#if state.crashLoopDetected}
+                    <span class="crash-loop-text">Crash loop</span>
+                  {:else}
+                    <button class="manage-action-btn manage-restart-btn" type="button" onclick={(e) => { e.stopPropagation(); handleRestart(); }}>
+                      Restart
+                    </button>
+                  {/if}
+                {:else if state.status === 'idle'}
+                  <span class="manage-status-label idle">Idle</span>
+                  <button class="manage-action-btn manage-stop-btn" type="button" onclick={(e) => { e.stopPropagation(); handleStop(); }}>
+                    Stop
                   </button>
                 {/if}
-              {:else if hiddenTab}
-                <button class="manage-show-terminal-btn" type="button" onclick={(e) => { e.stopPropagation(); terminalTabsStore.unhideTab(hiddenTab.id); }}>
-                  Show Terminal
-                </button>
-              {/if}
+
+                {#if hiddenTab}
+                  <button class="manage-action-btn manage-show-btn" type="button" onclick={(e) => { e.stopPropagation(); terminalTabsStore.unhideTab(hiddenTab.id); }}>
+                    Show
+                  </button>
+                {/if}
+              </div>
             </div>
           {/each}
         </div>
 
-        <button class="manage-add" type="button">
+        <button class="manage-refresh" type="button" onclick={refreshServers}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
           </svg>
-          Add server
+          Refresh detection
         </button>
 
       {:else}
@@ -452,7 +553,6 @@
     border: none;
     border-bottom: 1px solid var(--border);
     background: transparent;
-    cursor: pointer;
     text-align: left;
     transition: background var(--duration-fast) var(--ease-out);
     -webkit-app-region: no-drag;
@@ -461,14 +561,19 @@
     border-bottom: none;
   }
   .manage-row:hover {
-    background: rgba(255, 255, 255, 0.06);
+    background: rgba(255, 255, 255, 0.03);
   }
-  .manage-row:active {
-    background: rgba(255, 255, 255, 0.1);
+
+  .manage-row-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
   }
 
   .manage-row-name {
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 500;
     color: var(--text);
     white-space: nowrap;
@@ -476,8 +581,8 @@
     text-overflow: ellipsis;
   }
 
-  .manage-row-version {
-    font-size: 11px;
+  .manage-row-type {
+    font-size: 10px;
     color: var(--muted);
     white-space: nowrap;
   }
@@ -488,11 +593,95 @@
     background: var(--bg-elevated);
     padding: 2px 6px;
     border-radius: 4px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .manage-row-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
     margin-left: auto;
+  }
+
+  .manage-action-btn {
+    padding: 2px 8px;
+    font-size: 10px;
+    font-weight: 500;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: transparent;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: background var(--duration-fast) var(--ease-out);
+    -webkit-app-region: no-drag;
+  }
+
+  .manage-start-btn {
+    color: var(--ok);
+    border-color: color-mix(in srgb, var(--ok) 40%, transparent);
+  }
+  .manage-start-btn:hover {
+    background: color-mix(in srgb, var(--ok) 12%, transparent);
+  }
+
+  .manage-stop-btn {
+    color: var(--danger);
+    border-color: color-mix(in srgb, var(--danger) 40%, transparent);
+  }
+  .manage-stop-btn:hover {
+    background: color-mix(in srgb, var(--danger) 12%, transparent);
+  }
+
+  .manage-restart-btn {
+    color: var(--warn);
+    border-color: color-mix(in srgb, var(--warn) 40%, transparent);
+  }
+  .manage-restart-btn:hover {
+    background: color-mix(in srgb, var(--warn) 12%, transparent);
+  }
+
+  .manage-status-label {
+    font-size: 10px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .manage-status-label.running {
+    color: var(--ok);
+  }
+  .manage-status-label.idle {
+    color: var(--muted);
+    font-style: italic;
+  }
+
+  .manage-show-btn {
+    color: var(--accent);
+    border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  }
+  .manage-show-btn:hover {
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+
+  .manage-starting-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 10px;
+    color: var(--muted);
     white-space: nowrap;
   }
 
-  .manage-add {
+  .starting-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--warn);
+    animation: dot-pulse 1.2s ease-in-out infinite;
+  }
+
+  .manage-refresh {
     display: flex;
     align-items: center;
     gap: 6px;
@@ -503,67 +692,24 @@
     border: none;
     border-radius: 6px;
     background: transparent;
-    color: var(--text);
+    color: var(--muted);
     cursor: pointer;
-    transition: background var(--duration-fast) var(--ease-out);
+    transition: background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
     -webkit-app-region: no-drag;
   }
-  .manage-add:hover {
+  .manage-refresh:hover {
     background: var(--bg);
+    color: var(--text);
   }
 
   /* ── Crash recovery UI ── */
 
   .row-dot.crashed { background: var(--danger); }
 
-  .crashed-badge {
-    background: color-mix(in srgb, var(--danger) 15%, transparent) !important;
-    color: var(--danger) !important;
-    border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
-  }
-
   .crash-loop-text {
     font-size: 10px;
     color: var(--danger);
     font-weight: 500;
     white-space: nowrap;
-  }
-
-  .manage-restart-btn {
-    padding: 2px 8px;
-    font-size: 10px;
-    font-weight: 500;
-    border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
-    border-radius: 4px;
-    background: transparent;
-    color: var(--warn);
-    cursor: pointer;
-    white-space: nowrap;
-    flex-shrink: 0;
-    margin-left: auto;
-    transition: background var(--duration-fast) var(--ease-out);
-    -webkit-app-region: no-drag;
-  }
-  .manage-restart-btn:hover {
-    background: color-mix(in srgb, var(--warn) 12%, transparent);
-  }
-
-  .manage-show-terminal-btn {
-    padding: 2px 8px;
-    font-size: 10px;
-    font-weight: 500;
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    background: transparent;
-    color: var(--text);
-    cursor: pointer;
-    white-space: nowrap;
-    flex-shrink: 0;
-    margin-left: auto;
-    transition: background var(--duration-fast) var(--ease-out);
-    -webkit-app-region: no-drag;
-  }
-  .manage-show-terminal-btn:hover {
-    background: var(--bg);
   }
 </style>

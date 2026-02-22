@@ -60,6 +60,7 @@
   let lastDetectedProject = $state(null);
   let previousProjectIndex = $state(null);
 
+  // Trigger detection when active project changes
   $effect(() => {
     const project = projectStore.activeProject;
     if (!project || project.path === lastDetectedProject) {
@@ -88,8 +89,35 @@
     return () => clearTimeout(timer);
   });
 
-  async function detectAndNavigate(project) {
+  // Also trigger detection when webview becomes ready (catches initial load race)
+  $effect(() => {
     if (!lensStore.webviewReady) return;
+    const project = projectStore.activeProject;
+    if (project && project.path !== lastDetectedProject) {
+      lastDetectedProject = project.path;
+      previousProjectIndex = projectStore.activeIndex;
+      detectAndNavigate(project);
+    }
+  });
+
+  async function detectAndNavigate(project) {
+    // Wait for the webview to be ready (may still be creating during first project load)
+    if (!lensStore.webviewReady) {
+      // Poll for readiness up to 10 seconds (webview creation can take a few seconds)
+      const ready = await new Promise(resolve => {
+        if (lensStore.webviewReady) return resolve(true);
+        let elapsed = 0;
+        const interval = setInterval(() => {
+          elapsed += 200;
+          if (lensStore.webviewReady) { clearInterval(interval); resolve(true); }
+          else if (elapsed >= 10000) { clearInterval(interval); resolve(false); }
+        }, 200);
+      });
+      if (!ready) {
+        console.warn('[lens] Webview not ready after 10s, skipping detection');
+        return;
+      }
+    }
 
     lensStore.setDevServerLoading(true);
 

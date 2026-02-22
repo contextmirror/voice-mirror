@@ -28,10 +28,6 @@ describe('ServersTab', () => {
     assert.ok(src.includes('probePort'));
   });
 
-  it('imports lensNavigate from api', () => {
-    assert.ok(src.includes('lensNavigate'));
-  });
-
   it('imports onMount from svelte', () => {
     assert.ok(src.includes("from 'svelte'") || src.includes('from "svelte"'));
     assert.ok(src.includes('onMount'));
@@ -103,13 +99,9 @@ describe('ServersTab', () => {
     assert.ok(src.includes("class:danger={state.status === 'crashed'}"));
   });
 
-  it('has Open in Browser button for running servers', () => {
-    assert.ok(src.includes('Open in Browser'));
-    assert.ok(src.includes('open-btn'));
-  });
-
-  it('shows Open in Browser when server is running', () => {
+  it('shows Stop button when server is running', () => {
     assert.ok(src.includes("state.status === 'running'"));
+    assert.ok(src.includes('stop-btn'));
   });
 
   // ── Detection + polling ──
@@ -140,11 +132,15 @@ describe('ServersTab', () => {
     assert.ok(src.includes('detectDevServers(project.path)') || src.includes('detectDevServers'));
   });
 
-  // ── Navigate action ──
+  // ── Stop external action ──
 
-  it('calls lensNavigate when Open in Browser is clicked', () => {
-    assert.ok(src.includes('openInBrowser'));
-    assert.ok(src.includes('lensNavigate'));
+  it('has handleStopExternal function for external servers', () => {
+    assert.ok(src.includes('handleStopExternal'));
+    assert.ok(src.includes('devServerManager.stopExternalServer'));
+  });
+
+  it('Stop button calls handleStop for managed or handleStopExternal for external', () => {
+    assert.ok(src.includes('state.managed ? handleStop() : handleStopExternal(server)'));
   });
 
   // ── Manage button ──
@@ -292,7 +288,7 @@ describe('StatusDropdown dev server integration', () => {
     assert.ok(dropdownSrc.includes('server.port'));
   });
 
-  it('shows server running status in manage row', () => {
-    assert.ok(dropdownSrc.includes('class:ok={server.running}'));
+  it('shows server running status via getServerState in manage row', () => {
+    assert.ok(dropdownSrc.includes("class:ok={state.status === 'running'}"), 'Manage view should derive status from getServerState');
   });
 });

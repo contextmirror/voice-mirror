@@ -311,13 +311,19 @@ describe('StatusDropdown.svelte: manage server list', () => {
   it('has manage rows', () => {
     assert.ok(src.includes('manage-row'));
   });
-  it('shows provider name and type', () => {
+  it('shows provider name and type in info column', () => {
     assert.ok(src.includes('manage-row-name'));
-    assert.ok(src.includes('manage-row-version'));
+    assert.ok(src.includes('manage-row-info'));
+    assert.ok(src.includes('manage-row-type'));
   });
-  it('has Current Server badge', () => {
+  it('has Active badge for healthy provider', () => {
     assert.ok(src.includes('manage-row-badge'));
-    assert.ok(src.includes('Current Server'));
+    assert.ok(src.includes('Active'));
+  });
+  it('provider row is a div not a button (informational only)', () => {
+    // The provider row should be a div, not an interactive button
+    const manageListBlock = src.split('manage-list')[1]?.split('<!-- Dev servers')[0] || '';
+    assert.ok(manageListBlock.includes('<div class="manage-row">'), 'Provider row should be a div');
   });
   it('shows dev servers from lensStore with localhost port', () => {
     assert.ok(src.includes('server.framework'));
@@ -327,9 +333,11 @@ describe('StatusDropdown.svelte: manage server list', () => {
     assert.ok(!src.includes('manage-row-menu'), 'Noop menu button should be removed');
     assert.ok(!src.includes('Server options'), 'Server options aria-label should be removed');
   });
-  it('has Add server button', () => {
-    assert.ok(src.includes('manage-add'));
-    assert.ok(src.includes('Add server'));
+  it('has Refresh detection button instead of Add server', () => {
+    assert.ok(src.includes('manage-refresh'));
+    assert.ok(src.includes('Refresh detection'));
+    assert.ok(!src.includes('manage-add'), 'Add server button should be removed');
+    assert.ok(!src.includes('Add server'), 'Add server text should be removed');
   });
 });
 
@@ -341,51 +349,97 @@ describe('StatusDropdown.svelte: row-dot stopped color consistency', () => {
   });
 });
 
-describe('StatusDropdown.svelte: crash recovery UI', () => {
-  it('imports devServerManager', () => {
-    assert.ok(src.includes('devServerManager'));
-    assert.ok(src.includes('dev-server-manager.svelte.js'));
+describe('StatusDropdown.svelte: manage view interactive controls', () => {
+  it('imports projectStore for active project context', () => {
+    assert.ok(src.includes('projectStore'));
+    assert.ok(src.includes('project.svelte.js'));
   });
 
-  it('imports terminalTabsStore', () => {
-    assert.ok(src.includes('terminalTabsStore'));
-    assert.ok(src.includes('terminal-tabs.svelte.js'));
+  it('imports detectDevServers from api', () => {
+    assert.ok(src.includes('detectDevServers'));
+    assert.ok(src.includes("from '../../lib/api.js'"));
   });
 
-  it('checks crashedServers from devServerManager', () => {
-    assert.ok(src.includes('devServerManager.crashedServers'));
+  it('has getServerState function (same logic as ServersTab)', () => {
+    assert.ok(src.includes('function getServerState(server)'));
   });
 
-  it('shows Crashed badge for crashed servers', () => {
-    assert.ok(src.includes('crashed-badge'));
-    assert.ok(src.includes('Crashed'));
+  it('getServerState distinguishes managed vs external', () => {
+    const fn = src.split('function getServerState')[1]?.split('\n  }')[0] || '';
+    assert.ok(fn.includes('managed: true'), 'Should return managed: true for lifecycle-managed servers');
+    assert.ok(fn.includes('managed: false'), 'Should return managed: false for external servers');
   });
 
-  it('has Restart button for crashed (non-looping) servers', () => {
+  it('has handleStopExternal function for external servers', () => {
+    assert.ok(src.includes('function handleStopExternal(server)'));
+    assert.ok(src.includes('devServerManager.stopExternalServer'));
+  });
+
+  it('has handleStart function', () => {
+    assert.ok(src.includes('function handleStart(server)'));
+    assert.ok(src.includes('devServerManager.startServer'));
+  });
+
+  it('has handleStop function', () => {
+    assert.ok(src.includes('function handleStop()'));
+    assert.ok(src.includes('devServerManager.stopServer'));
+  });
+
+  it('has handleRestart function', () => {
+    assert.ok(src.includes('function handleRestart()'));
+    assert.ok(src.includes('devServerManager.restartServer'));
+  });
+
+  it('has refreshServers function calling detectDevServers', () => {
+    assert.ok(src.includes('function refreshServers()'));
+    assert.ok(src.includes('detectDevServers(project.path)'));
+  });
+
+  it('has Start button for stopped servers', () => {
+    assert.ok(src.includes('manage-start-btn'));
+    assert.ok(src.includes("state.status === 'stopped'"));
+  });
+
+  it('has Stop button for running managed servers', () => {
+    assert.ok(src.includes('manage-stop-btn'));
+    assert.ok(src.includes('state.managed'));
+  });
+
+  it('has Running status label for running servers', () => {
+    assert.ok(src.includes('manage-status-label'));
+    assert.ok(src.includes('Running'));
+  });
+
+  it('has manage-status-label CSS classes for running and idle', () => {
+    assert.ok(src.includes('.manage-status-label.running'));
+    assert.ok(src.includes('.manage-status-label.idle'));
+  });
+
+  it('Stop button calls handleStop for managed or handleStopExternal for external', () => {
+    assert.ok(src.includes('state.managed ? handleStop() : handleStopExternal(server)'));
+  });
+
+  it('has Starting indicator with animated dot', () => {
+    assert.ok(src.includes('manage-starting-label'));
+    assert.ok(src.includes('starting-dot'));
+  });
+
+  it('has Restart button for crashed servers', () => {
     assert.ok(src.includes('manage-restart-btn'));
     assert.ok(src.includes('Restart'));
   });
 
-  it('calls devServerManager.restartServer on restart click', () => {
-    assert.ok(src.includes('devServerManager.restartServer'));
-  });
-
-  it('shows crash loop warning text when crash-looped', () => {
+  it('shows crash loop warning text', () => {
     assert.ok(src.includes('crash-loop-text'));
     assert.ok(src.includes('Crash loop'));
-    assert.ok(src.includes('check terminal'));
   });
 
-  it('checks crashLoopDetected flag', () => {
-    assert.ok(src.includes('crashLoopDetected'));
+  it('has Show button for hidden tabs', () => {
+    assert.ok(src.includes('manage-show-btn'));
+    assert.ok(src.includes('Show'));
   });
 
-  it('has Show Terminal button for hidden tabs', () => {
-    assert.ok(src.includes('manage-show-terminal-btn'));
-    assert.ok(src.includes('Show Terminal'));
-  });
-
-  it('calls terminalTabsStore.unhideTab on Show Terminal click', () => {
+  it('calls terminalTabsStore.unhideTab on Show click', () => {
     assert.ok(src.includes('terminalTabsStore.unhideTab'));
   });
 
@@ -396,5 +450,18 @@ describe('StatusDropdown.svelte: crash recovery UI', () => {
   it('has crashed CSS class on row dot', () => {
     assert.ok(src.includes('class:crashed'));
     assert.ok(src.includes('.row-dot.crashed'));
+  });
+
+  it('uses getServerState for each server in manage view', () => {
+    const manageBlock = src.split('{#if managing}')[1]?.split('{:else}')[0] || '';
+    assert.ok(manageBlock.includes('getServerState(server)'), 'Manage view should call getServerState');
+  });
+
+  it('has manage-row-actions container for button group', () => {
+    assert.ok(src.includes('manage-row-actions'));
+  });
+
+  it('uses stopPropagation on action buttons', () => {
+    assert.ok(src.includes('e.stopPropagation()'), 'Action buttons should stop propagation');
   });
 });

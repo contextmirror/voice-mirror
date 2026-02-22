@@ -4,7 +4,7 @@
   import { lensStore } from '../../lib/stores/lens.svelte.js';
   import { projectStore } from '../../lib/stores/project.svelte.js';
   import { devServerManager } from '../../lib/stores/dev-server-manager.svelte.js';
-  import { detectDevServers, probePort, lensNavigate } from '../../lib/api.js';
+  import { detectDevServers, probePort } from '../../lib/api.js';
 
   let { onManage = () => {} } = $props();
 
@@ -82,14 +82,9 @@
     lensStore.setDevServers(updated);
   }
 
-  /** Open a server URL in the Lens browser */
-  async function openInBrowser(server) {
-    const url = server.url || `http://localhost:${server.port}`;
-    try {
-      await lensNavigate(url);
-    } catch (err) {
-      console.warn('[servers-tab] Navigate failed:', err);
-    }
+  /** Stop an external server by killing its port process */
+  function handleStopExternal(server) {
+    devServerManager.stopExternalServer(server.port);
   }
 
   /** Start a dev server via the lifecycle manager */
@@ -174,13 +169,8 @@
             <span class="starting-dot"></span> Starting...
           </button>
         {:else if state.status === 'running'}
-          {#if state.managed}
-            <button class="action-btn stop-btn" type="button" onclick={handleStop}>
-              Stop
-            </button>
-          {/if}
-          <button class="open-btn" type="button" onclick={() => openInBrowser(server)}>
-            Open in Browser
+          <button class="action-btn stop-btn" type="button" onclick={() => state.managed ? handleStop() : handleStopExternal(server)}>
+            Stop
           </button>
         {:else if state.status === 'crashed'}
           {#if state.crashLoopDetected}
@@ -193,9 +183,6 @@
         {:else if state.status === 'idle'}
           <button class="action-btn idle-stop-btn" type="button" onclick={handleStop}>
             Stop
-          </button>
-          <button class="open-btn" type="button" onclick={() => openInBrowser(server)}>
-            Open in Browser
           </button>
         {/if}
       </div>
@@ -293,24 +280,6 @@
     color: var(--muted);
     text-align: center;
     padding: 12px 0;
-  }
-
-  .open-btn {
-    padding: 2px 8px;
-    font-size: 10px;
-    font-weight: 500;
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    background: transparent;
-    color: var(--text);
-    cursor: pointer;
-    white-space: nowrap;
-    flex-shrink: 0;
-    transition: background var(--duration-fast) var(--ease-out);
-    -webkit-app-region: no-drag;
-  }
-  .open-btn:hover {
-    background: var(--bg-elevated);
   }
 
   .manage-btn {
