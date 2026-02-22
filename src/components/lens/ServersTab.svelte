@@ -72,7 +72,7 @@
     const updated = await Promise.all(current.map(async (server) => {
       try {
         const result = await probePort(server.port);
-        const running = result?.data?.open ?? result?.open ?? false;
+        const running = result?.data?.listening ?? false;
         return { ...server, running };
       } catch {
         return { ...server, running: false };
