@@ -6,14 +6,147 @@
 //! This bypasses Tauri's fire-and-forget `eval()` and gives us direct access
 //! to the JS evaluation result.
 //!
+//! For screenshots, we use WebView2's `CapturePreview` API which renders the
+//! webview content to a PNG image via an IStream, then base64-encode it.
+//!
 //! On Windows, we access the ICoreWebView2 interface via `webview.with_webview()`
-//! → `controller.CoreWebView2()` → `ExecuteScript()` with a completion handler.
-//! The result is routed back to the caller through a oneshot channel.
+//! → `controller.CoreWebView2()` → `ExecuteScript()` / `CapturePreview()`.
+//! Results are routed back to the caller through oneshot channels.
 
 use serde_json::{json, Value};
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::commands::lens::LensState;
+
+// ---------------------------------------------------------------------------
+// Screenshot capture (via native WebView2 CapturePreview COM API)
+// ---------------------------------------------------------------------------
+
+/// Capture a PNG screenshot of the lens webview content.
+///
+/// Uses `ICoreWebView2::CapturePreview` which renders the current page to
+/// an IStream as PNG. Returns the raw PNG bytes.
+#[cfg(windows)]
+async fn capture_screenshot_png(
+    webview: &tauri::Webview,
+) -> Result<Vec<u8>, String> {
+    let (tx, rx) = tokio::sync::oneshot::channel::<Result<Vec<u8>, String>>();
+
+    webview
+        .with_webview(move |platform_webview| {
+            use webview2_com::CapturePreviewCompletedHandler;
+            use webview2_com::Microsoft::Web::WebView2::Win32::COREWEBVIEW2_CAPTURE_PREVIEW_IMAGE_FORMAT_PNG;
+            use windows::Win32::System::Com::StructuredStorage::CreateStreamOnHGlobal;
+            use windows::Win32::Foundation::HGLOBAL;
+
+            unsafe {
+                let controller = platform_webview.controller();
+                let core_webview = match controller.CoreWebView2() {
+                    Ok(wv) => wv,
+                    Err(e) => {
+                        let _ = tx.send(Err(format!("Failed to get CoreWebView2: {:?}", e)));
+                        return;
+                    }
+                };
+
+                // Create an auto-managed IStream (default HGLOBAL = auto-allocate,
+                // fDeleteOnRelease = true so stream owns the memory)
+                let stream = match CreateStreamOnHGlobal(HGLOBAL::default(), true) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        let _ = tx.send(Err(format!("Failed to create IStream: {:?}", e)));
+                        return;
+                    }
+                };
+
+                let stream_for_read = stream.clone();
+
+                let handler = CapturePreviewCompletedHandler::create(Box::new(
+                    move |hresult| {
+                        if hresult.is_err() {
+                            let _ = tx.send(Err(format!(
+                                "CapturePreview failed: {:?}",
+                                hresult
+                            )));
+                            return Ok(());
+                        }
+
+                        // Read the PNG bytes from the stream
+                        let bytes = read_stream_bytes(&stream_for_read);
+                        let _ = tx.send(bytes);
+                        Ok(())
+                    },
+                ));
+
+                if let Err(e) = core_webview.CapturePreview(
+                    COREWEBVIEW2_CAPTURE_PREVIEW_IMAGE_FORMAT_PNG,
+                    &stream,
+                    &handler,
+                ) {
+                    tracing::error!(
+                        "[browser_bridge] CapturePreview dispatch failed: {:?}",
+                        e
+                    );
+                }
+            }
+        })
+        .map_err(|e| format!("with_webview failed: {}", e))?;
+
+    // Wait for the capture with a generous timeout (large pages take time)
+    match tokio::time::timeout(std::time::Duration::from_secs(15), rx).await {
+        Ok(Ok(result)) => result,
+        Ok(Err(_)) => Err("Screenshot channel closed unexpectedly".into()),
+        Err(_) => Err("Screenshot capture timed out".into()),
+    }
+}
+
+/// Read all bytes from a COM IStream. Seeks to end to get size, then reads.
+///
+/// # Safety
+/// The stream must be a valid, readable IStream with data written to it.
+#[cfg(windows)]
+unsafe fn read_stream_bytes(
+    stream: &windows::Win32::System::Com::IStream,
+) -> Result<Vec<u8>, String> {
+    use windows::Win32::System::Com::{STREAM_SEEK_SET, STREAM_SEEK_END};
+
+    // Seek to end to find stream size
+    let mut size: u64 = 0;
+    stream
+        .Seek(0, STREAM_SEEK_END, Some(&mut size))
+        .map_err(|e| format!("Stream seek to end failed: {:?}", e))?;
+
+    if size == 0 {
+        return Err("Screenshot stream is empty".into());
+    }
+
+    // Seek back to start
+    stream
+        .Seek(0, STREAM_SEEK_SET, None)
+        .map_err(|e| format!("Stream seek to start failed: {:?}", e))?;
+
+    // Read all bytes
+    let mut buf = vec![0u8; size as usize];
+    let mut bytes_read: u32 = 0;
+    let hr = stream.Read(
+        buf.as_mut_ptr() as *mut _,
+        size as u32,
+        Some(&mut bytes_read),
+    );
+    if hr.is_err() {
+        return Err(format!("Stream read failed: {:?}", hr));
+    }
+
+    buf.truncate(bytes_read as usize);
+    Ok(buf)
+}
+
+#[cfg(not(windows))]
+async fn capture_screenshot_png(
+    _webview: &tauri::Webview,
+) -> Result<Vec<u8>, String> {
+    Err("Screenshot capture is only available on Windows".into())
+}
 
 // ---------------------------------------------------------------------------
 // JS eval with result (via native WebView2 ExecuteScript COM API)
@@ -254,10 +387,10 @@ pub async fn handle_browser_action(
         }
 
         "screenshot" => {
-            // WebView2 doesn't expose a direct screenshot API through Tauri 2.
-            // Return page metadata and suggest using capture_screen command instead.
             let webview = get_webview(app, &state)?;
-            let result = evaluate_js_with_result(
+
+            // Get page metadata via ExecuteScript
+            let meta = evaluate_js_with_result(
                 app,
                 &webview,
                 r#"JSON.stringify({
@@ -268,11 +401,30 @@ pub async fn handle_browser_action(
                 })"#,
                 std::time::Duration::from_secs(10),
             )
-            .await?;
-            Ok(json!({
-                "note": "For full screenshot, use capture_screen tool and crop to webview bounds",
-                "page": result,
-            }))
+            .await
+            .unwrap_or(json!(null));
+
+            // Capture the actual screenshot via CapturePreview
+            match capture_screenshot_png(&webview).await {
+                Ok(png_bytes) => {
+                    use base64::Engine;
+                    let b64 = base64::engine::general_purpose::STANDARD.encode(&png_bytes);
+                    Ok(json!({
+                        "image_data_url": format!("data:image/png;base64,{}", b64),
+                        "size_bytes": png_bytes.len(),
+                        "page": meta,
+                    }))
+                }
+                Err(e) => {
+                    // Fall back to metadata-only if capture fails
+                    tracing::warn!("[browser_bridge] Screenshot capture failed: {}", e);
+                    Ok(json!({
+                        "error": e,
+                        "note": "Screenshot capture failed. Use capture_screen tool as fallback.",
+                        "page": meta,
+                    }))
+                }
+            }
         }
 
         "snapshot" => {

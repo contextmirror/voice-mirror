@@ -59,6 +59,9 @@ symphonia = { version = "0.5", default-features = false, features = ["mp3"] }
 # Tool calling: UUID generation for tool call IDs
 uuid = { version = "1", features = ["v4"] }
 
+# Base64 encoding for screenshot data URLs
+base64 = "0.22"
+
 # LSP client
 lsp-types = "0.97"
 which = "7"
@@ -73,10 +76,11 @@ tauri-plugin-decorum = "1.1.1"
 # Cross-platform trash/recycle bin support
 trash = "5"
 
-# Direct WebView2 COM access for JS eval with results (Windows only)
+# Direct WebView2 COM access for JS eval + screenshot capture (Windows only)
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.38"
 windows-core = "0.61"
+windows = { version = "0.61", features = ["Win32_System_Com_StructuredStorage", "Win32_Foundation"] }
 
 [[bin]]
 name = "voice-mirror-mcp"

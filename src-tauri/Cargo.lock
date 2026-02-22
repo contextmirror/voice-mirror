@@ -6370,6 +6370,7 @@ name = "voice-mirror"
 version = "0.1.0"
 dependencies = [
  "arboard",
+ "base64 0.22.1",
  "byteorder",
  "cpal",
  "dirs 6.0.0",
@@ -6406,6 +6407,7 @@ dependencies = [
  "webview2-com",
  "which 7.0.3",
  "whisper-rs",
+ "windows 0.61.3",
  "windows-core 0.61.2",
  "zip 2.4.2",
 ]
