@@ -13,6 +13,7 @@
   import Terminal from './Terminal.svelte';
   import ShellTerminal from './ShellTerminal.svelte';
   import { terminalTabsStore } from '../../lib/stores/terminal-tabs.svelte.js';
+  import { devServerManager } from '../../lib/stores/dev-server-manager.svelte.js';
   import { projectStore } from '../../lib/stores/project.svelte.js';
   import { sendVoiceLoop } from '../../lib/api.js';
   import { voiceStore } from '../../lib/stores/voice.svelte.js';
@@ -76,6 +77,49 @@
   async function handleAddShell() {
     const cwd = projectStore.activeProject?.path || null;
     await terminalTabsStore.addShellTab({ cwd });
+  }
+
+  // ---- Close confirmation for dev-server tabs ----
+
+  let closeConfirm = $state({ visible: false, tabId: null, tab: null });
+
+  /**
+   * Attempt to close a tab. If it's a running dev-server tab, show confirmation.
+   * Otherwise close immediately.
+   * @param {string} tabId
+   */
+  function requestCloseTab(tabId) {
+    if (tabId === 'ai') return;
+    const tab = terminalTabsStore.tabs.find(t => t.id === tabId);
+    if (tab && tab.type === 'dev-server' && tab.running) {
+      closeConfirm = { visible: true, tabId, tab };
+    } else {
+      terminalTabsStore.closeTab(tabId);
+    }
+  }
+
+  /** Stop server, then close the tab */
+  async function confirmStopAndClose() {
+    const { tab } = closeConfirm;
+    if (!tab) return;
+    if (tab.projectPath) {
+      await devServerManager.stopServer(tab.projectPath);
+    }
+    terminalTabsStore.closeTab(tab.id);
+    closeConfirm = { visible: false, tabId: null, tab: null };
+  }
+
+  /** Hide tab (keep process alive) */
+  function confirmHideTab() {
+    const { tab } = closeConfirm;
+    if (!tab) return;
+    terminalTabsStore.hideTab(tab.id);
+    closeConfirm = { visible: false, tabId: null, tab: null };
+  }
+
+  /** Cancel close confirmation */
+  function cancelCloseConfirm() {
+    closeConfirm = { visible: false, tabId: null, tab: null };
   }
 
   // ---- Tab renaming (double-click) ----
@@ -147,7 +191,7 @@
 
   function contextClose() {
     if (contextMenu.tabId !== 'ai') {
-      terminalTabsStore.closeTab(contextMenu.tabId);
+      requestCloseTab(contextMenu.tabId);
     }
     closeContextMenu();
   }
@@ -337,10 +381,10 @@
           >{tab.title}</span>
         {/if}
 
-        {#if tab.type === 'shell' && editingTabId !== tab.id}
+        {#if (tab.type === 'shell' || tab.type === 'dev-server') && editingTabId !== tab.id}
           <button
             class="tab-close"
-            onclick={(e) => { e.stopPropagation(); terminalTabsStore.closeTab(tab.id); }}
+            onclick={(e) => { e.stopPropagation(); requestCloseTab(tab.id); }}
             title="Close terminal"
           >
             <svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -480,6 +524,29 @@
     </div>
   {/if}
 
+  <!-- Close confirmation dialog for dev-server tabs -->
+  {#if closeConfirm.visible}
+    <div class="close-confirm-overlay">
+      <div class="close-confirm-dialog">
+        <div class="close-confirm-title">Dev server running</div>
+        <div class="close-confirm-message">
+          {closeConfirm.tab?.framework || 'Server'}{closeConfirm.tab?.port ? ` on :${closeConfirm.tab.port}` : ''} is still running.
+        </div>
+        <div class="close-confirm-actions">
+          <button class="close-confirm-btn stop" type="button" onclick={confirmStopAndClose}>
+            Stop Server
+          </button>
+          <button class="close-confirm-btn hide" type="button" onclick={confirmHideTab}>
+            Hide Tab
+          </button>
+          <button class="close-confirm-btn cancel" type="button" onclick={cancelCloseConfirm}>
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  {/if}
+
   <!-- Terminal panels -->
   <div class="terminal-panels">
     <!-- AI terminal (always mounted) -->
@@ -487,8 +554,8 @@
       <Terminal onRegisterActions={(actions) => { termActions['ai'] = actions; }} />
     </div>
 
-    <!-- Shell terminals (mounted when tab exists, hidden when inactive) -->
-    {#each terminalTabsStore.tabs.filter(t => t.type === 'shell') as tab (tab.id)}
+    <!-- Shell + dev-server terminals (mounted when tab exists, hidden when inactive) -->
+    {#each terminalTabsStore.tabs.filter(t => t.type === 'shell' || t.type === 'dev-server') as tab (tab.id)}
       <div class="terminal-panel" class:hidden={terminalTabsStore.activeTabId !== tab.id}>
         <ShellTerminal
           shellId={tab.shellId}
@@ -857,6 +924,83 @@
 
   .terminal-panel.hidden {
     display: none;
+  }
+
+  /* ── Close confirmation dialog ── */
+
+  .close-confirm-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.5);
+  }
+
+  .close-confirm-dialog {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border, rgba(255,255,255,0.1));
+    border-radius: 8px;
+    padding: 16px;
+    min-width: 260px;
+    max-width: 340px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  }
+
+  .close-confirm-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 6px;
+  }
+
+  .close-confirm-message {
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 12px;
+  }
+
+  .close-confirm-actions {
+    display: flex;
+    gap: 6px;
+  }
+
+  .close-confirm-btn {
+    flex: 1;
+    padding: 5px 10px;
+    font-size: 11px;
+    font-weight: 500;
+    font-family: var(--font-family);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: transparent;
+    cursor: pointer;
+    transition: background 0.15s;
+    -webkit-app-region: no-drag;
+  }
+
+  .close-confirm-btn.stop {
+    color: var(--danger, #ef4444);
+    border-color: color-mix(in srgb, var(--danger, #ef4444) 40%, transparent);
+  }
+  .close-confirm-btn.stop:hover {
+    background: color-mix(in srgb, var(--danger, #ef4444) 12%, transparent);
+  }
+
+  .close-confirm-btn.hide {
+    color: var(--accent);
+    border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  }
+  .close-confirm-btn.hide:hover {
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+
+  .close-confirm-btn.cancel {
+    color: var(--muted);
+  }
+  .close-confirm-btn.cancel:hover {
+    background: rgba(255,255,255,0.06);
   }
 
   @media (prefers-reduced-motion: reduce) {

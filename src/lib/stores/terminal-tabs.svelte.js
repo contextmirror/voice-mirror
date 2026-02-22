@@ -15,6 +15,7 @@ function createTerminalTabsStore() {
     { id: 'ai', type: 'ai', title: 'Agent', shellId: null, running: true }
   ]);
   let activeTabId = $state('ai');
+  let hiddenTabs = $state([]);
 
   /**
    * Find the next available shell number, filling gaps.
@@ -36,6 +37,7 @@ function createTerminalTabsStore() {
     get tabs() { return tabs; },
     get activeTabId() { return activeTabId; },
     get activeTab() { return tabs.find(t => t.id === activeTabId) || tabs[0]; },
+    get hiddenTabs() { return hiddenTabs; },
 
     /**
      * Set the active terminal tab.
@@ -211,6 +213,55 @@ function createTerminalTabsStore() {
       if (tab) {
         tab.title = title;
       }
+    },
+
+    /**
+     * Hide a tab -- removes from visible tabs but keeps the process alive.
+     * Used by dev-server manager to hide terminal tabs when server is running in background.
+     * @param {string} id
+     */
+    hideTab(id) {
+      if (id === 'ai') return;
+      const idx = tabs.findIndex(t => t.id === id);
+      if (idx === -1) return;
+
+      const [tab] = tabs.splice(idx, 1);
+      hiddenTabs.push(tab);
+
+      // Switch active tab to neighbor
+      if (activeTabId === id) {
+        if (idx > 0 && tabs[idx - 1]) {
+          activeTabId = tabs[idx - 1].id;
+        } else if (tabs[idx]) {
+          activeTabId = tabs[idx].id;
+        } else {
+          activeTabId = 'ai';
+        }
+      }
+    },
+
+    /**
+     * Unhide a tab -- moves it from hiddenTabs back to visible tabs.
+     * @param {string} id
+     */
+    unhideTab(id) {
+      const idx = hiddenTabs.findIndex(t => t.id === id);
+      if (idx === -1) return;
+
+      const [tab] = hiddenTabs.splice(idx, 1);
+      tabs.push(tab);
+      activeTabId = tab.id;
+    },
+
+    /**
+     * Find a dev-server tab by its shell ID (checks both visible and hidden tabs).
+     * @param {string} shellId
+     * @returns {Object|null}
+     */
+    getDevServerTabByShellId(shellId) {
+      return tabs.find(t => t.type === 'dev-server' && t.shellId === shellId)
+        || hiddenTabs.find(t => t.type === 'dev-server' && t.shellId === shellId)
+        || null;
     },
   };
 }

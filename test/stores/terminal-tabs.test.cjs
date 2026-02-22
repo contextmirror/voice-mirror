@@ -189,3 +189,84 @@ describe('terminal-tabs.svelte.js -- behavior', () => {
     assert.ok(src.includes('await shellKill('), 'Should call shellKill');
   });
 });
+
+describe('terminal-tabs.svelte.js -- hiddenTabs state', () => {
+  it('uses $state for hiddenTabs', () => {
+    assert.ok(src.includes('let hiddenTabs = $state([])'), 'Should use $state for hiddenTabs');
+  });
+
+  it('has hiddenTabs getter', () => {
+    assert.ok(src.includes('get hiddenTabs()'), 'Should have hiddenTabs getter');
+  });
+});
+
+describe('terminal-tabs.svelte.js -- hideTab method', () => {
+  it('has hideTab method', () => {
+    assert.ok(src.includes('hideTab('), 'Should have hideTab method');
+  });
+
+  it('prevents hiding AI tab', () => {
+    const block = src.split('hideTab(')[1]?.split('\n    },')[0] || '';
+    assert.ok(block.includes("id === 'ai'"), 'hideTab should prevent hiding AI tab');
+  });
+
+  it('removes tab from visible tabs via splice', () => {
+    const block = src.split('hideTab(')[1]?.split('\n    },')[0] || '';
+    assert.ok(block.includes('tabs.splice('), 'hideTab should splice from tabs');
+  });
+
+  it('pushes to hiddenTabs', () => {
+    const block = src.split('hideTab(')[1]?.split('\n    },')[0] || '';
+    assert.ok(block.includes('hiddenTabs.push('), 'hideTab should push to hiddenTabs');
+  });
+
+  it('switches active tab to neighbor', () => {
+    const block = src.split('hideTab(')[1]?.split('\n    },')[0] || '';
+    assert.ok(block.includes('activeTabId ==='), 'hideTab should switch active tab');
+  });
+});
+
+describe('terminal-tabs.svelte.js -- unhideTab method', () => {
+  it('has unhideTab method', () => {
+    assert.ok(src.includes('unhideTab('), 'Should have unhideTab method');
+  });
+
+  it('removes from hiddenTabs via splice', () => {
+    const block = src.split('unhideTab(')[1]?.split('\n    },')[0] || '';
+    assert.ok(block.includes('hiddenTabs.splice('), 'unhideTab should splice from hiddenTabs');
+  });
+
+  it('pushes back to visible tabs', () => {
+    const block = src.split('unhideTab(')[1]?.split('\n    },')[0] || '';
+    assert.ok(block.includes('tabs.push('), 'unhideTab should push back to tabs');
+  });
+
+  it('makes unhidden tab active', () => {
+    const block = src.split('unhideTab(')[1]?.split('\n    },')[0] || '';
+    assert.ok(block.includes('activeTabId = tab.id'), 'unhideTab should set activeTabId');
+  });
+});
+
+describe('terminal-tabs.svelte.js -- getDevServerTabByShellId method', () => {
+  it('has getDevServerTabByShellId method', () => {
+    assert.ok(src.includes('getDevServerTabByShellId('), 'Should have getDevServerTabByShellId method');
+  });
+
+  it('searches visible tabs by shellId and type', () => {
+    const block = src.split('getDevServerTabByShellId(')[1]?.split('\n    },')[0] || '';
+    assert.ok(
+      block.includes("t.type === 'dev-server'") && block.includes('t.shellId === shellId'),
+      'Should search visible tabs by type and shellId'
+    );
+  });
+
+  it('searches hidden tabs as fallback', () => {
+    const block = src.split('getDevServerTabByShellId(')[1]?.split('\n    },')[0] || '';
+    assert.ok(block.includes('hiddenTabs.find('), 'Should search hiddenTabs as fallback');
+  });
+
+  it('returns null when not found', () => {
+    const block = src.split('getDevServerTabByShellId(')[1]?.split('\n    },')[0] || '';
+    assert.ok(block.includes('|| null'), 'Should return null when not found');
+  });
+});

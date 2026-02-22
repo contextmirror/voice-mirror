@@ -246,4 +246,47 @@ describe('LensPreview.svelte', () => {
   it('tracks lastDetectedProject to prevent re-runs', () => {
     assert.ok(src.includes('lastDetectedProject'), 'Should track last detected project path');
   });
+
+  // ---- Auto-start dev server integration ----
+
+  it('imports devServerManager from dev-server-manager store', () => {
+    assert.ok(src.includes('devServerManager'), 'Should import devServerManager');
+    assert.ok(src.includes('dev-server-manager.svelte.js'), 'Should import from dev-server-manager.svelte.js');
+  });
+
+  it('imports toastStore for consent toast', () => {
+    assert.ok(src.includes('toastStore'), 'Should import toastStore');
+    assert.ok(src.includes('toast.svelte.js'), 'Should import from toast.svelte.js');
+  });
+
+  it('checks autoStartServer preference', () => {
+    assert.ok(src.includes('autoStartServer'), 'Should check autoStartServer');
+  });
+
+  it('shows consent toast with multi-action when autoStartServer is null', () => {
+    assert.ok(src.includes('actions:'), 'Should use actions array for toast');
+    assert.ok(src.includes('Always start'), 'Should have Always start action');
+    assert.ok(src.includes('Start once'), 'Should have Start once action');
+    assert.ok(src.includes('Not now'), 'Should have Not now action');
+  });
+
+  it('calls updateActiveField to persist auto-start preference', () => {
+    assert.ok(src.includes("updateActiveField('autoStartServer'"), 'Should persist autoStartServer');
+  });
+
+  it('calls devServerManager.startServer for auto-start', () => {
+    assert.ok(src.includes('devServerManager.startServer'), 'Should call startServer');
+  });
+
+  it('auto-starts silently when autoStartServer is true', () => {
+    assert.ok(src.includes('autoStart === true'), 'Should check for true preference');
+  });
+
+  it('stores packageManager from detection result', () => {
+    assert.ok(src.includes('data.packageManager'), 'Should extract packageManager from detection');
+  });
+
+  it('finds first stopped server for auto-start logic', () => {
+    assert.ok(src.includes('servers.find(s => !s.running)'), 'Should find stopped server');
+  });
 });

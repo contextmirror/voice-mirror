@@ -1,6 +1,8 @@
 <script>
   import { aiStatusStore } from '../../lib/stores/ai-status.svelte.js';
   import { lensStore } from '../../lib/stores/lens.svelte.js';
+  import { devServerManager } from '../../lib/stores/dev-server-manager.svelte.js';
+  import { terminalTabsStore } from '../../lib/stores/terminal-tabs.svelte.js';
   import ServersTab from './ServersTab.svelte';
   import McpTab from './McpTab.svelte';
   import LspTab from './LspTab.svelte';
@@ -141,15 +143,33 @@
             {/if}
           </button>
           {#each devServers as server}
+            {@const crashed = devServerManager.crashedServers.find(c => c.port === server.port)}
+            {@const isCrashLoop = crashed?.crashLoopDetected}
+            {@const hiddenTab = server.shellId ? terminalTabsStore.hiddenTabs.find(t => t.shellId === server.shellId) : null}
             <div class="manage-row">
-              <div class="row-dot" class:ok={server.running} class:stopped={!server.running}></div>
+              <div class="row-dot" class:ok={server.running} class:stopped={!server.running && !crashed} class:crashed={!!crashed}></div>
               <span class="manage-row-name">{server.framework || 'Dev Server'}</span>
               <span class="manage-row-version">localhost:{server.port}</span>
-              <button class="manage-row-menu" type="button" aria-label="Server options" onclick={(e) => e.stopPropagation()}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/>
-                </svg>
-              </button>
+              {#if crashed}
+                <span class="manage-row-badge crashed-badge">Crashed</span>
+                {#if isCrashLoop}
+                  <span class="crash-loop-text">Crash loop — check terminal</span>
+                {:else}
+                  <button class="manage-restart-btn" type="button" onclick={(e) => { e.stopPropagation(); devServerManager.restartServer(crashed.projectPath); }}>
+                    Restart
+                  </button>
+                {/if}
+              {:else if hiddenTab}
+                <button class="manage-show-terminal-btn" type="button" onclick={(e) => { e.stopPropagation(); terminalTabsStore.unhideTab(hiddenTab.id); }}>
+                  Show Terminal
+                </button>
+              {:else}
+                <button class="manage-row-menu" type="button" aria-label="Server options" onclick={(e) => e.stopPropagation()}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/>
+                  </svg>
+                </button>
+              {/if}
             </div>
           {/each}
         </div>
@@ -506,6 +526,61 @@
     -webkit-app-region: no-drag;
   }
   .manage-add:hover {
+    background: var(--bg);
+  }
+
+  /* ── Crash recovery UI ── */
+
+  .row-dot.crashed { background: var(--danger); }
+
+  .crashed-badge {
+    background: color-mix(in srgb, var(--danger) 15%, transparent) !important;
+    color: var(--danger) !important;
+    border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
+  }
+
+  .crash-loop-text {
+    font-size: 10px;
+    color: var(--danger);
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  .manage-restart-btn {
+    padding: 2px 8px;
+    font-size: 10px;
+    font-weight: 500;
+    border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
+    border-radius: 4px;
+    background: transparent;
+    color: var(--warn);
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    margin-left: auto;
+    transition: background var(--duration-fast) var(--ease-out);
+    -webkit-app-region: no-drag;
+  }
+  .manage-restart-btn:hover {
+    background: color-mix(in srgb, var(--warn) 12%, transparent);
+  }
+
+  .manage-show-terminal-btn {
+    padding: 2px 8px;
+    font-size: 10px;
+    font-weight: 500;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: transparent;
+    color: var(--text);
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    margin-left: auto;
+    transition: background var(--duration-fast) var(--ease-out);
+    -webkit-app-region: no-drag;
+  }
+  .manage-show-terminal-btn:hover {
     background: var(--bg);
   }
 </style>

@@ -313,3 +313,61 @@ describe('StatusDropdown.svelte: manage server list', () => {
     assert.ok(src.includes('Add server'));
   });
 });
+
+describe('StatusDropdown.svelte: crash recovery UI', () => {
+  it('imports devServerManager', () => {
+    assert.ok(src.includes('devServerManager'));
+    assert.ok(src.includes('dev-server-manager.svelte.js'));
+  });
+
+  it('imports terminalTabsStore', () => {
+    assert.ok(src.includes('terminalTabsStore'));
+    assert.ok(src.includes('terminal-tabs.svelte.js'));
+  });
+
+  it('checks crashedServers from devServerManager', () => {
+    assert.ok(src.includes('devServerManager.crashedServers'));
+  });
+
+  it('shows Crashed badge for crashed servers', () => {
+    assert.ok(src.includes('crashed-badge'));
+    assert.ok(src.includes('Crashed'));
+  });
+
+  it('has Restart button for crashed (non-looping) servers', () => {
+    assert.ok(src.includes('manage-restart-btn'));
+    assert.ok(src.includes('Restart'));
+  });
+
+  it('calls devServerManager.restartServer on restart click', () => {
+    assert.ok(src.includes('devServerManager.restartServer'));
+  });
+
+  it('shows crash loop warning text when crash-looped', () => {
+    assert.ok(src.includes('crash-loop-text'));
+    assert.ok(src.includes('Crash loop'));
+    assert.ok(src.includes('check terminal'));
+  });
+
+  it('checks crashLoopDetected flag', () => {
+    assert.ok(src.includes('crashLoopDetected'));
+  });
+
+  it('has Show Terminal button for hidden tabs', () => {
+    assert.ok(src.includes('manage-show-terminal-btn'));
+    assert.ok(src.includes('Show Terminal'));
+  });
+
+  it('calls terminalTabsStore.unhideTab on Show Terminal click', () => {
+    assert.ok(src.includes('terminalTabsStore.unhideTab'));
+  });
+
+  it('checks hiddenTabs for hidden terminal tabs', () => {
+    assert.ok(src.includes('terminalTabsStore.hiddenTabs'));
+  });
+
+  it('has crashed CSS class on row dot', () => {
+    assert.ok(src.includes('class:crashed'));
+    assert.ok(src.includes('.row-dot.crashed'));
+  });
+});

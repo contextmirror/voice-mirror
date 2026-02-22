@@ -2,6 +2,8 @@
   import { onMount, onDestroy } from 'svelte';
   import { lensStore, DEFAULT_URL } from '../../lib/stores/lens.svelte.js';
   import { projectStore } from '../../lib/stores/project.svelte.js';
+  import { devServerManager } from '../../lib/stores/dev-server-manager.svelte.js';
+  import { toastStore } from '../../lib/stores/toast.svelte.js';
   import { lensCreateWebview, lensResizeWebview, lensCloseWebview, detectDevServers } from '../../lib/api.js';
   import { listen } from '@tauri-apps/api/event';
 
@@ -88,6 +90,7 @@
       const result = await detectDevServers(project.path);
       const data = result?.data || result || {};
       const servers = data.servers || [];
+      const packageManager = data.packageManager || null;
       lensStore.setDevServers(servers);
 
       // Determine URL to navigate to (priority: preferred > running server > last URL)
@@ -106,6 +109,42 @@
 
       if (targetUrl) {
         lensStore.navigate(targetUrl);
+      }
+
+      // Auto-start logic for stopped servers
+      const stoppedServer = servers.find(s => !s.running);
+      if (stoppedServer) {
+        const autoStart = project.autoStartServer;
+        if (autoStart === null || autoStart === undefined) {
+          // Never asked — show consent toast
+          toastStore.addToast({
+            message: `${stoppedServer.framework || 'Dev server'} on :${stoppedServer.port} is not running.`,
+            severity: 'info',
+            actions: [
+              {
+                label: 'Always start',
+                callback: () => {
+                  projectStore.updateActiveField('autoStartServer', true);
+                  devServerManager.startServer(stoppedServer, project.path, packageManager);
+                },
+              },
+              {
+                label: 'Start once',
+                callback: () => {
+                  devServerManager.startServer(stoppedServer, project.path, packageManager);
+                },
+              },
+              {
+                label: 'Not now',
+                callback: () => {},
+              },
+            ],
+          });
+        } else if (autoStart === true) {
+          // User opted in — auto-start silently
+          devServerManager.startServer(stoppedServer, project.path, packageManager);
+        }
+        // autoStart === false → do nothing
       }
     } catch (err) {
       console.error('[lens] Dev server detection failed:', err);

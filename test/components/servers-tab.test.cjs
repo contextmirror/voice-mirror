@@ -97,9 +97,10 @@ describe('ServersTab', () => {
     assert.ok(src.includes('server-source'));
   });
 
-  it('shows status dot for running/stopped servers', () => {
-    assert.ok(src.includes('class:ok={server.running}'));
-    assert.ok(src.includes('class:stopped={!server.running}'));
+  it('shows status dot with state-based classes', () => {
+    assert.ok(src.includes("class:ok={state.status === 'running'}"));
+    assert.ok(src.includes("class:starting={state.status === 'starting'}"));
+    assert.ok(src.includes("class:danger={state.status === 'crashed'}"));
   });
 
   it('has Open in Browser button for running servers', () => {
@@ -107,8 +108,8 @@ describe('ServersTab', () => {
     assert.ok(src.includes('open-btn'));
   });
 
-  it('only shows Open in Browser for running servers', () => {
-    assert.ok(src.includes('{#if server.running}'));
+  it('shows Open in Browser when server is running', () => {
+    assert.ok(src.includes("state.status === 'running'"));
   });
 
   // ── Detection + polling ──
@@ -165,6 +166,96 @@ describe('ServersTab', () => {
 
   it('has -webkit-app-region: no-drag on interactive elements', () => {
     assert.ok(src.includes('-webkit-app-region: no-drag'));
+  });
+
+  it('uses design token --danger for crashed dots', () => {
+    assert.ok(src.includes('var(--danger)'));
+  });
+});
+
+// ── devServerManager integration ──
+
+describe('ServersTab devServerManager integration', () => {
+  it('imports devServerManager from dev-server-manager store', () => {
+    assert.ok(src.includes('devServerManager'));
+    assert.ok(src.includes('dev-server-manager.svelte.js'));
+  });
+
+  it('has getServerState helper function', () => {
+    assert.ok(src.includes('function getServerState(server)'));
+  });
+
+  it('calls devServerManager.getServerStatus for status', () => {
+    assert.ok(src.includes('devServerManager.getServerStatus'));
+  });
+
+  it('has Start button for stopped servers', () => {
+    assert.ok(src.includes('start-btn'));
+    assert.ok(src.includes('handleStart'));
+  });
+
+  it('has Stop button for running servers', () => {
+    assert.ok(src.includes('stop-btn'));
+    assert.ok(src.includes('handleStop'));
+  });
+
+  it('has Restart button for crashed servers', () => {
+    assert.ok(src.includes('restart-btn'));
+    assert.ok(src.includes('handleRestart'));
+  });
+
+  it('has Starting... button with disabled state', () => {
+    assert.ok(src.includes('starting-btn'));
+    assert.ok(src.includes('Starting...'));
+    assert.ok(src.includes('disabled'));
+  });
+
+  it('has idle badge for idle servers', () => {
+    assert.ok(src.includes('idle-badge'));
+    assert.ok(src.includes('(idle)'));
+  });
+
+  it('has idle stop button for idle servers', () => {
+    assert.ok(src.includes('idle-stop-btn'));
+  });
+
+  it('shows crash loop warning when crashLoopDetected', () => {
+    assert.ok(src.includes('crash-loop-warning'));
+    assert.ok(src.includes('Crash loop'));
+    assert.ok(src.includes('crashLoopDetected'));
+  });
+
+  it('calls devServerManager.startServer in handleStart', () => {
+    assert.ok(src.includes('devServerManager.startServer(server, project.path'));
+  });
+
+  it('calls devServerManager.stopServer in handleStop', () => {
+    assert.ok(src.includes('devServerManager.stopServer(project.path)'));
+  });
+
+  it('calls devServerManager.restartServer in handleRestart', () => {
+    assert.ok(src.includes('devServerManager.restartServer(project.path)'));
+  });
+
+  it('stores detected package manager from detection result', () => {
+    assert.ok(src.includes('detectedPackageManager'));
+    assert.ok(src.includes('data.packageManager'));
+  });
+
+  it('uses @const for server state in template', () => {
+    assert.ok(src.includes('{@const state = getServerState(server)}'));
+  });
+
+  it('checks status values: stopped, starting, running, crashed, idle', () => {
+    assert.ok(src.includes("state.status === 'stopped'"));
+    assert.ok(src.includes("state.status === 'starting'"));
+    assert.ok(src.includes("state.status === 'running'"));
+    assert.ok(src.includes("state.status === 'crashed'"));
+    assert.ok(src.includes("state.status === 'idle'"));
+  });
+
+  it('has starting dot animation element', () => {
+    assert.ok(src.includes('starting-dot'));
   });
 });
 
