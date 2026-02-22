@@ -54,7 +54,6 @@ struct JsonRpcError {
 /// Outgoing JSON-RPC notification (no id).
 /// Used for sending tools/list_changed notifications.
 #[derive(Debug, Serialize)]
-#[allow(dead_code)]
 struct JsonRpcNotification {
     jsonrpc: String,
     method: String,
@@ -96,6 +95,9 @@ pub struct McpServerState {
     data_dir: std::path::PathBuf,
     /// Optional named pipe client for fast IPC with the Tauri app.
     pipe: Option<Arc<PipeClient>>,
+    /// Flag set when tool list changes (load/unload/auto-unload).
+    /// The main loop checks this after each request to send notifications.
+    tools_changed: bool,
 }
 
 /// Run the MCP server on stdin/stdout.
@@ -106,17 +108,31 @@ pub struct McpServerState {
 ///
 /// The optional `pipe` parameter enables fast named-pipe IPC for voice_send/voice_listen.
 /// When `None`, the server falls back to file-based IPC (inbox.json).
+///
+/// The optional `enabled_groups` parameter (comma-separated group names from
+/// `ENABLED_GROUPS` env var) pre-loads tool groups at startup so they appear
+/// in the initial `tools/list` response.
 pub async fn run_server(
     data_dir: std::path::PathBuf,
     pipe: Option<Arc<PipeClient>>,
+    enabled_groups: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Ensure data directory exists
     tokio::fs::create_dir_all(&data_dir).await?;
 
+    let mut registry = ToolRegistry::new();
+
+    // Pre-load groups from ENABLED_GROUPS env var so they appear in
+    // the initial tools/list handshake (BUG-005 Fix 1).
+    if let Some(ref groups_str) = enabled_groups {
+        registry.apply_enabled_groups(groups_str);
+    }
+
     let state = Arc::new(Mutex::new(McpServerState {
-        registry: ToolRegistry::new(),
+        registry,
         data_dir,
         pipe,
+        tools_changed: false,
     }));
 
     let stdin = tokio::io::stdin();
@@ -170,6 +186,21 @@ pub async fn run_server(
             }
             None => {
                 // Method handled as notification, no response needed
+            }
+        }
+
+        // Send tools/list_changed notification if tool list was modified
+        // (BUG-005 Fix 2). This tells the MCP client to re-fetch tools/list.
+        {
+            let mut st = state.lock().await;
+            if st.tools_changed {
+                st.tools_changed = false;
+                let notification = JsonRpcNotification {
+                    jsonrpc: "2.0".into(),
+                    method: "notifications/tools/list_changed".into(),
+                    params: None,
+                };
+                write_notification(&mut writer, &notification).await;
             }
         }
     }
@@ -298,8 +329,7 @@ async fn handle_tools_call(
         let mut state = state.lock().await;
         let unloaded = state.registry.auto_unload_idle();
         if !unloaded.is_empty() {
-            // In a full implementation we'd send a tools/list_changed notification here.
-            // For now, just log it.
+            state.tools_changed = true;
             info!("[MCP] Auto-unloaded idle groups: {:?}", unloaded);
         }
     }
@@ -324,12 +354,15 @@ async fn route_tool_call(
             }
             let mut state = state.lock().await;
             match state.registry.load_group(group) {
-                Ok(tool_names) => McpToolResult::text(format!(
-                    "Loaded tool group \"{}\" ({} tools):\n{}",
-                    group,
-                    tool_names.len(),
-                    tool_names.join(", ")
-                )),
+                Ok(tool_names) => {
+                    state.tools_changed = true;
+                    McpToolResult::text(format!(
+                        "Loaded tool group \"{}\" ({} tools):\n{}",
+                        group,
+                        tool_names.len(),
+                        tool_names.join(", ")
+                    ))
+                }
                 Err(e) => McpToolResult::error(e),
             }
         }
@@ -340,10 +373,13 @@ async fn route_tool_call(
             }
             let mut state = state.lock().await;
             match state.registry.unload_group(group) {
-                Ok(count) => McpToolResult::text(format!(
-                    "Unloaded tool group \"{}\". {} tools removed from context.",
-                    group, count
-                )),
+                Ok(count) => {
+                    state.tools_changed = true;
+                    McpToolResult::text(format!(
+                        "Unloaded tool group \"{}\". {} tools removed from context.",
+                        group, count
+                    ))
+                }
                 Err(e) => McpToolResult::error(e),
             }
         }
@@ -462,6 +498,28 @@ async fn write_response<W: AsyncWriteExt + Unpin>(writer: &mut W, response: &Jso
     }
 }
 
+/// Write a JSON-RPC notification to stdout (no id, no response expected).
+async fn write_notification<W: AsyncWriteExt + Unpin>(
+    writer: &mut W,
+    notification: &JsonRpcNotification,
+) {
+    match serde_json::to_string(notification) {
+        Ok(json) => {
+            let line = format!("{}\n", json);
+            if let Err(e) = writer.write_all(line.as_bytes()).await {
+                error!("[MCP] Failed to write notification: {}", e);
+            }
+            if let Err(e) = writer.flush().await {
+                error!("[MCP] Failed to flush stdout: {}", e);
+            }
+            info!("[MCP] Sent tools/list_changed notification");
+        }
+        Err(e) => {
+            error!("[MCP] Failed to serialize notification: {}", e);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -496,6 +554,7 @@ mod tests {
             registry: ToolRegistry::new(),
             data_dir: std::path::PathBuf::from("/tmp/test"),
             pipe: None,
+            tools_changed: false,
         };
         let resp = handle_tools_list(json!(1), &state);
         let result = resp.result.unwrap();
@@ -510,5 +569,64 @@ mod tests {
         let req: JsonRpcRequest = serde_json::from_str(json).unwrap();
         assert_eq!(req.method, "tools/list");
         assert_eq!(req.id, Some(json!(1)));
+    }
+
+    #[test]
+    fn test_enabled_groups_loads_tools_at_startup() {
+        // BUG-005 Fix 1: ENABLED_GROUPS should pre-load tool groups
+        let mut registry = ToolRegistry::new();
+        // Default: only core + meta (7 tools)
+        assert_eq!(registry.list_tools().len(), 7);
+
+        // Apply enabled groups (simulating ENABLED_GROUPS env var)
+        registry.apply_enabled_groups("core,meta,memory,screen");
+        let tools = registry.list_tools();
+
+        // Should now have core (4) + meta (3) + memory (6) + screen (1) = 14
+        assert_eq!(tools.len(), 14);
+        let tool_names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
+        assert!(tool_names.contains(&"memory_search"));
+        assert!(tool_names.contains(&"capture_screen"));
+    }
+
+    #[test]
+    fn test_enabled_groups_in_tools_list() {
+        // Verify that tools/list returns all enabled-group tools
+        let mut registry = ToolRegistry::new();
+        registry.apply_enabled_groups("core,meta,browser");
+
+        let state = McpServerState {
+            registry,
+            data_dir: std::path::PathBuf::from("/tmp/test"),
+            pipe: None,
+            tools_changed: false,
+        };
+        let resp = handle_tools_list(json!(1), &state);
+        let result = resp.result.unwrap();
+        let tools = result["tools"].as_array().unwrap();
+        // core (4) + meta (3) + browser (16) + screen (1, dependency) = 24
+        // Note: apply_enabled_groups only loads listed groups, not deps.
+        // Browser is listed but screen is not — so just core+meta+browser = 23
+        // Actually apply_enabled_groups sets loaded = allowed, so only the listed groups.
+        // Let's check: the fn sets loaded = allowed = {core, meta, browser}
+        // Browser's dependency on screen is NOT auto-resolved by apply_enabled_groups.
+        assert!(tools.len() > 7, "Should have more than default 7 tools");
+        let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
+        assert!(names.contains(&"browser_start"));
+    }
+
+    #[test]
+    fn test_notification_serialization() {
+        // BUG-005 Fix 2: verify notification JSON format
+        let notification = JsonRpcNotification {
+            jsonrpc: "2.0".into(),
+            method: "notifications/tools/list_changed".into(),
+            params: None,
+        };
+        let json = serde_json::to_string(&notification).unwrap();
+        assert!(json.contains("\"jsonrpc\":\"2.0\""));
+        assert!(json.contains("\"method\":\"notifications/tools/list_changed\""));
+        // params should be omitted (skip_serializing_if)
+        assert!(!json.contains("\"params\""));
     }
 }

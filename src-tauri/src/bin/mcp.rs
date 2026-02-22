@@ -48,8 +48,11 @@ async fn main() {
         None
     };
 
+    // Read enabled groups from env (set by Tauri app via .mcp.json / settings.json)
+    let enabled_groups = std::env::var("ENABLED_GROUPS").ok();
+
     // Run the MCP server (blocks until stdin closes)
-    if let Err(e) = run_server(data_dir, pipe).await {
+    if let Err(e) = run_server(data_dir, pipe, enabled_groups).await {
         eprintln!("[MCP] Server error: {}", e);
         std::process::exit(1);
     }
