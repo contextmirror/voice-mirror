@@ -317,15 +317,43 @@ impl ShellManager {
 
         session.running.store(false, Ordering::SeqCst);
 
-        if let Some(mut child) = session.child.take() {
-            let _ = child.kill();
-            let _ = child.wait();
-        }
+        // Get PID before killing (needed for process-tree kill on Windows).
+        let pid = session.child.as_ref().and_then(|c| c.process_id());
 
-        // Drop PTY resources (writer, master) — this will cause the reader thread
-        // to get an EOF or error on its next read, ending the thread naturally.
+        // Drop PTY resources FIRST — this signals EOF to the reader thread
+        // and closes the ConPTY, which in turn signals child processes to exit.
         drop(session.writer);
         session.master = None;
+
+        // On Windows, kill the entire process tree so child processes (e.g. node
+        // running a dev server) are also terminated. `TerminateProcess` alone only
+        // kills the top-level shell, leaving orphan node processes.
+        #[cfg(windows)]
+        if let Some(p) = pid {
+            info!("Killing process tree for PID {} (session '{}')", p, id);
+            let _ = std::process::Command::new("taskkill")
+                .args(["/PID", &p.to_string(), "/T", "/F"])
+                .output();
+        }
+
+        if let Some(mut child) = session.child.take() {
+            let _ = child.kill();
+            // Use try_wait in a loop with timeout instead of blocking forever.
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+            loop {
+                match child.try_wait() {
+                    Ok(Some(_)) => break,
+                    Ok(None) if std::time::Instant::now() < deadline => {
+                        std::thread::sleep(std::time::Duration::from_millis(50));
+                    }
+                    _ => {
+                        warn!("Shell '{}' did not exit within 3s, abandoning wait", id);
+                        break;
+                    }
+                }
+            }
+        }
+
         session._reader_handle = None;
 
         info!("Killed shell session '{}'", id);
