@@ -3,7 +3,7 @@
  *
  * OpenCode-style status popover with Servers/MCP/LSP tabs.
  * Lives in the FileTree header (right panel, pure DOM — no HWND overlap).
- * Includes "Manage servers" dialog modal.
+ * Includes "Manage servers" dialog modal using native <dialog> + showModal().
  */
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
@@ -198,8 +198,9 @@ describe('StatusDropdown.svelte: Manage Servers dialog', () => {
   it('has dialogOpen state', () => {
     assert.ok(/let\s+dialogOpen\s*=\s*\$state/.test(src));
   });
-  it('has dialogEl element ref', () => {
-    assert.ok(src.includes('bind:this={dialogEl}'));
+  it('has dialogRef for native dialog element', () => {
+    assert.ok(/let\s+dialogRef\s*=\s*\$state/.test(src));
+    assert.ok(src.includes('bind:this={dialogRef}'));
   });
   it('has searchQuery state', () => {
     assert.ok(/let\s+searchQuery\s*=\s*\$state/.test(src));
@@ -210,27 +211,39 @@ describe('StatusDropdown.svelte: Manage Servers dialog', () => {
   it('has closeDialog function', () => {
     assert.ok(src.includes('function closeDialog()'));
   });
-  it('freezes lens on dialog open', () => {
-    const openFn = src.slice(src.indexOf('function openDialog'), src.indexOf('function closeDialog'));
-    assert.ok(openFn.includes('lensStore.freeze()'));
+  it('uses $effect for freeze/unfreeze (ScreenshotPicker pattern)', () => {
+    assert.ok(src.includes('lensStore.freeze()'));
+    assert.ok(src.includes('lensStore.unfreeze()'));
+    // freeze and unfreeze should be in an $effect, not in openDialog/closeDialog
+    const effectBlock = src.slice(src.indexOf('if (dialogOpen)'), src.indexOf('// Show/hide'));
+    assert.ok(effectBlock.includes('lensStore.freeze()'));
+    assert.ok(effectBlock.includes('lensStore.unfreeze()'));
   });
-  it('unfreezes lens on dialog close', () => {
-    const closeFn = src.slice(src.indexOf('function closeDialog'), src.indexOf('function handleWindowClick'));
-    assert.ok(closeFn.includes('lensStore.unfreeze()'));
+  it('uses native <dialog> element', () => {
+    assert.ok(src.includes('<dialog'), 'Should use native <dialog> element');
+    assert.ok(src.includes('server-dialog'), 'Should have server-dialog class');
   });
-  it('uses portal action to escape overflow ancestors', () => {
-    assert.ok(src.includes('function portal(node)'), 'Should define portal action');
-    assert.ok(src.includes('document.body.appendChild(node)'), 'Should append to body');
-    assert.ok(src.includes('use:portal'), 'Should apply portal to dialog backdrop');
+  it('uses showModal() for top-layer rendering', () => {
+    assert.ok(src.includes('showModal()'), 'Should call showModal()');
   });
-  it('has dialog backdrop', () => {
-    assert.ok(src.includes('dialog-backdrop'));
+  it('uses dialog close() method', () => {
+    assert.ok(src.includes('dialogRef.close()') || src.includes('.close()'));
   });
-  it('has dialog panel', () => {
-    assert.ok(src.includes('dialog-panel'));
+  it('has ::backdrop pseudo-element styling', () => {
+    assert.ok(src.includes('::backdrop'), 'Should style ::backdrop');
   });
-  it('has aria-modal for dialog', () => {
-    assert.ok(src.includes('aria-modal="true"'));
+  it('handles dialog cancel event (Escape key)', () => {
+    assert.ok(src.includes('handleDialogCancel'));
+    assert.ok(src.includes('oncancel'));
+  });
+  it('handles backdrop click to close', () => {
+    assert.ok(src.includes('handleDialogClick'));
+  });
+  it('stops propagation on inner content clicks', () => {
+    assert.ok(src.includes('e.stopPropagation()'));
+  });
+  it('has dialog inner wrapper', () => {
+    assert.ok(src.includes('dialog-inner'));
   });
   it('has dialog title "Servers"', () => {
     assert.ok(src.includes('dialog-title'));
@@ -268,23 +281,7 @@ describe('StatusDropdown.svelte: Manage Servers dialog', () => {
     assert.ok(src.includes('dialog-add'));
     assert.ok(src.includes('Add server'));
   });
-  it('has high z-index for dialog backdrop', () => {
-    assert.ok(src.includes('z-index: 20000'));
-  });
-  it('has 560px dialog panel width', () => {
+  it('has 560px dialog width', () => {
     assert.ok(src.includes('width: 560px'));
-  });
-  it('dialog backdrop uses fixed positioning', () => {
-    assert.ok(src.includes('position: fixed'));
-  });
-  it('Escape closes dialog', () => {
-    const keydown = src.slice(src.indexOf('function handleKeydown'), src.indexOf('</script>'));
-    assert.ok(keydown.includes('dialogOpen'));
-    assert.ok(keydown.includes('closeDialog'));
-  });
-  it('outside click on dialog backdrop closes dialog', () => {
-    const clickHandler = src.slice(src.indexOf('function handleWindowClick'), src.indexOf('function handleKeydown'));
-    assert.ok(clickHandler.includes('dialogOpen'));
-    assert.ok(clickHandler.includes('closeDialog'));
   });
 });

@@ -1,9 +1,12 @@
 <script>
   import { onDestroy, tick } from 'svelte';
   import { listen } from '@tauri-apps/api/event';
-  import { readFile, writeFile, lspOpenFile, lspCloseFile, lspChangeFile, lspSaveFile, lspRequestCompletion, lspRequestHover, lspRequestDefinition } from '../../lib/api.js';
+  import { readFile, writeFile, lspOpenFile, lspCloseFile, lspChangeFile, lspSaveFile, lspRequestCompletion, lspRequestHover, lspRequestDefinition, revealInExplorer, writeUserMessage, aiPtyInput } from '../../lib/api.js';
   import { tabsStore } from '../../lib/stores/tabs.svelte.js';
   import { projectStore } from '../../lib/stores/project.svelte.js';
+  import { chatStore } from '../../lib/stores/chat.svelte.js';
+  import { aiStatusStore } from '../../lib/stores/ai-status.svelte.js';
+  import EditorContextMenu from './EditorContextMenu.svelte';
 
   let { tab } = $props();
 
@@ -14,6 +17,16 @@
   let isBinary = $state(false);
   let fileSize = $state(0);
   let currentPath = $state(null);
+
+  // Context menu state
+  let editorMenu = $state({ visible: false, x: 0, y: 0 });
+  let menuContext = $state({
+    hasSelection: false,
+    selectedText: '',
+    hasDiagnostic: false,
+    diagnosticMessage: '',
+    lineNumber: 0,
+  });
 
   // LSP state
   let lspVersion = $state(0);
@@ -157,6 +170,149 @@
     }
   }
 
+  function getLanguageFromPath(path) {
+    const ext = path.split('.').pop()?.toLowerCase() || '';
+    const map = { js: 'javascript', ts: 'typescript', rs: 'rust', py: 'python', svelte: 'svelte', json: 'json', css: 'css', html: 'html', md: 'markdown' };
+    return map[ext] || ext;
+  }
+
+  function sendAiMessage(text) {
+    chatStore.addMessage('user', text);
+    if (aiStatusStore.isApiProvider) {
+      aiPtyInput(text, null).catch(err => console.warn('[editor] AI send failed:', err));
+    } else if (!aiStatusStore.isDictationProvider) {
+      writeUserMessage(text).catch(err => console.warn('[editor] AI send failed:', err));
+    }
+  }
+
+  async function handleGoToDefinition() {
+    if (!view || !hasLsp || !currentPath) return;
+    const pos = view.state.selection.main.head;
+    const lineInfo = view.state.doc.lineAt(pos);
+    const line = lineInfo.number - 1;
+    const character = pos - lineInfo.from;
+    const r = projectStore.activeProject?.path || null;
+
+    try {
+      const result = await lspRequestDefinition(currentPath, line, character, r);
+      if (!result?.data?.locations?.length) return;
+      const loc = result.data.locations[0];
+      const root = projectStore.activeProject?.path || '';
+      const locPath = uriToRelativePath(loc.uri, root);
+      if (!locPath) return;
+      if (locPath === currentPath) {
+        const targetLine = view.state.doc.line(loc.range.start.line + 1);
+        view.dispatch({
+          selection: { anchor: targetLine.from + loc.range.start.character },
+          scrollIntoView: true,
+        });
+      } else {
+        tabsStore.openFile(locPath);
+      }
+    } catch {}
+  }
+
+  async function foldAtCursor() {
+    if (!view) return;
+    const { foldCode } = await import('@codemirror/language');
+    foldCode(view);
+  }
+
+  async function unfoldAtCursor() {
+    if (!view) return;
+    const { unfoldCode } = await import('@codemirror/language');
+    unfoldCode(view);
+  }
+
+  async function foldAllCode() {
+    if (!view) return;
+    const { foldAll } = await import('@codemirror/language');
+    foldAll(view);
+  }
+
+  async function unfoldAllCode() {
+    if (!view) return;
+    const { unfoldAll } = await import('@codemirror/language');
+    unfoldAll(view);
+  }
+
+  function handleMenuAction(action, data) {
+    if (!view) return;
+    switch (action) {
+      // AI Actions
+      case 'ai-fix': {
+        const msg = `Error on line ${data.lineNumber} of \`${data.filePath}\`: "${data.diagnosticMessage}"\n\nFix this error.`;
+        sendAiMessage(msg);
+        break;
+      }
+      case 'ai-explain': {
+        const lang = getLanguageFromPath(data.filePath);
+        const msg = `Looking at \`${data.filePath}\` line ${data.lineNumber}:\n\`\`\`${lang}\n${data.selectedText}\n\`\`\`\nExplain what this code does.`;
+        sendAiMessage(msg);
+        break;
+      }
+      case 'ai-refactor': {
+        const lang = getLanguageFromPath(data.filePath);
+        const msg = `Looking at \`${data.filePath}\` line ${data.lineNumber}:\n\`\`\`${lang}\n${data.selectedText}\n\`\`\`\nRefactor this code to be cleaner and more maintainable.`;
+        sendAiMessage(msg);
+        break;
+      }
+      case 'ai-test': {
+        const lang = getLanguageFromPath(data.filePath);
+        const msg = `Looking at \`${data.filePath}\` line ${data.lineNumber}:\n\`\`\`${lang}\n${data.selectedText}\n\`\`\`\nWrite tests for this code.`;
+        sendAiMessage(msg);
+        break;
+      }
+
+      // LSP Actions
+      case 'goto-definition':
+        handleGoToDefinition();
+        break;
+
+      // Clipboard
+      case 'cut': document.execCommand('cut'); break;
+      case 'copy': document.execCommand('copy'); break;
+      case 'paste':
+        navigator.clipboard.readText().then(text => {
+          if (!view) return;
+          const { from, to } = view.state.selection.main;
+          view.dispatch({ changes: { from, to, insert: text } });
+        }).catch(err => console.warn('[editor] Clipboard read denied:', err));
+        break;
+      case 'select-all':
+        view.dispatch({ selection: { anchor: 0, head: view.state.doc.length } });
+        break;
+
+      // Folding
+      case 'fold': foldAtCursor(); break;
+      case 'unfold': unfoldAtCursor(); break;
+      case 'fold-all': foldAllCode(); break;
+      case 'unfold-all': unfoldAllCode(); break;
+
+      // File actions
+      case 'copy-path': {
+        const root = projectStore.activeProject?.path || '';
+        const fullPath = root ? `${root}/${currentPath}` : currentPath;
+        navigator.clipboard.writeText(fullPath.replace(/\//g, '\\'));
+        break;
+      }
+      case 'copy-relative-path':
+        navigator.clipboard.writeText(currentPath);
+        break;
+      case 'copy-markdown': {
+        const lang = getLanguageFromPath(currentPath);
+        const text = view.state.selection.main.empty
+          ? view.state.doc.toString()
+          : view.state.sliceDoc(view.state.selection.main.from, view.state.selection.main.to);
+        navigator.clipboard.writeText(`\`${currentPath}\`\n\`\`\`${lang}\n${text}\n\`\`\``);
+        break;
+      }
+      case 'reveal':
+        revealInExplorer(currentPath, projectStore.activeProject?.path || null);
+        break;
+    }
+  }
+
   async function save() {
     if (!view) return;
     try {
@@ -238,6 +394,10 @@
           maxRenderedOptions: 20,
         }),
         cm.EditorView.updateListener.of((update) => {
+          // Dismiss context menu on any document change or viewport scroll
+          if ((update.docChanged || update.viewportChanged) && editorMenu.visible) {
+            editorMenu.visible = false;
+          }
           if (update.docChanged) {
             tabsStore.setDirty(tab.id, true);
             tabsStore.pinTab(tab.id);
@@ -286,46 +446,72 @@
           }
         }));
 
-        // Go-to-definition on Ctrl+Click / Cmd+Click
-        extensions.push(cm.EditorView.domEventHandlers({
-          click: async (event, v) => {
-            if (!event.ctrlKey && !event.metaKey) return false;
-            const pos = v.posAtCoords({ x: event.clientX, y: event.clientY });
-            if (pos == null) return false;
-
-            const lineInfo = v.state.doc.lineAt(pos);
-            const line = lineInfo.number - 1;
-            const character = pos - lineInfo.from;
-            const r = projectStore.activeProject?.path || null;
-
-            try {
-              const result = await lspRequestDefinition(currentPath, line, character, r);
-              if (!result?.data?.locations?.length) return false;
-
-              const loc = result.data.locations[0];
-              // Convert file:// URI to relative path by stripping the project root prefix
-              const root = projectStore.activeProject?.path || '';
-              const locPath = uriToRelativePath(loc.uri, root);
-              if (!locPath) return false;
-
-              if (locPath === currentPath) {
-                // Same file: scroll to position
-                const targetLine = v.state.doc.line(loc.range.start.line + 1);
-                v.dispatch({
-                  selection: { anchor: targetLine.from + loc.range.start.character },
-                  scrollIntoView: true,
-                });
-              } else {
-                // Different file: open in new tab
-                tabsStore.openFile(locPath);
-              }
-              return true;
-            } catch {
-              return false;
-            }
-          },
-        }));
       }
+
+      // Context menu + optional Ctrl+Click go-to-definition
+      const domHandlers = {
+        contextmenu: (event, v) => {
+          event.preventDefault();
+          const pos = v.posAtCoords({ x: event.clientX, y: event.clientY });
+          if (pos == null) return true;
+          const line = v.state.doc.lineAt(pos);
+          const sel = v.state.selection.main;
+          const selHas = !sel.empty;
+          const selText = selHas ? v.state.sliceDoc(sel.from, sel.to) : '';
+
+          // Check if pos falls within any cached diagnostic range
+          const diagnostics = cachedDiagnostics.get(currentPath) || [];
+          const diagnostic = diagnostics.find(d => pos >= d.from && pos <= d.to);
+
+          editorMenu = { visible: true, x: event.clientX, y: event.clientY };
+          menuContext = {
+            hasSelection: selHas,
+            selectedText: selText,
+            hasDiagnostic: !!diagnostic,
+            diagnosticMessage: diagnostic?.message || '',
+            lineNumber: line.number,
+          };
+          return true;
+        },
+      };
+
+      if (hasLsp) {
+        domHandlers.click = async (event, v) => {
+          if (!event.ctrlKey && !event.metaKey) return false;
+          const pos = v.posAtCoords({ x: event.clientX, y: event.clientY });
+          if (pos == null) return false;
+
+          const lineInfo = v.state.doc.lineAt(pos);
+          const line = lineInfo.number - 1;
+          const character = pos - lineInfo.from;
+          const r = projectStore.activeProject?.path || null;
+
+          try {
+            const result = await lspRequestDefinition(currentPath, line, character, r);
+            if (!result?.data?.locations?.length) return false;
+
+            const loc = result.data.locations[0];
+            const root = projectStore.activeProject?.path || '';
+            const locPath = uriToRelativePath(loc.uri, root);
+            if (!locPath) return false;
+
+            if (locPath === currentPath) {
+              const targetLine = v.state.doc.line(loc.range.start.line + 1);
+              v.dispatch({
+                selection: { anchor: targetLine.from + loc.range.start.character },
+                scrollIntoView: true,
+              });
+            } else {
+              tabsStore.openFile(locPath);
+            }
+            return true;
+          } catch {
+            return false;
+          }
+        };
+      }
+
+      extensions.push(cm.EditorView.domEventHandlers(domHandlers));
 
       if (langSupport && !Array.isArray(langSupport)) {
         extensions.splice(1, 0, langSupport);
@@ -485,6 +671,21 @@
     {/if}
   </div>
 {/if}
+
+<EditorContextMenu
+  x={editorMenu.x}
+  y={editorMenu.y}
+  visible={editorMenu.visible}
+  hasSelection={menuContext.hasSelection}
+  selectedText={menuContext.selectedText}
+  hasLsp={hasLsp}
+  hasDiagnostic={menuContext.hasDiagnostic}
+  diagnosticMessage={menuContext.diagnosticMessage}
+  filePath={currentPath}
+  lineNumber={menuContext.lineNumber}
+  onClose={() => { editorMenu.visible = false; }}
+  onAction={handleMenuAction}
+/>
 
 <style>
   .file-editor {

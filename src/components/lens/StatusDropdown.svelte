@@ -11,7 +11,7 @@
 
   // ── Manage servers dialog ──
   let dialogOpen = $state(false);
-  let dialogEl = $state(null);
+  let dialogRef = $state(null);
   let searchQuery = $state('');
 
   // LSP state
@@ -42,24 +42,36 @@
 
   function openDialog() {
     close();
-    lensStore.freeze();
     dialogOpen = true;
     searchQuery = '';
   }
 
   function closeDialog() {
     dialogOpen = false;
-    lensStore.unfreeze();
   }
 
-  // Close on click outside
-  function handleWindowClick(e) {
+  // Freeze webview when dialog is open (same pattern as ScreenshotPicker)
+  $effect(() => {
     if (dialogOpen) {
-      if (dialogEl && !dialogEl.contains(e.target)) {
-        closeDialog();
-      }
-      return;
+      lensStore.freeze();
+      return () => lensStore.unfreeze();
     }
+  });
+
+  // Show/hide the native <dialog> when dialogOpen changes
+  $effect(() => {
+    if (!dialogRef) return;
+    if (dialogOpen && !dialogRef.open) {
+      dialogRef.showModal();
+    } else if (!dialogOpen && dialogRef.open) {
+      dialogRef.close();
+    }
+  });
+
+  // Close on click outside popover
+  function handleWindowClick(e) {
+    // Don't interfere when dialog is open — dialog handles its own clicks
+    if (dialogOpen) return;
     if (!open) return;
     if (badgeEl?.contains(e.target)) return;
     if (panelEl?.contains(e.target)) return;
@@ -67,10 +79,23 @@
   }
 
   function handleKeydown(e) {
-    if (e.key === 'Escape') {
-      if (dialogOpen) closeDialog();
-      else if (open) close();
+    if (e.key === 'Escape' && open) {
+      close();
     }
+    // Dialog Escape is handled natively by <dialog>
+  }
+
+  // Handle click on dialog backdrop (outside the panel content)
+  function handleDialogClick(e) {
+    if (e.target === dialogRef) {
+      closeDialog();
+    }
+  }
+
+  // Handle native <dialog> cancel event (Escape key)
+  function handleDialogCancel(e) {
+    e.preventDefault();
+    closeDialog();
   }
 
   // Fetch LSP status when tab is selected
@@ -96,17 +121,6 @@
     })();
     return () => { unlisten?.(); };
   });
-
-  // Portal action: move element to document.body so it escapes
-  // SplitPanel overflow:hidden ancestors and renders above everything
-  function portal(node) {
-    document.body.appendChild(node);
-    return {
-      destroy() {
-        node.remove();
-      }
-    };
-  }
 </script>
 
 <svelte:window onclick={handleWindowClick} onkeydown={handleKeydown} />
@@ -241,54 +255,59 @@
   {/if}
 </div>
 
-<!-- ── Manage Servers Dialog ── -->
-{#if dialogOpen}
-  <div class="dialog-backdrop" use:portal>
-    <div bind:this={dialogEl} class="dialog-panel" role="dialog" aria-label="Manage servers" aria-modal="true">
-      <div class="dialog-header">
-        <h2 class="dialog-title">Servers</h2>
-        <button class="dialog-close" onclick={closeDialog} aria-label="Close">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+<!-- ── Manage Servers Dialog (native <dialog> — renders in top layer) ── -->
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+<dialog
+  bind:this={dialogRef}
+  class="server-dialog"
+  aria-label="Manage servers"
+  onclick={handleDialogClick}
+  oncancel={handleDialogCancel}
+>
+  <div class="dialog-inner" onclick={(e) => e.stopPropagation()}>
+    <div class="dialog-header">
+      <h2 class="dialog-title">Servers</h2>
+      <button class="dialog-close" type="button" onclick={closeDialog} aria-label="Close">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+
+    <div class="dialog-search">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="text" placeholder="Search servers" bind:value={searchQuery} />
+    </div>
+
+    <div class="dialog-list">
+      <button class="dialog-row" type="button">
+        <div class="row-dot" class:ok={healthy} class:stopped={!healthy && !aiStatusStore.starting} class:starting={aiStatusStore.starting}></div>
+        <span class="dialog-row-name">{providerName}</span>
+        <span class="dialog-row-version">{providerType}</span>
+        {#if healthy}
+          <span class="dialog-row-badge">Current Server</span>
+        {/if}
+      </button>
+      <div class="dialog-row" role="button" tabindex="0">
+        <div class="row-dot ok"></div>
+        <span class="dialog-row-name">Dev Server (Vite)</span>
+        <span class="dialog-row-version">localhost:1420</span>
+        <button class="dialog-row-menu" type="button" aria-label="Server options" onclick={(e) => e.stopPropagation()}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/>
           </svg>
         </button>
       </div>
-
-      <div class="dialog-search">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        <input type="text" placeholder="Search servers" bind:value={searchQuery} />
-      </div>
-
-      <div class="dialog-list">
-        <button class="dialog-row" type="button">
-          <div class="row-dot" class:ok={healthy} class:stopped={!healthy && !aiStatusStore.starting} class:starting={aiStatusStore.starting}></div>
-          <span class="dialog-row-name">{providerName}</span>
-          <span class="dialog-row-version">{providerType}</span>
-          {#if healthy}
-            <span class="dialog-row-badge">Current Server</span>
-          {/if}
-        </button>
-        <div class="dialog-row" role="button" tabindex="0">
-          <div class="row-dot ok"></div>
-          <span class="dialog-row-name">Dev Server (Vite)</span>
-          <span class="dialog-row-version">localhost:1420</span>
-          <button class="dialog-row-menu" type="button" aria-label="Server options" onclick={(e) => e.stopPropagation()}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/>
-            </svg>
-          </button>
-        </div>
-      </div>
-
-      <button class="dialog-add" type="button">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-        </svg>
-        Add server
-      </button>
     </div>
+
+    <button class="dialog-add" type="button">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+      </svg>
+      Add server
+    </button>
   </div>
-{/if}
+</dialog>
 
 <style>
   .status-wrapper {
@@ -526,28 +545,27 @@
     padding: 12px 0;
   }
 
-  /* ── Dialog (Manage Servers) ── */
+  /* ── Native <dialog> (Manage Servers) ── */
 
-  .dialog-backdrop {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.5);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 20000;
-    -webkit-app-region: no-drag;
-  }
-
-  .dialog-panel {
+  .server-dialog {
+    border: none;
+    border-radius: 12px;
+    padding: 0;
     width: 560px;
     max-width: calc(100vw - 40px);
     max-height: calc(100vh - 80px);
     background: var(--bg-elevated);
-    border: 1px solid var(--border);
-    border-radius: 12px;
     box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
     overflow: hidden;
+    color: inherit;
+    -webkit-app-region: no-drag;
+  }
+
+  .server-dialog::backdrop {
+    background: rgba(0, 0, 0, 0.5);
+  }
+
+  .dialog-inner {
     display: flex;
     flex-direction: column;
   }
