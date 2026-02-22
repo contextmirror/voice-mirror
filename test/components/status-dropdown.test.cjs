@@ -177,7 +177,7 @@ describe('StatusDropdown.svelte: MCP tab content', () => {
 
 describe('StatusDropdown.svelte: LSP tab content', () => {
   it('shows auto-detected LSP message', () => {
-    assert.ok(src.includes('LSPs auto-detected from file types'));
+    assert.ok(src.includes('Auto-detected from open file types'));
   });
 });
 

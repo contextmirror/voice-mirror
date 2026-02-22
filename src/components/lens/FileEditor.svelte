@@ -1,7 +1,7 @@
 <script>
   import { onDestroy, tick } from 'svelte';
   import { listen } from '@tauri-apps/api/event';
-  import { readFile, writeFile } from '../../lib/api.js';
+  import { readFile, writeFile, lspOpenFile, lspCloseFile, lspChangeFile, lspSaveFile, lspRequestCompletion, lspRequestHover, lspRequestDefinition } from '../../lib/api.js';
   import { tabsStore } from '../../lib/stores/tabs.svelte.js';
   import { projectStore } from '../../lib/stores/project.svelte.js';
 
@@ -15,6 +15,14 @@
   let fileSize = $state(0);
   let currentPath = $state(null);
 
+  // LSP state
+  let lspVersion = $state(0);
+  let lspDebounceTimer = null;
+  let cachedDiagnostics = $state(new Map()); // path -> diagnostics array
+  let hasLsp = $state(false); // whether current file has LSP support
+
+  const LSP_EXTENSIONS = new Set(['js', 'jsx', 'mjs', 'cjs', 'ts', 'tsx', 'rs', 'py', 'css', 'scss', 'html', 'svelte', 'json', 'md', 'markdown']);
+
   // Cache CodeMirror modules after first load
   let cmCache = null;
 
@@ -23,17 +31,19 @@
     const [
       { EditorView, basicSetup },
       { EditorState },
-      { keymap },
+      { keymap, hoverTooltip },
       { oneDark },
       { autocompletion },
+      { setDiagnostics, lintGutter },
     ] = await Promise.all([
       import('codemirror'),
       import('@codemirror/state'),
       import('@codemirror/view'),
       import('@codemirror/theme-one-dark'),
       import('@codemirror/autocomplete'),
+      import('@codemirror/lint'),
     ]);
-    cmCache = { EditorView, basicSetup, EditorState, keymap, oneDark, autocompletion };
+    cmCache = { EditorView, basicSetup, EditorState, keymap, hoverTooltip, oneDark, autocompletion, setDiagnostics, lintGutter };
     return cmCache;
   }
 
@@ -82,6 +92,71 @@
     }
   }
 
+  /** Convert a file:// URI to a project-relative path. */
+  function uriToRelativePath(uri, root) {
+    if (!uri) return null;
+    try {
+      const url = new URL(uri);
+      if (url.protocol !== 'file:') return null;
+      // Decode percent-encoded characters and normalize slashes
+      let filePath = decodeURIComponent(url.pathname).replace(/\\/g, '/');
+      // On Windows, pathname starts with /C:/... — strip leading slash
+      if (/^\/[A-Za-z]:\//.test(filePath)) filePath = filePath.slice(1);
+      const normalizedRoot = root.replace(/\\/g, '/').replace(/\/$/, '');
+      if (filePath.startsWith(normalizedRoot + '/')) {
+        return filePath.slice(normalizedRoot.length + 1);
+      }
+      // Fallback: return the full path
+      return filePath;
+    } catch {
+      return null;
+    }
+  }
+
+  function lspPositionToOffset(doc, pos) {
+    const line = doc.line(Math.min(pos.line + 1, doc.lines));
+    return line.from + Math.min(pos.character, line.length);
+  }
+
+  function mapCompletionKind(kind) {
+    const kinds = {
+      1: 'text', 2: 'method', 3: 'function', 4: 'constructor',
+      5: 'field', 6: 'variable', 7: 'class', 8: 'interface',
+      9: 'module', 10: 'property', 11: 'unit', 12: 'value',
+      13: 'enum', 14: 'keyword', 15: 'snippet', 16: 'color',
+      17: 'file', 18: 'reference', 19: 'folder', 20: 'enum',
+      21: 'constant', 22: 'struct', 23: 'event', 24: 'operator',
+      25: 'type',
+    };
+    return kinds[kind] || 'text';
+  }
+
+  async function lspCompletionSource(context) {
+    if (!hasLsp || !currentPath) return null;
+    const pos = context.state.doc.lineAt(context.pos);
+    const line = pos.number - 1; // LSP is 0-indexed
+    const character = context.pos - pos.from;
+    const root = projectStore.activeProject?.path || null;
+
+    try {
+      const result = await lspRequestCompletion(currentPath, line, character, root);
+      if (!result?.data?.items?.length) return null;
+
+      return {
+        from: context.pos - (context.matchBefore(/\w*/)?.text.length || 0),
+        options: result.data.items.map(item => ({
+          label: item.label,
+          type: mapCompletionKind(item.kind),
+          detail: item.detail || undefined,
+          info: item.documentation || undefined,
+          apply: item.textEdit?.newText || item.insertText || item.label,
+        })),
+      };
+    } catch {
+      return null; // Fall back to keyword completions
+    }
+  }
+
   async function save() {
     if (!view) return;
     try {
@@ -89,6 +164,9 @@
       const root = projectStore.activeProject?.path || null;
       await writeFile(tab.path, content, root);
       tabsStore.setDirty(tab.id, false);
+      if (hasLsp) {
+        lspSaveFile(tab.path, content, root).catch(() => {});
+      }
     } catch (err) {
       console.error('[FileEditor] Save failed:', err);
     }
@@ -96,6 +174,16 @@
 
   async function loadFile(filePath) {
     if (!filePath || filePath === currentPath) return;
+
+    // Close previous LSP document
+    if (currentPath && hasLsp) {
+      const root = projectStore.activeProject?.path || null;
+      lspCloseFile(currentPath, root).catch(() => {});
+    }
+    clearTimeout(lspDebounceTimer);
+    lspVersion = 0;
+    hasLsp = false;
+
     currentPath = filePath;
     loading = true;
     error = null;
@@ -134,10 +222,18 @@
       // Check again if tab changed
       if (filePath !== currentPath) return;
 
+      // Determine LSP support from file extension
+      const ext = filePath.split('.').pop()?.toLowerCase() || '';
+      hasLsp = LSP_EXTENSIONS.has(ext);
+
       const extensions = [
         cm.basicSetup,
         cm.oneDark,
-        cm.autocompletion({
+        cm.lintGutter(),
+        cm.autocompletion(hasLsp ? {
+          override: [lspCompletionSource],
+          maxRenderedOptions: 20,
+        } : {
           activateOnTyping: true,
           maxRenderedOptions: 20,
         }),
@@ -145,6 +241,15 @@
           if (update.docChanged) {
             tabsStore.setDirty(tab.id, true);
             tabsStore.pinTab(tab.id);
+            if (hasLsp) {
+              lspVersion++;
+              clearTimeout(lspDebounceTimer);
+              lspDebounceTimer = setTimeout(() => {
+                const content = update.state.doc.toString();
+                const r = projectStore.activeProject?.path || null;
+                lspChangeFile(currentPath, content, lspVersion, r).catch(() => {});
+              }, 300);
+            }
           }
         }),
         cm.keymap.of([{
@@ -152,6 +257,75 @@
           run: () => { save(); return true; },
         }]),
       ];
+
+      // Add hover tooltip for LSP
+      if (hasLsp) {
+        extensions.push(cm.hoverTooltip(async (v, pos) => {
+          const lineInfo = v.state.doc.lineAt(pos);
+          const line = lineInfo.number - 1;
+          const character = pos - lineInfo.from;
+          const r = projectStore.activeProject?.path || null;
+
+          try {
+            const result = await lspRequestHover(currentPath, line, character, r);
+            if (!result?.data?.contents) return null;
+
+            return {
+              pos,
+              create() {
+                const dom = document.createElement('div');
+                dom.className = 'lsp-hover-tooltip';
+                dom.textContent = typeof result.data.contents === 'string'
+                  ? result.data.contents
+                  : result.data.contents.value || '';
+                return { dom };
+              },
+            };
+          } catch {
+            return null;
+          }
+        }));
+
+        // Go-to-definition on Ctrl+Click / Cmd+Click
+        extensions.push(cm.EditorView.domEventHandlers({
+          click: async (event, v) => {
+            if (!event.ctrlKey && !event.metaKey) return false;
+            const pos = v.posAtCoords({ x: event.clientX, y: event.clientY });
+            if (pos == null) return false;
+
+            const lineInfo = v.state.doc.lineAt(pos);
+            const line = lineInfo.number - 1;
+            const character = pos - lineInfo.from;
+            const r = projectStore.activeProject?.path || null;
+
+            try {
+              const result = await lspRequestDefinition(currentPath, line, character, r);
+              if (!result?.data?.locations?.length) return false;
+
+              const loc = result.data.locations[0];
+              // Convert file:// URI to relative path by stripping the project root prefix
+              const root = projectStore.activeProject?.path || '';
+              const locPath = uriToRelativePath(loc.uri, root);
+              if (!locPath) return false;
+
+              if (locPath === currentPath) {
+                // Same file: scroll to position
+                const targetLine = v.state.doc.line(loc.range.start.line + 1);
+                v.dispatch({
+                  selection: { anchor: targetLine.from + loc.range.start.character },
+                  scrollIntoView: true,
+                });
+              } else {
+                // Different file: open in new tab
+                tabsStore.openFile(locPath);
+              }
+              return true;
+            } catch {
+              return false;
+            }
+          },
+        }));
+      }
 
       if (langSupport && !Array.isArray(langSupport)) {
         extensions.splice(1, 0, langSupport);
@@ -175,6 +349,18 @@
 
       if (editorEl) {
         view = new cm.EditorView({ state, parent: editorEl });
+      }
+
+      // Open file in LSP (fire and forget)
+      if (hasLsp) {
+        lspOpenFile(filePath, data.content, root).catch(() => {});
+      }
+
+      // Restore cached diagnostics if we have them
+      if (hasLsp && cachedDiagnostics.has(filePath) && view) {
+        try {
+          view.dispatch(cm.setDiagnostics(view.state, cachedDiagnostics.get(filePath)));
+        } catch {}
       }
     } catch (err) {
       if (filePath !== currentPath) return;
@@ -228,7 +414,51 @@
     };
   });
 
+  // Listen for LSP diagnostics
+  $effect(() => {
+    let unlisten;
+    (async () => {
+      unlisten = await listen('lsp-diagnostics', (event) => {
+        const { uri, diagnostics: lspDiags } = event.payload;
+        if (!view || !currentPath) return;
+        // Normalize path for comparison
+        const normalizedPath = currentPath.replace(/\\/g, '/');
+        if (!uri.includes(normalizedPath)) return;
+
+        try {
+          const cm = cmCache;
+          if (!cm) return;
+          const cmDiags = lspDiags.map(d => {
+            let from = lspPositionToOffset(view.state.doc, d.range.start);
+            let to = lspPositionToOffset(view.state.doc, d.range.end);
+            from = Math.max(0, Math.min(from, view.state.doc.length));
+            to = Math.max(0, Math.min(to, view.state.doc.length));
+            if (from > to) { const tmp = from; from = to; to = tmp; }
+            return {
+              from,
+              to,
+              severity: d.severity || 'error',
+              message: d.message,
+              source: d.source || undefined,
+            };
+          });
+          // Cache diagnostics for this file
+          cachedDiagnostics.set(currentPath, cmDiags);
+          view.dispatch(cm.setDiagnostics(view.state, cmDiags));
+        } catch (err) {
+          console.warn('[FileEditor] Failed to apply diagnostics:', err);
+        }
+      });
+    })();
+    return () => { unlisten?.(); };
+  });
+
   onDestroy(() => {
+    if (currentPath && hasLsp) {
+      const root = projectStore.activeProject?.path || null;
+      lspCloseFile(currentPath, root).catch(() => {});
+    }
+    clearTimeout(lspDebounceTimer);
     view?.destroy();
   });
 </script>
@@ -310,5 +540,27 @@
   .binary-detail {
     color: var(--muted);
     font-size: 12px;
+  }
+
+  .file-editor :global(.lsp-hover-tooltip) {
+    max-width: 500px;
+    padding: 6px 10px;
+    font-family: var(--font-mono, monospace);
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--text);
+    background: var(--bgElevated, #1e1e1e);
+    border: 1px solid var(--muted, #444);
+    border-radius: 4px;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .file-editor :global(.cm-lintPoint-error) {
+    border-bottom-color: var(--danger, #ef4444);
+  }
+
+  .file-editor :global(.cm-lintPoint-warning) {
+    border-bottom-color: var(--warn, #f59e0b);
   }
 </style>

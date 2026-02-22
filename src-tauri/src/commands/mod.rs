@@ -9,6 +9,7 @@ pub mod voice;
 pub mod window;
 pub mod lens;
 pub mod shell;
+pub mod lsp;
 
 use serde_json::Value;
 

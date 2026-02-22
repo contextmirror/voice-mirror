@@ -569,3 +569,41 @@ export async function shellKill(id) {
 export async function shellList() {
   return invoke('shell_list');
 }
+
+// ============ LSP ============
+
+export async function lspOpenFile(path, content, projectRoot) {
+  return invoke('lsp_open_file', { path, content, projectRoot });
+}
+
+export async function lspCloseFile(path, projectRoot) {
+  return invoke('lsp_close_file', { path, projectRoot });
+}
+
+export async function lspChangeFile(path, content, version, projectRoot) {
+  return invoke('lsp_change_file', { path, content, version, projectRoot });
+}
+
+export async function lspSaveFile(path, content, projectRoot) {
+  return invoke('lsp_save_file', { path, content, projectRoot });
+}
+
+export async function lspRequestCompletion(path, line, character, projectRoot) {
+  return invoke('lsp_request_completion', { path, line, character, projectRoot });
+}
+
+export async function lspRequestHover(path, line, character, projectRoot) {
+  return invoke('lsp_request_hover', { path, line, character, projectRoot });
+}
+
+export async function lspRequestDefinition(path, line, character, projectRoot) {
+  return invoke('lsp_request_definition', { path, line, character, projectRoot });
+}
+
+export async function lspGetStatus() {
+  return invoke('lsp_get_status');
+}
+
+export async function lspShutdown() {
+  return invoke('lsp_shutdown');
+}

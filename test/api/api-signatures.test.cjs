@@ -246,6 +246,16 @@ describe('api.js -- exported async functions', () => {
     'shellResize',
     'shellKill',
     'shellList',
+    // LSP
+    'lspOpenFile',
+    'lspCloseFile',
+    'lspChangeFile',
+    'lspSaveFile',
+    'lspRequestCompletion',
+    'lspRequestHover',
+    'lspRequestDefinition',
+    'lspGetStatus',
+    'lspShutdown',
   ];
 
   for (const fn of expectedExports) {

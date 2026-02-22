@@ -7,6 +7,7 @@ pub mod services;
 pub mod util;
 pub mod voice;
 pub mod shell;
+pub mod lsp;
 
 use commands::ai as ai_cmds;
 use commands::chat as chat_cmds;
@@ -19,6 +20,7 @@ use commands::window as window_cmds;
 use commands::files as files_cmds;
 use commands::lens as lens_cmds;
 use commands::shell as shell_cmds;
+use commands::lsp as lsp_cmds;
 
 use providers::manager::AiManager;
 use providers::ProviderEvent;
@@ -219,8 +221,21 @@ pub fn run() {
             // File watcher
             services::file_watcher::start_file_watching,
             services::file_watcher::stop_file_watching,
+            // LSP
+            lsp_cmds::lsp_open_file,
+            lsp_cmds::lsp_close_file,
+            lsp_cmds::lsp_change_file,
+            lsp_cmds::lsp_save_file,
+            lsp_cmds::lsp_request_completion,
+            lsp_cmds::lsp_request_hover,
+            lsp_cmds::lsp_request_definition,
+            lsp_cmds::lsp_get_status,
+            lsp_cmds::lsp_shutdown,
         ])
         .setup(|app| {
+            // Initialize LSP manager state (needs AppHandle)
+            app.manage(lsp::LspManagerState::new(app.handle().clone()));
+
             // Clear stale listener locks from previous sessions.
             // When the app starts fresh, any lock left by a prior MCP binary is stale.
             {
@@ -492,6 +507,9 @@ pub fn run() {
                         manager.kill_all();
                     }
                 }
+
+                // LSP servers are cleaned up automatically when the process exits.
+                // The tokio::process::Child handles are dropped, which kills the servers.
 
                 use crate::config::persistence;
                 use crate::services::platform;
