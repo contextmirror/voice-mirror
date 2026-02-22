@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 
-const src = fs.readFileSync(path.join(__dirname, '../../src/components/lens/StatusDropdown.svelte'), 'utf-8');
+const src = fs.readFileSync(path.join(__dirname, '../../src/components/lens/LspTab.svelte'), 'utf-8');
 
 describe('StatusDropdown LSP tab', () => {
   it('imports lspGetStatus from api', () => {

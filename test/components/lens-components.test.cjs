@@ -102,6 +102,26 @@ describe('LensToolbar.svelte', () => {
     assert.ok(!src.includes('showChat'), 'LensToolbar should not have showChat prop');
     assert.ok(!src.includes('showTerminal'), 'LensToolbar should not have showTerminal prop');
   });
+
+  it('imports lensHardRefresh from api', () => {
+    assert.ok(src.includes('lensHardRefresh'));
+  });
+
+  it('imports listen from tauri event', () => {
+    assert.ok(src.includes("from '@tauri-apps/api/event'"));
+  });
+
+  it('supports shift+click for hard refresh', () => {
+    assert.ok(src.includes('event.shiftKey'));
+  });
+
+  it('listens for lens-hard-refresh event', () => {
+    assert.ok(src.includes('lens-hard-refresh'));
+  });
+
+  it('has tooltip mentioning shift+click', () => {
+    assert.ok(src.includes('Shift+click'));
+  });
 });
 
 // ============ LensPreview ============

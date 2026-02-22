@@ -14,6 +14,18 @@ const src = fs.readFileSync(
   path.join(__dirname, '../../src/components/lens/StatusDropdown.svelte'),
   'utf-8'
 );
+const serversSrc = fs.readFileSync(
+  path.join(__dirname, '../../src/components/lens/ServersTab.svelte'),
+  'utf-8'
+);
+const mcpSrc = fs.readFileSync(
+  path.join(__dirname, '../../src/components/lens/McpTab.svelte'),
+  'utf-8'
+);
+const lspSrc = fs.readFileSync(
+  path.join(__dirname, '../../src/components/lens/LspTab.svelte'),
+  'utf-8'
+);
 
 describe('StatusDropdown.svelte: badge trigger', () => {
   it('has status badge button', () => {
@@ -146,48 +158,57 @@ describe('StatusDropdown.svelte: tabs (OpenCode layout)', () => {
 
 describe('StatusDropdown.svelte: servers tab content', () => {
   it('shows provider name', () => {
-    assert.ok(src.includes('providerName'));
+    assert.ok(serversSrc.includes('providerName'));
   });
   it('shows provider type as version', () => {
-    assert.ok(src.includes('providerType'));
+    assert.ok(serversSrc.includes('providerType'));
   });
   it('has checkmark for connected server', () => {
-    assert.ok(src.includes('row-check'));
-    assert.ok(src.includes('polyline'));
+    assert.ok(serversSrc.includes('row-check'));
+    assert.ok(serversSrc.includes('polyline'));
   });
   it('shows dev server entry', () => {
-    assert.ok(src.includes('Dev Server'));
+    assert.ok(serversSrc.includes('Dev Server'));
   });
   it('has status rows with dot indicators', () => {
-    assert.ok(src.includes('status-row'));
-    assert.ok(src.includes('row-dot'));
+    assert.ok(serversSrc.includes('status-row'));
+    assert.ok(serversSrc.includes('row-dot'));
   });
   it('has Manage servers button', () => {
-    assert.ok(src.includes('manage-btn'));
-    assert.ok(src.includes('Manage servers'));
+    assert.ok(serversSrc.includes('manage-btn'));
+    assert.ok(serversSrc.includes('Manage servers'));
+  });
+  it('imports ServersTab in StatusDropdown', () => {
+    assert.ok(src.includes("import ServersTab from './ServersTab.svelte'"));
   });
 });
 
 describe('StatusDropdown.svelte: MCP tab content', () => {
   it('shows voice-mirror MCP entry for CLI providers', () => {
-    assert.ok(src.includes('voice-mirror'));
+    assert.ok(mcpSrc.includes('voice-mirror'));
   });
   it('shows tool count', () => {
-    assert.ok(src.includes('55 tools'));
+    assert.ok(mcpSrc.includes('55 tools'));
   });
   it('has toggle switch for MCP', () => {
-    assert.ok(src.includes('row-toggle'));
-    assert.ok(src.includes('toggle-track'));
-    assert.ok(src.includes('toggle-thumb'));
+    assert.ok(mcpSrc.includes('row-toggle'));
+    assert.ok(mcpSrc.includes('toggle-track'));
+    assert.ok(mcpSrc.includes('toggle-thumb'));
   });
   it('shows empty state for non-CLI providers', () => {
-    assert.ok(src.includes('No MCP tools configured'));
+    assert.ok(mcpSrc.includes('No MCP tools configured'));
+  });
+  it('imports McpTab in StatusDropdown', () => {
+    assert.ok(src.includes("import McpTab from './McpTab.svelte'"));
   });
 });
 
 describe('StatusDropdown.svelte: LSP tab content', () => {
   it('shows auto-detected LSP message', () => {
-    assert.ok(src.includes('Auto-detected from open file types'));
+    assert.ok(lspSrc.includes('Auto-detected from open file types'));
+  });
+  it('imports LspTab in StatusDropdown', () => {
+    assert.ok(src.includes("import LspTab from './LspTab.svelte'"));
   });
 });
 

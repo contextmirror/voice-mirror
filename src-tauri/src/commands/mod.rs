@@ -1,6 +1,7 @@
 pub mod ai;
 pub mod chat;
 pub mod config;
+pub mod dev_server;
 pub mod files;
 pub mod screenshot;
 pub mod shortcuts;

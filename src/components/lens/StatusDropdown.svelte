@@ -1,8 +1,9 @@
 <script>
   import { aiStatusStore } from '../../lib/stores/ai-status.svelte.js';
   import { lensStore } from '../../lib/stores/lens.svelte.js';
-  import { lspGetStatus } from '../../lib/api.js';
-  import { listen } from '@tauri-apps/api/event';
+  import ServersTab from './ServersTab.svelte';
+  import McpTab from './McpTab.svelte';
+  import LspTab from './LspTab.svelte';
 
   let open = $state(false);
   let activeTab = $state('servers');
@@ -12,9 +13,6 @@
   // ── Manage servers (inline in popover) ──
   let managing = $state(false);
   let searchQuery = $state('');
-
-  // LSP state
-  let lspServers = $state([]);
 
   // Overall health
   let healthy = $derived(aiStatusStore.running);
@@ -27,7 +25,7 @@
     aiStatusStore.isCliProvider && aiStatusStore.running
   );
 
-  // Provider info
+  // Provider info (used in manage view)
   let providerName = $derived(aiStatusStore.displayName || 'No provider');
   let providerType = $derived(
     aiStatusStore.isCliProvider ? 'CLI / PTY'
@@ -82,30 +80,6 @@
       else if (open) close();
     }
   }
-
-  // Fetch LSP status when tab is selected
-  $effect(() => {
-    if (activeTab === 'lsp' && open) {
-      lspGetStatus().then(result => {
-        if (result?.data?.servers) {
-          lspServers = result.data.servers;
-        }
-      }).catch(() => {});
-    }
-  });
-
-  // Listen for LSP server status updates
-  $effect(() => {
-    let unlisten;
-    (async () => {
-      unlisten = await listen('lsp-server-status', (event) => {
-        if (event.payload?.servers) {
-          lspServers = event.payload.servers;
-        }
-      });
-    })();
-    return () => { unlisten?.(); };
-  });
 </script>
 
 <svelte:window onclick={handleWindowClick} onkeydown={handleKeydown} />
@@ -211,80 +185,11 @@
         <div class="popover-body" role="tabpanel">
           <div class="popover-content">
             {#if activeTab === 'servers'}
-              <div class="status-list">
-                <div class="status-row">
-                  <div
-                    class="row-dot"
-                    class:ok={healthy}
-                    class:stopped={!healthy && !aiStatusStore.starting}
-                    class:starting={aiStatusStore.starting}
-                  ></div>
-                  <span class="row-name">{providerName}</span>
-                  <span class="row-version">{providerType}</span>
-                  {#if healthy}
-                    <svg class="row-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                  {/if}
-                </div>
-
-                <div class="status-row">
-                  <div class="row-dot ok"></div>
-                  <span class="row-name">Dev Server</span>
-                  <span class="row-version">Vite</span>
-                  <svg class="row-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                </div>
-              </div>
-
-              <button class="manage-btn" type="button" onclick={openManage}>Manage servers</button>
-
+              <ServersTab onManage={openManage} />
             {:else if activeTab === 'mcp'}
-              <div class="status-list">
-                {#if aiStatusStore.isCliProvider}
-                  <div class="status-row">
-                    <div
-                      class="row-dot"
-                      class:ok={mcpConnected}
-                      class:stopped={!mcpConnected && !aiStatusStore.starting}
-                      class:starting={aiStatusStore.starting}
-                    ></div>
-                    <span class="row-name">voice-mirror</span>
-                    <span class="row-version">55 tools</span>
-                    <div class="row-toggle" class:on={mcpConnected}>
-                      <div class="toggle-track">
-                        <div class="toggle-thumb"></div>
-                      </div>
-                    </div>
-                  </div>
-                {:else}
-                  <div class="status-empty">No MCP tools configured</div>
-                {/if}
-              </div>
-
+              <McpTab />
             {:else if activeTab === 'lsp'}
-              <div class="status-list">
-                {#if lspServers.length > 0}
-                  {#each lspServers as server}
-                    <div class="lsp-server-row">
-                      <span class="lsp-dot" class:running={server.running} class:error={server.error}></span>
-                      <div class="lsp-server-info">
-                        <span class="lsp-server-name">{server.binary}</span>
-                        <span class="lsp-server-lang">{server.languageId}</span>
-                      </div>
-                      <span class="lsp-server-status">
-                        {#if server.running}
-                          {server.openDocsCount} file{server.openDocsCount !== 1 ? 's' : ''}
-                        {:else if server.error}
-                          Error
-                        {:else}
-                          Not found
-                        {/if}
-                      </span>
-                    </div>
-                  {/each}
-                {:else}
-                  <div class="status-empty">No LSP servers active</div>
-                {/if}
-                <div class="lsp-hint">Auto-detected from open file types</div>
-              </div>
+              <LspTab visible={activeTab === 'lsp' && open} />
             {/if}
           </div>
         </div>
@@ -412,26 +317,7 @@
     padding: 8px;
   }
 
-  /* ── Status rows ── */
-
-  .status-list {
-    display: flex;
-    flex-direction: column;
-  }
-
-  .status-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    width: 100%;
-    height: 32px;
-    padding: 0 12px 0 8px;
-    border: none;
-    background: transparent;
-    border-radius: 6px;
-    text-align: left;
-    -webkit-app-region: no-drag;
-  }
+  /* ── Manage Servers view (inline in popover) ── */
 
   .row-dot {
     width: 6px;
@@ -442,94 +328,6 @@
   .row-dot.ok { background: var(--ok); }
   .row-dot.starting { background: var(--warn); animation: dot-pulse 1.2s ease-in-out infinite; }
   .row-dot.stopped { background: var(--danger); }
-
-  .row-name {
-    font-size: 14px;
-    color: var(--text);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    flex: 1;
-    min-width: 0;
-  }
-
-  .row-version {
-    font-size: 12px;
-    color: var(--muted);
-    white-space: nowrap;
-  }
-
-  .row-check {
-    color: var(--ok);
-    flex-shrink: 0;
-  }
-
-  /* ── Manage servers button ── */
-
-  .manage-btn {
-    display: inline-flex;
-    align-items: center;
-    margin-top: 8px;
-    padding: 6px 12px;
-    font-size: 12px;
-    font-weight: 500;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    background: transparent;
-    color: var(--text);
-    cursor: pointer;
-    transition: background var(--duration-fast) var(--ease-out);
-    -webkit-app-region: no-drag;
-  }
-  .manage-btn:hover {
-    background: var(--bg-elevated);
-  }
-
-  /* ── Toggle switch ── */
-
-  .row-toggle {
-    flex-shrink: 0;
-    margin-left: auto;
-  }
-
-  .toggle-track {
-    width: 32px;
-    height: 18px;
-    border-radius: 9px;
-    background: var(--border-strong);
-    position: relative;
-    transition: background var(--duration-fast) var(--ease-out);
-  }
-
-  .row-toggle.on .toggle-track {
-    background: var(--ok);
-  }
-
-  .toggle-thumb {
-    width: 14px;
-    height: 14px;
-    border-radius: 50%;
-    background: white;
-    position: absolute;
-    top: 2px;
-    left: 2px;
-    transition: transform var(--duration-fast) var(--ease-out);
-  }
-
-  .row-toggle.on .toggle-thumb {
-    transform: translateX(14px);
-  }
-
-  /* ── Empty state ── */
-
-  .status-empty {
-    font-size: 14px;
-    color: var(--muted);
-    text-align: center;
-    padding: 12px 0;
-  }
-
-  /* ── Manage Servers view (inline in popover) ── */
 
   .manage-header {
     display: flex;
@@ -704,65 +502,5 @@
   }
   .manage-add:hover {
     background: var(--bg);
-  }
-
-  /* ── LSP tab ── */
-
-  .lsp-server-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 12px;
-  }
-
-  .lsp-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--muted);
-    flex-shrink: 0;
-  }
-
-  .lsp-dot.running {
-    background: var(--ok, #22c55e);
-  }
-
-  .lsp-dot.error {
-    background: var(--danger, #ef4444);
-  }
-
-  .lsp-server-info {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
-    min-width: 0;
-  }
-
-  .lsp-server-name {
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--text);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .lsp-server-lang {
-    font-size: 10px;
-    color: var(--muted);
-  }
-
-  .lsp-server-status {
-    font-size: 11px;
-    color: var(--muted);
-    white-space: nowrap;
-  }
-
-  .lsp-hint {
-    padding: 8px 12px 4px;
-    font-size: 10px;
-    color: var(--muted);
-    opacity: 0.7;
   }
 </style>

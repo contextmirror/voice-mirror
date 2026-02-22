@@ -159,6 +159,66 @@ describe('project: addProject behavior', () => {
   });
 });
 
+// ============ addProject new fields ============
+
+describe('project: addProject includes dev server fields', () => {
+  it('sets preferredServerUrl to null', () => {
+    assert.ok(src.includes('preferredServerUrl: null'), 'Should set preferredServerUrl to null');
+  });
+
+  it('sets lastBrowserUrl to null', () => {
+    assert.ok(src.includes('lastBrowserUrl: null'), 'Should set lastBrowserUrl to null');
+  });
+
+  it('sets autoStartServer to null', () => {
+    assert.ok(src.includes('autoStartServer: null'), 'Should set autoStartServer to null');
+  });
+});
+
+// ============ updateProjectField / updateActiveField ============
+
+describe('project: updateProjectField method', () => {
+  it('has updateProjectField method', () => {
+    assert.ok(src.includes('updateProjectField(index, field, value)'), 'Should have updateProjectField method');
+  });
+
+  it('validates entry exists before updating', () => {
+    assert.ok(src.includes('entries[index]'), 'Should check entries[index] exists');
+  });
+
+  it('sets field on entry', () => {
+    assert.ok(src.includes('entries[index][field] = value'), 'Should set entries[index][field] = value');
+  });
+
+  it('persists after update', () => {
+    const block = src.split('updateProjectField')[1]?.split('},')[0] || '';
+    assert.ok(block.includes('_persist'), 'updateProjectField should persist');
+  });
+});
+
+describe('project: updateActiveField method', () => {
+  it('has updateActiveField method', () => {
+    assert.ok(src.includes('updateActiveField(field, value)'), 'Should have updateActiveField method');
+  });
+
+  it('validates activeIndex is in bounds', () => {
+    const block = src.split('updateActiveField')[1]?.split('},')[0] || '';
+    assert.ok(
+      block.includes('activeIndex >= 0') && block.includes('activeIndex < entries.length'),
+      'Should validate activeIndex bounds'
+    );
+  });
+
+  it('sets field on active entry', () => {
+    assert.ok(src.includes('entries[activeIndex][field] = value'), 'Should set entries[activeIndex][field] = value');
+  });
+
+  it('persists after update', () => {
+    const block = src.split('updateActiveField')[1]?.split('},')[0] || '';
+    assert.ok(block.includes('_persist'), 'updateActiveField should persist');
+  });
+});
+
 // ============ removeProject behavior ============
 
 describe('project: removeProject behavior', () => {

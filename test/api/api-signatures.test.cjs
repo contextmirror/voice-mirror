@@ -119,6 +119,7 @@ describe('api.js -- critical Tauri command names', () => {
     'lens_resize_webview',
     'lens_close_webview',
     'lens_set_visible',
+    'lens_hard_refresh',
     // Files
     'list_directory',
     'get_git_changes',
@@ -225,6 +226,7 @@ describe('api.js -- exported async functions', () => {
     'lensResizeWebview',
     'lensCloseWebview',
     'lensSetVisible',
+    'lensHardRefresh',
     // Files
     'listDirectory',
     'getGitChanges',

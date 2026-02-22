@@ -20,6 +20,7 @@ use commands::window as window_cmds;
 use commands::files as files_cmds;
 use commands::lens as lens_cmds;
 use commands::shell as shell_cmds;
+use commands::dev_server as dev_server_cmds;
 use commands::lsp as lsp_cmds;
 
 use providers::manager::AiManager;
@@ -83,7 +84,10 @@ pub fn run() {
                 .unwrap_or("")
                 .trim_matches('/');
 
-            if !key.is_empty() {
+            if key == "hard-refresh" {
+                info!("[lens-shortcut] Hard refresh requested");
+                let _ = ctx.app_handle().emit("lens-hard-refresh", serde_json::json!({}));
+            } else if !key.is_empty() {
                 info!("[lens-shortcut] Forwarding shortcut key: {}", key);
                 let _ = ctx.app_handle().emit("lens-shortcut", serde_json::json!({ "key": key }));
             }
@@ -201,6 +205,7 @@ pub fn run() {
             lens_cmds::lens_resize_webview,
             lens_cmds::lens_close_webview,
             lens_cmds::lens_set_visible,
+            lens_cmds::lens_hard_refresh,
             // File tree
             files_cmds::list_directory,
             files_cmds::get_git_changes,
@@ -234,6 +239,9 @@ pub fn run() {
             lsp_cmds::lsp_request_definition,
             lsp_cmds::lsp_get_status,
             lsp_cmds::lsp_shutdown,
+            // Dev server detection
+            dev_server_cmds::detect_dev_servers,
+            dev_server_cmds::probe_port,
         ])
         .setup(|app| {
             // Initialize LSP manager state (needs AppHandle)

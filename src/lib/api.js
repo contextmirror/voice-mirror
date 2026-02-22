@@ -413,6 +413,11 @@ export async function lensSetVisible(visible) {
   return invoke('lens_set_visible', { visible });
 }
 
+/** Hard-refresh the lens browser, bypassing all caches. */
+export async function lensHardRefresh() {
+  return invoke('lens_hard_refresh');
+}
+
 // ============ Files ============
 
 export async function listDirectory(path, root) {

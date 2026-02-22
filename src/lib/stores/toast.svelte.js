@@ -40,27 +40,37 @@ function createToastStore() {
     timers.set(id, timer);
   }
 
+  /** Duration for toasts with multiple actions (gives user time to read and click) */
+  const MULTI_ACTION_DURATION = 15000;
+
   /**
    * Add a toast notification.
-   * @param {{ message: string, severity?: string, duration?: number, action?: { label: string, callback: () => void } }} options
+   * @param {{ message: string, severity?: string, duration?: number, action?: { label: string, callback: () => void }, actions?: Array<{ label: string, callback: () => void }> }} options
    * @returns {string} The toast ID
    */
   function addToast({
     message,
     severity = 'info',
-    duration = DEFAULT_DURATION,
+    duration,
     action = null,
+    actions = null,
   }) {
     // Respect the showToasts config setting (errors always shown)
     if (severity !== 'error' && configStore.value?.behavior?.showToasts === false) return '';
+
+    // Use longer duration for multi-action toasts unless explicitly set
+    const effectiveDuration = duration !== undefined
+      ? duration
+      : (actions ? MULTI_ACTION_DURATION : DEFAULT_DURATION);
 
     const id = uid();
     const toast = {
       id,
       message,
       severity,
-      duration,
+      duration: effectiveDuration,
       action,
+      actions,
       createdAt: Date.now(),
     };
 
@@ -71,7 +81,7 @@ function createToastStore() {
     }
 
     toasts = [...toasts, toast];
-    scheduleDismiss(id, duration);
+    scheduleDismiss(id, effectiveDuration);
     return id;
   }
 

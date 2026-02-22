@@ -1,10 +1,20 @@
 <script>
+  import { onMount } from 'svelte';
+  import { listen } from '@tauri-apps/api/event';
   import { lensStore } from '../../lib/stores/lens.svelte.js';
+  import { lensHardRefresh } from '../../lib/api.js';
 
   let urlInput = $state('');
 
   $effect(() => {
     urlInput = lensStore.inputUrl;
+  });
+
+  onMount(() => {
+    const unlisten = listen('lens-hard-refresh', () => {
+      lensHardRefresh();
+    });
+    return () => { unlisten.then(fn => fn()); };
   });
 
   function handleSubmit(e) {
@@ -17,7 +27,13 @@
 
   function handleBack() { lensStore.goBack(); }
   function handleForward() { lensStore.goForward(); }
-  function handleReload() { lensStore.reload(); }
+  function handleReload(event) {
+    if (event.shiftKey) {
+      lensHardRefresh();
+    } else {
+      lensStore.reload();
+    }
+  }
 </script>
 
 <div class="lens-toolbar">
@@ -28,7 +44,7 @@
     <button class="nav-btn" onclick={handleForward} disabled={!lensStore.canGoForward} title="Go forward" aria-label="Go forward">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
     </button>
-    <button class="nav-btn" onclick={handleReload} title="Reload" aria-label="Reload page">
+    <button class="nav-btn" onclick={handleReload} title="Reload (Shift+click for hard refresh)" aria-label="Reload page">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
     </button>
   </div>

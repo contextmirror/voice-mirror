@@ -128,6 +128,33 @@ function createTerminalTabsStore() {
     },
 
     /**
+     * Add a dev-server tab. Unlike shell tabs, this takes a pre-spawned shellId.
+     * @param {{ shellId: string, title?: string, projectPath: string, framework?: string, port?: number }} options
+     */
+    addDevServerTab({ shellId, title, projectPath, framework, port }) {
+      tabs.push({
+        id: shellId,
+        type: 'dev-server',
+        title: title || `${framework || 'Dev'} :${port || '?'}`,
+        shellId,
+        running: true,
+        projectPath,
+        framework: framework || null,
+        port: port || null,
+      });
+      activeTabId = shellId;
+    },
+
+    /**
+     * Find a dev-server tab by project path.
+     * @param {string} projectPath
+     * @returns {Object|null}
+     */
+    getDevServerTab(projectPath) {
+      return tabs.find(t => t.type === 'dev-server' && t.projectPath === projectPath) || null;
+    },
+
+    /**
      * Close a shell tab. Cannot close the AI tab.
      * Kills the backend PTY process.
      * @param {string} id

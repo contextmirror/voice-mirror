@@ -17,6 +17,8 @@ function createLensStore() {
   let webviewReady = $state(false);
   let hidden = $state(false);
   let pageTitle = $state('');
+  let devServers = $state([]);
+  let devServerLoading = $state(false);
 
   return {
     get url() { return url; },
@@ -27,6 +29,13 @@ function createLensStore() {
     get webviewReady() { return webviewReady; },
     get hidden() { return hidden; },
     get pageTitle() { return pageTitle; },
+    get devServers() { return devServers; },
+    get devServerLoading() { return devServerLoading; },
+
+    /** The first running dev server, or null if none are running */
+    get activeDevServer() {
+      return devServers.find(s => s.running) || null;
+    },
 
     setUrl(newUrl) { url = newUrl; },
     setInputUrl(newUrl) { inputUrl = newUrl; },
@@ -36,6 +45,8 @@ function createLensStore() {
     setWebviewReady(val) { webviewReady = val; },
     setHidden(val) { hidden = val; },
     setPageTitle(title) { pageTitle = title; },
+    setDevServers(servers) { devServers = servers; },
+    setDevServerLoading(val) { devServerLoading = val; },
 
     /**
      * Hide the native webview so DOM overlays (dropdowns, modals, palettes)
@@ -100,6 +111,8 @@ function createLensStore() {
       webviewReady = false;
       hidden = false;
       pageTitle = '';
+      devServers = [];
+      devServerLoading = false;
     },
   };
 }

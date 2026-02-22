@@ -95,6 +95,12 @@ pub async fn lens_create_webview(
                 try {{
                     (new Image()).src = '{}' + 'F1' + '?t=' + Date.now();
                 }} catch(err) {{}}
+            }} else if ((e.ctrlKey || e.metaKey) && e.shiftKey && lower === 'r') {{
+                e.preventDefault();
+                e.stopPropagation();
+                try {{
+                    (new Image()).src = '{}' + 'hard-refresh' + '?t=' + Date.now();
+                }} catch(err) {{}}
             }} else if ((e.ctrlKey || e.metaKey) && ['n','t',','].includes(lower)) {{
                 e.preventDefault();
                 e.stopPropagation();
@@ -103,8 +109,30 @@ pub async fn lens_create_webview(
                 }} catch(err) {{}}
             }}
         }}, true);"#,
-        shortcut_base, shortcut_base
+        shortcut_base, shortcut_base, shortcut_base
     );
+
+    // Localhost-only cache-disable script.
+    // Overrides fetch() and XMLHttpRequest to bypass HTTP cache for dev servers.
+    // Only activates when the page hostname is localhost or 127.0.0.1.
+    let cache_script = r#"
+(function() {
+    if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
+        var originalFetch = window.fetch;
+        window.fetch = function(url, opts) {
+            opts = opts || {};
+            opts.cache = 'no-store';
+            return originalFetch.call(this, url, opts);
+        };
+        var originalOpen = XMLHttpRequest.prototype.open;
+        XMLHttpRequest.prototype.open = function() {
+            var result = originalOpen.apply(this, arguments);
+            try { this.setRequestHeader('Cache-Control', 'no-cache, no-store'); } catch(e) {}
+            return result;
+        };
+    }
+})();
+"#;
 
     // Run WebView2 creation on a blocking thread to prevent hanging the
     // tokio runtime. WebView2 initialization on Windows can block for
@@ -118,6 +146,7 @@ pub async fn lens_create_webview(
         let builder =
             WebviewBuilder::new(&label_clone, tauri::WebviewUrl::External(parsed_url))
                 .initialization_script(&shortcut_script)
+                .initialization_script(cache_script)
                 .on_page_load(move |_webview, payload| {
                     if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
                         let url_str = payload.url().to_string();
@@ -349,5 +378,26 @@ pub fn lens_set_visible(
             if visible { "show" } else { "hide" },
             e
         )),
+    }
+}
+
+/// Hard-refresh the lens webview by navigating to the same URL with a cache buster.
+/// This forces the browser to bypass all caches and reload fresh content.
+#[tauri::command]
+pub fn lens_hard_refresh(
+    app: AppHandle,
+    state: tauri::State<'_, LensState>,
+) -> IpcResponse {
+    let webview = match get_lens_webview(&app, &state) {
+        Ok(w) => w,
+        Err(e) => return e,
+    };
+
+    match webview.eval("location.href = location.href.split('?')[0] + '?_cb=' + Date.now()") {
+        Ok(()) => {
+            let _ = app.emit("lens-url-changed", serde_json::json!({}));
+            IpcResponse::ok_empty()
+        }
+        Err(e) => IpcResponse::err(format!("Failed to hard refresh: {}", e)),
     }
 }

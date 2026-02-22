@@ -158,6 +158,44 @@ describe('toast.svelte.js -- uid import', () => {
   });
 });
 
+describe('toast.svelte.js -- multi-action support', () => {
+  it('addToast accepts actions parameter', () => {
+    assert.ok(src.includes('actions = null'), 'addToast should accept actions param with null default');
+  });
+
+  it('includes actions in toast object', () => {
+    // The toast object should have an actions field
+    assert.ok(src.includes('actions,') || src.includes('actions:'), 'Toast object should include actions');
+  });
+
+  it('defines MULTI_ACTION_DURATION constant', () => {
+    assert.ok(src.includes('MULTI_ACTION_DURATION'), 'Should define MULTI_ACTION_DURATION');
+  });
+
+  it('sets MULTI_ACTION_DURATION to 15000', () => {
+    assert.ok(src.includes('MULTI_ACTION_DURATION = 15000'), 'MULTI_ACTION_DURATION should be 15000ms');
+  });
+
+  it('uses longer duration when actions provided', () => {
+    assert.ok(
+      src.includes('actions ? MULTI_ACTION_DURATION : DEFAULT_DURATION'),
+      'Should use MULTI_ACTION_DURATION when actions array is provided'
+    );
+  });
+
+  it('respects explicit duration over multi-action default', () => {
+    assert.ok(
+      src.includes('duration !== undefined'),
+      'Should check if duration was explicitly provided'
+    );
+  });
+
+  it('backward compat: action (singular) still accepted', () => {
+    assert.ok(src.includes('action = null'), 'Should still accept single action param');
+    assert.ok(src.includes('action,') || src.includes('action:'), 'Toast should still include action field');
+  });
+});
+
 describe('toast.svelte.js -- severity levels documented', () => {
   it('documents info severity', () => {
     assert.ok(src.includes('info'), 'Should document info severity');

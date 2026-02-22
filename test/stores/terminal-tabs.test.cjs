@@ -116,6 +116,58 @@ describe('terminal-tabs.svelte.js -- tab reordering', () => {
   });
 });
 
+describe('terminal-tabs.svelte.js -- dev-server tabs', () => {
+  it('has addDevServerTab method', () => {
+    assert.ok(src.includes('addDevServerTab('), 'Should have addDevServerTab method');
+  });
+
+  it('has getDevServerTab method', () => {
+    assert.ok(src.includes('getDevServerTab('), 'Should have getDevServerTab method');
+  });
+
+  it('addDevServerTab creates tab with type dev-server', () => {
+    assert.ok(src.includes("type: 'dev-server'"), 'Should create tab with type dev-server');
+  });
+
+  it('addDevServerTab includes projectPath', () => {
+    const block = src.split('addDevServerTab')[1]?.split('},')[0] || '';
+    assert.ok(block.includes('projectPath'), 'dev-server tab should include projectPath');
+  });
+
+  it('addDevServerTab includes framework field', () => {
+    const block = src.split('addDevServerTab')[1]?.split('},')[0] || '';
+    assert.ok(block.includes('framework'), 'dev-server tab should include framework');
+  });
+
+  it('addDevServerTab includes port field', () => {
+    const block = src.split('addDevServerTab')[1]?.split('},')[0] || '';
+    assert.ok(block.includes('port'), 'dev-server tab should include port');
+  });
+
+  it('addDevServerTab sets running to true', () => {
+    const block = src.split('addDevServerTab')[1]?.split('},')[0] || '';
+    assert.ok(block.includes('running: true'), 'dev-server tab should start as running');
+  });
+
+  it('addDevServerTab sets activeTabId', () => {
+    const block = src.split('addDevServerTab')[1]?.split('},')[0] || '';
+    assert.ok(block.includes('activeTabId = shellId'), 'addDevServerTab should switch to new tab');
+  });
+
+  it('getDevServerTab filters by type and projectPath', () => {
+    const block = src.split('getDevServerTab')[1]?.split('},')[0] || '';
+    assert.ok(
+      block.includes("t.type === 'dev-server'") && block.includes('t.projectPath === projectPath'),
+      'getDevServerTab should filter by type and projectPath'
+    );
+  });
+
+  it('getDevServerTab returns null when not found', () => {
+    const block = src.split('getDevServerTab')[1]?.split('},')[0] || '';
+    assert.ok(block.includes('|| null'), 'getDevServerTab should return null when not found');
+  });
+});
+
 describe('terminal-tabs.svelte.js -- behavior', () => {
   it('prevents closing AI tab', () => {
     assert.ok(src.includes("if (id === 'ai') return"), 'Should prevent closing AI tab');
