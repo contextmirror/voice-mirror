@@ -85,6 +85,13 @@ describe('StatusDropdown.svelte: popover panel', () => {
   it('has 320px width', () => {
     assert.ok(src.includes('width: 320px'));
   });
+  it('uses position: fixed to escape overflow clipping', () => {
+    assert.ok(src.includes('position: fixed'));
+  });
+  it('calculates position from badge bounding rect', () => {
+    assert.ok(src.includes('getBoundingClientRect'));
+    assert.ok(src.includes('updatePopoverPosition'));
+  });
   it('has high z-index for popover', () => {
     assert.ok(src.includes('z-index: 10002'));
   });
@@ -93,6 +100,9 @@ describe('StatusDropdown.svelte: popover panel', () => {
   });
   it('has outside click handler', () => {
     assert.ok(src.includes('handleWindowClick'));
+  });
+  it('guards against detached targets in outside click', () => {
+    assert.ok(src.includes('e.target.isConnected'));
   });
   it('uses margin-left auto for right alignment', () => {
     assert.ok(src.includes('margin-left: auto'));

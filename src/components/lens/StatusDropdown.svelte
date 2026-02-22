@@ -36,7 +36,21 @@
     : ''
   );
 
-  function toggle() { open = !open; }
+  // Popover position (fixed, escapes overflow:hidden ancestors)
+  let popoverTop = $state(0);
+  let popoverRight = $state(0);
+
+  function updatePopoverPosition() {
+    if (!badgeEl) return;
+    const rect = badgeEl.getBoundingClientRect();
+    popoverTop = rect.bottom + 4;
+    popoverRight = window.innerWidth - rect.right;
+  }
+
+  function toggle() {
+    open = !open;
+    if (open) updatePopoverPosition();
+  }
   function close() {
     open = false;
     managing = false;
@@ -56,6 +70,7 @@
   // Close on click outside
   function handleWindowClick(e) {
     if (!open) return;
+    if (!e.target.isConnected) return; // target removed by reactive DOM update
     if (badgeEl?.contains(e.target)) return;
     if (panelEl?.contains(e.target)) return;
     close();
@@ -116,7 +131,9 @@
   </button>
 
   {#if open}
-    <div bind:this={panelEl} class="status-popover" class:wide={managing} role="dialog" aria-label="Status panel">
+    <div bind:this={panelEl} class="status-popover" class:wide={managing} role="dialog" aria-label="Status panel"
+      style="top: {popoverTop}px; right: {popoverRight}px;"
+    >
 
       {#if managing}
         <!-- ── Manage Servers view (inline in popover) ── -->
@@ -195,7 +212,7 @@
           <div class="popover-content">
             {#if activeTab === 'servers'}
               <div class="status-list">
-                <button class="status-row" type="button">
+                <div class="status-row">
                   <div
                     class="row-dot"
                     class:ok={healthy}
@@ -207,14 +224,14 @@
                   {#if healthy}
                     <svg class="row-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
                   {/if}
-                </button>
+                </div>
 
-                <button class="status-row" type="button">
+                <div class="status-row">
                   <div class="row-dot ok"></div>
                   <span class="row-name">Dev Server</span>
                   <span class="row-version">Vite</span>
                   <svg class="row-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                </button>
+                </div>
               </div>
 
               <button class="manage-btn" type="button" onclick={openManage}>Manage servers</button>
@@ -222,7 +239,7 @@
             {:else if activeTab === 'mcp'}
               <div class="status-list">
                 {#if aiStatusStore.isCliProvider}
-                  <button class="status-row" type="button">
+                  <div class="status-row">
                     <div
                       class="row-dot"
                       class:ok={mcpConnected}
@@ -236,7 +253,7 @@
                         <div class="toggle-thumb"></div>
                       </div>
                     </div>
-                  </button>
+                  </div>
                 {:else}
                   <div class="status-empty">No MCP tools configured</div>
                 {/if}
@@ -332,14 +349,14 @@
   /* ── Popover panel ── */
 
   .status-popover {
-    position: absolute;
-    top: calc(100% + 4px);
-    right: 0;
+    position: fixed;
     width: 320px;
     max-width: calc(100vw - 40px);
+    max-height: calc(100vh - 80px);
+    overflow-y: auto;
     border-radius: 10px;
+    background: var(--bg-elevated);
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35), 0 0 0 1px var(--border);
-    overflow: hidden;
     z-index: 10002;
     -webkit-app-region: no-drag;
     transition: width var(--duration-fast) var(--ease-out);
@@ -412,13 +429,8 @@
     border: none;
     background: transparent;
     border-radius: 6px;
-    cursor: pointer;
     text-align: left;
-    transition: background var(--duration-fast) var(--ease-out);
     -webkit-app-region: no-drag;
-  }
-  .status-row:hover {
-    background: var(--bg-elevated);
   }
 
   .row-dot {
@@ -580,7 +592,6 @@
     gap: 8px;
     margin: 8px 8px 0;
     padding: 6px 10px;
-    background: var(--bg);
     border: 1px solid var(--border);
     border-radius: 6px;
     color: var(--muted);
@@ -600,7 +611,6 @@
 
   .manage-list {
     margin: 8px;
-    background: var(--bg);
     border-radius: 6px;
     border: 1px solid var(--border);
     overflow: hidden;
@@ -624,7 +634,10 @@
     border-bottom: none;
   }
   .manage-row:hover {
-    background: var(--bg-elevated);
+    background: rgba(255, 255, 255, 0.06);
+  }
+  .manage-row:active {
+    background: rgba(255, 255, 255, 0.1);
   }
 
   .manage-row-name {
