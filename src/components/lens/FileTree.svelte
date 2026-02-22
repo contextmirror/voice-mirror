@@ -29,9 +29,13 @@
   // Selected entry for F2 rename shortcut
   let selectedEntry = $state(null);
 
-  // Reload when active project changes
+  // Reload when active project changes.
+  // Track activeIndex, entries length, AND the active path so every kind of
+  // project change (switch, add, remove-last) triggers a reload.
   $effect(() => {
-    const _ = projectStore.activeIndex;  // track dependency
+    const _idx = projectStore.activeIndex;
+    const _len = projectStore.entries.length;
+    const _path = projectStore.activeProject?.path;
     expandedDirs = new Set();
     dirChildren = new Map();
     loadRoot();
