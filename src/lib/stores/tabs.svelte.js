@@ -154,6 +154,31 @@ function createTabsStore() {
       tabs.push({ id: 'browser', type: 'browser', title: 'Browser', preview: false, dirty: false });
       activeTabId = 'browser';
     },
+
+    /**
+     * Close all tabs except the given one (and the browser tab).
+     */
+    closeOthers(id) {
+      const keep = tabs.filter(t => t.id === id || t.id === 'browser');
+      tabs.length = 0;
+      tabs.push(...keep);
+      if (!tabs.find(t => t.id === activeTabId)) {
+        activeTabId = id;
+      }
+    },
+
+    /**
+     * Close all tabs to the right of the given tab.
+     */
+    closeToRight(id) {
+      const idx = tabs.findIndex(t => t.id === id);
+      if (idx === -1) return;
+      const removed = tabs.splice(idx + 1).filter(t => t.id !== 'browser');
+      // If the browser tab was after and got removed, it's still at position 0
+      if (activeTabId && !tabs.find(t => t.id === activeTabId)) {
+        activeTabId = id;
+      }
+    },
   };
 }
 

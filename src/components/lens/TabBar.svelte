@@ -1,5 +1,13 @@
 <script>
   import { tabsStore } from '../../lib/stores/tabs.svelte.js';
+  import TabContextMenu from './TabContextMenu.svelte';
+
+  let tabMenu = $state({ visible: false, x: 0, y: 0, tab: null });
+
+  function handleTabContextMenu(event, tab) {
+    event.preventDefault();
+    tabMenu = { visible: true, x: event.clientX, y: event.clientY, tab };
+  }
 
   async function handleAddFile() {
     try {
@@ -46,6 +54,7 @@
       aria-selected={tab.id === tabsStore.activeTabId}
       onclick={() => tabsStore.setActive(tab.id)}
       ondblclick={() => tabsStore.pinTab(tab.id)}
+      oncontextmenu={(e) => handleTabContextMenu(e, tab)}
       onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') tabsStore.setActive(tab.id); }}
       title={tab.path || tab.title}
     >
@@ -92,6 +101,14 @@
     </button>
   {/if}
 </div>
+
+<TabContextMenu
+  x={tabMenu.x}
+  y={tabMenu.y}
+  tab={tabMenu.tab}
+  visible={tabMenu.visible}
+  onClose={() => { tabMenu.visible = false; }}
+/>
 
 <style>
   .tab-bar {
