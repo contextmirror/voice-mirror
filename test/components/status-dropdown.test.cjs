@@ -3,7 +3,7 @@
  *
  * OpenCode-style status popover with Servers/MCP/LSP tabs.
  * Lives in the FileTree header (right panel, pure DOM — no HWND overlap).
- * Includes "Manage servers" dialog modal using native <dialog> + showModal().
+ * Includes inline "Manage servers" view that expands the popover.
  */
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
@@ -53,7 +53,7 @@ describe('StatusDropdown.svelte: reactive data', () => {
     assert.ok(src.includes('aiStatusStore'));
     assert.ok(src.includes('ai-status.svelte.js'));
   });
-  it('imports lensStore for freeze/unfreeze', () => {
+  it('imports lensStore', () => {
     assert.ok(src.includes('lensStore'));
     assert.ok(src.includes('lens.svelte.js'));
   });
@@ -194,94 +194,91 @@ describe('StatusDropdown.svelte: OpenCode-style styling', () => {
   });
 });
 
-describe('StatusDropdown.svelte: Manage Servers dialog', () => {
-  it('has dialogOpen state', () => {
-    assert.ok(/let\s+dialogOpen\s*=\s*\$state/.test(src));
-  });
-  it('has dialogRef for native dialog element', () => {
-    assert.ok(/let\s+dialogRef\s*=\s*\$state/.test(src));
-    assert.ok(src.includes('bind:this={dialogRef}'));
+describe('StatusDropdown.svelte: inline manage view', () => {
+  it('has managing state', () => {
+    assert.ok(/let\s+managing\s*=\s*\$state/.test(src));
   });
   it('has searchQuery state', () => {
     assert.ok(/let\s+searchQuery\s*=\s*\$state/.test(src));
   });
-  it('has openDialog function', () => {
-    assert.ok(src.includes('function openDialog()'));
+  it('has openManage function', () => {
+    assert.ok(src.includes('function openManage()'));
   });
-  it('has closeDialog function', () => {
-    assert.ok(src.includes('function closeDialog()'));
+  it('has closeManage function', () => {
+    assert.ok(src.includes('function closeManage()'));
   });
-  it('uses $effect for freeze/unfreeze (ScreenshotPicker pattern)', () => {
-    assert.ok(src.includes('lensStore.freeze()'));
-    assert.ok(src.includes('lensStore.unfreeze()'));
-    // freeze and unfreeze should be in an $effect, not in openDialog/closeDialog
-    const effectBlock = src.slice(src.indexOf('if (dialogOpen)'), src.indexOf('// Show/hide'));
-    assert.ok(effectBlock.includes('lensStore.freeze()'));
-    assert.ok(effectBlock.includes('lensStore.unfreeze()'));
+  it('widens popover when managing (class:wide)', () => {
+    assert.ok(src.includes('class:wide={managing}'));
+    assert.ok(src.includes('width: 380px'));
   });
-  it('uses native <dialog> element', () => {
-    assert.ok(src.includes('<dialog'), 'Should use native <dialog> element');
-    assert.ok(src.includes('server-dialog'), 'Should have server-dialog class');
+  it('toggles between managing and tabs view', () => {
+    assert.ok(src.includes('{#if managing}'));
   });
-  it('uses showModal() for top-layer rendering', () => {
-    assert.ok(src.includes('showModal()'), 'Should call showModal()');
+  it('Escape key closes manage view first', () => {
+    assert.ok(src.includes('if (managing) closeManage()'));
   });
-  it('uses dialog close() method', () => {
-    assert.ok(src.includes('dialogRef.close()') || src.includes('.close()'));
+  it('close() resets managing and searchQuery', () => {
+    assert.ok(src.includes('managing = false'));
+    assert.ok(src.includes("searchQuery = ''"));
   });
-  it('has ::backdrop pseudo-element styling', () => {
-    assert.ok(src.includes('::backdrop'), 'Should style ::backdrop');
+});
+
+describe('StatusDropdown.svelte: manage header', () => {
+  it('has manage header', () => {
+    assert.ok(src.includes('manage-header'));
   });
-  it('handles dialog cancel event (Escape key)', () => {
-    assert.ok(src.includes('handleDialogCancel'));
-    assert.ok(src.includes('oncancel'));
+  it('has back button with aria-label', () => {
+    assert.ok(src.includes('manage-back'));
+    assert.ok(src.includes('aria-label="Back"'));
   });
-  it('handles backdrop click to close', () => {
-    assert.ok(src.includes('handleDialogClick'));
+  it('has Servers title', () => {
+    assert.ok(src.includes('manage-title'));
+    assert.ok(src.includes('>Servers</h3>'));
   });
-  it('stops propagation on inner content clicks', () => {
-    assert.ok(src.includes('e.stopPropagation()'));
+  it('has close button', () => {
+    assert.ok(src.includes('manage-close-btn'));
+    assert.ok(src.includes('aria-label="Close"'));
   });
-  it('has dialog inner wrapper', () => {
-    assert.ok(src.includes('dialog-inner'));
+});
+
+describe('StatusDropdown.svelte: manage search', () => {
+  it('has search container', () => {
+    assert.ok(src.includes('manage-search'));
   });
-  it('has dialog title "Servers"', () => {
-    assert.ok(src.includes('dialog-title'));
-    assert.ok(src.includes('>Servers</h2>'));
-  });
-  it('has dialog close button', () => {
-    assert.ok(src.includes('dialog-close'));
-  });
-  it('has search input', () => {
-    assert.ok(src.includes('dialog-search'));
+  it('has search input with placeholder', () => {
     assert.ok(src.includes('Search servers'));
     assert.ok(src.includes('bind:value={searchQuery}'));
   });
-  it('has dialog server list', () => {
-    assert.ok(src.includes('dialog-list'));
-    assert.ok(src.includes('dialog-row'));
+});
+
+describe('StatusDropdown.svelte: manage server list', () => {
+  it('has manage list container', () => {
+    assert.ok(src.includes('manage-list'));
   });
-  it('shows provider in dialog', () => {
-    assert.ok(src.includes('dialog-row-name'));
-    assert.ok(src.includes('dialog-row-version'));
+  it('has manage rows', () => {
+    assert.ok(src.includes('manage-row'));
+  });
+  it('shows provider name and type', () => {
+    assert.ok(src.includes('manage-row-name'));
+    assert.ok(src.includes('manage-row-version'));
   });
   it('has Current Server badge', () => {
-    assert.ok(src.includes('dialog-row-badge'));
+    assert.ok(src.includes('manage-row-badge'));
     assert.ok(src.includes('Current Server'));
   });
-  it('shows dev server in dialog with localhost', () => {
+  it('shows dev server with localhost', () => {
     assert.ok(src.includes('Dev Server (Vite)'));
     assert.ok(src.includes('localhost:1420'));
   });
   it('has server options menu button', () => {
-    assert.ok(src.includes('dialog-row-menu'));
+    assert.ok(src.includes('manage-row-menu'));
     assert.ok(src.includes('Server options'));
   });
-  it('has Add server button', () => {
-    assert.ok(src.includes('dialog-add'));
-    assert.ok(src.includes('Add server'));
+  it('stops propagation on menu click', () => {
+    assert.ok(src.includes('e.stopPropagation()'));
   });
-  it('has 560px dialog width', () => {
-    assert.ok(src.includes('width: 560px'));
+  it('has Add server button', () => {
+    assert.ok(src.includes('manage-add'));
+    assert.ok(src.includes('Add server'));
   });
 });
