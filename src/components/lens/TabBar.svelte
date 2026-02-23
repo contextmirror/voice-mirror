@@ -116,18 +116,19 @@
 />
 
 <style>
+  /* ── Linear Floating Pill style ── */
   .tab-bar {
     display: flex;
     align-items: center;
-    height: 30px;
+    height: 36px;
     flex-shrink: 0;
-    padding: 0 4px;
-    background: var(--bg-elevated);
-    border-bottom: 1px solid var(--border);
+    padding: 0 8px;
+    background: var(--bg);
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 40%, transparent);
     -webkit-app-region: no-drag;
     overflow-x: auto;
     overflow-y: hidden;
-    gap: 1px;
+    gap: 2px;
   }
 
   .tab-bar::-webkit-scrollbar {
@@ -142,10 +143,10 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    height: 100%;
-    padding: 0 10px;
+    height: 26px;
+    padding: 0 12px;
     border: none;
-    border-radius: 0;
+    border-radius: 6px;
     background: transparent;
     color: var(--muted);
     font-size: 12px;
@@ -154,18 +155,18 @@
     white-space: nowrap;
     flex-shrink: 0;
     position: relative;
-    transition: color 0.15s ease;
+    transition: background 0.15s ease, color 0.15s ease;
   }
 
   .tab:hover {
     color: var(--text);
-    background: var(--bg);
+    background: color-mix(in srgb, var(--text) 8%, transparent);
   }
 
   .tab.active {
     color: var(--text-strong);
-    background: var(--bg);
-    box-shadow: inset 0 -2px 0 var(--accent);
+    background: color-mix(in srgb, var(--text) 12%, transparent);
+    font-weight: 500;
   }
 
   .tab.preview .tab-title {
@@ -199,7 +200,7 @@
     width: 16px;
     height: 16px;
     border: none;
-    border-radius: 3px;
+    border-radius: 4px;
     background: transparent;
     color: var(--muted);
     cursor: pointer;
@@ -228,8 +229,8 @@
   .tab:hover .tab-action.pinned { opacity: 1; }
 
   .tab-action:hover {
-    background: var(--bg-elevated);
-    color: var(--text);
+    background: color-mix(in srgb, var(--danger) 20%, transparent);
+    color: var(--danger);
   }
 
   .tab-add {
@@ -239,16 +240,17 @@
     width: 24px;
     height: 24px;
     border: none;
-    border-radius: 4px;
+    border-radius: 6px;
     background: transparent;
     color: var(--muted);
     cursor: pointer;
     flex-shrink: 0;
-    margin-left: 4px;
+    margin-left: 2px;
+    transition: background 0.12s ease, color 0.12s ease;
   }
 
   .tab-add:hover {
-    background: var(--bg);
+    background: color-mix(in srgb, var(--text) 8%, transparent);
     color: var(--text);
   }
 
@@ -259,16 +261,17 @@
     width: 24px;
     height: 24px;
     border: none;
-    border-radius: 4px;
+    border-radius: 6px;
     background: transparent;
     color: var(--muted);
     cursor: pointer;
     flex-shrink: 0;
     margin-left: 2px;
+    transition: background 0.12s ease, color 0.12s ease;
   }
 
   .tab-close-all:hover {
-    background: var(--bg);
+    background: color-mix(in srgb, var(--danger) 20%, transparent);
     color: var(--danger);
   }
 

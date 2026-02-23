@@ -84,10 +84,10 @@ describe('TabBar.svelte', () => {
     assert.ok(src.includes('font-style: italic'), 'Should italicize preview tab titles');
   });
 
-  it('active tabs have accent indicator', () => {
+  it('active tabs have visual distinction', () => {
     assert.ok(
-      src.includes('box-shadow') || src.includes('border-bottom'),
-      'Should have visual active indicator'
+      src.includes('.tab.active'),
+      'Should have .tab.active CSS rule'
     );
   });
 
