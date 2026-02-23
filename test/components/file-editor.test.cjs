@@ -369,3 +369,100 @@ describe('FileEditor.svelte: lifecycle', () => {
     assert.ok(src.includes('.cm-editor'), 'Should override cm-editor height');
   });
 });
+
+describe('FileEditor.svelte: markdown preview', () => {
+  it('imports renderMarkdown from markdown.js', () => {
+    assert.ok(src.includes('renderMarkdown'), 'Should import renderMarkdown');
+    assert.ok(src.includes('markdown.js'), 'Should import from markdown.js');
+  });
+
+  it('has isMarkdown derived check', () => {
+    assert.ok(
+      src.includes('isMarkdown') && src.includes('md|markdown'),
+      'Should have isMarkdown derived checking .md extension'
+    );
+  });
+
+  it('has showPreview state defaulting to true', () => {
+    assert.ok(
+      src.includes('showPreview') && src.includes('$state(true)'),
+      'Should have showPreview state defaulting to true'
+    );
+  });
+
+  it('has markdownContent state for rendered content', () => {
+    assert.ok(src.includes('markdownContent'), 'Should have markdownContent state');
+  });
+
+  it('has markdown-preview class for preview container', () => {
+    assert.ok(src.includes('markdown-preview'), 'Should have markdown-preview class');
+  });
+
+  it('has editor-preview-toolbar class', () => {
+    assert.ok(src.includes('editor-preview-toolbar'), 'Should have editor-preview-toolbar class');
+  });
+
+  it('uses @html to render markdown', () => {
+    assert.ok(
+      src.includes('{@html renderMarkdown('),
+      'Should use @html directive to render markdown'
+    );
+  });
+
+  it('has preview toggle buttons', () => {
+    assert.ok(src.includes('preview-btn'), 'Should have preview toggle buttons');
+  });
+
+  it('hides editor when preview is active', () => {
+    assert.ok(
+      src.includes('file-editor') && src.includes('hidden'),
+      'Should hide editor when preview is shown'
+    );
+  });
+});
+
+describe('FileEditor.svelte: markdown preview styles', () => {
+  it('has table styling in markdown-preview', () => {
+    assert.ok(
+      src.includes('.markdown-preview') && src.includes('border-collapse'),
+      'Should style tables in markdown preview'
+    );
+  });
+
+  it('has heading styles', () => {
+    const previewIdx = src.indexOf('.markdown-preview');
+    const styleSection = src.slice(previewIdx);
+    assert.ok(
+      styleSection.includes(':global(h1)') || styleSection.includes(':global(h2)'),
+      'Should have heading styles in markdown preview'
+    );
+  });
+
+  it('has code block styling', () => {
+    assert.ok(
+      src.includes('.markdown-preview') && src.includes(':global(pre)'),
+      'Should have code block styles in preview'
+    );
+  });
+
+  it('has blockquote styling', () => {
+    assert.ok(
+      src.includes('.markdown-preview') && src.includes(':global(blockquote)'),
+      'Should have blockquote styles in preview'
+    );
+  });
+
+  it('has list styling', () => {
+    assert.ok(
+      src.includes('.markdown-preview') && src.includes(':global(ul)'),
+      'Should have list styles in preview'
+    );
+  });
+
+  it('has collapsible code block support', () => {
+    assert.ok(
+      src.includes('.markdown-preview') && src.includes('code-collapse'),
+      'Should have collapsible code block styles'
+    );
+  });
+});

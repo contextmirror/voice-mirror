@@ -6,6 +6,7 @@
    * auto-scroll (only scrolls if user is near bottom), and shows an
    * empty state when there are no messages.
    */
+  import { tick } from 'svelte';
   import { chatStore } from '../../lib/stores/chat.svelte.js';
   import { voiceStore } from '../../lib/stores/voice.svelte.js';
   import { attachmentsStore } from '../../lib/stores/attachments.svelte.js';
@@ -64,22 +65,34 @@
 
   const hasMessages = $derived(chatStore.messages.length > 0);
 
+  /** Whether the user has manually scrolled up away from the bottom. */
+  let userScrolledUp = $state(false);
+
+  /** Handle scroll events to detect manual scroll-up. */
+  function handleScroll() {
+    if (!scrollContainer) return;
+    const distanceFromBottom =
+      scrollContainer.scrollHeight - scrollContainer.scrollTop - scrollContainer.clientHeight;
+    userScrolledUp = distanceFromBottom > SCROLL_THRESHOLD;
+  }
+
   /**
    * Smart auto-scroll: only scroll if user is near the bottom.
    * During streaming, use instant scroll for responsiveness.
    * When not streaming, use smooth scroll for polish.
+   * @param {boolean} [forceSmooth=false] - Force smooth scrolling (e.g. for new messages)
    */
-  function autoScroll() {
+  function autoScroll(forceSmooth = false) {
     if (!scrollContainer) return;
+    if (userScrolledUp) return;
 
-    const distanceFromBottom =
-      scrollContainer.scrollHeight - scrollContainer.scrollTop - scrollContainer.clientHeight;
-
-    if (distanceFromBottom > SCROLL_THRESHOLD) return;
+    const behavior = forceSmooth ? 'smooth'
+      : chatStore.isStreaming ? 'instant'
+      : 'smooth';
 
     scrollContainer.scrollTo({
       top: scrollContainer.scrollHeight,
-      behavior: chatStore.isStreaming ? 'instant' : 'smooth',
+      behavior,
     });
   }
 
@@ -185,23 +198,36 @@
     showScreenshotPicker = false;
   }
 
-  // Auto-scroll whenever messages change or streaming updates
+  // Auto-scroll when new messages are added (length changes)
   $effect(() => {
-    // Track messages length and streaming state to trigger this effect
     const _len = chatStore.messages.length;
-    const _streaming = chatStore.isStreaming;
+    if (!scrollContainer || _len === 0) return;
 
-    // Use tick-like delay to let DOM update first
-    if (scrollContainer) {
-      requestAnimationFrame(() => {
-        autoScroll();
-      });
-    }
+    // Reset userScrolledUp when a new message arrives so we scroll to it
+    userScrolledUp = false;
+
+    tick().then(() => {
+      autoScroll(true);
+    });
+  });
+
+  // Auto-scroll during streaming updates (text content changes)
+  $effect(() => {
+    const msgs = chatStore.messages;
+    const lastMsg = msgs.length > 0 ? msgs[msgs.length - 1] : null;
+    // Track the last message's text length to react to streaming appends
+    const _textLen = lastMsg ? lastMsg.text.length : 0;
+    const _streaming = lastMsg ? lastMsg.streaming : false;
+    if (!scrollContainer || !_streaming) return;
+
+    tick().then(() => {
+      autoScroll();
+    });
   });
 </script>
 
 <div class="chat-panel">
-  <div class="chat-scroll-area" bind:this={scrollContainer}>
+  <div class="chat-scroll-area" bind:this={scrollContainer} onscroll={handleScroll}>
     {#if hasMessages}
       <div class="messages-container">
         {#each messageGroups as group (group.id)}

@@ -18,6 +18,7 @@
   const LOADING_TIMEOUT_MS = 15000;
   let loadingTimer = null;
   let detectionTimer = null;
+  let creatingFirstTab = false;
 
   function getAbsoluteBounds() {
     if (!containerEl) return null;
@@ -244,6 +245,8 @@
   async function createFirstTab() {
     if (!containerEl) return;
     if (lensStore.webviewReady) return; // Already created
+    if (creatingFirstTab) return;       // Already in-flight (prevents ResizeObserver + onMount race)
+    creatingFirstTab = true;
 
     // Wait for layout to settle before measuring bounds (double rAF)
     await new Promise((resolve) => {
@@ -258,6 +261,7 @@
       // Don't waste retries — we'll try again when the container becomes visible
       // via the ResizeObserver set up in onMount.
       console.log('[LensPreview] Container has zero bounds, will create tab when visible');
+      creatingFirstTab = false; // Reset so ResizeObserver can retry when container becomes visible
       return;
     }
 
@@ -364,6 +368,7 @@
     browserTabsStore.clearAll();
     lensStore.setWebviewReady(false);
     setupDone = false;
+    creatingFirstTab = false;
   });
 </script>
 

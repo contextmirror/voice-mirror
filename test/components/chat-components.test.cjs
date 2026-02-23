@@ -360,6 +360,39 @@ describe('ChatPanel.svelte', () => {
       'Should pass onClearAttachments to ChatInput'
     );
   });
+
+  it('imports tick from svelte for post-DOM-update scrolling', () => {
+    assert.ok(src.includes("import { tick } from 'svelte'"), 'Should import tick from svelte');
+  });
+
+  it('uses tick() instead of requestAnimationFrame for auto-scroll', () => {
+    assert.ok(src.includes('tick().then'), 'Should use tick().then for DOM update timing');
+    assert.ok(!src.includes('requestAnimationFrame'), 'Should NOT use requestAnimationFrame');
+  });
+
+  it('tracks userScrolledUp state for scroll position awareness', () => {
+    assert.ok(src.includes('userScrolledUp'), 'Should have userScrolledUp state');
+  });
+
+  it('has handleScroll to detect manual scroll-up', () => {
+    assert.ok(src.includes('function handleScroll'), 'Should have handleScroll function');
+    assert.ok(src.includes('onscroll={handleScroll}'), 'Should bind onscroll to handleScroll');
+  });
+
+  it('has separate $effect for streaming text updates', () => {
+    // The streaming effect tracks last message text length for streaming appends
+    assert.ok(src.includes('lastMsg.text.length'), 'Should track last message text length');
+    assert.ok(src.includes('lastMsg.streaming'), 'Should track last message streaming flag');
+  });
+
+  it('resets userScrolledUp when new messages arrive', () => {
+    assert.ok(src.includes('userScrolledUp = false'), 'Should reset userScrolledUp on new messages');
+  });
+
+  it('uses smooth scroll for new messages and instant for streaming', () => {
+    assert.ok(src.includes("forceSmooth ? 'smooth'"), 'Should use smooth for forced scroll');
+    assert.ok(src.includes("chatStore.isStreaming ? 'instant'"), 'Should use instant during streaming');
+  });
 });
 
 // ---- ScreenshotPicker.svelte ----

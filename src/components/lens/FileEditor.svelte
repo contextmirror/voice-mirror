@@ -11,6 +11,7 @@
   import CodeActionsMenu from './CodeActionsMenu.svelte';
   import RenameInput from './RenameInput.svelte';
   import { voiceMirrorEditorTheme } from '../../lib/editor-theme.js';
+  import { renderMarkdown } from '../../lib/markdown.js';
   import { createEditorLsp, LSP_EXTENSIONS, uriToRelativePath, lspPositionToOffset, mapCompletionKind } from '../../lib/editor-lsp.svelte.js';
   import { lspDiagnosticsStore } from '../../lib/stores/lsp-diagnostics.svelte.js';
 
@@ -26,6 +27,11 @@
 
   // Conflict detection state — shown when file changes on disk while tab is dirty
   let conflictDetected = $state(false);
+
+  // Markdown preview state
+  let isMarkdown = $derived(!!tab?.path?.match(/\.(md|markdown)$/i));
+  let showPreview = $state(true);
+  let markdownContent = $state('');
 
   // Context menu state
   let editorMenu = $state({ visible: false, x: 0, y: 0 });
@@ -268,6 +274,7 @@
           changes: { from: 0, to: currentContent.length, insert: data.content },
         });
       }
+      markdownContent = data.content;
       tabsStore.setDirty(tab.id, false);
       conflictDetected = false;
     } catch (err) {
@@ -329,6 +336,9 @@
         return;
       }
 
+      // Store content for markdown preview
+      markdownContent = data.content || '';
+
       const langSupport = await loadLanguage(filePath);
 
       // Check again if tab changed
@@ -358,6 +368,7 @@
           if (update.docChanged) {
             tabsStore.setDirty(tab.id, true);
             tabsStore.pinTab(tab.id);
+            markdownContent = update.state.doc.toString();
             if (lsp.hasLsp) {
               const content = update.state.doc.toString();
               const r = projectStore.activeProject?.path || null;
@@ -633,7 +644,30 @@
       <button class="conflict-btn conflict-dismiss" onclick={dismissConflict}>Dismiss</button>
     </div>
   {/if}
-  <div class="file-editor" bind:this={editorEl}
+  {#if isMarkdown && !loading}
+    <div class="editor-preview-toolbar">
+      <button class="preview-btn" class:active={showPreview} onclick={() => { showPreview = true; }} title="Preview" aria-label="Preview markdown">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+        </svg>
+      </button>
+      <button class="preview-btn" class:active={!showPreview} onclick={() => { showPreview = false; }} title="Edit" aria-label="Edit markdown">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/>
+        </svg>
+      </button>
+    </div>
+  {/if}
+  {#if isMarkdown && showPreview && !loading}
+    <div class="markdown-preview">
+      {#if markdownContent}
+        {@html renderMarkdown(markdownContent)}
+      {:else}
+        <div class="editor-loading"><span class="loading-text">No content</span></div>
+      {/if}
+    </div>
+  {/if}
+  <div class="file-editor" class:hidden={isMarkdown && showPreview} bind:this={editorEl}
     oncontextmenu={(e) => {
       // Fallback: catch right-clicks on gutter markers, tooltips, and other
       // CodeMirror DOM layers that bypass the EditorView.domEventHandlers callback.
@@ -883,5 +917,229 @@
 
   .file-editor :global(.cm-lintPoint-warning) {
     border-bottom-color: var(--warn, #f59e0b);
+  }
+
+  /* ---- Markdown preview ---- */
+
+  .file-editor.hidden {
+    display: none;
+  }
+
+  .editor-preview-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 4px 12px;
+    background: var(--bg-elevated);
+    border-bottom: 1px solid var(--border);
+    -webkit-app-region: no-drag;
+    flex-shrink: 0;
+  }
+
+  .preview-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--text);
+    cursor: pointer;
+    transition: background var(--duration-fast) var(--ease-out);
+  }
+
+  .preview-btn:hover {
+    background: var(--bg);
+  }
+
+  .preview-btn.active {
+    background: color-mix(in srgb, var(--accent) 20%, transparent);
+    color: var(--accent);
+  }
+
+  .markdown-preview {
+    flex: 1;
+    overflow: auto;
+    padding: 24px 32px;
+    font-family: var(--font-family);
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--text);
+  }
+
+  .markdown-preview :global(h1) {
+    font-size: 24px;
+    margin: 1.5em 0 0.5em;
+    color: var(--text-strong);
+    font-weight: 600;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.3em;
+  }
+
+  .markdown-preview :global(h2) {
+    font-size: 20px;
+    margin: 1.25em 0 0.5em;
+    color: var(--text-strong);
+    font-weight: 600;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.3em;
+  }
+
+  .markdown-preview :global(h3) {
+    font-size: 16px;
+    margin: 1em 0 0.5em;
+    color: var(--text-strong);
+    font-weight: 600;
+  }
+
+  .markdown-preview :global(h4) {
+    font-size: 14px;
+    margin: 1em 0 0.5em;
+    color: var(--text-strong);
+    font-weight: 600;
+  }
+
+  .markdown-preview :global(h1:first-child),
+  .markdown-preview :global(h2:first-child),
+  .markdown-preview :global(h3:first-child) {
+    margin-top: 0;
+  }
+
+  .markdown-preview :global(p) {
+    margin: 0 0 1em 0;
+  }
+
+  .markdown-preview :global(p:last-child) {
+    margin-bottom: 0;
+  }
+
+  .markdown-preview :global(table) {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 1em 0;
+    font-size: 0.9em;
+  }
+
+  .markdown-preview :global(th),
+  .markdown-preview :global(td) {
+    border: 1px solid var(--border);
+    padding: 8px 12px;
+    text-align: left;
+  }
+
+  .markdown-preview :global(th) {
+    background: var(--bg-elevated);
+    font-weight: 600;
+    color: var(--text-strong);
+  }
+
+  .markdown-preview :global(pre) {
+    margin: 1em 0;
+    padding: 12px 16px;
+    background: var(--bg-elevated);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    overflow-x: auto;
+    font-size: 13px;
+  }
+
+  .markdown-preview :global(pre code) {
+    background: none;
+    padding: 0;
+    font-size: 0.85em;
+    line-height: 1.5;
+  }
+
+  .markdown-preview :global(code) {
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+    background: var(--bg-elevated);
+    padding: 0.15em 0.4em;
+    border-radius: var(--radius-sm);
+  }
+
+  .markdown-preview :global(blockquote) {
+    border-left: 3px solid var(--accent);
+    padding: 8px 16px;
+    margin: 1em 0;
+    color: var(--muted);
+    background: color-mix(in srgb, var(--accent) 5%, transparent);
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  }
+
+  .markdown-preview :global(ul),
+  .markdown-preview :global(ol) {
+    padding-left: 24px;
+    margin: 0.5em 0 1em;
+  }
+
+  .markdown-preview :global(li) {
+    margin: 0.25em 0;
+  }
+
+  .markdown-preview :global(a) {
+    color: var(--accent);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  .markdown-preview :global(a:hover) {
+    color: var(--accent-hover);
+  }
+
+  .markdown-preview :global(strong) {
+    font-weight: 600;
+    color: var(--text-strong);
+  }
+
+  .markdown-preview :global(hr) {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 1.5em 0;
+  }
+
+  .markdown-preview :global(img) {
+    max-width: 100%;
+    border-radius: var(--radius-md);
+  }
+
+  .markdown-preview :global(details.code-collapse) {
+    margin: 1em 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+  }
+
+  .markdown-preview :global(details.code-collapse summary) {
+    padding: 6px 12px;
+    font-size: 12px;
+    font-family: var(--font-mono);
+    color: var(--muted);
+    background: var(--bg-elevated);
+    cursor: pointer;
+    user-select: none;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .markdown-preview :global(details.code-collapse summary::before) {
+    content: '▶';
+    font-size: 9px;
+    transition: transform var(--duration-fast) var(--ease-in-out);
+  }
+
+  .markdown-preview :global(details.code-collapse[open] summary::before) {
+    transform: rotate(90deg);
+  }
+
+  .markdown-preview :global(details.code-collapse pre) {
+    margin: 0;
+    border: none;
+    border-top: 1px solid var(--border);
+    border-radius: 0;
   }
 </style>
