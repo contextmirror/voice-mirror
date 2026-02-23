@@ -53,7 +53,13 @@ Content-Length: 52\r\n
 | LSP status panel | Done | `LspTab.svelte` (130 lines) |
 | Windows handling | Done | `.cmd` resolution, `CREATE_NO_WINDOW`, drive letter normalization |
 | Live file sync (AI edits → editor) | Done | `fs-file-changed` event → CodeMirror update → LSP re-analysis |
-| Tests | Done | 45+ tests across 3 test files, all passing |
+| **LSP helper module** | Done | `editor-lsp.svelte.js` — extracted from FileEditor (factory pattern) |
+| **FileTree diagnostic decorations** | Done | `lsp-diagnostics.svelte.js` store + `FileTree.svelte` red/yellow badges |
+| **Document symbols / outline** | Done | `OutlinePanel.svelte` — third tab in FileTree, recursive symbol tree |
+| **Find all references** | Done | `ReferencesPanel.svelte` + Shift+F12 + context menu |
+| **Code actions / quick fixes** | Done | `CodeActionsMenu.svelte` + Ctrl+. + context menu, grouped by kind |
+| **Rename symbol** | Done | `RenameInput.svelte` + F2 + context menu, multi-file via workspace edit |
+| Tests | Done | 100+ tests across 12 test files, all passing |
 | Documentation | Done | This file |
 
 ### Not Implemented
@@ -62,18 +68,19 @@ These are standard LSP capabilities that we **do not** currently support. Listed
 
 | Feature | LSP Method | Value | Notes |
 |---------|-----------|-------|-------|
-| **FileTree diagnostic decorations** | — (UI only) | **High** | Red/yellow filenames + error badges in the file tree, like VS Code's Explorer. All data already available from `lsp-diagnostics` events — just needs UI wiring in `FileTree.svelte`. |
-| **Document symbols / outline** | `textDocument/documentSymbol` | Medium | Shows an outline of functions, classes, variables in the current file. Useful for navigation in large files. |
-| **Find all references** | `textDocument/references` | Medium | "Where is this symbol used?" — helpful for refactoring. |
-| **Rename symbol** | `textDocument/rename` | Medium | Rename a variable/function across all files. Requires `textDocument/prepareRename` + workspace edit application. |
-| **Workspace symbols** | `workspace/symbol` | Low | Search for symbols across the entire project. Overlaps with Command Palette file search. |
-| **Code actions / quick fixes** | `textDocument/codeAction` | Medium | Auto-fix suggestions (e.g., "add missing import", "convert to const"). Would appear as lightbulb icon in gutter. |
-| **Inlay hints** | `textDocument/inlayHint` | Low | Inline type annotations (e.g., showing inferred types). Can be noisy. |
+| **Signature help** | `textDocument/signatureHelp` | Medium | Shows function parameter info as you type `(`. Overlaps with completions. |
+| **Inlay hints** | `textDocument/inlayHint` | Medium | Inline type annotations (e.g., showing inferred types). Can be noisy. |
+| **Linked editing** | `textDocument/linkedEditingRange` | Low | Edit matching pairs simultaneously (e.g., HTML open/close tags). |
+| **On-type formatting** | `textDocument/onTypeFormatting` | Low | Auto-format as you type (e.g., indent after `{`). |
 | **Semantic highlighting** | `textDocument/semanticTokens` | Low | Token-based highlighting (more accurate than syntax regex). Marginal visual improvement. |
 | **Code lens** | `textDocument/codeLens` | Low | Inline annotations above functions (e.g., "3 references", "Run test"). |
+| **Workspace symbols** | `workspace/symbol` | Low | Search for symbols across the entire project. Overlaps with Command Palette file search. |
+| **Document colors** | `textDocument/documentColor` | Low | Color picker for CSS/style values. |
 | **Call hierarchy** | `callHierarchy/incomingCalls` | Low | "Who calls this function?" tree view. Niche use case. |
 | **Folding ranges** | `textDocument/foldingRange` | Low | LSP-aware code folding. CodeMirror already has syntax-based folding. |
-| **Signature help** | `textDocument/signatureHelp` | Low | Shows function parameter info as you type `(`. Overlaps with completions. |
+| **Type definition** | `textDocument/typeDefinition` | Low | Jump to the type of a symbol (vs the symbol's definition). |
+| **Declaration / Implementation** | `textDocument/declaration` | Low | Jump to declaration or implementation of interfaces/abstract methods. |
+| **Multi-server per file** | — | Low | Multiple LSP servers for one file (e.g., TS + CSS for CSS-in-JS). |
 | **Crash recovery** | — | Low | Restart server with exponential backoff on unexpected exit. Not yet needed — servers are stable in practice. |
 
 ---
@@ -84,20 +91,32 @@ These are standard LSP capabilities that we **do not** currently support. Listed
 ┌─────────────────────────────────────────────────────────┐
 │                    Frontend (Svelte)                      │
 │                                                           │
-│  FileEditor.svelte (~939 lines)                          │
-│    ├── @codemirror/lint      ← diagnostics (squigglies)   │
-│    ├── @codemirror/autocomplete ← LSP completions         │
-│    ├── @codemirror/view      ← hover tooltips             │
-│    ├── Ctrl+Click keymap     ← go-to-definition           │
-│    └── Context menu          ← right-click "Go to Def"    │
+│  FileEditor.svelte (~843 lines, thin orchestrator)        │
+│    └── editor-lsp.svelte.js  ← LSP helper module          │
+│         ├── @codemirror/lint      ← diagnostics            │
+│         ├── @codemirror/autocomplete ← completions         │
+│         ├── @codemirror/view      ← hover tooltips         │
+│         ├── Ctrl+Click            ← go-to-definition       │
+│         ├── Shift+F12             ← find references        │
+│         ├── F2                    ← rename symbol           │
+│         └── Ctrl+.               ← code actions            │
+│                                                           │
+│  New Tier 1 components:                                    │
+│    ├── OutlinePanel.svelte   ← document symbols tree       │
+│    ├── ReferencesPanel.svelte ← find references list       │
+│    ├── CodeActionsMenu.svelte ← quick fix / refactor menu  │
+│    └── RenameInput.svelte    ← inline rename input         │
+│                                                           │
+│  lsp-diagnostics.svelte.js   ← FileTree diagnostic store   │
 │                                                           │
 │  LspTab.svelte (~130 lines)                              │
 │    └── Server status list with green/grey dots            │
 │                                                           │
 │  Tauri events: lsp-diagnostics, lsp-server-status         │
-│  Tauri invoke: 9 commands (open, close, change, save,     │
-│                completion, hover, definition, status,      │
-│                shutdown)                                   │
+│  Tauri invoke: 15 commands (open, close, change, save,    │
+│                completion, hover, definition, symbols,     │
+│                references, code-actions, prepare-rename,   │
+│                rename, apply-edit, status, shutdown)       │
 ├───────────────────────────────────────────────────────────┤
 │                  Rust Backend (Tauri)                      │
 │                                                           │
@@ -117,8 +136,8 @@ These are standard LSP capabilities that we **do not** currently support. Listed
 │          file_uri(), uri_to_relative_path(),              │
 │          LspDiagnosticEvent, LspServerStatusEvent         │
 │                                                           │
-│  src-tauri/src/commands/lsp.rs (256 lines)               │
-│    └── 9 async commands exposed via invoke()              │
+│  src-tauri/src/commands/lsp.rs (~556 lines)              │
+│    └── 15 async commands exposed via invoke()             │
 ├───────────────────────────────────────────────────────────┤
 │              Language Servers (external)                    │
 │                                                           │
@@ -182,6 +201,12 @@ These are standard LSP capabilities that we **do not** currently support. Listed
 | `lsp_request_completion` | path, line, character, project_root | CompletionItem[] | Completions at cursor |
 | `lsp_request_hover` | path, line, character, project_root | HoverContents | Type info / docs at cursor |
 | `lsp_request_definition` | path, line, character, project_root | Location[] | Definition location(s) |
+| `lsp_request_document_symbols` | path, project_root | DocumentSymbol[] | Outline symbols for a file |
+| `lsp_request_references` | path, line, character, project_root | Location[] | All references to symbol |
+| `lsp_request_code_actions` | path, range, diagnostics, project_root | CodeAction[] | Available fixes/refactors |
+| `lsp_prepare_rename` | path, line, character, project_root | Range + placeholder | Check if symbol is renameable |
+| `lsp_rename` | path, line, character, new_name, project_root | WorkspaceEdit | Rename across files |
+| `lsp_apply_workspace_edit` | edits, project_root | filesChanged[] | Apply multi-file text edits |
 | `lsp_get_status` | — | ServerStatus[] | Running servers + doc counts |
 | `lsp_shutdown` | — | `()` | Graceful shutdown of all servers |
 
@@ -189,17 +214,33 @@ These are standard LSP capabilities that we **do not** currently support. Listed
 
 ## Frontend Features
 
-### FileEditor.svelte
+### FileEditor.svelte + editor-lsp.svelte.js
+
+LSP logic is extracted into `editor-lsp.svelte.js` (factory pattern: `createEditorLsp()`). FileEditor is a thin orchestrator.
 
 | Feature | How It Works |
 |---------|-------------|
-| **Diagnostics** | Listens for `lsp-diagnostics` event → `lspPositionToOffset()` converts 1-indexed LSP positions to 0-indexed CodeMirror offsets → `setDiagnostics()` renders squiggly underlines → `lintGutter()` shows gutter markers |
-| **Completions** | `lspCompletionSource()` async function registered as CodeMirror autocomplete override → `mapCompletionKind()` maps LSP kinds to CM types → falls back to keyword completions on 5s timeout |
-| **Hover** | `hoverTooltip()` extension calls `lspRequestHover()` → renders plaintext/markdown in styled `.lsp-hover-tooltip` div |
-| **Go-to-definition** | Ctrl+Click keymap + context menu → `lspRequestDefinition()` → same-file scroll or open in new tab → `uriToRelativePath()` handles external files (opened read-only) |
-| **Document sync** | `lspOpenFile()` on load, debounced `lspChangeFile()` on edit (300ms), `lspSaveFile()` on Ctrl+S, `lspCloseFile()` on close/destroy |
-| **Diagnostic cache** | `cachedDiagnostics` Map stores diagnostics per file path, restored on tab switch |
+| **Diagnostics** | `diagnosticListener()` (getter-based for view timing) → `lspPositionToOffset()` → `setDiagnostics()` + `lintGutter()`. Pre-existing diagnostics from `lspDiagnosticsStore` applied on file open. Hover tooltip suppressed at diagnostic positions to avoid overlap. |
+| **Completions** | `completionSource()` async function → `mapCompletionKind()` maps LSP kinds (1–25) to CM types → falls back to keyword completions on 5s timeout |
+| **Hover** | `hoverTooltipExtension()` calls `lspRequestHover()` → renders in `.lsp-hover-tooltip` div. Skipped when cursor is over a diagnostic. |
+| **Go-to-definition** | Ctrl+Click keymap + context menu → `handleGoToDefinition()` → same-file scroll or open in new tab → `uriToRelativePath()` handles external files (read-only) |
+| **Find references** | Shift+F12 or context menu → `handleFindReferences()` → `ReferencesPanel.svelte` floating list, click to navigate |
+| **Code actions** | Ctrl+. or context menu → `handleCodeActions()` → `CodeActionsMenu.svelte` dropdown grouped by kind (quickfix/refactor/source) |
+| **Rename symbol** | F2 or context menu → `handleRenameSymbol()` → `prepareRename` → `RenameInput.svelte` inline input → `executeRename()` → `lspApplyWorkspaceEdit()` for multi-file |
+| **Document sync** | `openFile()` on load, debounced `changeFile()` on edit (300ms), `saveFile()` on Ctrl+S, `closeFile()` on close/destroy |
+| **Diagnostic cache** | `cachedDiagnostics` Map in editor-lsp + `lspDiagnosticsStore` (global, raw diagnostics) — bridged on file open |
 | **Live file sync** | `fs-file-changed` event from Rust file watcher → CodeMirror dispatch → triggers LSP re-analysis |
+
+### lsp-diagnostics.svelte.js
+
+Global diagnostic aggregation store, decoupled from FileEditor:
+
+| Feature | How It Works |
+|---------|-------------|
+| **Per-file counts** | `Map<path, { errors, warnings }>` from `lsp-diagnostics` Tauri events |
+| **Raw diagnostics** | `Map<path, DiagnosticItem[]>` — full LSP data, used to populate editor on first open |
+| **Directory aggregation** | `getForDirectory(path)` — prefix match sums child file counts |
+| **FileTree wiring** | `.has-error` (red) / `.has-warning` (yellow) classes + `.diag-badge` count elements |
 
 ### LspTab.svelte
 
@@ -217,11 +258,17 @@ Server status panel in StatusDropdown:
 
 | Test File | Tests | Coverage |
 |-----------|-------|----------|
-| `test/api/api-lsp.test.cjs` | 9 | All 9 API wrappers (exports + invoke calls) |
-| `test/components/file-editor-lsp.test.cjs` | 17 | Imports, helpers, events, extensions, debouncing, lifecycle, completions, hover, go-to-def, language detection, save, CSS, position clamping |
+| `test/api/api-lsp.test.cjs` | 15 | All 15 API wrappers (exports + invoke calls) |
+| `test/components/file-editor-lsp.test.cjs` | 21 | Imports, helpers, events, extensions, lifecycle, completions, hover, go-to-def, references, rename, code actions, diagnostics store bridge |
 | `test/components/status-dropdown-lsp.test.cjs` | 13 | API imports, state, events, rendering (dots, names, counts, empty state), auto-detection hint, cleanup |
+| `test/lib/editor-lsp.test.cjs` | — | Extracted helper module: factory, handlers, extensions, state |
+| `test/stores/lsp-diagnostics.test.cjs` | — | Diagnostic store: state, methods, events, raw cache, URI conversion |
+| `test/components/outline-panel.test.cjs` | — | OutlinePanel: props, symbols, rendering, navigation |
+| `test/components/references-panel.test.cjs` | — | ReferencesPanel: props, location list, close/navigate |
+| `test/components/code-actions-menu.test.cjs` | — | CodeActionsMenu: props, grouping, labels, separators, behavior |
+| `test/components/rename-input.test.cjs` | — | RenameInput: props, input, confirm/cancel, auto-focus |
 
-All passing as part of `npm test` (2476+ tests total).
+All passing as part of `npm test` (3175+ tests total).
 
 ---
 
@@ -301,11 +348,11 @@ Zed (`E:\Projects\references\Zed`) is a high-performance code editor written in 
     ├─────────────────────────────────┼─────────────────────────────────────────────────┼──────────────┼───────┤
     │ Implementation                  │ Yes                                             │ No           │       │
     ├─────────────────────────────────┼─────────────────────────────────────────────────┼──────────────┼───────┤
-    │ Find all references             │ Yes                                             │ No           │       │
+    │ Find all references             │ Yes                                             │ Yes          │ --    │
     ├─────────────────────────────────┼─────────────────────────────────────────────────┼──────────────┼───────┤
-    │ Rename symbol                   │ Yes (with prepare)                              │ No           │       │
+    │ Rename symbol                   │ Yes (with prepare)                              │ Yes          │ --    │
     ├─────────────────────────────────┼─────────────────────────────────────────────────┼──────────────┼───────┤
-    │ Code actions / quick fixes      │ Yes (resolve + filtering)                       │ No           │       │
+    │ Code actions / quick fixes      │ Yes (resolve + filtering)                       │ Yes          │ Minor │
     ├─────────────────────────────────┼─────────────────────────────────────────────────┼──────────────┼───────┤
     │ Signature help                  │ Yes (auto-trigger on ()                         │ No           │       │
     ├─────────────────────────────────┼─────────────────────────────────────────────────┼──────────────┼───────┤
@@ -315,7 +362,7 @@ Zed (`E:\Projects\references\Zed`) is a high-performance code editor written in 
     ├─────────────────────────────────┼─────────────────────────────────────────────────┼──────────────┼───────┤
     │ Code lens                       │ Yes                                             │ No           │       │
     ├─────────────────────────────────┼─────────────────────────────────────────────────┼──────────────┼───────┤
-    │ Document symbols / outline      │ Yes (LSP + tree-sitter fallback)                │ No           │       │
+    │ Document symbols / outline      │ Yes (LSP + tree-sitter fallback)                │ Yes          │ Minor │
     ├─────────────────────────────────┼─────────────────────────────────────────────────┼──────────────┼───────┤
     │ Workspace symbols               │ Yes                                             │ No           │       │
     ├─────────────────────────────────┼─────────────────────────────────────────────────┼──────────────┼───────┤
@@ -327,7 +374,7 @@ Zed (`E:\Projects\references\Zed`) is a high-performance code editor written in 
     ├─────────────────────────────────┼─────────────────────────────────────────────────┼──────────────┼───────┤
     │ On-type formatting              │ Yes                                             │ No           │       │
     ├─────────────────────────────────┼─────────────────────────────────────────────────┼──────────────┼───────┤
-    │ FileTree diagnostic decorations │ Yes (error/warning counts on files AND folders) │ No           │       │
+    │ FileTree diagnostic decorations │ Yes (error/warning counts on files AND folders) │ Yes          │ --    │
     ├─────────────────────────────────┼─────────────────────────────────────────────────┼──────────────┼───────┤
     │ Multi-server per file           │ Yes (primary + supplementary)                   │ No           │       │
     ├─────────────────────────────────┼─────────────────────────────────────────────────┼──────────────┼───────┤
@@ -346,17 +393,26 @@ Zed (`E:\Projects\references\Zed`) is a high-performance code editor written in 
 
 **Semantic token augmentation** — Zed doesn't replace syntax highlighting with LSP semantic tokens — it augments it. Tree-sitter does the base highlighting, LSP refines specific tokens (e.g., distinguishing a local variable from a parameter). Best of both worlds.
 
-### What's Worth Adopting
+### What We Adopted (Tier 1 — shipped Feb 2026)
 
-Ranked by effort vs value for Voice Mirror:
+All 5 high-value features from the gap analysis have been implemented:
 
-1. **FileTree diagnostic decorations** — Low effort, high value. We have the data, just need UI wiring.
-2. **Code actions / quick fixes** — Medium effort, high value. The "add missing import" lightbulb.
-3. **Find all references** — Medium effort, medium value. "Where is this used?"
-4. **Rename symbol** — Medium effort, medium value. Rename across all files.
-5. **Document symbols / outline** — Medium effort, nice for large file navigation.
+1. ~~FileTree diagnostic decorations~~ — **Done.** Red/yellow filenames + count badges + folder aggregation.
+2. ~~Code actions / quick fixes~~ — **Done.** Ctrl+. menu grouped by kind (quickfix/refactor/source).
+3. ~~Find all references~~ — **Done.** Shift+F12 + context menu + floating references panel.
+4. ~~Rename symbol~~ — **Done.** F2 + context menu + inline input + multi-file workspace edits.
+5. ~~Document symbols / outline~~ — **Done.** Third tab in FileTree, recursive symbol tree, click-to-navigate.
 
-The rest (semantic tokens, inlay hints, code lens, linked editing, multi-server) are polish features. Zed invests in them because they're building a VS Code competitor. Voice Mirror's differentiator is AI + voice + browser integration — our current LSP covers the core editing experience.
+### Tier 2 Candidates (not yet planned)
+
+Ranked by value for Voice Mirror:
+
+1. **Signature help** — Show parameter info as you type `(`. Useful for unfamiliar APIs.
+2. **Inlay hints** — Inline type annotations. Nice for TS but can be noisy.
+3. **Linked editing** — Auto-rename matching HTML tags. Small scope, nice polish.
+4. **On-type formatting** — Auto-indent/format as you type. Low effort.
+
+The rest (semantic tokens, code lens, workspace symbols, document colors, multi-server) are deep polish. Zed invests in them because they're building a VS Code competitor. Voice Mirror's differentiator is AI + voice + browser integration — our LSP now covers the full core editing experience.
 
 ### Zed's Architecture (for reference)
 
@@ -398,3 +454,6 @@ The rest (semantic tokens, inlay hints, code lens, linked editing, multi-server)
 | `69d1cdd2` | fix: prevent Ctrl+Click from opening browser in editor |
 | `6d267061` | feat: read-only viewing of external files via go-to-definition |
 | `30977570` | fix: case-insensitive path comparison for Windows go-to-definition |
+| `c7f5b1b0` | feat: LSP Tier 1 — refactor, diagnostics, symbols, references, code actions, rename |
+| `55681b63` | fix: resolve 6 code review issues in LSP Tier 1 |
+| `4b150e30` | feat: browser sub-tabs + LSP design docs + doc refresh |
