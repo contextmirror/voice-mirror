@@ -410,6 +410,33 @@ fn match_script_pattern(cmd: &str, script_key: &str, pkg_manager: &str) -> Optio
         });
     }
 
+    // Parcel (bundler with built-in dev server)
+    if cmd.contains("parcel serve") || cmd.contains("parcel watch") ||
+       (cmd.contains("parcel") && !cmd.contains("parcel build")) {
+        let port = port_override.unwrap_or(1234);
+        return Some(DetectedDevServer {
+            framework: "Parcel".to_string(),
+            port,
+            url: format!("http://localhost:{}", port),
+            start_command: make_start_command(pkg_manager, script_key),
+            source: "package.json".to_string(),
+            running: false,
+        });
+    }
+
+    // Expo (React Native web)
+    if cmd.contains("expo start") {
+        let port = port_override.unwrap_or(8081);
+        return Some(DetectedDevServer {
+            framework: "Expo".to_string(),
+            port,
+            url: format!("http://localhost:{}", port),
+            start_command: make_start_command(pkg_manager, script_key),
+            source: "package.json".to_string(),
+            running: false,
+        });
+    }
+
     // Bun dev server (bun run --hot, bun --hot, bun --watch)
     if cmd.contains("bun run --hot") || cmd.contains("bun --hot") || cmd.contains("bun --watch") {
         let port = port_override.unwrap_or(3000);
@@ -793,6 +820,54 @@ mod tests {
         let server = match_script_pattern("tauri dev", "dev", "npm").unwrap();
         assert_eq!(server.framework, "Tauri");
         assert_eq!(server.port, 1420);
+    }
+
+    #[test]
+    fn test_match_script_parcel() {
+        let server = match_script_pattern("parcel serve src/index.html", "dev", "npm").unwrap();
+        assert_eq!(server.framework, "Parcel");
+        assert_eq!(server.port, 1234);
+    }
+
+    #[test]
+    fn test_match_script_parcel_custom_port() {
+        let server = match_script_pattern("parcel serve src/index.html --port 3000", "dev", "npm").unwrap();
+        assert_eq!(server.framework, "Parcel");
+        assert_eq!(server.port, 3000);
+    }
+
+    #[test]
+    fn test_match_script_parcel_no_build() {
+        // "parcel build" should NOT be detected as a dev server
+        assert!(match_script_pattern("parcel build src/index.html", "build", "npm").is_none());
+    }
+
+    #[test]
+    fn test_match_script_expo() {
+        let server = match_script_pattern("expo start", "start", "npm").unwrap();
+        assert_eq!(server.framework, "Expo");
+        assert_eq!(server.port, 8081);
+    }
+
+    #[test]
+    fn test_match_script_expo_web() {
+        let server = match_script_pattern("expo start --web", "start", "npm").unwrap();
+        assert_eq!(server.framework, "Expo");
+        assert_eq!(server.port, 8081);
+    }
+
+    #[test]
+    fn test_match_script_bun_hot() {
+        let server = match_script_pattern("bun run --hot index.ts", "dev", "bun").unwrap();
+        assert_eq!(server.framework, "Bun");
+        assert_eq!(server.port, 3000);
+    }
+
+    #[test]
+    fn test_match_script_bun_entry_file() {
+        let server = match_script_pattern("bun run src/server.ts", "start", "bun").unwrap();
+        assert_eq!(server.framework, "Bun");
+        assert_eq!(server.port, 3000);
     }
 
     #[test]
