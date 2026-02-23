@@ -11,6 +11,7 @@
   import ReferencesPanel from './ReferencesPanel.svelte';
   import CodeActionsMenu from './CodeActionsMenu.svelte';
   import RenameInput from './RenameInput.svelte';
+  import { open } from '@tauri-apps/plugin-shell';
   import { voiceMirrorEditorTheme } from '../../lib/editor-theme.js';
   import { renderMarkdown } from '../../lib/markdown.js';
   import { createEditorLsp, LSP_EXTENSIONS, uriToRelativePath, lspPositionToOffset, mapCompletionKind } from '../../lib/editor-lsp.svelte.js';
@@ -662,7 +663,17 @@
     </div>
   {/if}
   {#if isMarkdown && showPreview && !loading}
-    <div class="markdown-preview">
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="markdown-preview" onclick={(e) => {
+      const a = /** @type {HTMLElement} */ (e.target).closest('a[href]');
+      if (!a) return;
+      e.preventDefault();
+      const href = a.getAttribute('href');
+      if (href && (href.startsWith('http://') || href.startsWith('https://'))) {
+        open(href);
+      }
+    }}>
       {#if markdownContent}
         {@html renderMarkdown(markdownContent)}
       {:else}

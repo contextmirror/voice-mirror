@@ -10,6 +10,7 @@
    *   onDismiss {function} - Called when modal is dismissed
    */
   import { fly, fade } from 'svelte/transition';
+  import { open } from '@tauri-apps/plugin-shell';
   import { renderMarkdown } from '../../lib/markdown.js';
 
   /** @type {{ version?: string, onDismiss?: () => void }} */
@@ -75,7 +76,17 @@
       </button>
     </div>
 
-    <div class="whats-new-body">
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="whats-new-body" onclick={(e) => {
+      const a = /** @type {HTMLElement} */ (e.target).closest('a[href]');
+      if (!a) return;
+      const href = a.getAttribute('href');
+      if (href && (href.startsWith('http://') || href.startsWith('https://'))) {
+        e.preventDefault();
+        open(href);
+      }
+    }}>
       <!-- eslint-disable-next-line svelte/no-at-html-tags -->
       {@html changelogContent}
     </div>

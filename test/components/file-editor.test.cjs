@@ -488,3 +488,44 @@ describe('FileEditor.svelte: markdown preview config', () => {
     );
   });
 });
+
+describe('FileEditor.svelte: markdown link safety', () => {
+  it('imports open from @tauri-apps/plugin-shell', () => {
+    assert.ok(
+      src.includes("import { open } from '@tauri-apps/plugin-shell'"),
+      'Should import shell open for external links'
+    );
+  });
+
+  it('intercepts link clicks in markdown preview', () => {
+    assert.ok(
+      src.includes("closest('a[href]')"),
+      'Should use closest to find clicked links'
+    );
+  });
+
+  it('opens external links via shell open', () => {
+    const previewStart = src.indexOf('markdown-preview');
+    const chunk = src.slice(previewStart, previewStart + 500);
+    assert.ok(
+      chunk.includes('open(href)'),
+      'Should open links with Tauri shell'
+    );
+  });
+
+  it('only opens http/https links externally', () => {
+    assert.ok(
+      src.includes("href.startsWith('http://')") || src.includes("href.startsWith('https://')"),
+      'Should only open http/https links'
+    );
+  });
+
+  it('prevents default navigation on link click', () => {
+    const previewStart = src.indexOf('markdown-preview');
+    const chunk = src.slice(previewStart, previewStart + 500);
+    assert.ok(
+      chunk.includes('e.preventDefault()'),
+      'Should prevent default link navigation'
+    );
+  });
+});
