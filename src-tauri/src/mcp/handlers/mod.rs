@@ -8,7 +8,6 @@
 //! - `n8n`         -- n8n REST API integration (22 tools)
 //! - `diagnostic`  -- Pipeline tracing (trace_pipeline)
 //! - `facades`     -- Combined tools for voice mode (memory_manage, n8n_manage, browser_manage)
-//! - `voice_clone` -- Voice cloning tools (clone_voice, clear_voice_clone, list_voice_clones)
 
 pub mod core;
 pub mod memory;
@@ -17,7 +16,6 @@ pub mod browser;
 pub mod n8n;
 pub mod diagnostic;
 pub mod facades;
-pub mod voice_clone;
 
 use serde::{Deserialize, Serialize};
 

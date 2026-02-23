@@ -472,11 +472,6 @@ async fn route_tool_call(
         "n8n_manage" => handlers::facades::handle_n8n_manage(args, data_dir).await,
         "browser_manage" => handlers::facades::handle_browser_manage(args, data_dir, router).await,
 
-        // ---- Voice clone tools ----
-        "clone_voice" => handlers::voice_clone::handle_clone_voice(args, data_dir).await,
-        "clear_voice_clone" => handlers::voice_clone::handle_clear_voice_clone(args, data_dir).await,
-        "list_voice_clones" => handlers::voice_clone::handle_list_voice_clones(args, data_dir).await,
-
         _ => McpToolResult::error(format!("Unknown tool: {}", name)),
     }
 }

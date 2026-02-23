@@ -112,7 +112,7 @@ Config is stored in platform-appropriate locations:
             "voice-assistant-lite": { groups: ["core", "meta", "screen", "memory-facade", "browser-facade"] },
             "n8n-workflows":        { groups: ["core", "meta", "n8n"] },
             "web-browser":          { groups: ["core", "meta", "screen", "browser"] },
-            "full-toolbox":         { groups: ["core", "meta", "screen", "memory", "voice-clone", "browser", "n8n"] },
+            "full-toolbox":         { groups: ["core", "meta", "screen", "memory", "browser", "n8n"] },
             "minimal":              { groups: ["core", "meta"] }
         },
         endpoints: {
@@ -335,7 +335,7 @@ Tool profiles control which MCP tool groups are pre-loaded when using a CLI agen
 | **voice-assistant-lite** | core, meta, screen, memory-facade, browser-facade | Lighter footprint with facade tools |
 | **n8n-workflows** | core, meta, n8n | Workflow automation focus |
 | **web-browser** | core, meta, screen, browser | Web research focus |
-| **full-toolbox** | core, meta, screen, memory, voice-clone, browser, n8n | Everything enabled |
+| **full-toolbox** | core, meta, screen, memory, browser, n8n | Everything enabled |
 | **minimal** | core, meta | Bare minimum tools |
 
 Custom profiles can be created through the Settings UI.

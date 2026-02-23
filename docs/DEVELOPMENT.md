@@ -84,7 +84,6 @@ voice-mirror/
 │   │   │       ├── memory.rs           # search, get, remember, forget, stats, flush
 │   │   │       ├── browser.rs          # Browser automation via named pipe to WebView2
 │   │   │       ├── n8n.rs              # n8n workflow management
-│   │   │       ├── voice_clone.rs      # Voice cloning
 │   │   │       ├── diagnostic.rs       # Pipeline diagnostics
 │   │   │       └── facades.rs          # Single-tool facades for voice mode
 │   │   ├── ipc/                        # Named pipe IPC (MCP binary <-> Tauri app)

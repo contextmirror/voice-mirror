@@ -524,11 +524,11 @@ fn build_all_groups() -> HashMap<String, ToolGroupDef> {
             tools: vec![
                 ToolDef {
                     name: "load_tools".into(),
-                    description: "Load a tool group to make its tools available. Call list_tool_groups first to see what groups exist. Groups: screen, memory, voice-clone, browser.".into(),
+                    description: "Load a tool group to make its tools available. Call list_tool_groups first to see what groups exist. Groups: screen, memory, browser.".into(),
                     input_schema: json!({
                         "type": "object",
                         "properties": {
-                            "group": { "type": "string", "description": "Tool group to load (e.g. \"browser\", \"memory\", \"screen\", \"voice-clone\")" }
+                            "group": { "type": "string", "description": "Tool group to load (e.g. \"browser\", \"memory\", \"screen\")" }
                         },
                         "required": ["group"]
                     }),
@@ -660,47 +660,6 @@ fn build_all_groups() -> HashMap<String, ToolGroupDef> {
                             "summary": { "type": "string", "description": "Brief summary of the session" }
                         }
                     }),
-                },
-            ],
-        },
-    );
-
-    // ---- Voice Clone ----
-    groups.insert(
-        "voice-clone".into(),
-        ToolGroupDef {
-            name: "voice-clone".into(),
-            description: "Voice cloning for TTS customization".into(),
-            always_loaded: false,
-            keywords: vec![
-                "clone voice".into(), "voice clone".into(), "sound like".into(),
-                "voice sample".into(), "mimic".into(), "change voice".into(),
-                "my voice".into(),
-            ],
-            dependencies: vec![],
-            tools: vec![
-                ToolDef {
-                    name: "clone_voice".into(),
-                    description: "Clone a voice from an audio sample for TTS.".into(),
-                    input_schema: json!({
-                        "type": "object",
-                        "properties": {
-                            "audio_url": { "type": "string", "description": "URL to download audio from" },
-                            "audio_path": { "type": "string", "description": "Local file path to an audio file" },
-                            "voice_name": { "type": "string", "description": "Name for this voice clone (default: \"custom\")" },
-                            "transcript": { "type": "string", "description": "Optional transcript of what is said in the audio." }
-                        }
-                    }),
-                },
-                ToolDef {
-                    name: "clear_voice_clone".into(),
-                    description: "Clear the current voice clone and return to using preset speaker voices.".into(),
-                    input_schema: json!({ "type": "object", "properties": {} }),
-                },
-                ToolDef {
-                    name: "list_voice_clones".into(),
-                    description: "List all saved voice clones.".into(),
-                    input_schema: json!({ "type": "object", "properties": {} }),
                 },
             ],
         },
@@ -994,7 +953,7 @@ mod tests {
     fn test_list_groups() {
         let reg = ToolRegistry::new();
         let groups = reg.list_groups();
-        assert!(groups.len() >= 8); // core, meta, screen, memory, voice-clone, browser, n8n, diagnostic, facades
+        assert!(groups.len() >= 7); // core, meta, screen, memory, browser, n8n, diagnostic, facades
     }
 
     #[test]

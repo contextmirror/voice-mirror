@@ -463,7 +463,7 @@ fn default_tool_profiles() -> HashMap<String, ToolProfile> {
         groups: vec!["core".into(), "meta".into(), "screen".into(), "browser".into()],
     });
     m.insert("full-toolbox".into(), ToolProfile {
-        groups: vec!["core".into(), "meta".into(), "screen".into(), "memory".into(), "voice-clone".into(), "browser".into(), "n8n".into()],
+        groups: vec!["core".into(), "meta".into(), "screen".into(), "memory".into(), "browser".into(), "n8n".into()],
     });
     m.insert("minimal".into(), ToolProfile {
         groups: vec!["core".into(), "meta".into()],

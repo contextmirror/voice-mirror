@@ -112,7 +112,7 @@ const DEFAULT_CONFIG = {
       'voice-assistant': { groups: ['core', 'meta', 'screen', 'memory', 'browser'] },
       'n8n-workflows': { groups: ['core', 'meta', 'n8n'] },
       'web-browser': { groups: ['core', 'meta', 'screen', 'browser'] },
-      'full-toolbox': { groups: ['core', 'meta', 'screen', 'memory', 'voice-clone', 'browser', 'n8n'] },
+      'full-toolbox': { groups: ['core', 'meta', 'screen', 'memory', 'browser', 'n8n'] },
       'minimal': { groups: ['core', 'meta'] },
       'voice-assistant-lite': { groups: ['core', 'meta', 'screen', 'memory-facade', 'browser-facade'] },
     },

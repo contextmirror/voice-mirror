@@ -43,13 +43,6 @@
       alwaysLoaded: false,
     },
     {
-      id: 'voice-clone',
-      name: 'Voice Clone',
-      description: 'Voice cloning for TTS customization',
-      toolCount: 3,
-      alwaysLoaded: false,
-    },
-    {
       id: 'browser',
       name: 'Browser',
       description: 'Chrome browser control and web research (16 tools)',
@@ -89,7 +82,7 @@
     },
     'full-toolbox': {
       label: 'Full Toolbox',
-      groups: ['core', 'meta', 'screen', 'memory', 'voice-clone', 'browser', 'n8n'],
+      groups: ['core', 'meta', 'screen', 'memory', 'browser', 'n8n'],
     },
     'minimal': {
       label: 'Minimal',

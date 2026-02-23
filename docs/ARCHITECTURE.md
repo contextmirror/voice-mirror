@@ -520,7 +520,6 @@ Tauri app backend (Rust)
 | `mcp/handlers/browser.rs` | Browser control via named pipe to WebView2 |
 | `mcp/handlers/screen.rs` | Screen capture handlers |
 | `mcp/handlers/memory.rs` | Persistent memory system |
-| `mcp/handlers/voice_clone.rs` | Voice cloning handlers |
 | `mcp/handlers/n8n.rs` | n8n workflow automation |
 | `mcp/handlers/diagnostic.rs` | Pipeline diagnostic tools |
 | `mcp/handlers/facades.rs` | Single-tool wrappers for voice mode |
@@ -533,7 +532,6 @@ Tauri app backend (Rust)
 | `meta` | 3 | Yes | Tool management (load, unload, list groups) |
 | `screen` | 1 | No | Screen capture |
 | `memory` | 6 | No | Persistent memory (search, remember, forget, stats, flush) |
-| `voice-clone` | 3 | No | Voice cloning for TTS |
 | `browser` | 16 | No | Chrome browser control and web research |
 | `n8n` | 22 | No | n8n workflow automation |
 | `diagnostic` | 1 | No | Pipeline diagnostic tools |
