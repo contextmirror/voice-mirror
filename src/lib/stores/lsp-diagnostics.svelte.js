@@ -7,26 +7,15 @@
  */
 
 import { listen } from '@tauri-apps/api/event';
+import { uriToRelativePath as _uriToRelativePath } from '../editor-lsp.svelte.js';
 
-/** Convert a file:// URI to a project-relative path.
- *  Handles Windows drive letters (e.g. /C:/Users/...) */
+/** Convert a file:// URI to a project-relative path (string or null).
+ *  Wraps the shared uriToRelativePath which returns { path, external }. */
 function uriToRelativePath(uri, root) {
   if (!uri || !root) return null;
-  try {
-    const url = new URL(uri);
-    if (url.protocol !== 'file:') return null;
-    let filePath = decodeURIComponent(url.pathname).replace(/\\/g, '/');
-    if (/^\/[A-Za-z]:\//.test(filePath)) filePath = filePath.slice(1);
-    const normalizedRoot = root.replace(/\\/g, '/').replace(/\/$/, '');
-    const filePathLower = filePath.toLowerCase();
-    const rootLower = normalizedRoot.toLowerCase();
-    if (filePathLower.startsWith(rootLower + '/')) {
-      return filePath.slice(normalizedRoot.length + 1);
-    }
-    return null; // Outside project root — skip
-  } catch {
-    return null;
-  }
+  const result = _uriToRelativePath(uri, root);
+  if (!result || result.external) return null;
+  return result.path;
 }
 
 function createLspDiagnosticsStore() {

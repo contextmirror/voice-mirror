@@ -5,7 +5,6 @@
  * event listeners, handlers, and CodeMirror extension factories for the file editor.
  */
 
-import { listen } from '@tauri-apps/api/event';
 import { lspOpenFile, lspCloseFile, lspChangeFile, lspSaveFile, lspRequestCompletion, lspRequestHover, lspRequestDefinition, lspRequestReferences, lspPrepareRename, lspRename, lspApplyWorkspaceEdit, lspRequestCodeActions } from './api.js';
 import { projectStore } from './stores/project.svelte.js';
 import { tabsStore } from './stores/tabs.svelte.js';
@@ -84,7 +83,6 @@ export function createEditorLsp() {
   let codeActionsPosition = $state({ x: 0, y: 0 });
 
   let lspDebounceTimer = null;
-  let diagnosticUnlisten = null;
 
   // ── Handlers ──
 
@@ -321,16 +319,6 @@ export function createEditorLsp() {
 
   // ── Lifecycle ──
 
-  async function startListening(currentPath, getView, cmCache) {
-    stopListening();
-    diagnosticUnlisten = await listen('lsp-diagnostics', diagnosticListener(currentPath, getView(), cmCache));
-  }
-
-  function stopListening() {
-    diagnosticUnlisten?.();
-    diagnosticUnlisten = null;
-  }
-
   function reset() {
     clearTimeout(lspDebounceTimer);
     lspVersion = 0;
@@ -338,7 +326,6 @@ export function createEditorLsp() {
   }
 
   function destroy() {
-    stopListening();
     clearTimeout(lspDebounceTimer);
   }
 
@@ -379,8 +366,6 @@ export function createEditorLsp() {
     diagnosticListener,
 
     // Lifecycle
-    startListening,
-    stopListening,
     reset,
     destroy,
   };

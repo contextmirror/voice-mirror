@@ -14,6 +14,7 @@
   import { lensSetVisible, startFileWatching, stopFileWatching } from '../../lib/api.js';
   import { projectStore } from '../../lib/stores/project.svelte.js';
   import { lspDiagnosticsStore } from '../../lib/stores/lsp-diagnostics.svelte.js';
+  import { LSP_EXTENSIONS } from '../../lib/editor-lsp.svelte.js';
 
   let {
     onSend = () => {},
@@ -28,6 +29,7 @@
   let isBrowser = $derived(tabsStore.activeTab?.type === 'browser');
   let isFile = $derived(tabsStore.activeTab?.type === 'file');
   let isDiff = $derived(tabsStore.activeTab?.type === 'diff');
+  let activeExt = $derived(tabsStore.activeTab?.path?.split('.').pop()?.toLowerCase());
 
   // Toggle browser webview visibility when switching between browser and file tabs.
   // Guard on webviewReady so we never call before the webview exists.
@@ -104,7 +106,7 @@
                   onFileDblClick={(entry) => tabsStore.pinTab(entry.path)}
                   onChangeClick={(change) => tabsStore.openDiff(change)}
                   activeFilePath={isFile ? tabsStore.activeTab?.path : null}
-                  activeFileHasLsp={isFile}
+                  activeFileHasLsp={isFile && LSP_EXTENSIONS.has(activeExt)}
                   onSymbolClick={({ line, character }) => {
                     // Navigate to symbol position in the active file editor
                     // The FileEditor will handle scrolling via its view

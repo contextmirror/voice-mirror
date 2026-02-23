@@ -1,7 +1,7 @@
 <script>
   import { onDestroy, tick } from 'svelte';
   import { listen } from '@tauri-apps/api/event';
-  import { readFile, readExternalFile, writeFile, lspRequestDefinition, revealInExplorer, writeUserMessage, aiPtyInput } from '../../lib/api.js';
+  import { readFile, readExternalFile, writeFile, lspRequestDefinition, lspApplyWorkspaceEdit, revealInExplorer, writeUserMessage, aiPtyInput } from '../../lib/api.js';
   import { tabsStore } from '../../lib/stores/tabs.svelte.js';
   import { projectStore } from '../../lib/stores/project.svelte.js';
   import { chatStore } from '../../lib/stores/chat.svelte.js';
@@ -189,9 +189,13 @@
       case 'rename-symbol':
         lsp.handleRenameSymbol(view, currentPath);
         break;
-      case 'quick-fix':
-        lsp.handleCodeActions(view, currentPath);
+      case 'quick-fix': {
+        const allDiags = lsp.cachedDiagnostics.get(currentPath) || [];
+        const pos = view.state.selection.main.head;
+        const cursorDiags = allDiags.filter(d => pos >= d.from && pos <= d.to);
+        lsp.handleCodeActions(view, currentPath, cursorDiags);
         break;
+      }
 
       // Clipboard
       case 'cut': document.execCommand('cut'); break;
@@ -366,9 +370,14 @@
         }]),
       ];
 
-      // Add hover tooltip for LSP
+      // Add hover tooltip and LSP keybindings
       if (lsp.hasLsp) {
         extensions.push(lsp.hoverTooltipExtension(filePath, cm.hoverTooltip));
+        extensions.push(cm.keymap.of([
+          { key: 'F2', run: () => { lsp.handleRenameSymbol(view, currentPath); return true; } },
+          { key: 'Shift-F12', run: () => { lsp.handleFindReferences(view, currentPath); return true; } },
+          { key: 'Mod-.', run: () => { lsp.handleCodeActions(view, currentPath); return true; } },
+        ]));
       }
 
       // Context menu + optional Ctrl+Click go-to-definition
@@ -689,7 +698,14 @@
   x={lsp.codeActionsPosition.x}
   y={lsp.codeActionsPosition.y}
   onClose={() => { lsp.setShowCodeActions(false); }}
-  onApply={(action) => { lsp.setShowCodeActions(false); }}
+  onApply={async (action) => {
+    lsp.setShowCodeActions(false);
+    const edit = action.edit;
+    if (edit) {
+      const root = projectStore.activeProject?.path || null;
+      await lspApplyWorkspaceEdit(edit, root);
+    }
+  }}
 />
 
 <RenameInput

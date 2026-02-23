@@ -89,14 +89,6 @@ describe('editor-lsp.svelte.js: extension factories', () => {
 });
 
 describe('editor-lsp.svelte.js: lifecycle', () => {
-  it('has startListening method', () => {
-    assert.ok(src.includes('async function startListening('), 'Should have startListening');
-  });
-
-  it('has stopListening method', () => {
-    assert.ok(src.includes('function stopListening('), 'Should have stopListening');
-  });
-
   it('has reset method', () => {
     assert.ok(src.includes('function reset('), 'Should have reset');
   });
@@ -133,11 +125,6 @@ describe('editor-lsp.svelte.js: imports', () => {
     assert.ok(src.includes('lspRequestCompletion'), 'Should import lspRequestCompletion');
     assert.ok(src.includes('lspRequestHover'), 'Should import lspRequestHover');
     assert.ok(src.includes('lspRequestDefinition'), 'Should import lspRequestDefinition');
-  });
-
-  it('imports listen from Tauri event API', () => {
-    assert.ok(src.includes("import { listen }"), 'Should import listen');
-    assert.ok(src.includes("@tauri-apps/api/event"), 'Should import from Tauri event');
   });
 
   it('imports projectStore', () => {

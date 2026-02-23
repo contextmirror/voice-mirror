@@ -121,24 +121,17 @@ describe('lsp-diagnostics.svelte.js: diagnostic handling', () => {
 });
 
 describe('lsp-diagnostics.svelte.js: URI conversion', () => {
-  it('has uriToRelativePath helper', () => {
-    assert.ok(src.includes('function uriToRelativePath'), 'Should have uriToRelativePath');
+  it('has uriToRelativePath wrapper', () => {
+    assert.ok(src.includes('function uriToRelativePath'), 'Should have uriToRelativePath wrapper');
   });
 
-  it('handles file:// protocol', () => {
-    assert.ok(src.includes("file:"), 'Should check file: protocol');
+  it('imports shared uriToRelativePath from editor-lsp', () => {
+    assert.ok(src.includes("import { uriToRelativePath"), 'Should import from editor-lsp');
+    assert.ok(src.includes("editor-lsp.svelte.js"), 'Should reference editor-lsp.svelte.js');
   });
 
-  it('handles Windows drive letters', () => {
-    assert.ok(src.includes('[A-Za-z]'), 'Should handle Windows drive letters');
-  });
-
-  it('normalizes slashes', () => {
-    assert.ok(src.includes("replace(/\\\\/g, '/')"), 'Should normalize backslashes');
-  });
-
-  it('does case-insensitive path comparison', () => {
-    assert.ok(src.includes('toLowerCase()'), 'Should use case-insensitive comparison');
+  it('filters out external paths', () => {
+    assert.ok(src.includes('result.external'), 'Should check external flag');
   });
 
   it('returns null for paths outside project root', () => {
