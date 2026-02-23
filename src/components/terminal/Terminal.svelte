@@ -15,7 +15,7 @@
   import { aiRawInput, aiPtyResize } from '../../lib/api.js';
   import { currentThemeName } from '../../lib/stores/theme.svelte.js';
 
-  let { onRegisterActions } = $props();
+  let { onRegisterActions = undefined } = $props();
 
   // ---- State ----
   let containerEl = $state(null);

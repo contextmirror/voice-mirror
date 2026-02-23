@@ -52,8 +52,13 @@
     }));
   });
 
+  /**
+   * @typedef {{ type: string, label?: string, name?: string, path?: string, score?: number, id?: string, category?: string, hint?: string }} PaletteItem
+   */
+
   // Combined results: files first (if query matches), then commands
   let allResults = $derived.by(() => {
+    /** @type {PaletteItem[]} */
     const items = [];
     if (filteredFiles.length > 0) {
       items.push({ type: 'header', label: 'Files' });

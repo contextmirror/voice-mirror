@@ -15,6 +15,8 @@ import { configStore } from './config.svelte.js';
  * @property {'info'|'success'|'warning'|'error'} severity - Visual style
  * @property {number} duration - Auto-dismiss duration in ms (0 = no auto-dismiss)
  * @property {{ label: string, callback: () => void }|null} action - Optional action button
+ * @property {Array<{ label: string, callback: () => void }>|null} actions - Optional multiple action buttons
+ * @property {string|null} key - Deduplication key
  * @property {number} createdAt - Creation timestamp
  */
 
@@ -45,7 +47,7 @@ function createToastStore() {
 
   /**
    * Add a toast notification.
-   * @param {{ message: string, severity?: string, duration?: number, action?: { label: string, callback: () => void }, actions?: Array<{ label: string, callback: () => void }> }} options
+   * @param {{ message: string, severity?: string, duration?: number, action?: { label: string, callback: () => void }|null, actions?: Array<{ label: string, callback: () => void }>|null, key?: string|null }} options
    * @returns {string} The toast ID
    */
   function addToast({

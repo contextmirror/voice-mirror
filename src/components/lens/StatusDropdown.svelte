@@ -18,6 +18,12 @@
   let managing = $state(false);
   let searchQuery = $state('');
 
+  // Overall health
+  let healthy = $derived(aiStatusStore.running);
+
+  // Server count (provider + detected dev servers)
+  let devServers = $derived(lensStore.devServers);
+
   // ── Manage servers search filter ──
   let filteredServers = $derived(
     searchQuery
@@ -27,12 +33,6 @@
         )
       : devServers
   );
-
-  // Overall health
-  let healthy = $derived(aiStatusStore.running);
-
-  // Server count (provider + detected dev servers)
-  let devServers = $derived(lensStore.devServers);
   let serverCount = $derived(
     (healthy || aiStatusStore.starting ? 1 : 0) + devServers.length
   );
@@ -149,6 +149,7 @@
     lensStore.setDevServerLoading(true);
     try {
       const result = await detectDevServers(project.path);
+      /** @type {any} */
       const data = result?.data || result || {};
       const list = data.servers || (Array.isArray(data) ? data : []);
       if (Array.isArray(list)) {

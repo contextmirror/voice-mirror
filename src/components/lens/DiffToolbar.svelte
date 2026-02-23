@@ -7,10 +7,15 @@
     currentChunkIndex = -1,
     wordWrap = false,
     showWhitespace = false,
-    onToggleMode = () => {},
+    /** @type {(mode: string) => void} */
+    onToggleMode = (_mode) => {},
+    /** @type {(e?: MouseEvent) => void} */
     onPrevChunk = () => {},
+    /** @type {(e?: MouseEvent) => void} */
     onNextChunk = () => {},
+    /** @type {(e?: MouseEvent) => void} */
     onToggleWrap = () => {},
+    /** @type {(e?: MouseEvent) => void} */
     onToggleWhitespace = () => {},
   } = $props();
 
@@ -59,7 +64,7 @@
     <button
       class="diff-btn"
       disabled={!hasPrev}
-      onclick={onPrevChunk}
+      onclick={() => onPrevChunk()}
       aria-label="Previous change"
       title="Previous change"
     >
@@ -71,7 +76,7 @@
     <button
       class="diff-btn"
       disabled={!hasNext}
-      onclick={onNextChunk}
+      onclick={() => onNextChunk()}
       aria-label="Next change"
       title="Next change"
     >
@@ -87,7 +92,7 @@
     <button
       class="diff-btn"
       class:active={wordWrap}
-      onclick={onToggleWrap}
+      onclick={() => onToggleWrap()}
       aria-label="Toggle word wrap"
       title="Toggle word wrap"
     >
@@ -100,7 +105,7 @@
     <button
       class="diff-btn"
       class:active={showWhitespace}
-      onclick={onToggleWhitespace}
+      onclick={() => onToggleWhitespace()}
       aria-label="Toggle whitespace"
       title="Toggle whitespace"
     >

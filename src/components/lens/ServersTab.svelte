@@ -6,7 +6,7 @@
   import { devServerManager } from '../../lib/stores/dev-server-manager.svelte.js';
   import { detectDevServers, probePort } from '../../lib/api.js';
 
-  let { onManage = () => {} } = $props();
+  let { /** @type {(e: MouseEvent) => void} */ onManage = () => {} } = $props();
 
   // Provider status
   let healthy = $derived(aiStatusStore.running);
@@ -29,7 +29,7 @@
    * Get the devServerManager status for a given server.
    * Falls back to the server's own running flag if manager has no state.
    * @param {Object} server
-   * @returns {{ status: string, crashLoopDetected: boolean }}
+   * @returns {{ status: string, crashLoopDetected: boolean, managed: boolean }}
    */
   function getServerState(server) {
     const project = projectStore.activeProject;
@@ -50,6 +50,7 @@
     lensStore.setDevServerLoading(true);
     try {
       const result = await detectDevServers(project.path);
+      /** @type {any} */
       const data = result?.data || result || {};
       const list = data.servers || (Array.isArray(data) ? data : []);
       if (Array.isArray(list)) {
@@ -190,7 +191,7 @@
   {/if}
 </div>
 
-<button class="manage-btn" type="button" onclick={onManage}>Manage servers</button>
+<button class="manage-btn" type="button" onclick={() => onManage()}>Manage servers</button>
 
 <style>
   .status-list {

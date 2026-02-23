@@ -19,20 +19,33 @@ const MAX_CONCURRENT = 3;
 const CRASH_LOOP_COUNT = 3;
 const CRASH_LOOP_WINDOW = 300000; // 5 minutes
 
+/**
+ * @typedef {Object} ServerState
+ * @property {string} status
+ * @property {string|null} shellId
+ * @property {number|null} port
+ * @property {string|null} framework
+ * @property {string|null} url
+ * @property {number} crashCount
+ * @property {number|null} lastCrashTime
+ * @property {number} lastActiveTime
+ * @property {boolean} crashLoopDetected
+ */
+
 function createDevServerManager() {
-  /** @type {Map<string, Object>} projectPath -> server state */
+  /** @type {Map<string, ServerState>} projectPath -> server state */
   let servers = $state(new Map());
 
   /** @type {Map<string, number>} projectPath -> setTimeout id for idle */
   const idleTimers = new Map();
 
-  /** @type {Map<string, number>} projectPath -> setInterval id for port polling */
+  /** @type {Map<string, { interval: number, reject: (err: Error) => void }>} projectPath -> port poll state */
   const pollTimers = new Map();
 
   /**
    * Get or create server state for a project path.
    * @param {string} projectPath
-   * @returns {Object}
+   * @returns {ServerState}
    */
   function getOrCreateState(projectPath) {
     if (!servers.has(projectPath)) {
@@ -56,7 +69,7 @@ function createDevServerManager() {
   /**
    * Update server state and trigger reactivity.
    * @param {string} projectPath
-   * @param {Object} updates
+   * @param {Partial<ServerState>} updates
    */
   function updateState(projectPath, updates) {
     const state = servers.get(projectPath);
@@ -305,6 +318,7 @@ function createDevServerManager() {
   async function stopExternalServer(port) {
     let killed = false;
     try {
+      /** @type {any} */
       const result = await killPortProcess(port);
       if (result?.success && result?.data?.killed) {
         killed = true;
@@ -365,7 +379,7 @@ function createDevServerManager() {
   /**
    * Get current server status for a project.
    * @param {string} projectPath
-   * @returns {Object|null}
+   * @returns {ServerState|null}
    */
   function getServerStatus(projectPath) {
     return servers.get(projectPath) || null;

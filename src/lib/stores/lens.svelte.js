@@ -17,6 +17,7 @@ function createLensStore() {
   let webviewReady = $state(false);
   let hidden = $state(false);
   let pageTitle = $state('');
+  /** @type {Array<{port: number, framework?: string, source?: string, running?: boolean, startCommand?: string, shellId?: string}>} */
   let devServers = $state([]);
   let devServerLoading = $state(false);
 

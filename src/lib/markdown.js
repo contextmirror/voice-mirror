@@ -15,7 +15,9 @@ const COLLAPSE_LINE_THRESHOLD = 10;
 const renderer = new Renderer();
 const defaultCode = renderer.code.bind(renderer);
 
-renderer.code = function ({ text, lang, escaped }) {
+/** @param {import('marked').Tokens.Code} token */
+renderer.code = function (token) {
+  const { text, lang, escaped } = token;
   const lineCount = (text.match(/\n/g) || []).length + 1;
   const html = defaultCode({ text, lang, escaped });
   if (lineCount <= COLLAPSE_LINE_THRESHOLD) return html;

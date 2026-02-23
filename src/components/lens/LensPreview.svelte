@@ -160,6 +160,7 @@
 
     try {
       const result = await detectDevServers(project.path);
+      /** @type {any} */
       const data = result?.data || result || {};
       const servers = data.servers || [];
       const packageManager = data.packageManager || null;

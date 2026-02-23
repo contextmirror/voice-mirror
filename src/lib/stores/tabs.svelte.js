@@ -18,7 +18,7 @@ function createTabsStore() {
     /**
      * Open a file in a tab. If already open, focus it.
      * Single-click creates a preview tab (replaces existing preview).
-     * @param {{ name: string, path: string }} entry - FileTree entry
+     * @param {{ name: string, path: string, readOnly?: boolean, external?: boolean }} entry - FileTree entry
      */
     openFile(entry) {
       // If file is already open, just focus it

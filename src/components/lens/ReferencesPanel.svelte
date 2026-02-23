@@ -2,8 +2,10 @@
   let {
     references = [],
     visible = false,
+    /** @type {(e?: MouseEvent) => void} */
     onClose = () => {},
-    onNavigate = () => {},
+    /** @type {(ref: any) => void} */
+    onNavigate = (_ref) => {},
   } = $props();
 
   function getFileName(path) {
@@ -15,7 +17,7 @@
   <div class="references-panel">
     <div class="references-header">
       <span class="references-count">{references.length} reference{references.length === 1 ? '' : 's'}</span>
-      <button class="references-close" onclick={onClose} aria-label="Close">x</button>
+      <button class="references-close" onclick={() => onClose()} aria-label="Close">x</button>
     </div>
     <div class="references-list">
       {#each references as ref}

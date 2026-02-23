@@ -23,9 +23,10 @@ document.addEventListener('mousedown', (e) => {
         e.stopPropagation();
         const clickY = e.clientY - rect.top;
         const ratio = clickY / rect.height;
-        el.style.scrollBehavior = 'auto';
-        el.scrollTop = ratio * (el.scrollHeight - el.clientHeight);
-        requestAnimationFrame(() => { el.style.scrollBehavior = ''; });
+        const target = el;
+        target.style.scrollBehavior = 'auto';
+        target.scrollTop = ratio * (target.scrollHeight - target.clientHeight);
+        requestAnimationFrame(() => { target.style.scrollBehavior = ''; });
         return;
       }
     }
