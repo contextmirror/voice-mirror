@@ -629,68 +629,14 @@
 
   .diff-viewer :global(.cm-scroller) {
     overflow: auto;
-    scroll-behavior: smooth;
   }
 
-  /* Custom scrollbar — wider track so it's easy to grab and doesn't fight the resize handle */
-  .diff-viewer :global(.cm-scroller::-webkit-scrollbar) {
-    width: 14px;
-    height: 14px;
-  }
-
-  .diff-viewer :global(.cm-scroller::-webkit-scrollbar-track) {
-    background: transparent;
-  }
-
-  .diff-viewer :global(.cm-scroller::-webkit-scrollbar-thumb) {
-    background: color-mix(in srgb, var(--text) 20%, transparent);
-    border: 3px solid transparent;
-    border-radius: 7px;
-    background-clip: padding-box;
-  }
-
-  .diff-viewer :global(.cm-scroller::-webkit-scrollbar-thumb:hover) {
-    background: color-mix(in srgb, var(--text) 35%, transparent);
-    border: 3px solid transparent;
-    background-clip: padding-box;
-  }
-
-  .diff-viewer :global(.cm-scroller::-webkit-scrollbar-corner) {
-    background: transparent;
-  }
+  /* Scrollbar + smooth scroll inherited from global base.css */
 
   /* ── MergeView (split mode) ── */
   .diff-viewer :global(.cm-mergeView) {
     height: 100%;
     overflow: auto;
-    scroll-behavior: smooth;
-  }
-
-  /* Custom scrollbar for MergeView outer scroller (split mode) */
-  .diff-viewer :global(.cm-mergeView::-webkit-scrollbar) {
-    width: 14px;
-    height: 14px;
-  }
-
-  .diff-viewer :global(.cm-mergeView::-webkit-scrollbar-track) {
-    background: transparent;
-  }
-
-  .diff-viewer :global(.cm-mergeView::-webkit-scrollbar-thumb) {
-    background: color-mix(in srgb, var(--text) 20%, transparent);
-    border: 3px solid transparent;
-    border-radius: 7px;
-    background-clip: padding-box;
-  }
-
-  .diff-viewer :global(.cm-mergeView::-webkit-scrollbar-thumb:hover) {
-    background: color-mix(in srgb, var(--text) 35%, transparent);
-    border: 3px solid transparent;
-    background-clip: padding-box;
-  }
-
-  .diff-viewer :global(.cm-mergeView::-webkit-scrollbar-corner) {
-    background: transparent;
   }
 
   /* Split mode: side A (old) colors */

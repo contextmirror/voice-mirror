@@ -541,23 +541,10 @@ describe('DiffViewer.svelte: enhanced diff CSS', () => {
   });
 });
 
-describe('DiffViewer.svelte: custom scrollbar', () => {
-  it('styles custom scrollbar on cm-scroller', () => {
-    assert.ok(src.includes('::-webkit-scrollbar'), 'Should style custom scrollbar');
-    assert.ok(src.includes('::-webkit-scrollbar-thumb'), 'Should style scrollbar thumb');
-  });
-
-  it('styles custom scrollbar on cm-mergeView (split mode)', () => {
-    assert.ok(src.includes('.cm-mergeView::-webkit-scrollbar'), 'Should style mergeView scrollbar');
-    assert.ok(src.includes('.cm-mergeView::-webkit-scrollbar-thumb'), 'Should style mergeView scrollbar thumb');
-    assert.ok(src.includes('.cm-mergeView::-webkit-scrollbar-track'), 'Should style mergeView scrollbar track');
-    assert.ok(src.includes('.cm-mergeView::-webkit-scrollbar-corner'), 'Should style mergeView scrollbar corner');
-  });
-
-  it('mergeView scrollbar matches cm-scroller dimensions (14px)', () => {
-    // Both should use 14px width
-    const mergeViewSection = src.substring(src.indexOf('.cm-mergeView::-webkit-scrollbar'));
-    assert.ok(mergeViewSection.includes('width: 14px'), 'MergeView scrollbar should be 14px wide');
+describe('DiffViewer.svelte: scrollbar styling', () => {
+  it('inherits scrollbar styling from global base.css', () => {
+    // Scrollbar CSS was moved to base.css for consistency — DiffViewer should NOT duplicate it
+    assert.ok(!src.includes('.cm-scroller::-webkit-scrollbar'), 'Should not have per-component scrollbar CSS (inherited from base.css)');
   });
 });
 
