@@ -15,10 +15,12 @@ When a user opens a workspace (project), Voice Mirror should detect available de
 
 ## Current State
 
-- Browser tab opens to `https://www.google.com` (hardcoded in `lens.rs`)
-- StatusDropdown shows "Dev Server (Vite) localhost:1420" (hardcoded)
-- Workspaces are tracked via `projectStore` (path + name)
-- No dev server detection, port probing, or server lifecycle management
+- Browser tab defaults to `about:blank` (not google.com — changed during dev server integration)
+- Dev server detection is **implemented** in `src-tauri/src/services/dev_server.rs`
+- StatusDropdown shows real detected servers via `ServersTab.svelte` (extracted from StatusDropdown)
+- Port probing (`is_port_listening`) and workspace-aware browser navigation work
+- Dev server lifecycle management implemented in `dev-server-manager.svelte.js`
+- Workspaces are tracked via `projectStore` (path + name + `preferredServerUrl` + `lastBrowserUrl` + `autoStartServer`)
 
 ---
 
@@ -90,6 +92,8 @@ Read `scripts.dev`, `scripts.start`, `scripts.serve` and match patterns:
 | `docusaurus start` | Docusaurus | 3000 | `npm start` |
 | `eleventy --serve` | Eleventy | 8080 | `npm start` |
 | `svelte-kit dev` | SvelteKit | 5173 | `npm run dev` |
+| `parcel` / `parcel serve` | Parcel | 1234 | `npm start` |
+| `expo start` / `expo start --web` | Expo | 8081 | `npm start` |
 | `trunk serve` | Trunk (Rust WASM) | 8080 | `trunk serve` |
 
 **Port override detection:** Also check for `--port NNNN` or `-p NNNN` flags in the script string.

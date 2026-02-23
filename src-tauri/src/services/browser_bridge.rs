@@ -246,13 +246,20 @@ fn get_webview(
     app: &AppHandle,
     state: &tauri::State<'_, LensState>,
 ) -> Result<tauri::Webview, String> {
-    let label = state
-        .webview_label
+    let active_id = state
+        .active_tab_id
         .lock()
         .map_err(|e| format!("Lock error: {}", e))?
         .clone()
         .ok_or("No browser webview active. Open the Lens tab first.")?;
-    app.get_webview(&label)
+    let tabs = state
+        .tabs
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
+    let tab = tabs
+        .get(&active_id)
+        .ok_or("Active tab not found")?;
+    app.get_webview(&tab.webview_label)
         .ok_or_else(|| "Lens webview not found".into())
 }
 
@@ -344,46 +351,47 @@ pub async fn handle_browser_action(
         }
 
         "open" => {
-            // Same as navigate for single-webview model
+            // Emit event for frontend to create a new browser tab
             let url = args
                 .get("url")
                 .and_then(|v| v.as_str())
                 .ok_or("URL is required")?;
-            let webview = get_webview(app, &state)?;
-            let parsed = url
-                .parse::<tauri::Url>()
-                .map_err(|e| format!("Invalid URL: {}", e))?;
-            webview
-                .navigate(parsed)
-                .map_err(|e| format!("Navigation failed: {}", e))?;
-            // Notify frontend so URL bar updates
-            let _ = app.emit("lens-url-changed", json!({ "url": url }));
-            Ok(json!({ "ok": true, "url": url }))
+            let _ = app.emit("lens-open-tab", json!({ "url": url }));
+            Ok(json!({ "ok": true, "url": url, "note": "Tab creation delegated to frontend" }))
         }
 
         "status" => {
-            let has_webview = state
-                .webview_label
+            let has_tabs = state
+                .tabs
                 .lock()
-                .map(|g| g.is_some())
+                .map(|g| !g.is_empty())
                 .unwrap_or(false);
+            let active_id = state.active_tab_id.lock()
+                .map(|g| g.clone())
+                .unwrap_or(None);
             let bounds = state.bounds.lock().ok().and_then(|g| *g);
             Ok(json!({
-                "active": has_webview,
+                "active": has_tabs,
+                "activeTabId": active_id,
                 "bounds": bounds.map(|(x,y,w,h)| json!({"x":x,"y":y,"width":w,"height":h})),
             }))
         }
 
         "tabs" => {
-            let label = state
-                .webview_label
-                .lock()
+            let active_id = state.active_tab_id.lock()
                 .map(|g| g.clone())
                 .unwrap_or(None);
-            match label {
-                Some(l) => Ok(json!([{ "targetId": l, "type": "page", "active": true }])),
-                None => Ok(json!([])),
-            }
+            let tabs = state.tabs.lock()
+                .map_err(|e| format!("Lock error: {}", e))?;
+            let tab_list: Vec<Value> = tabs.iter().map(|(tid, tab)| {
+                json!({
+                    "targetId": tab.webview_label,
+                    "tabId": tid,
+                    "type": "page",
+                    "active": active_id.as_deref() == Some(tid.as_str()),
+                })
+            }).collect();
+            Ok(json!(tab_list))
         }
 
         "screenshot" => {
@@ -592,9 +600,30 @@ pub async fn handle_browser_action(
             Ok(json!({ "ok": true }))
         }
 
-        "close_tab" | "focus" => {
-            // Single-tab model -- these are no-ops
-            Ok(json!({ "ok": true, "note": "Single-tab browser model" }))
+        "close_tab" => {
+            let tab_id = args
+                .get("tabId")
+                .or_else(|| args.get("targetId"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            if tab_id.is_empty() {
+                return Err("tabId is required for close_tab".into());
+            }
+            let _ = app.emit("lens-close-tab", json!({ "tabId": tab_id }));
+            Ok(json!({ "ok": true, "tabId": tab_id }))
+        }
+
+        "focus" => {
+            let tab_id = args
+                .get("tabId")
+                .or_else(|| args.get("targetId"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            if tab_id.is_empty() {
+                return Err("tabId is required for focus".into());
+            }
+            let _ = app.emit("lens-focus-tab", json!({ "tabId": tab_id }));
+            Ok(json!({ "ok": true, "tabId": tab_id }))
         }
 
         "cookies" => {

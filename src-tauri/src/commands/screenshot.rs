@@ -649,13 +649,22 @@ pub async fn lens_capture_browser(
 
     // Read state synchronously before any .await
     let webview_bounds = {
-        let label_guard = state.webview_label.lock()
+        let active_id = state.active_tab_id.lock()
             .map_err(|e| format!("Lock error: {}", e))?;
-        if label_guard.is_none() {
-            tracing::warn!("[screenshot] No lens webview active");
-            return Ok(IpcResponse::err("No lens webview active"));
+        if active_id.is_none() {
+            tracing::warn!("[screenshot] No active browser tab");
+            return Ok(IpcResponse::err("No active browser tab"));
         }
-        tracing::info!("[screenshot] Lens webview label: {:?}", *label_guard);
+        let active_id_str = active_id.clone().unwrap();
+
+        let tabs = state.tabs.lock()
+            .map_err(|e| format!("Lock error: {}", e))?;
+        let tab = tabs.get(&active_id_str);
+        if tab.is_none() {
+            tracing::warn!("[screenshot] Active tab not found in tabs map");
+            return Ok(IpcResponse::err("Active tab not found"));
+        }
+        tracing::info!("[screenshot] Lens webview label: {}", tab.unwrap().webview_label);
 
         let bounds_guard = state.bounds.lock()
             .map_err(|e| format!("Lock error: {}", e))?;

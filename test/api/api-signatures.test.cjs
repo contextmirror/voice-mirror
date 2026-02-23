@@ -121,6 +121,11 @@ describe('api.js -- critical Tauri command names', () => {
     'lens_set_visible',
     'lens_hard_refresh',
     'lens_clear_cache',
+    // Browser Tabs
+    'lens_create_tab',
+    'lens_close_tab',
+    'lens_switch_tab',
+    'lens_close_all_tabs',
     // Dev Server
     'detect_dev_servers',
     'probe_port',
@@ -232,6 +237,11 @@ describe('api.js -- exported async functions', () => {
     'lensSetVisible',
     'lensHardRefresh',
     'lensClearCache',
+    // Browser Tabs
+    'lensCreateTab',
+    'lensCloseTab',
+    'lensSwitchTab',
+    'lensCloseAllTabs',
     // Dev Server
     'detectDevServers',
     'probePort',
@@ -297,7 +307,7 @@ describe('api.js -- exported async functions', () => {
 });
 
 describe('api.js -- section organization', () => {
-  const sections = ['Config', 'Window', 'Voice', 'AI', 'Inbox', 'Chat', 'Tools', 'Shortcuts', 'Performance Stats', 'Config Migration', 'Lens', 'Dev Server', 'Files'];
+  const sections = ['Config', 'Window', 'Voice', 'AI', 'Inbox', 'Chat', 'Tools', 'Shortcuts', 'Performance Stats', 'Config Migration', 'Lens', 'Browser Tabs', 'Dev Server', 'Files'];
 
   for (const section of sections) {
     it(`has "${section}" section comment`, () => {

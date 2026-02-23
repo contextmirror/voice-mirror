@@ -59,6 +59,12 @@ describe('LensWorkspace.svelte', () => {
   it('imports DiffViewer component', () => {
     assert.ok(src.includes("import DiffViewer from"), 'Should import DiffViewer');
   });
+  it('imports BrowserTabBar component', () => {
+    assert.ok(src.includes("import BrowserTabBar from"), 'Should import BrowserTabBar');
+  });
+  it('renders BrowserTabBar in preview layer', () => {
+    assert.ok(src.includes('<BrowserTabBar'), 'Should render BrowserTabBar');
+  });
   it('imports tabsStore', () => {
     assert.ok(src.includes('tabsStore'), 'Should import tabsStore');
   });

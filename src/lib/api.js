@@ -423,6 +423,24 @@ export async function lensClearCache() {
   return invoke('lens_clear_cache');
 }
 
+// ============ Browser Tabs ============
+
+export async function lensCreateTab(tabId, url, x, y, width, height) {
+  return invoke('lens_create_tab', { tabId, url, x, y, width, height });
+}
+
+export async function lensCloseTab(tabId) {
+  return invoke('lens_close_tab', { tabId });
+}
+
+export async function lensSwitchTab(tabId) {
+  return invoke('lens_switch_tab', { tabId });
+}
+
+export async function lensCloseAllTabs() {
+  return invoke('lens_close_all_tabs');
+}
+
 // ============ Dev Server ============
 
 /**

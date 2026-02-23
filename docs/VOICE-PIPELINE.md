@@ -1,9 +1,14 @@
 # Voice Pipeline
 
-This document describes the full voice pipeline in Voice Mirror Electron: how audio
-flows from the microphone through speech recognition, into the AI, and back out as
-spoken TTS audio. It covers every component in the chain, the IPC protocol between
-them, and the error recovery mechanisms.
+Voice Mirror is a voice-assisted development environment. The voice pipeline is
+the core interaction loop: a developer speaks, the system transcribes their
+speech, routes it to an AI agent (Claude Code or an API provider), and speaks
+the response back -- all while the developer stays in the Lens workspace editing
+code, previewing in the browser, or running terminal commands.
+
+The voice engine is integrated directly into the Tauri 2 Rust backend as a
+native module. This document describes how audio flows from the microphone
+through speech recognition, into the AI, and back out as spoken TTS audio.
 
 ---
 
@@ -11,63 +16,45 @@ them, and the error recovery mechanisms.
 
 1. [Pipeline Overview](#pipeline-overview)
 2. [ASCII Diagram](#ascii-diagram)
-3. [voice-core (Rust Binary)](#voice-core-rust-binary)
+3. [Voice Engine (Rust Module)](#voice-engine-rust-module)
    - [Audio Capture and Processing](#audio-capture-and-processing)
    - [Voice Activity Detection (VAD)](#voice-activity-detection-vad)
-   - [Wake Word Detection (OpenWakeWord)](#wake-word-detection-openwakeword)
    - [Speech-to-Text (STT)](#speech-to-text-stt)
    - [Text-to-Speech (TTS)](#text-to-speech-tts)
    - [Activation Modes](#activation-modes)
    - [Audio State Machine](#audio-state-machine)
-   - [Hotkey Listener](#hotkey-listener)
-   - [Text Injector (Dictation)](#text-injector-dictation)
-   - [JSON IPC Protocol](#json-ipc-protocol)
-4. [Inbox System](#inbox-system)
-   - [inbox.json Message Queue](#inboxjson-message-queue)
-   - [listener_lock.json Mutex](#listener_lockjson-mutex)
-   - [status.json Presence Tracking](#statusjson-presence-tracking)
-5. [MCP Server Tools](#mcp-server-tools)
-   - [claude_listen](#claude_listen)
-   - [claude_send](#claude_send)
-   - [claude_inbox](#claude_inbox)
-   - [claude_status](#claude_status)
-6. [Electron Services Layer](#electron-services-layer)
-   - [voice-backend.js (voice-core Manager)](#voice-backendjs)
-   - [inbox-watcher.js (Inbox Poller)](#inbox-watcherjs)
-7. [TTS Response Flow](#tts-response-flow)
-8. [Error States and Recovery](#error-states-and-recovery)
+4. [Frontend Voice Adapters](#frontend-voice-adapters)
+5. [MCP Server Voice Tools](#mcp-server-voice-tools)
+6. [TTS Response Flow](#tts-response-flow)
+7. [Error States and Recovery](#error-states-and-recovery)
 
 ---
 
 ## Pipeline Overview
 
-The voice pipeline is a round-trip system with five major participants:
+The voice pipeline is integrated directly into the Tauri application:
 
-1. **voice-core** -- A Rust binary that handles all audio I/O (capture, wake word,
-   STT, TTS playback). Runs as a child process of Electron.
-2. **Electron main process** -- Spawns voice-core, manages its lifecycle, watches the
-   inbox file for new messages, and bridges events to the renderer UI.
-3. **inbox.json** -- A flat JSON file on disk that acts as a message queue between
-   voice-core, the Electron app, and AI providers.
-4. **MCP server** -- A Node.js process that exposes `claude_listen`, `claude_send`,
-   `claude_inbox`, and `claude_status` tools for Claude Code to interact with the
-   inbox.
-5. **AI provider** -- Either Claude Code (via MCP tools) or a local LLM (Ollama,
-   LM Studio) that reads voice messages and writes responses to the inbox.
+1. **Voice Engine** -- A Rust module (`src-tauri/src/voice/`) that handles all
+   audio I/O (capture, VAD, STT, TTS playback). Runs as native async tasks
+   within the Tauri process.
+2. **Tauri frontend** -- Svelte 5 components receive voice events and send
+   commands via Tauri invoke() calls.
+3. **MCP server** -- Exposes voice tools (`voice_listen`, `voice_send`, etc.)
+   for Claude Code to interact with voice messages.
+4. **AI provider** -- Claude Code (via MCP tools) or API-based providers that
+   process voice input and produce responses.
 
 The high-level flow:
 
 ```
-User speaks -> Microphone -> voice-core captures audio
--> Wake word / PTT / Call mode triggers recording
+User speaks -> Microphone -> cpal captures audio
+-> PTT / Toggle / WakeWord triggers recording
 -> VAD detects end of speech (or key release)
 -> STT transcribes audio to text
--> Text written to inbox.json
--> AI reads message (via MCP or inbox-watcher bridge)
--> AI writes response to inbox.json
--> voice-core polls for response, reads it
+-> Transcription emitted as Tauri event
+-> AI processes text and produces response
 -> TTS synthesizes response to audio
--> Audio played through speakers
+-> rodio plays audio through speakers
 ```
 
 ---
@@ -76,85 +63,66 @@ User speaks -> Microphone -> voice-core captures audio
 
 ```
 +----------------------------------------------------------------------+
-|                         ELECTRON MAIN PROCESS                         |
+|                         TAURI APPLICATION                             |
 |                                                                       |
-|  voice-backend.js                    inbox-watcher.js                 |
-|  +------------------+               +---------------------+          |
-|  | spawn voice-core |               | watch inbox.json    |          |
-|  | parse stdout JSON |<-- events -->| detect new messages |          |
-|  | write stdin JSON  |              | forward to provider |          |
-|  +--------+---------+               +----------+----------+          |
-|           |  stdin/stdout                      |                      |
-|           |  (JSON lines)                      | file watch           |
+|  Voice Engine (src-tauri/src/voice/)                                  |
+|  +--------------------------------------------------------------+    |
+|  |                                                                |   |
+|  |  +------+   +----------+   +----------+   +----------+       |   |
+|  |  | cpal |-->| Ring Buf  |-->| VAD      |-->| STT      |       |   |
+|  |  | 16kHz|  | (160k f32)| | (energy)  | | (whisper)  |       |   |
+|  |  +------+  +----------+   +----------+   +----------+       |   |
+|  |                                                 |              |   |
+|  |                                      Transcription event      |   |
+|  |                                                 |              |   |
+|  |  +----------+   +----------+                   v              |   |
+|  |  | rodio    |<--| TTS      |<---- AI response text           |   |
+|  |  | playback | | (Edge/    |                                  |   |
+|  |  | (speaker)| |  Kokoro)  |                                  |   |
+|  |  +----------+   +----------+                                  |   |
+|  +--------------------------------------------------------------+    |
+|                                                                       |
+|  Commands (frontend):                                                 |
+|    invoke('voice_start') / invoke('voice_stop')                       |
+|    invoke('voice_speak', { text })                                    |
+|    invoke('start_recording') / invoke('stop_recording')               |
+|                                                                       |
+|  Events (to frontend):                                                |
+|    voice-event: Starting, Ready, StateChange, RecordingStart,         |
+|                 RecordingStop, Transcription, SpeakingStart,          |
+|                 SpeakingEnd, AudioLevel, Error, AudioDevices          |
 +----------------------------------------------------------------------+
-            |                                    |
-            v                                    v
-+--------------------------+       +----------------------------+
-|      VOICE-CORE          |       |       inbox.json           |
-|      (Rust binary)       |       | +------------------------+ |
-|                          | write | | { "messages": [        | |
-| +------+   +----------+ | ----> | |   { id, from, message, | |
-| | cpal |-->| Ring Buf  | |       | |     timestamp,         | |
-| | 16kHz|  | (160k f32)| |       | |     thread_id,         | |
-| +------+  +-----+-----+ |       | |     read_by: [] }      | |
-|                  |       |       | | ] }                    | |
-|                  v       |       | +------------------------+ |
-| +-----------------------------+  +--------+-------------------+
-| | Audio Processing Loop      |           |
-| | 40ms tick, 1280-sample     |           | poll / watch
-| | chunks                     |           v
-| |                            |  +-----------------------------+
-| | [Listening]                |  |      MCP SERVER (Node.js)   |
-| |   +-> OpenWakeWord         |  |                             |
-| |   |   3-stage ONNX         |  | claude_listen:              |
-| |   |   pipeline             |  |   fs.watch inbox.json       |
-| |   +-> if detected:        |  |   return new messages       |
-| |       start recording     |  |                             |
-| |                            |  | claude_send:                |
-| | [Recording]                |  |   append to inbox.json      |
-| |   +-> accumulate samples  |  |   write trigger file        |
-| |   +-> Silero VAD           |  |                             |
-| |       (512-sample ONNX)   |  | claude_inbox:               |
-| |   +-> silence timeout     |  |   read + filter messages    |
-| |       (2.0s) => stop      |  +-------------+---------------+
-| |                            |                |
-| | [Processing]               |                v
-| |   +-> Whisper STT          |  +-----------------------------+
-| |       (GGML, local)       |  |     AI PROVIDER             |
-| |   +-> text -> inbox.json  |  |                             |
-| |   +-> poll for response   |  | Claude Code (via MCP tools) |
-| |   +-> response -> TTS     |  |   OR                        |
-| |                            |  | Ollama / LM Studio          |
-| | [TTS Playback]            |  |   (via inbox-watcher bridge)|
-| |   +-> Kokoro ONNX          |  +-----------------------------+
-| |       (espeak-ng phonemize)|
-| |   +-> rodio Sink           |
-| |       (24 kHz PCM)        |
-| |   +-> interruptible       |
-| +----------------------------+
-+--------------------------+
-
-    PTT / Dictation keys (rdev global hooks)
-    +------+
-    | rdev | ---> HotkeyEvent channel ---> main loop
-    +------+    PttDown/PttUp
-                DictationDown/DictationUp
+         |                                       |
+         | Named pipe IPC                        | Tauri events
+         v                                       v
++-----------------------------+       +-----------------------------+
+|      MCP SERVER             |       |     SVELTE 5 FRONTEND       |
+|      (Rust binary)          |       |                             |
+|                             |       | Voice settings UI           |
+| voice_listen:               |       | Recording waveform          |
+|   wait for transcription    |       | State indicator (orb)       |
+|                             |       | TTS/STT adapter config      |
+| voice_send:                 |       +-----------------------------+
+|   speak response via TTS    |
+|                             |
+| voice_status:               |
+|   pipeline state check      |
++-----------------------------+
 ```
 
 ---
 
-## voice-core (Rust Binary)
+## Voice Engine (Rust Module)
 
-Source: `voice-core/src/main.rs` and submodules.
+Source: `src-tauri/src/voice/` -- 4 submodules: `pipeline`, `stt`, `tts`, `vad`.
 
-voice-core is an async Rust binary (tokio runtime) that handles all real-time audio
-processing. It communicates with Electron exclusively through JSON lines on
-stdin (commands from Electron) and stdout (events to Electron). Logs go to
-`vmr-rust.log` in the data directory (not stdout).
+The voice engine is a native Rust module integrated directly into the Tauri
+application. It runs audio processing on background tokio tasks and communicates
+with the frontend via Tauri events.
 
 ### Audio Capture and Processing
 
-**Source**: `voice-core/src/audio/capture.rs`, `voice-core/src/audio/ring_buffer.rs`
+**Source**: `src-tauri/src/voice/pipeline/mod.rs`, `src-tauri/src/voice/pipeline/ring_buffer.rs`
 
 Audio capture uses the `cpal` crate to open the system default input device (or a
 named device from config). The capture pipeline:
@@ -163,528 +131,243 @@ named device from config). The capture pipeline:
    and channel count.
 2. **Down-mix** to mono by averaging channels (if multi-channel).
 3. **Resample** to 16 kHz using linear interpolation (if native rate differs).
-4. **Chunk** into 1280-sample buffers (80 ms at 16 kHz) -- this matches
-   OpenWakeWord's expected input size.
-5. **Push** chunks into a lock-free SPSC ring buffer (`ringbuf` crate).
+4. **Chunk** into 1280-sample buffers (80 ms at 16 kHz).
+5. **Push** chunks into a ring buffer.
 
-The ring buffer has a default capacity of 160,000 samples (~10 seconds at 16 kHz).
-If the consumer falls behind, the oldest audio is silently overwritten. The producer
-lives in the cpal audio thread; the consumer lives in the async processing task.
+The ring buffer has a capacity of 160,000 samples (~10 seconds at 16 kHz).
+If the consumer falls behind, the oldest audio is silently overwritten. The
+producer lives in the cpal audio thread; the consumer lives in the async
+processing task.
 
-The **audio processing loop** runs as a tokio task, ticking every 40 ms. Each tick
-it pops up to 1280 samples from the ring buffer and processes them according to the
-current audio state.
+The **audio processing loop** runs as a tokio task, ticking every 40 ms. Each
+tick it pops up to 1280 samples from the ring buffer and processes them
+according to the current voice state.
 
 ### Voice Activity Detection (VAD)
 
-**Source**: `voice-core/src/vad/silero.rs`, `voice-core/src/vad/energy.rs`
+**Source**: `src-tauri/src/voice/vad.rs`
 
-VAD determines whether a chunk of audio contains speech. Two implementations exist:
+VAD determines whether a chunk of audio contains speech. The current
+implementation is energy-based:
 
-- **Silero VAD** (primary): An ONNX model (`silero_vad.onnx`) that processes
-  512-sample windows and outputs a speech probability (0.0 - 1.0). It maintains
-  LSTM hidden state (h, c tensors of shape `[2, 1, 128]`) across calls for temporal
-  context. The speech threshold is 0.5 for recording mode.
+- **Energy-based detection**: Computes mean absolute amplitude of the audio
+  chunk. Threshold is configurable (default `0.01`). Speech is detected when
+  energy exceeds the threshold.
 
-- **Energy-based fallback**: Mean absolute amplitude of the audio chunk. Used when
-  the Silero ONNX model is not available. Threshold is 0.01 for recording mode.
+VAD is used during recording to detect when the user stops speaking. After the
+configured silence timeout (default 2.0 seconds), the recording is automatically
+stopped. PTT and Toggle recordings are controlled entirely by key press/release
+and bypass VAD silence detection.
 
-VAD is used during recording (after wake word or PTT press) to detect when the user
-stops speaking. After 2.0 seconds of continuous silence (no speech detected), the
-recording is automatically stopped. PTT and dictation recordings bypass VAD silence
-detection -- they are controlled entirely by key release.
-
-### Wake Word Detection (OpenWakeWord)
-
-**Source**: `voice-core/src/wake_word/oww.rs`
-
-OpenWakeWord is a 3-stage ONNX inference pipeline:
-
-1. **Mel spectrogram** (`melspectrogram.onnx`): Converts 1280 raw audio samples into
-   mel-frequency features.
-2. **Embedding model** (`embedding_model.onnx`): Converts mel features into a compact
-   embedding vector.
-3. **Wake word classifier** (`hey_claude_v2.onnx`): Takes a sliding window of recent
-   embedding vectors and outputs a confidence score (0.0 - 1.0).
-
-The embedding vectors are accumulated in a sliding window (default size 16). The
-classifier only runs once enough embeddings have accumulated. When the score exceeds
-the detection threshold of **0.98**, a wake word event is emitted and recording
-begins.
-
-All three ONNX models are loaded with single intra-thread / single inter-thread
-configuration to minimize CPU impact. If any model file is missing, wake word
-detection is disabled entirely.
+The `VadProcessor` struct also tracks:
+- Running average energy (exponential moving average, alpha=0.01)
+- Silence duration since last detected speech
+- Per-frame speech/silence state
 
 ### Speech-to-Text (STT)
 
-**Source**: `voice-core/src/stt/mod.rs`, `voice-core/src/stt/whisper.rs`, `voice-core/src/stt/cloud.rs`
+**Source**: `src-tauri/src/voice/stt.rs`
 
-Three STT adapters are available:
+STT provides a trait-based abstraction (`SttEngine`) with implementations:
 
 | Adapter | Config Name | Description |
 |---------|-------------|-------------|
-| **Whisper local** | `whisper-local` | Local inference via `whisper-rs` (whisper.cpp). Default. |
-| **OpenAI Cloud** | `openai-cloud` | OpenAI Whisper API. Requires API key. |
-| **Custom Cloud** | `custom-cloud` | Any OpenAI-compatible STT endpoint. Requires URL. |
+| **Whisper local** | `whisper-local` | Local inference via `whisper-rs` (whisper.cpp FFI). Default. |
+| **OpenAI Cloud** | `openai-cloud` | Placeholder (falls back to Whisper stub). |
+| **Custom Cloud** | `custom-cloud` | Placeholder (falls back to Whisper stub). |
 
-**Whisper local** is the default and most commonly used adapter:
+**Whisper local** is the primary STT adapter:
 
 - Models are GGML format, auto-downloaded from HuggingFace on first use
-  (e.g., `ggml-base.en.bin`).
-- Inference runs on a blocking tokio thread (`spawn_blocking`) to avoid stalling the
-  async runtime.
+  (e.g., `ggml-base.en.bin`). Download uses atomic writes (temp file + rename).
+- Behind the `whisper` feature flag. When disabled, a stub implementation returns
+  placeholder text.
 - Uses greedy sampling strategy with `best_of: 1`.
 - Configured for English-only (`set_language(Some("en"))`).
 - Non-speech token suppression is enabled to reduce hallucination on silence.
 - Thread count is half the available CPU cores, clamped to 1-8.
 - The `WhisperState` is cached after first use to avoid ~200 MB of buffer
   reallocation per transcription.
-- Audio shorter than 0.4 seconds (6,400 samples) is silently discarded.
+- Audio shorter than 0.4 seconds (6,400 samples at 16kHz) is silently discarded.
+- Inference runs on a blocking tokio thread (`spawn_blocking`) to avoid stalling
+  the async runtime.
+- Streaming mode accumulates at least 2 seconds of audio before triggering
+  transcription.
 
-**Cloud adapters** encode the f32 audio as 16-bit PCM WAV and send it as a
-multipart form upload.
+Available model sizes (configured via frontend):
+
+| Size | File | Approximate Size |
+|------|------|-----------------|
+| `tiny` | `ggml-tiny.en.bin` | ~77 MB |
+| `base` | `ggml-base.en.bin` | ~148 MB (default) |
+| `small` | `ggml-small.en.bin` | ~488 MB |
 
 ### Text-to-Speech (TTS)
 
-**Source**: `voice-core/src/tts/mod.rs`, `voice-core/src/tts/kokoro.rs`, `voice-core/src/tts/cloud.rs`, `voice-core/src/tts/playback.rs`
+**Source**: `src-tauri/src/voice/tts/mod.rs`, `src-tauri/src/voice/tts/edge_tts.rs`, `src-tauri/src/voice/tts/kokoro_impl.rs`
 
-Four TTS adapters are available:
+TTS provides a trait-based abstraction (`TtsEngine`) with implementations:
 
 | Adapter | Config Name | Description |
 |---------|-------------|-------------|
-| **Kokoro** | `kokoro` | Local ONNX synthesis (default). Requires espeak-ng for phonemization. |
-| **Edge TTS** | `edge` | Free Microsoft voices via WebSocket. Fallback when Kokoro unavailable. |
-| **OpenAI TTS** | `openai-tts` | OpenAI TTS API (`tts-1` model). Requires API key. |
-| **ElevenLabs** | `elevenlabs` | ElevenLabs REST API. Requires API key. |
+| **Kokoro** | `kokoro` | Local ONNX synthesis (default). Behind `onnx` feature flag. |
+| **Edge TTS** | `edge` | Free Microsoft voices via HTTP REST. Fallback when Kokoro unavailable. |
+| **OpenAI TTS** | `openai-tts` | Placeholder (falls back to Edge TTS). |
+| **ElevenLabs** | `elevenlabs` | Placeholder (falls back to Edge TTS). |
 
-**Kokoro TTS** is the default local engine:
+**Kokoro TTS** (when the `onnx` feature is enabled):
 
-- Uses `kokoro-v1.0.onnx` model with voice embeddings from `voices-v1.0.bin` (NPZ
-  format containing per-voice style vectors of shape `[N, 1, 256]`).
-- Text is first **phonemized** using `espeak-ng` CLI (converts text to IPA phonemes).
-  espeak-ng is located via: PATH > bundled `tools/espeak-ng/` > packaged
-  `resources/bin/espeak-ng/`.
-- Phonemes are **tokenized** using an 88-entry vocabulary mapping IPA characters to
-  token IDs.
-- Long sequences are **chunked** at word boundaries (space token) with a maximum of
-  510 phoneme tokens per chunk (model context length minus 2 for start/end pads).
-- Each chunk is padded with `[0, ...tokens, 0]` and fed through the ONNX model with
-  a style embedding (selected by voice name and token count) and speed parameter.
-- Output is 24 kHz mono f32 PCM audio.
-- Synthesis is **interruptible** via an `AtomicBool` flag checked between chunks.
+- Uses `kokoro-v1.0.onnx` model with voice embeddings from `voices-v1.0.bin`.
+- Model files loaded from data directory at `models/kokoro/`.
+- Output is 22,050 Hz mono f32 PCM audio.
+- If Kokoro model files are not available, automatically falls back to Edge TTS.
 
-**Edge TTS** connects via WebSocket to Microsoft's Bing speech synthesis service.
-It sends SSML over the WebSocket and receives MP3 audio chunks, which are decoded to
-f32 PCM using the Symphonia codec library.
+**Edge TTS**:
+
+- Connects via HTTP to Microsoft's Bing speech synthesis service.
+- Sends SSML and receives MP3 audio, decoded to f32 PCM using Symphonia.
+- Supports rate adjustment via SSML.
+- Output is 24 kHz mono.
+
+**Phrase splitting**: Long text is split into natural phrases (5-8 words) for
+incremental synthesis via `split_into_phrases()`. The `TtsStream` struct
+provides an iterator over phrase chunks.
 
 **Playback** uses the `rodio` crate:
 - Opens the default audio output device via `OutputStream::try_default()`.
 - Creates a `Sink` for queuing and playing audio buffers.
 - Supports volume control (0.0 - 1.0).
-- The `Sink` handle is shared via `Arc` so that external code (command handler,
-  hotkey handler) can call `sink.stop()` to interrupt playback.
-- Playback is polled at 50 ms intervals until the sink is empty or cancellation is
-  requested.
+- Playback is interruptible via an `AtomicBool` cancel flag.
 
 ### Activation Modes
 
-voice-core supports three activation modes, configured via `activation_mode` in
-`voice_settings.json`:
+The voice engine supports three activation modes, configured via the
+`behavior.activationMode` config key:
 
-#### Wake Word Mode (`wake_word`)
+#### Push-to-Talk Mode (`pushToTalk`) -- Default
+
+- Recording starts when PTT key is pressed, stops when released.
+- The frontend sends `start_recording` / `stop_recording` commands.
+- VAD silence detection is **bypassed** -- recording duration is controlled
+  by key hold time.
+- Any in-progress TTS playback is interrupted on key press (barge-in).
+
+#### Toggle Mode (`toggle`)
+
+- Press once to start recording, press again to stop.
+- Otherwise identical to PTT mode (VAD bypassed, barge-in supported).
+
+#### Wake Word / Continuous Mode (`wakeWord`)
 
 - Audio processing loop starts in **Listening** state automatically.
-- OpenWakeWord processes every 1280-sample chunk.
-- When "Hey Claude" is detected (score >= 0.98), recording begins.
-- Recording stops after 2.0 seconds of silence (VAD-based).
-- Transcribed text is sent to inbox; voice-core polls for AI response.
-
-#### Push-to-Talk Mode (`ptt`)
-
-- Hotkey listener captures a configurable key (default: `MouseButton5`).
-- **Key down**: Transitions to Recording state; ring buffer is drained to discard
-  stale audio; recording buffer is cleared.
-- **Key up**: Recording stops; audio is sent to STT; result goes to inbox.
-- VAD silence detection is **bypassed** -- recording duration is entirely controlled
-  by how long the user holds the key.
-- Any in-progress TTS playback is interrupted on key down.
-
-#### Hybrid Mode (`hybrid`)
-
-- Both wake word and PTT are active simultaneously.
-- Audio loop starts listening for wake word; PTT key also triggers recording.
-- Useful when users want hands-free wake word with a PTT override.
-
-#### Dictation Mode
-
-An additional input mode available alongside PTT. Configured via `dictation_key`:
-
-- **Key down**: Starts dictation recording.
-- **Key up**: Audio is transcribed via STT, then the text is **injected** into the
-  currently focused application via clipboard paste (Ctrl+V / Cmd+V) rather than
-  being sent to the inbox.
-- This mode is for direct text input, not for AI conversation.
+- VAD monitors audio continuously for speech onset.
+- When speech is detected, recording begins automatically.
+- Recording stops after the configured silence timeout (default 2.0 seconds).
+- After STT, returns to Listening state.
 
 ### Audio State Machine
 
-**Source**: `voice-core/src/audio/state.rs`
+**Source**: `src-tauri/src/voice/pipeline/mod.rs`
 
-A thread-safe state machine using `AtomicU8` for lock-free state transitions shared
-between the audio callback thread, the processing task, and the command handler.
+A state machine using `AtomicU8` for lock-free state transitions shared
+between the capture callback thread, the processing task, and Tauri commands.
 
 ```
-                  start_listening()
+                  WakeWord mode auto
     +---------+  ----------------->  +-----------+
     |  Idle   |                      | Listening |
     +---------+  <-----------------  +-----------+
-                     reset()              |
-                                          | start_recording(source)
+                     stop()               |
+                                          | speech detected / PTT press
                                           v
                                     +-----------+
                                     | Recording |
                                     +-----------+
                                           |
-                                          | stop_recording()
+                                          | silence timeout / key release
                                           v
                                     +------------+
                                     | Processing |
                                     +------------+
                                           |
-                                          | finish_processing()
+                                          | STT complete
                                           v
-                                    +-----------+
-                                    | Listening |
-                                    +-----------+
+                                    +-----------+       +----------+
+                                    | Idle /    |------>| Speaking  |
+                                    | Listening |       | (TTS)    |
+                                    +-----------+       +----------+
 ```
 
-Each recording tracks its **source** (`RecordingSource`): `WakeWord`, `Ptt`, or
-`Dictation`. The source determines whether VAD silence detection is applied
-(wake word only) or whether the recording is key-release controlled (PTT, dictation).
+States:
+- **Idle** (0): Voice engine inactive or waiting for PTT/Toggle key press.
+- **Listening** (1): Microphone active, VAD monitoring for speech (WakeWord mode).
+- **Recording** (2): Actively capturing user speech.
+- **Processing** (3): STT transcription in progress.
+- **Speaking** (4): TTS playback in progress.
 
-### Hotkey Listener
-
-**Source**: `voice-core/src/hotkey/mod.rs`
-
-Uses the `rdev` crate for cross-platform global key/mouse event capture:
-
-- **Windows**: Win32 low-level hooks
-- **Linux**: X11 event capture (with evdev for Wayland)
-- **macOS**: Quartz event tap
-
-Supports keyboard keys (F1-F12, A-Z, 0-9, Space, Tab, etc.) and mouse buttons
-(MouseButton3/4/5). Includes **debouncing** with a 150 ms minimum hold time to
-filter out Windows key-repeat artifacts (rapid KeyPress/KeyRelease cycles at ~80 ms).
-
-Events are sent through a tokio mpsc channel to the main event loop, which handles
-them alongside stdin commands via `tokio::select!`.
-
-### Text Injector (Dictation)
-
-**Source**: `voice-core/src/text_injector/mod.rs`
-
-For dictation mode, transcribed text is injected into the focused application:
-
-1. Save current clipboard contents
-2. Set clipboard to transcribed text
-3. Simulate Ctrl+V (or Cmd+V on macOS) via `rdev::simulate`
-4. Restore original clipboard contents
-
-This uses the `arboard` crate for clipboard access.
-
-### JSON IPC Protocol
-
-**Source**: `voice-core/src/ipc/mod.rs`, `voice-core/src/ipc/bridge.rs`
-
-Communication between Electron and voice-core uses newline-delimited JSON on
-stdin (Electron to Rust) and stdout (Rust to Electron).
-
-#### Commands (Electron -> voice-core via stdin)
-
-Format: `{"command": "<name>", ...}\n`
-
-| Command | Fields | Description |
-|---------|--------|-------------|
-| `ping` | -- | Health check; voice-core responds with `pong` event |
-| `stop` | -- | Graceful shutdown |
-| `stop_speaking` | -- | Interrupt TTS playback (ignored during system speak) |
-| `start_recording` | -- | Begin recording manually |
-| `stop_recording` | -- | Stop recording manually; triggers STT |
-| `set_mode` | `mode` | Change activation mode (listening, idle, wake_word, hybrid) |
-| `config_update` | `config` | Hot-reload configuration |
-| `list_audio_devices` | -- | Enumerate input devices |
-| `list_adapters` | -- | List available STT/TTS adapter names |
-| `system_speak` | `text` | Non-interruptible TTS (startup greeting) |
-| `query` | `text`, `image?` | Send a text query to the inbox |
-| `image` | `data`, `filename?`, `prompt?` | Send base64 image for vision analysis |
-
-#### Events (voice-core -> Electron via stdout)
-
-Format: `{"event": "<name>", "data": {...}}\n`
-
-| Event | Data Fields | Description |
-|-------|-------------|-------------|
-| `starting` | -- | Process is initializing |
-| `loading` | `step` | Loading status message (model download progress, etc.) |
-| `ready` | -- | All subsystems initialized |
-| `listening` | -- | Entered listening state (waiting for wake word or PTT) |
-| `wake_word` | `model`, `score` | Wake word detected |
-| `recording_start` | `type` | Recording started (wake_word, ptt, dictation, manual) |
-| `recording_stop` | -- | Recording stopped |
-| `transcription` | `text` | STT result |
-| `sent_to_inbox` | `message`, `msgId` | Message written to inbox.json |
-| `response` | `text`, `source`, `msgId` | AI response received from inbox |
-| `speaking_start` | `text` | TTS playback starting |
-| `speaking_end` | -- | TTS playback finished |
-| `ptt_start` | -- | PTT key pressed |
-| `ptt_stop` | -- | PTT key released |
-| `dictation_start` | -- | Dictation key pressed |
-| `dictation_stop` | -- | Dictation key released |
-| `dictation_result` | `text`, `success` | Dictation text injected (or failed) |
-| `mode_change` | `mode` | Activation mode changed |
-| `error` | `message` | Error occurred |
-| `stopping` | -- | Graceful shutdown initiated |
-| `audio_devices` | `input`, `output` | Audio device enumeration result |
-| `adapter_list` | `tts`, `stt` | Available adapter names |
-| `config_updated` | `config` | Configuration update acknowledged |
-| `image_received` | `path` | Image saved to disk |
+Barge-in is supported: if the user presses PTT during Speaking, TTS is
+cancelled and recording begins immediately.
 
 ---
 
-## Inbox System
+## Frontend Voice Adapters
 
-The inbox system is the central communication hub. It uses three JSON files in the
-data directory (`%APPDATA%/voice-mirror-electron/data/` on Windows).
+**Source**: `src/lib/voice-adapters.js`
 
-### inbox.json Message Queue
+The frontend maintains adapter registries for TTS and STT configuration UI:
 
-**Path**: `<data_dir>/inbox.json`
+### TTS Adapter Registry
 
-This is the message queue shared by voice-core, the MCP server, the Electron inbox
-watcher, and AI providers. All participants read and write to this file.
+| Adapter | Category | Voices |
+|---------|----------|--------|
+| **Kokoro** | local | 10 voices (4 US female, 2 US male, 2 British female, 2 British male) |
+| **Qwen3-TTS** | local | 9 voices (voice cloning support, multi-language) |
+| **Piper** | local | 5 voices (lightweight, ~50MB) |
+| **Edge TTS** | cloud-free | 6 voices (Microsoft Neural voices) |
+| **OpenAI TTS** | cloud-paid | 6 voices (alloy, echo, fable, onyx, nova, shimmer) |
+| **ElevenLabs** | cloud-paid | 6 voices (Rachel, Domi, Bella, Antoni, Josh, Adam) |
+| **Custom API** | cloud-custom | OpenAI-compatible endpoint |
 
-```json
-{
-  "messages": [
-    {
-      "id": "msg-a1b2c3d4e5f6",
-      "from": "user",
-      "message": "What's the weather like?",
-      "timestamp": "2024-01-15T10:30:00.000000",
-      "thread_id": "voice-mirror",
-      "read_by": []
-    },
-    {
-      "id": "msg-1706789012-abc123",
-      "from": "voice-claude",
-      "message": "I don't have access to real-time weather data...",
-      "timestamp": "2024-01-15T10:30:05.000Z",
-      "thread_id": "voice-mirror",
-      "read_by": [],
-      "reply_to": "msg-a1b2c3d4e5f6"
-    }
-  ]
-}
-```
+Each adapter definition includes: `showModelSize`, `showApiKey`,
+`showEndpoint`, `showModelPath` flags for the settings UI.
 
-**Message fields**:
+### STT Adapter Registry
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | string | Unique ID. voice-core uses `msg-<hex12>` format; Electron/MCP use `msg-<timestamp>-<random>` |
-| `from` | string | Sender name. `"user"` or configured username for voice input; `"voice-claude"` for Claude; provider ID for local LLMs |
-| `message` | string | The message text |
-| `timestamp` | string | ISO 8601 or Python-style local timestamp |
-| `thread_id` | string | Thread grouping. Voice messages use `"voice-mirror"` |
-| `read_by` | string[] | Instance IDs that have read this message |
-| `reply_to` | string? | ID of the message being replied to (optional) |
-| `type` | string? | Message type for system events (optional) |
-| `event` | string? | System event name (optional) |
-| `image_path` | string? | Path to attached image file (optional) |
-| `image_data_url` | string? | Base64 data URL for inline images (optional) |
+| Adapter | Label | Options |
+|---------|-------|---------|
+| **whisper-local** | Whisper (Local, default) | Model sizes: tiny.en, base.en, small.en |
+| **openai-whisper-api** | OpenAI Whisper API | API key required |
+| **custom-api-stt** | Custom API | Endpoint + API key + model name |
 
-**Concurrency**: Multiple processes may read/write inbox.json simultaneously.
-voice-core uses atomic writes (write to temp file, then rename). The MCP server
-and inbox-watcher use direct `fs.writeFileSync`. In practice, message writes are
-infrequent enough that conflicts are rare.
+### Keybind Helpers
 
-**Cleanup**: Messages are automatically cleaned up:
-- voice-core removes messages older than 2 hours on startup and periodically
-  (every 30 minutes). Maximum 100 messages retained.
-- MCP server (`claude_inbox`) removes messages older than 24 hours.
-- Deduplication: voice-core hashes the lowercase trimmed message text and skips
-  identical messages sent within 2 seconds.
-
-### listener_lock.json Mutex
-
-**Path**: `<data_dir>/listener_lock.json`
-
-Ensures only **one** Claude Code instance can listen for voice messages at a time.
-Without this, multiple Claude instances could each respond to the same message.
-
-```json
-{
-  "instance_id": "voice-claude",
-  "acquired_at": 1706789000000,
-  "expires_at": 1706789310000
-}
-```
-
-- Lock timeout: 310 seconds (slightly longer than the default 300s listen timeout).
-- Lock is refreshed every 30 seconds during an active listen.
-- Lock is released when `claude_listen` returns (message found or timeout).
-- Stale locks (expired `expires_at`) are cleaned up on MCP server startup and
-  automatically overwritten by new lock acquisitions.
-
-### status.json Presence Tracking
-
-**Path**: `<data_dir>/status.json`
-
-Tracks which Claude instances are active:
-
-```json
-{
-  "statuses": [
-    {
-      "instance_id": "voice-claude",
-      "status": "active",
-      "current_task": "Listening for user",
-      "last_heartbeat": "2024-01-15T10:30:00.000Z"
-    }
-  ]
-}
-```
-
-- Heartbeats are updated on every MCP tool call.
-- Instances with heartbeats older than 2 minutes are marked as `[STALE]`.
-- Used by `claude_status` to show which instances are alive.
+The file also exports keybind display helpers:
+- `VKEY_NAMES` -- Windows virtual key code to display name mapping
+- `MOUSE_BUTTON_NAMES` -- Mouse button ID to display name
+- `formatKeybind(keybind)` -- Formats keybind strings for display (supports
+  `kb:VKEY`, `mouse:ID`, legacy `MouseButtonN`, and `Ctrl+Shift+V` formats)
 
 ---
 
-## MCP Server Tools
+## MCP Server Voice Tools
 
-**Source**: `mcp-server/index.js`, `mcp-server/handlers/core.js`
+**Source**: `src-tauri/src/mcp/handlers/core.rs`
 
-The MCP server is a Node.js process that implements the Model Context Protocol,
-exposing tools that Claude Code can call. The core voice tools are always loaded.
+The MCP server exposes voice-related tools in the `core` group (always loaded):
 
-### claude_listen
+### voice_listen
 
-The primary tool for receiving voice input. Blocks until a new message arrives from
-the specified sender, or times out.
+Waits for new voice input from the user. Blocks until a message arrives or
+times out.
 
-**Flow**:
+### voice_send
 
-1. Acquires exclusive listener lock (prevents duplicate responses from multiple
-   Claude instances).
-2. Captures the set of existing message IDs in inbox.json.
-3. Uses `fs.watch` on the data directory to wake on file changes (with a 5-second
-   polling fallback).
-4. On each wake, reads inbox.json and checks for new messages from `from_sender`
-   that were not in the initial set.
-5. When a new message is found, auto-loads relevant MCP tool groups based on keyword
-   intent detection (e.g., "search" triggers the browser group).
-6. Releases the listener lock and returns the message.
-7. On timeout (default 300s, max 600s), releases the lock and returns a timeout
-   message.
+Sends a response message. For voice mode, this triggers TTS playback through
+the voice engine.
 
-### claude_send
+### voice_status
 
-Writes a response message to inbox.json. This is how Claude Code sends spoken
-responses back to the user.
-
-**Flow**:
-
-1. Reads existing messages from inbox.json.
-2. Resolves the thread ID: uses `reply_to` message's thread if available; defaults
-   to `"voice-mirror"` for the `voice-claude` instance.
-3. Appends a new message with the sender set to `instance_id`.
-4. Trims to last 100 messages.
-5. Writes a `claude_message_trigger.json` file to notify watchers.
-
-### claude_inbox
-
-Reads messages from the inbox, filtered by read status. Supports marking messages
-as read. Used for checking messages without blocking. Auto-loads tool groups based
-on message content intent.
-
-### claude_status
-
-Updates or lists presence information in status.json. Used for heartbeat tracking
-and showing which Claude instances are active.
-
----
-
-## Electron Services Layer
-
-### voice-backend.js
-
-**Source**: `electron/services/voice-backend.js`
-
-Manages the voice-core Rust binary as a child process.
-
-**Responsibilities**:
-
-- **Binary discovery**: Checks packaged path (`resources/bin/voice-core`), release
-  build, then debug build.
-- **Process spawning**: Uses `child_process.spawn` with piped stdio. Working
-  directory is set to the binary's parent directory (so espeak-ng and model files
-  are found relative to the binary).
-- **stdout parsing**: Buffers incoming data and splits on newlines. Each complete
-  line is parsed as JSON. Events with an `event` field are handled; other output
-  is logged.
-- **Event mapping**: Maps voice-core event names to UI event objects that the
-  renderer understands. For example, `recording_stop` becomes `{type: 'processing'}`,
-  `speaking_end` becomes `{type: 'idle'}`.
-- **Command sending**: `send(command)` writes JSON + newline to stdin.
-- **Auto-restart**: If voice-core exits with a non-zero code, automatically restarts
-  up to 3 times with an 8-second delay between attempts. The restart counter resets
-  on a successful `ready` event.
-- **Graceful shutdown**: Sends `{"command": "stop"}` and waits up to 3 seconds
-  before force-killing the process.
-- **Config sync**: `syncVoiceSettings(cfg)` writes `voice_settings.json` to the
-  data directory before (re)starting voice-core. Maps Electron's camelCase config
-  keys to voice-core's snake_case format.
-- **Image handling**: Sends base64 images to voice-core via stdin. Falls back to
-  writing the image to disk and creating an inbox message if voice-core is not
-  running.
-
-### inbox-watcher.js
-
-**Source**: `electron/services/inbox-watcher.js`
-
-Watches inbox.json for new messages and bridges between the inbox and non-Claude
-AI providers.
-
-**Responsibilities**:
-
-- **File watching**: Uses a debounced JSON file watcher (100 ms debounce) on
-  inbox.json.
-- **Message deduplication**: Maintains two Sets:
-  - `displayedMessageIds`: Messages already shown in the UI.
-  - `processedUserMessageIds`: User messages already forwarded to providers.
-  Both sets are seeded from existing messages on startup to prevent replaying
-  history.
-- **Claude message detection**: Scans for the latest message where `from` contains
-  "claude" and `thread_id` is "voice-mirror". New Claude messages trigger
-  `onClaudeMessage` and `onVoiceEvent` callbacks.
-- **Non-Claude provider bridge**: When Claude is not running but a local provider
-  (Ollama, LM Studio) is active, user messages are forwarded to the provider:
-  1. Extract the message text from inbox.json.
-  2. Call `provider.sendInput(message)` and intercept the provider's output stream.
-  3. Wait for the response to stabilize (2+ seconds of no new output).
-  4. Extract the speakable response (strip tool JSON, code blocks, system messages,
-     URLs, markdown formatting).
-  5. Write the cleaned response back to inbox.json so voice-core can read and
-     speak it.
-- **Response cleanup**: `extractSpeakableResponse()` aggressively filters provider
-  output to extract only natural language suitable for TTS. It removes:
-  - Tool call/result JSON objects
-  - Code blocks (fenced with triple backticks)
-  - System messages (`[Executing tool:...]`, `[Tool succeeded]`, etc.)
-  - Markdown formatting (bold, italic, headers, links)
-  - Raw URLs
-  - Blockquoted user echo lines
+Reports the current voice pipeline state and configuration.
 
 ---
 
@@ -692,157 +375,69 @@ AI providers.
 
 The complete flow for speaking an AI response:
 
-### When using Claude Code (via MCP)
+### Via Tauri Commands
 
-1. voice-core writes the user's transcription to `inbox.json` and emits
-   `sent_to_inbox` with the message ID.
-2. voice-core calls `inbox.wait_for_response(message_id)`, which polls inbox.json
-   every 100 ms for up to 5 minutes.
-3. Meanwhile, Claude Code's `claude_listen` detects the new message and returns it.
-4. Claude Code processes the query and calls `claude_send` to write the response to
-   inbox.json.
-5. voice-core's poll detects the response (a message after the original, from a
-   non-user sender, on the `"voice-mirror"` thread).
-6. voice-core emits a `response` event and calls `speak_text()`.
-7. `speak_text()` takes the TTS engine from `AppState`, calls `engine.speak(text)`,
-   stores the `Sink` handle for external interruption, appends audio to the sink,
-   and polls until playback finishes or is cancelled.
-8. `speaking_start` and `speaking_end` events bracket the playback.
-
-### When using non-Claude providers (Ollama, LM Studio)
-
-1. voice-core writes the transcription to inbox.json (same as above).
-2. Electron's inbox-watcher detects the new user message.
-3. Since Claude is not running, the inbox-watcher forwards the message to the
-   active provider via `captureProviderResponse()`.
-4. The provider generates a response (possibly involving tool calls).
-5. The inbox-watcher extracts the speakable text and writes it back to inbox.json
-   as a response message.
-6. voice-core's poll detects the response and speaks it (same as step 5-8 above).
+1. Frontend or MCP tool calls `invoke('voice_speak', { text })`.
+2. The Tauri command accesses the `VoiceEngine` from managed state.
+3. `VoiceEngine::speak()` delegates to `VoicePipeline::speak()`.
+4. The pipeline's `playback` module synthesizes audio via the TTS engine.
+5. Audio is queued on the rodio `Sink` for playback.
+6. `SpeakingStart` and `SpeakingEnd` events bracket the playback.
+7. State transitions: current -> Speaking -> previous state.
 
 ### Interruption
 
 TTS playback can be interrupted by:
 
-- **PTT key press**: Sets `tts_cancel` flag, calls `sink.stop()` and
-  `engine.stop()`. Forces state to Listening so recording can begin immediately.
-- **Wake word detection**: Same interruption logic as PTT.
-- **`stop_speaking` command**: From Electron UI. Sets the cancel flag and stops
-  the sink. Does not interrupt non-interruptible system speaks (startup greeting).
-- **New user input**: When voice-core detects a wake word or PTT press during
-  playback, it interrupts the current TTS to begin recording.
-
-The `system_speaking` flag protects startup greetings from being interrupted.
-While `system_speaking` is true, `stop_speaking` commands and wake-word
-interruptions are ignored.
+- **PTT key press (barge-in)**: Sets `tts_cancel` flag, transitions directly
+  to Recording state so capture begins immediately.
+- **`stop_speaking` command**: From frontend UI. Sets the cancel flag.
+- The `tts_cancel` flag is checked between phrase synthesis chunks.
 
 ---
 
 ## Error States and Recovery
 
-### voice-core fails to start
-
-- `voice-backend.js` emits an `error` event: "voice-core binary not found."
-- Binary discovery checks packaged, release, and debug paths in order.
-- The user sees an error in the Electron UI.
-
-### voice-core crashes
-
-- Electron's `close` handler detects non-zero exit code.
-- Auto-restart attempts up to 3 times with 8-second delays.
-- Restart counter resets on successful `ready` event.
-- After 3 failures, emits `restart_failed` event and stops retrying.
-- The user can manually restart via the UI.
-
 ### Audio capture fails
 
-- `start_capture()` returns an error; the stream handle is `None`.
-- voice-core continues running (STT/TTS still work for text queries).
-- An error event is emitted: "Audio capture failed: ..."
+- `start_audio_capture()` returns an error; no capture stream is created.
+- The pipeline returns an error from `start()`.
+- An error event is emitted to the frontend.
 
 ### STT engine fails to load
 
 - `create_stt_engine()` returns `Err`; `stt_engine` is `None`.
-- voice-core continues running, but recordings are discarded with "No STT engine
-  available -- recording discarded".
-- Whisper model auto-download: If the model file is missing, voice-core downloads
-  it from HuggingFace, emitting `loading` progress events. Download failures are
-  reported as errors.
+- The pipeline continues running, but recordings produce no transcription.
+- An error event is emitted: "STT not available: ..."
+- Whisper model auto-download: If the model file is missing, it can be
+  downloaded from HuggingFace via `ensure_model_exists()`. Download failures
+  are reported as `SttError::DownloadError`.
 
 ### TTS engine fails to load
 
 - `create_tts_engine()` returns `Err`; `tts_engine` is `None`.
-- Kokoro failure triggers automatic fallback to Edge TTS.
-- If both fail, speak requests emit "TTS not available" errors.
-- The conversation pipeline still works (text transcription and inbox messaging
-  continue), but responses are not spoken.
+- Kokoro failure triggers automatic fallback to Edge TTS in the factory.
+- If both fail, speak requests produce error events.
+- The pipeline still works for STT (transcription continues, responses are
+  not spoken).
 
-### Wake word models missing
+### Configuration
 
-- `OpenWakeWord::load()` returns false; `is_loaded()` returns false.
-- All `process()` calls return `(false, 0.0)`.
-- In wake word mode, no recording is ever triggered. PTT still works in hybrid mode.
+The voice engine config (`VoiceEngineConfig`) is built from the app's config
+at pipeline start time. Key fields:
 
-### VAD model missing
+| Field | Default | Description |
+|-------|---------|-------------|
+| `mode` | `PushToTalk` | Activation mode |
+| `stt_adapter` | `"whisper-local"` | STT engine name |
+| `stt_model_size` | `"base"` | Whisper model size |
+| `tts_adapter` | `"kokoro"` | TTS engine name |
+| `tts_voice` | `"af_bella"` | TTS voice name |
+| `tts_speed` | `1.0` | TTS speed multiplier |
+| `tts_volume` | `1.0` | Playback volume (0.0-1.0) |
+| `input_device` | `None` | Input device name (None = system default) |
+| `output_device` | `None` | Output device name (None = system default) |
+| `silence_timeout_secs` | `2.0` | Seconds of silence before auto-stop |
+| `vad_threshold` | `0.01` | Energy threshold for speech detection |
 
-- `SileroVad::load()` returns false.
-- Falls back to energy-based detection automatically. This is less accurate but
-  functional.
-
-### Inbox write failures
-
-- voice-core logs a warning but continues operation.
-- The user's speech is transcribed and the transcription event is emitted, but the
-  message does not reach the AI.
-- The Electron UI still shows the transcription.
-
-### AI response timeout
-
-- voice-core's `wait_for_response()` times out after 5 minutes.
-- A warning is logged; the pipeline returns to listening state.
-- An error event may be emitted: "Response timed out -- Claude may still be
-  processing".
-
-### Listener lock contention
-
-- If another Claude Code instance holds the listener lock, `claude_listen` returns
-  an error: "Cannot listen: Another Claude instance is already listening."
-- The lock has a 310-second expiry, so stale locks from crashed processes are
-  automatically released.
-
-### stdin/stdout pipe closed
-
-- voice-core's stdin reader thread detects EOF and sends `None` through the channel.
-- The main loop breaks and voice-core shuts down cleanly.
-- This is the normal shutdown path when Electron closes.
-
----
-
-## Data Directory Paths
-
-All persistent data is stored in the platform-specific data directory:
-
-| Platform | Path |
-|----------|------|
-| Windows | `%APPDATA%/voice-mirror-electron/data/` |
-| macOS | `~/Library/Application Support/voice-mirror-electron/data/` |
-| Linux | `$XDG_CONFIG_HOME/voice-mirror-electron/data/` (default `~/.config/...`) |
-
-Key files in this directory:
-
-| File | Purpose |
-|------|---------|
-| `voice_settings.json` | Configuration written by Electron, read by voice-core |
-| `inbox.json` | Message queue |
-| `status.json` | Instance presence tracking |
-| `listener_lock.json` | Exclusive listener mutex |
-| `claude_message_trigger.json` | File-change trigger for message notifications |
-| `vmr-rust.log` | voice-core debug log |
-| `models/ggml-base.en.bin` | Whisper STT model |
-| `models/silero_vad.onnx` | Silero VAD model |
-| `models/melspectrogram.onnx` | OpenWakeWord stage 1 |
-| `models/embedding_model.onnx` | OpenWakeWord stage 2 |
-| `models/hey_claude_v2.onnx` | OpenWakeWord stage 3 |
-| `models/kokoro/kokoro-v1.0.onnx` | Kokoro TTS model |
-| `models/kokoro/voices-v1.0.bin` | Kokoro voice embeddings (NPZ) |
-| `images/` | Saved screenshots for vision queries |
+Changes to the config require a pipeline restart to take effect.

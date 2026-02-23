@@ -1,6 +1,7 @@
 <script>
   import LensToolbar from './LensToolbar.svelte';
   import LensPreview from './LensPreview.svelte';
+  import BrowserTabBar from './BrowserTabBar.svelte';
   import FileTree from './FileTree.svelte';
   import TabBar from './TabBar.svelte';
   import FileEditor from './FileEditor.svelte';
@@ -19,6 +20,8 @@
   let {
     onSend = () => {},
   } = $props();
+
+  let lensPreviewRef;
 
   // Split ratios (will be persisted to config later)
   let verticalRatio = $state(0.75);   // main area vs terminal
@@ -89,8 +92,9 @@
                   <TabBar />
                   <!-- Always mount all views, toggle visibility with CSS to avoid destroy/recreate -->
                   <div class="preview-layer" class:visible={isBrowser}>
+                    <BrowserTabBar onNewTab={() => lensPreviewRef?.createNewTab()} />
                     <LensToolbar />
-                    <LensPreview />
+                    <LensPreview bind:this={lensPreviewRef} />
                   </div>
                   {#if isFile}
                     <FileEditor tab={tabsStore.activeTab} />

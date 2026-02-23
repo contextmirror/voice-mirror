@@ -1,4 +1,4 @@
-# Voice Mirror Electron - Configuration
+# Voice Mirror — Configuration
 
 ## Config File Locations
 
@@ -6,9 +6,9 @@ Config is stored in platform-appropriate locations:
 
 | Platform | Config Path |
 |----------|-------------|
-| Linux | `~/.config/voice-mirror-electron/config.json` |
-| macOS | `~/Library/Application Support/voice-mirror-electron/config.json` |
-| Windows | `%APPDATA%\voice-mirror-electron\config.json` |
+| Linux | `~/.config/voice-mirror/config.json` |
+| macOS | `~/Library/Application Support/voice-mirror/config.json` |
+| Windows | `%APPDATA%\voice-mirror\config.json` |
 
 ---
 
@@ -31,23 +31,25 @@ Config is stored in platform-appropriate locations:
         ttsEndpoint: null,         // Custom endpoint URL for cloud/custom TTS
         ttsModelPath: null,        // Local model file path (Piper)
         sttAdapter: "whisper-local",  // "whisper-local", "openai-whisper-api", "custom-api-stt"
-        sttModel: "whisper-local",    // Legacy alias for sttAdapter
+        sttModel: "whisper-local",    // Legacy alias for sttAdapter (frontend only)
         sttModelSize: "base",      // Whisper model size: "tiny", "base" (recommended), "small"
         sttApiKey: null,           // API key for cloud STT
         sttEndpoint: null,         // Custom STT endpoint URL
         sttModelName: null,        // Specific model name (e.g. "large-v3")
         inputDevice: null,         // Audio input device name (null = system default)
-        outputDevice: null         // Audio output device name (null = system default)
+        outputDevice: null,        // Audio output device name (null = system default)
+        announceStartup: true,     // Speak greeting on startup
+        announceProviderSwitch: true  // Speak notification on provider switch
     },
     appearance: {
-        orbSize: 64,               // 32 - 256
+        orbSize: 80,               // 32 - 256
         theme: "colorblind",       // See theme list below
         panelWidth: 500,           // 200 - 4000
         panelHeight: 700,          // 200 - 4000
         colors: null,              // null = use preset from theme, object = custom overrides (see below)
         fonts: null,               // null = use preset defaults, object = { fontFamily, fontMono }
-        customThemes: [],          // Array of persisted imported themes (see theme system below)
-        messageCard: null          // null = use theme defaults, object = message card overrides (see below)
+        messageCard: null,         // null = use defaults, object = { aiAvatar, userAvatar, customAvatars }
+        orb: null                  // null = use defaults, object = { preset, overrides, customPresets }
     },
     behavior: {
         startMinimized: false,
@@ -56,12 +58,16 @@ Config is stored in platform-appropriate locations:
         statsHotkey: "CommandOrControl+Shift+M", // Toggle performance stats bar
         activationMode: "wakeWord",  // "wakeWord", "pushToTalk"
         pttKey: "MouseButton4",      // Push-to-talk key: MouseButton4, MouseButton5, or keyboard keys
-        dictationKey: "MouseButton5" // Dictation key: hold to record, release to type into focused window
+        dictationKey: "MouseButton5", // Dictation key: hold to record, release to type into focused window
+        showToasts: true             // Show toast notifications
     },
     window: {
-        orbX: null,                // Remembered position (null = default bottom-right)
+        orbX: null,                // Orb mode position (null = default)
         orbY: null,
-        expanded: false            // Whether the dashboard was open when the app last closed
+        dashboardX: null,          // Dashboard mode position (null = default)
+        dashboardY: null,
+        expanded: true,            // true = dashboard mode, false = orb mode
+        maximized: false           // Whether the window was maximized when last closed
     },
     overlay: {
         outputName: null           // Wayland output/monitor name (null = primary)
@@ -71,7 +77,18 @@ Config is stored in platform-appropriate locations:
         showDependencies: false    // Hidden flag -- enables Dependencies settings tab
     },
     sidebar: {
-        collapsed: false           // Sidebar collapsed state
+        collapsed: false,          // Sidebar collapsed state
+        mode: "mirror"             // Sidebar mode: "mirror", "lens"
+    },
+    workspace: {
+        showChat: false,           // Show chat panel in lens workspace
+        showTerminal: false,       // Show terminal panel in lens workspace
+        chatRatio: 0.3,            // Chat panel ratio (0.0 - 1.0)
+        terminalRatio: 0.7         // Terminal panel ratio (0.0 - 1.0)
+    },
+    projects: {
+        entries: [],               // Array of { path, name, color } project entries
+        activeIndex: 0             // Index of the active project
     },
     user: {
         name: null                 // User's preferred name (null = ask on first launch)
@@ -84,6 +101,7 @@ Config is stored in platform-appropriate locations:
     },
     ai: {
         provider: "claude",        // "claude", "opencode", "ollama", "lmstudio", "jan"
+        autoStart: false,          // Auto-start AI provider on app launch
         model: null,               // Specific model ID or null (auto-detected for local providers)
         autoDetect: true,          // Auto-detect local LLM servers on startup
         contextLength: 32768,      // Context window size for local models (tokens, 1024 - 1048576)
@@ -125,14 +143,14 @@ Settings is a full page accessible via the sidebar.
 
 | Section | Options |
 |---------|---------|
-| **AI Provider** | Provider selector (claude, opencode, ollama, lmstudio, jan), model selector, endpoint/API key |
+| **AI Provider** | Provider selector (claude, opencode, ollama, lmstudio, jan), model selector, endpoint/API key, auto-start |
 | **Activation Mode** | Wake Word, Push to Talk |
 | **Keyboard Shortcuts** | Toggle Panel hotkey, Toggle Stats hotkey, PTT key, Dictation key (supports mouse buttons) |
 | **Wake Word** | Phrase selection, sensitivity slider |
 | **Voice** | TTS adapter, voice, speed, volume, model size (Qwen), STT adapter, STT model size |
 | **Audio Devices** | Input/output device selection |
-| **Appearance** | Theme presets, color overrides, font selection, custom fonts, orb size, message card customization |
-| **Behavior** | Start minimized, start with system |
+| **Appearance** | Theme presets, color overrides, font selection, custom fonts, orb size/presets, message card avatars |
+| **Behavior** | Start minimized, start with system, show toasts |
 | **Tool Profiles** | MCP tool group presets (CLI agent providers only) |
 
 ---
@@ -200,41 +218,25 @@ All values must be hex format `#RRGGBB`.
 
 Custom fonts can be uploaded through the Appearance settings tab and are injected as `@font-face` rules.
 
-### Custom Themes (`appearance.customThemes`)
+### Orb Configuration (`appearance.orb`)
 
-An array of persisted imported themes. Each entry has:
+When non-null, customizes the orb visual style:
 
-```javascript
-{
-    key: "custom-1234567890",   // Unique key (custom- prefix + timestamp)
-    name: "My Theme",          // Display name
-    colors: { bg: "#...", ... }, // Full 10-key color object
-    fonts: { fontFamily: "...", fontMono: "..." }
-}
-```
+| Key | Type | Description |
+|-----|------|-------------|
+| `preset` | string | Built-in orb style name (default: `"classic"`) |
+| `overrides` | object | Per-field tweaks after picking a preset |
+| `customPresets` | array | User-imported orb styles |
 
-Themes can be imported/exported as JSON files via the Appearance settings tab.
+### Message Card Configuration (`appearance.messageCard`)
 
-### Message Card Overrides (`appearance.messageCard`)
+When non-null, customizes chat message avatars:
 
-Fine-grained control over chat message bubbles. When non-null:
-
-| Key | Type | Range/Values | Default |
-|-----|------|-------------|---------|
-| `fontSize` | string | `"10px"` - `"24px"` | `"14px"` |
-| `lineHeight` | number | 1.0 - 2.5 | 1.5 |
-| `padding` | string | CSS padding value | `"12px 16px"` |
-| `avatarSize` | integer | 20 - 64 | 36 |
-| `showAvatars` | boolean | true/false | true |
-| `bubbleStyle` | string | `"rounded"`, `"square"`, `"pill"` | `"rounded"` |
-| `userColor` | string | Hex color | `"#667eea"` |
-| `aiColor` | string | Hex color | `"#111318"` |
-| `userBg` | string | CSS gradient | (derived from userColor) |
-| `userBorder` | string | CSS color | (derived from userColor) |
-| `userRadius` | string | CSS border-radius | (derived from bubbleStyle) |
-| `aiBg` | string | CSS gradient | (derived from aiColor) |
-| `aiBorder` | string | CSS color | (derived from aiColor) |
-| `aiRadius` | string | CSS border-radius | (derived from bubbleStyle) |
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `aiAvatar` | string | `"cube"` | AI avatar preset name |
+| `userAvatar` | string | `"person"` | User avatar preset name |
+| `customAvatars` | object | `null` | Custom avatar overrides |
 
 ---
 
@@ -248,9 +250,7 @@ Fine-grained control over chat message bubbles. When non-null:
 | `MouseButton5` (default) | `behavior.dictationKey` | Dictation (hold to record, release to type into focused window) |
 | Drag orb | -- | Move orb position |
 
-The toggle panel and toggle stats shortcuts are registered as global hotkeys via Electron's `globalShortcut` API, with automatic health-checked re-registration after sleep/unlock. A DOM `keydown` fallback for `Ctrl+Shift+V` fires when the Electron window has focus but global registration has failed.
-
-All keyboard shortcuts are configurable through the Settings UI using a keybind recorder.
+The toggle panel and toggle stats shortcuts are registered as global hotkeys via Tauri's global shortcut plugin. All keyboard shortcuts are configurable through the Settings UI using a keybind recorder.
 
 ---
 
@@ -342,9 +342,23 @@ Custom profiles can be created through the Settings UI.
 
 ---
 
+## Multi-Project Support
+
+Voice Mirror supports multiple projects via the `projects` config section. Each project entry has:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `path` | string | Absolute path to the project root |
+| `name` | string | Display name |
+| `color` | string | Color tag for the project strip |
+
+The `activeIndex` field tracks which project is currently selected. Projects are managed through the sidebar's project strip.
+
+---
+
 ## Data Storage
 
-All runtime data stored in: `~/.config/voice-mirror-electron/`
+All runtime data stored in the app config directory (e.g., `%APPDATA%/voice-mirror/` on Windows):
 
 | Path | Purpose |
 |------|---------|
@@ -353,10 +367,8 @@ All runtime data stored in: `~/.config/voice-mirror-electron/`
 | `data/inbox.json` | Message queue (max 100 messages) |
 | `data/status.json` | Instance presence tracking |
 | `data/listener_lock.json` | Exclusive listener mutex |
-| `data/vmr.log` | Combined Electron + voice-core logs |
 | `data/images/` | Screenshot storage (keeps last 5) |
 | `data/voices/` | Cloned voice metadata |
-| `data/voice_settings.json` | Voice-specific settings |
 | `memory/MEMORY.md` | Main memory file (source of truth) |
 | `memory/daily/` | Auto-logged conversations by date |
 | `memory/index.db` | SQLite with FTS5 + embeddings |
@@ -365,21 +377,7 @@ All runtime data stored in: `~/.config/voice-mirror-electron/`
 
 ## Logging
 
-Electron and voice-core write to a shared log file:
-
-**Location:** `~/.config/voice-mirror-electron/data/vmr.log`
-
-**Log format:**
-- Timestamps in ISO format
-- Level prefixes: `CONFIG`, `EVENT`, `VOICE`, `APP`, `HOTKEY`, `ERROR`
-- Events from both Electron (main process) and voice-core (Rust binary)
-
-The log file is truncated on Electron startup to keep it fresh each session.
-
-**Monitor in real-time:**
-```bash
-tail -f ~/.config/voice-mirror-electron/data/vmr.log
-```
+The Rust backend uses the `tracing` crate for structured logging. The MCP binary logs to stderr (stdout is reserved for JSON-RPC). The frontend uses `console.*`.
 
 ---
 
@@ -392,5 +390,3 @@ Configuration uses atomic writes with automatic backup:
 3. The temp file is renamed to `config.json` (atomic on all platforms)
 4. On load, if `config.json` is corrupt, falls back to `config.json.bak`
 5. If both are corrupt or missing, defaults are used
-
-Both synchronous (`updateConfig`) and asynchronous (`updateConfigAsync`) update methods are available.

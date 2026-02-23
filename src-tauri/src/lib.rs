@@ -130,7 +130,8 @@ pub fn run() {
         .manage(std::sync::Mutex::new(sysinfo::System::new()) as window_cmds::PerfMonitorState)
         .manage(std::sync::Mutex::new(None::<Box<dyn voice::tts::TtsEngine>>) as PreloadedTtsState)
         .manage(lens_cmds::LensState {
-            webview_label: std::sync::Mutex::new(None),
+            tabs: std::sync::Mutex::new(std::collections::HashMap::new()),
+            active_tab_id: std::sync::Mutex::new(None),
             bounds: std::sync::Mutex::new(None),
         })
         .manage(services::file_watcher::FileWatcherState {
@@ -211,6 +212,10 @@ pub fn run() {
             window_cmds::get_process_stats,
             // Lens (embedded browser)
             lens_cmds::lens_create_webview,
+            lens_cmds::lens_create_tab,
+            lens_cmds::lens_close_tab,
+            lens_cmds::lens_switch_tab,
+            lens_cmds::lens_close_all_tabs,
             lens_cmds::lens_navigate,
             lens_cmds::lens_go_back,
             lens_cmds::lens_go_forward,

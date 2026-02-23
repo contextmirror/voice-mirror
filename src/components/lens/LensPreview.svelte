@@ -4,13 +4,15 @@
   import { projectStore } from '../../lib/stores/project.svelte.js';
   import { devServerManager } from '../../lib/stores/dev-server-manager.svelte.js';
   import { toastStore } from '../../lib/stores/toast.svelte.js';
-  import { lensCreateWebview, lensResizeWebview, lensCloseWebview, lensClearCache, detectDevServers } from '../../lib/api.js';
+  import { browserTabsStore } from '../../lib/stores/browser-tabs.svelte.js';
+  import { lensResizeWebview, lensCloseAllTabs, lensClearCache, detectDevServers } from '../../lib/api.js';
   import { listen } from '@tauri-apps/api/event';
 
   let containerEl = $state(null);
   let resizeObserver = null;
   let rafId = null;
   let unlistenUrl = null;
+  let unlistenOpenTab = null;
   let setupDone = false;
   let retryCount = 0;
   let retryTimer = null;
@@ -29,6 +31,13 @@
       width: rect.width,
       height: rect.height,
     };
+  }
+
+  export function createNewTab(url = 'about:blank') {
+    const bounds = getAbsoluteBounds();
+    if (bounds && bounds.width > 0 && bounds.height > 0) {
+      browserTabsStore.openTab(url, bounds);
+    }
   }
 
   function syncBounds() {
@@ -54,6 +63,15 @@
       startLoadingTimeout();
     } else {
       clearTimeout(loadingTimer);
+    }
+  });
+
+  /** Sync lensStore URL/inputUrl when the active browser tab changes (tab switch or close). */
+  $effect(() => {
+    const active = browserTabsStore.activeTab;
+    if (active?.url) {
+      lensStore.setUrl(active.url);
+      lensStore.setInputUrl(active.url);
     }
   });
 
@@ -226,7 +244,7 @@
     }
   });
 
-  async function createWebview() {
+  async function createFirstTab() {
     if (!containerEl) return;
 
     // Wait for layout to settle before measuring bounds (double rAF)
@@ -243,28 +261,28 @@
       return;
     }
 
-    console.log('[LensPreview] Creating webview at', bounds, retryCount > 0 ? `(retry ${retryCount})` : '');
+    console.log('[LensPreview] Creating first browser tab at', bounds, retryCount > 0 ? `(retry ${retryCount})` : '');
 
     try {
-      await lensCreateWebview(
-        DEFAULT_URL,
-        bounds.x, bounds.y,
-        bounds.width, bounds.height,
-      );
-      lensStore.setWebviewReady(true);
-      retryCount = 0;
-      console.log('[LensPreview] Webview ready');
+      const tabId = await browserTabsStore.openTab(DEFAULT_URL, bounds);
+      if (tabId) {
+        lensStore.setWebviewReady(true);
+        retryCount = 0;
+        console.log('[LensPreview] First browser tab ready');
 
-      // Observe container resize — sync bounds on next animation frame
-      if (resizeObserver) resizeObserver.disconnect();
-      const observer = new ResizeObserver(() => {
-        if (rafId) cancelAnimationFrame(rafId);
-        rafId = requestAnimationFrame(() => { rafId = null; syncBounds(); });
-      });
-      observer.observe(containerEl);
-      resizeObserver = observer;
+        // Observe container resize — sync bounds on next animation frame
+        if (resizeObserver) resizeObserver.disconnect();
+        const observer = new ResizeObserver(() => {
+          if (rafId) cancelAnimationFrame(rafId);
+          rafId = requestAnimationFrame(() => { rafId = null; syncBounds(); });
+        });
+        observer.observe(containerEl);
+        resizeObserver = observer;
+      } else {
+        scheduleRetry();
+      }
     } catch (err) {
-      console.error('[LensPreview] Failed to create webview:', err);
+      console.error('[LensPreview] Failed to create first tab:', err);
       scheduleRetry();
     }
   }
@@ -278,7 +296,7 @@
     console.log(`[LensPreview] Retrying in ${RETRY_DELAY_MS}ms (attempt ${retryCount}/${MAX_RETRIES})`);
     clearTimeout(retryTimer);
     retryTimer = setTimeout(() => {
-      createWebview();
+      createFirstTab();
     }, RETRY_DELAY_MS);
   }
 
@@ -288,16 +306,36 @@
     if (setupDone) return;
     setupDone = true;
 
-    // Listen for URL change events first (before webview creation)
+    // Listen for URL change events — route by tabId to browser tabs store
     unlistenUrl = await listen('lens-url-changed', (event) => {
-      if (event.payload?.url) {
-        lensStore.setUrl(event.payload.url);
-        lensStore.setInputUrl(event.payload.url);
+      const tabId = event.payload?.tabId;
+      const url = event.payload?.url;
+
+      if (tabId && url) {
+        browserTabsStore.setTabUrl(tabId, url);
+        browserTabsStore.setTabLoading(tabId, false);
+      }
+
+      // Sync active tab URL to lensStore for backward compat
+      if ((!tabId || tabId === browserTabsStore.activeTabId) && url) {
+        lensStore.setUrl(url);
+        lensStore.setInputUrl(url);
       }
       lensStore.setLoading(false);
     });
 
-    await createWebview();
+    // Listen for MCP browser_open requests to create new tabs
+    unlistenOpenTab = await listen('lens-open-tab', (event) => {
+      const url = event.payload?.url;
+      if (url) {
+        const bounds = getAbsoluteBounds();
+        if (bounds && bounds.width > 0 && bounds.height > 0) {
+          browserTabsStore.openTab(url, bounds);
+        }
+      }
+    });
+
+    await createFirstTab();
   });
 
   onDestroy(() => {
@@ -313,7 +351,12 @@
       unlistenUrl();
       unlistenUrl = null;
     }
-    lensCloseWebview().catch(() => {});
+    if (unlistenOpenTab) {
+      unlistenOpenTab();
+      unlistenOpenTab = null;
+    }
+    lensCloseAllTabs().catch(() => {});
+    browserTabsStore.clearAll();
     lensStore.setWebviewReady(false);
     setupDone = false;
   });

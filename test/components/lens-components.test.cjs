@@ -129,16 +129,16 @@ describe('LensToolbar.svelte', () => {
 describe('LensPreview.svelte', () => {
   const src = readComponent('LensPreview.svelte');
 
-  it('imports lensCreateWebview from api', () => {
-    assert.ok(src.includes('lensCreateWebview'));
+  it('imports browserTabsStore for multi-tab management', () => {
+    assert.ok(src.includes('browserTabsStore'));
   });
 
   it('imports lensResizeWebview from api', () => {
     assert.ok(src.includes('lensResizeWebview'));
   });
 
-  it('imports lensCloseWebview from api', () => {
-    assert.ok(src.includes('lensCloseWebview'));
+  it('imports lensCloseAllTabs from api', () => {
+    assert.ok(src.includes('lensCloseAllTabs'));
   });
 
   it('imports lensClearCache from api', () => {
@@ -178,8 +178,8 @@ describe('LensPreview.svelte', () => {
   });
 
   it('cleans up webview on unmount', () => {
-    // The cleanup function should call lensCloseWebview in onDestroy
-    assert.ok(src.includes('lensCloseWebview'), 'Should close webview on cleanup');
+    // The cleanup function should call lensCloseAllTabs in onDestroy
+    assert.ok(src.includes('lensCloseAllTabs'), 'Should close all tabs on cleanup');
     assert.ok(src.includes('onDestroy'), 'Should use onDestroy for cleanup');
   });
 

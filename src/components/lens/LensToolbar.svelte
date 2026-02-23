@@ -2,12 +2,13 @@
   import { onMount } from 'svelte';
   import { listen } from '@tauri-apps/api/event';
   import { lensStore } from '../../lib/stores/lens.svelte.js';
+  import { browserTabsStore } from '../../lib/stores/browser-tabs.svelte.js';
   import { lensHardRefresh } from '../../lib/api.js';
 
   let urlInput = $state('');
 
   $effect(() => {
-    urlInput = lensStore.inputUrl;
+    urlInput = browserTabsStore.activeTab?.inputUrl || lensStore.inputUrl;
   });
 
   onMount(() => {
