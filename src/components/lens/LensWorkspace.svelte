@@ -13,6 +13,8 @@
   import { lensStore } from '../../lib/stores/lens.svelte.js';
   import { lensSetVisible, startFileWatching, stopFileWatching } from '../../lib/api.js';
   import { projectStore } from '../../lib/stores/project.svelte.js';
+  import { lspDiagnosticsStore } from '../../lib/stores/lsp-diagnostics.svelte.js';
+  import { LSP_EXTENSIONS } from '../../lib/editor-lsp.svelte.js';
 
   let {
     onSend = () => {},
@@ -27,6 +29,7 @@
   let isBrowser = $derived(tabsStore.activeTab?.type === 'browser');
   let isFile = $derived(tabsStore.activeTab?.type === 'file');
   let isDiff = $derived(tabsStore.activeTab?.type === 'diff');
+  let activeExt = $derived(tabsStore.activeTab?.path?.split('.').pop()?.toLowerCase());
 
   // Toggle browser webview visibility when switching between browser and file tabs.
   // Guard on webviewReady so we never call before the webview exists.
@@ -47,6 +50,21 @@
 
     return () => {
       stopFileWatching().catch(() => {});
+    };
+  });
+
+  // Start/stop LSP diagnostics store listener on project switch
+  $effect(() => {
+    const path = projectStore.activeProject?.path;
+    if (!path) return;
+
+    lspDiagnosticsStore.clear();
+    lspDiagnosticsStore.startListening(path).catch((err) => {
+      console.warn('[LensWorkspace] Failed to start diagnostics listener:', err);
+    });
+
+    return () => {
+      lspDiagnosticsStore.stopListening();
     };
   });
 </script>
@@ -87,6 +105,14 @@
                   onFileClick={(entry) => tabsStore.openFile(entry)}
                   onFileDblClick={(entry) => tabsStore.pinTab(entry.path)}
                   onChangeClick={(change) => tabsStore.openDiff(change)}
+                  activeFilePath={isFile ? tabsStore.activeTab?.path : null}
+                  activeFileHasLsp={isFile && LSP_EXTENSIONS.has(activeExt)}
+                  onSymbolClick={({ line, character }) => {
+                    // Navigate to symbol position in the active file editor
+                    // The FileEditor will handle scrolling via its view
+                    const event = new CustomEvent('lens-goto-position', { detail: { line, character } });
+                    window.dispatchEvent(event);
+                  }}
                 />
               {/snippet}
             </SplitPanel>

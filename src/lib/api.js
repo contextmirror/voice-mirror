@@ -651,3 +651,27 @@ export async function lspGetStatus() {
 export async function lspShutdown() {
   return invoke('lsp_shutdown');
 }
+
+export async function lspRequestDocumentSymbols(path, projectRoot) {
+  return invoke('lsp_request_document_symbols', { path, projectRoot });
+}
+
+export async function lspRequestReferences(path, line, character, projectRoot) {
+  return invoke('lsp_request_references', { path, line, character, projectRoot });
+}
+
+export async function lspRequestCodeActions(path, rangeStartLine, rangeStartChar, rangeEndLine, rangeEndChar, diagnostics, projectRoot) {
+  return invoke('lsp_request_code_actions', { path, rangeStartLine, rangeStartChar, rangeEndLine, rangeEndChar, diagnostics, projectRoot });
+}
+
+export async function lspPrepareRename(path, line, character, projectRoot) {
+  return invoke('lsp_prepare_rename', { path, line, character, projectRoot });
+}
+
+export async function lspRename(path, line, character, newName, projectRoot) {
+  return invoke('lsp_rename', { path, line, character, newName, projectRoot });
+}
+
+export async function lspApplyWorkspaceEdit(edits, projectRoot) {
+  return invoke('lsp_apply_workspace_edit', { edits, projectRoot });
+}

@@ -65,6 +65,8 @@ pub struct DiagnosticItem {
     pub severity: String,
     pub message: String,
     pub source: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub code: Option<serde_json::Value>,
 }
 
 /// A range within a document (start and end positions).

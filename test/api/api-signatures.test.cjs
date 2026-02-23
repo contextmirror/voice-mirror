@@ -268,6 +268,12 @@ describe('api.js -- exported async functions', () => {
     'lspRequestDefinition',
     'lspGetStatus',
     'lspShutdown',
+    'lspRequestDocumentSymbols',
+    'lspRequestReferences',
+    'lspRequestCodeActions',
+    'lspPrepareRename',
+    'lspRename',
+    'lspApplyWorkspaceEdit',
   ];
 
   for (const fn of expectedExports) {

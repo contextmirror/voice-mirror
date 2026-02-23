@@ -278,6 +278,7 @@ fn handle_diagnostics(app_handle: &AppHandle, lang_id: &str, msg: &Value) {
                             .get("source")
                             .and_then(|v| v.as_str())
                             .map(|s| s.to_string()),
+                        code: d.get("code").cloned(),
                     }
                 })
                 .collect()
