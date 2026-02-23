@@ -19,9 +19,9 @@ describe('base.css: global scrollbar styling', () => {
     assert.ok(src.includes('height: 14px'), 'Should have 14px scrollbar height');
   });
 
-  it('has transparent track', () => {
+  it('has subtle track background using color-mix', () => {
     const trackSection = src.substring(src.indexOf('::-webkit-scrollbar-track'));
-    assert.ok(trackSection.includes('background: transparent'), 'Track should be transparent');
+    assert.ok(trackSection.includes('color-mix(in srgb, var(--text) 5%, transparent)'), 'Track should use 5% text color');
   });
 
   it('has semi-transparent thumb using color-mix', () => {

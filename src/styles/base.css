@@ -113,7 +113,7 @@ pre code {
 }
 
 ::-webkit-scrollbar-track {
-  background: transparent;
+  background: color-mix(in srgb, var(--text) 5%, transparent);
 }
 
 ::-webkit-scrollbar-thumb {
