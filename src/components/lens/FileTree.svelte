@@ -3,6 +3,7 @@
   import { listen } from '@tauri-apps/api/event';
   import { chooseIconName } from '../../lib/file-icons.js';
   import { projectStore } from '../../lib/stores/project.svelte.js';
+  import { lspDiagnosticsStore } from '../../lib/stores/lsp-diagnostics.svelte.js';
   import spriteUrl from '../../assets/icons/file-icons-sprite.svg';
   import FileContextMenu from './FileContextMenu.svelte';
   import StatusDropdown from './StatusDropdown.svelte';
@@ -422,6 +423,7 @@
                 />
               </div>
             {:else}
+              {@const dirDiag = lspDiagnosticsStore.getForDirectory(entry.path)}
               <button
                 class="tree-item folder"
                 style="padding-left: {8 + depth * 16}px"
@@ -430,7 +432,15 @@
               >
                 <span class="tree-chevron">{isExpanded ? 'v' : '>'}</span>
                 <svg class="tree-icon"><use href="{spriteUrl}#{chooseIconName(entry.path, 'directory', isExpanded)}" /></svg>
-                <span class="tree-name">{entry.name}</span>
+                <span class="tree-name" class:has-error={dirDiag?.errors > 0} class:has-warning={dirDiag && dirDiag.errors === 0 && dirDiag.warnings > 0}>{entry.name}</span>
+                {#if dirDiag}
+                  {#if dirDiag.errors > 0}
+                    <span class="diag-badge error">{dirDiag.errors}</span>
+                  {/if}
+                  {#if dirDiag.warnings > 0}
+                    <span class="diag-badge warning">{dirDiag.warnings}</span>
+                  {/if}
+                {/if}
               </button>
             {/if}
             {#if isExpanded}
@@ -466,6 +476,7 @@
                 />
               </div>
             {:else}
+              {@const fileDiag = lspDiagnosticsStore.getForFile(entry.path)}
               <button
                 class="tree-item file"
                 style="padding-left: {8 + depth * 16 + 18}px"
@@ -474,7 +485,15 @@
                 oncontextmenu={(e) => handleContextMenu(e, entry, false, false)}
               >
                 <svg class="tree-icon"><use href="{spriteUrl}#{chooseIconName(entry.path, 'file')}" /></svg>
-                <span class="tree-name" class:ignored={entry.ignored}>{entry.name}</span>
+                <span class="tree-name" class:ignored={entry.ignored} class:has-error={fileDiag?.errors > 0} class:has-warning={fileDiag && fileDiag.errors === 0 && fileDiag.warnings > 0}>{entry.name}</span>
+                {#if fileDiag}
+                  {#if fileDiag.errors > 0}
+                    <span class="diag-badge error">{fileDiag.errors}</span>
+                  {/if}
+                  {#if fileDiag.warnings > 0}
+                    <span class="diag-badge warning">{fileDiag.warnings}</span>
+                  {/if}
+                {/if}
               </button>
             {/if}
           {/if}
@@ -839,5 +858,39 @@
   }
   .project-menu-item:hover svg {
     opacity: 1;
+  }
+
+  /* ── Diagnostic decorations ── */
+
+  .tree-name.has-error {
+    color: var(--danger, #ef4444);
+  }
+
+  .tree-name.has-warning {
+    color: var(--warn, #f59e0b);
+  }
+
+  .diag-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    font-size: 10px;
+    font-weight: 600;
+    border-radius: 8px;
+    flex-shrink: 0;
+    margin-left: auto;
+  }
+
+  .diag-badge.error {
+    background: var(--danger, #ef4444);
+    color: var(--bg, #000);
+  }
+
+  .diag-badge.warning {
+    background: var(--warn, #f59e0b);
+    color: var(--bg, #000);
   }
 </style>

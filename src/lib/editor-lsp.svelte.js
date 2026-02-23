@@ -1,0 +1,268 @@
+/**
+ * editor-lsp.svelte.js -- LSP helper module extracted from FileEditor.svelte.
+ *
+ * Provides a createEditorLsp() factory that encapsulates all LSP-specific state,
+ * event listeners, handlers, and CodeMirror extension factories for the file editor.
+ */
+
+import { listen } from '@tauri-apps/api/event';
+import { lspOpenFile, lspCloseFile, lspChangeFile, lspSaveFile, lspRequestCompletion, lspRequestHover, lspRequestDefinition } from './api.js';
+import { projectStore } from './stores/project.svelte.js';
+import { tabsStore } from './stores/tabs.svelte.js';
+
+/** Set of file extensions that have LSP support */
+export const LSP_EXTENSIONS = new Set([
+  'js', 'jsx', 'mjs', 'cjs', 'ts', 'tsx', 'rs', 'py',
+  'css', 'scss', 'html', 'svelte', 'json', 'md', 'markdown',
+]);
+
+/** Convert a file:// URI to a project-relative path.
+ *  Returns { path, external } where external=true if outside project root. */
+export function uriToRelativePath(uri, root) {
+  if (!uri) return null;
+  try {
+    const url = new URL(uri);
+    if (url.protocol !== 'file:') return null;
+    let filePath = decodeURIComponent(url.pathname).replace(/\\/g, '/');
+    // On Windows, pathname starts with /C:/... — strip leading slash
+    if (/^\/[A-Za-z]:\//.test(filePath)) filePath = filePath.slice(1);
+    const normalizedRoot = root.replace(/\\/g, '/').replace(/\/$/, '');
+    const filePathLower = filePath.toLowerCase();
+    const rootLower = normalizedRoot.toLowerCase();
+    if (filePathLower.startsWith(rootLower + '/')) {
+      return { path: filePath.slice(normalizedRoot.length + 1), external: false };
+    }
+    return { path: filePath, external: true };
+  } catch {
+    return null;
+  }
+}
+
+/** Convert an LSP position { line, character } to a CodeMirror offset */
+export function lspPositionToOffset(doc, pos) {
+  const line = doc.line(Math.min(pos.line + 1, doc.lines));
+  return line.from + Math.min(pos.character, line.length);
+}
+
+/** Map LSP CompletionItemKind number to CodeMirror completion type string */
+export function mapCompletionKind(kind) {
+  const kinds = {
+    1: 'text', 2: 'method', 3: 'function', 4: 'constructor',
+    5: 'field', 6: 'variable', 7: 'class', 8: 'interface',
+    9: 'module', 10: 'property', 11: 'unit', 12: 'value',
+    13: 'enum', 14: 'keyword', 15: 'snippet', 16: 'color',
+    17: 'file', 18: 'reference', 19: 'folder', 20: 'enum',
+    21: 'constant', 22: 'struct', 23: 'event', 24: 'operator',
+    25: 'type',
+  };
+  return kinds[kind] || 'text';
+}
+
+/**
+ * Create an editor LSP helper instance. Encapsulates all LSP state, event
+ * listeners, handlers, and CodeMirror extension factories.
+ *
+ * @returns LSP helper object with state, handlers, extension factories, and lifecycle methods
+ */
+export function createEditorLsp() {
+  let lspVersion = $state(0);
+  let hasLsp = $state(false);
+  let cachedDiagnostics = $state(new Map());
+
+  let lspDebounceTimer = null;
+  let diagnosticUnlisten = null;
+
+  // ── Handlers ──
+
+  function openFile(path, content, root) {
+    if (!hasLsp) return;
+    lspOpenFile(path, content, root).catch(() => {});
+  }
+
+  function closeFile(path, root) {
+    if (!hasLsp) return;
+    lspCloseFile(path, root).catch(() => {});
+  }
+
+  function changeFile(path, content, root) {
+    lspVersion++;
+    clearTimeout(lspDebounceTimer);
+    lspDebounceTimer = setTimeout(() => {
+      lspChangeFile(path, content, lspVersion, root).catch(() => {});
+    }, 300);
+  }
+
+  function saveFile(path, content, root) {
+    if (!hasLsp) return;
+    lspSaveFile(path, content, root).catch(() => {});
+  }
+
+  async function handleGoToDefinition(view, pos) {
+    if (!view || !hasLsp) return;
+    const lineInfo = view.state.doc.lineAt(pos);
+    const line = lineInfo.number - 1;
+    const character = pos - lineInfo.from;
+    const root = projectStore.activeProject?.path || null;
+    const currentPath = view._lspPath; // set by FileEditor
+
+    try {
+      const result = await lspRequestDefinition(currentPath, line, character, root);
+      if (!result?.data?.locations?.length) return;
+      const loc = result.data.locations[0];
+      const rootStr = projectStore.activeProject?.path || '';
+      const resolved = uriToRelativePath(loc.uri, rootStr);
+      if (!resolved) return;
+      if (resolved.path === currentPath && !resolved.external) {
+        const targetLine = view.state.doc.line(loc.range.start.line + 1);
+        view.dispatch({
+          selection: { anchor: targetLine.from + loc.range.start.character },
+          scrollIntoView: true,
+        });
+      } else {
+        const fileName = resolved.path.split(/[/\\]/).pop() || resolved.path;
+        tabsStore.openFile({ name: fileName, path: resolved.path, readOnly: resolved.external, external: resolved.external });
+      }
+    } catch {}
+  }
+
+  // ── CodeMirror extension factories ──
+
+  function completionSource(currentPath) {
+    return async function lspCompletionSource(context) {
+      if (!hasLsp || !currentPath) return null;
+      const pos = context.state.doc.lineAt(context.pos);
+      const line = pos.number - 1;
+      const character = context.pos - pos.from;
+      const root = projectStore.activeProject?.path || null;
+
+      try {
+        const result = await lspRequestCompletion(currentPath, line, character, root);
+        if (!result?.data?.items?.length) return null;
+
+        return {
+          from: context.pos - (context.matchBefore(/\w*/)?.text.length || 0),
+          options: result.data.items.map(item => ({
+            label: item.label,
+            type: mapCompletionKind(item.kind),
+            detail: item.detail || undefined,
+            info: item.documentation || undefined,
+            apply: item.textEdit?.newText || item.insertText || item.label,
+          })),
+        };
+      } catch {
+        return null;
+      }
+    };
+  }
+
+  function hoverTooltipExtension(currentPath, hoverTooltip) {
+    return hoverTooltip(async (v, pos) => {
+      const lineInfo = v.state.doc.lineAt(pos);
+      const line = lineInfo.number - 1;
+      const character = pos - lineInfo.from;
+      const root = projectStore.activeProject?.path || null;
+
+      try {
+        const result = await lspRequestHover(currentPath, line, character, root);
+        if (!result?.data?.contents) return null;
+
+        return {
+          pos,
+          create() {
+            const dom = document.createElement('div');
+            dom.className = 'lsp-hover-tooltip';
+            dom.textContent = typeof result.data.contents === 'string'
+              ? result.data.contents
+              : result.data.contents.value || '';
+            return { dom };
+          },
+        };
+      } catch {
+        return null;
+      }
+    });
+  }
+
+  function diagnosticListener(currentPath, view, cmCache) {
+    return (event) => {
+      const { uri, diagnostics: lspDiags } = event.payload;
+      if (!view || !currentPath) return;
+      const normalizedPath = currentPath.replace(/\\/g, '/');
+      if (!uri.includes(normalizedPath)) return;
+
+      try {
+        const cm = cmCache;
+        if (!cm) return;
+        const cmDiags = lspDiags.map(d => {
+          let from = lspPositionToOffset(view.state.doc, d.range.start);
+          let to = lspPositionToOffset(view.state.doc, d.range.end);
+          from = Math.max(0, Math.min(from, view.state.doc.length));
+          to = Math.max(0, Math.min(to, view.state.doc.length));
+          if (from > to) { const tmp = from; from = to; to = tmp; }
+          return {
+            from,
+            to,
+            severity: d.severity || 'error',
+            message: d.message,
+            source: d.source || undefined,
+          };
+        });
+        cachedDiagnostics.set(currentPath, cmDiags);
+        view.dispatch(cm.setDiagnostics(view.state, cmDiags));
+      } catch (err) {
+        console.warn('[editor-lsp] Failed to apply diagnostics:', err);
+      }
+    };
+  }
+
+  // ── Lifecycle ──
+
+  async function startListening(currentPath, getView, cmCache) {
+    stopListening();
+    diagnosticUnlisten = await listen('lsp-diagnostics', diagnosticListener(currentPath, getView(), cmCache));
+  }
+
+  function stopListening() {
+    diagnosticUnlisten?.();
+    diagnosticUnlisten = null;
+  }
+
+  function reset() {
+    clearTimeout(lspDebounceTimer);
+    lspVersion = 0;
+    hasLsp = false;
+  }
+
+  function destroy() {
+    stopListening();
+    clearTimeout(lspDebounceTimer);
+  }
+
+  return {
+    // State (reactive getters)
+    get lspVersion() { return lspVersion; },
+    get hasLsp() { return hasLsp; },
+    get cachedDiagnostics() { return cachedDiagnostics; },
+
+    // Setters
+    setHasLsp(val) { hasLsp = val; },
+
+    // Handlers
+    openFile,
+    closeFile,
+    changeFile,
+    saveFile,
+    handleGoToDefinition,
+
+    // CodeMirror extension factories
+    completionSource,
+    hoverTooltipExtension,
+    diagnosticListener,
+
+    // Lifecycle
+    startListening,
+    stopListening,
+    reset,
+    destroy,
+  };
+}

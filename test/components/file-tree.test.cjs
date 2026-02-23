@@ -508,3 +508,65 @@ describe('FileTree.svelte -- tree refresh', () => {
     assert.ok(refreshBody.includes('loadGitChanges'), 'Should refresh git changes');
   });
 });
+
+describe('FileTree.svelte -- LSP diagnostic decorations', () => {
+  it('imports lspDiagnosticsStore', () => {
+    assert.ok(src.includes('lspDiagnosticsStore'), 'Should import lspDiagnosticsStore');
+    assert.ok(src.includes('lsp-diagnostics.svelte.js'), 'Should import from lsp-diagnostics.svelte.js');
+  });
+
+  it('calls getForFile for file diagnostic lookup', () => {
+    assert.ok(src.includes('lspDiagnosticsStore.getForFile('), 'Should call getForFile');
+  });
+
+  it('calls getForDirectory for folder diagnostic lookup', () => {
+    assert.ok(src.includes('lspDiagnosticsStore.getForDirectory('), 'Should call getForDirectory');
+  });
+
+  it('has has-error class for error files', () => {
+    assert.ok(src.includes('class:has-error'), 'Should have has-error class toggle');
+  });
+
+  it('has has-warning class for warning files', () => {
+    assert.ok(src.includes('class:has-warning'), 'Should have has-warning class toggle');
+  });
+
+  it('has diag-badge element for counts', () => {
+    assert.ok(src.includes('diag-badge'), 'Should have diag-badge class');
+  });
+
+  it('has error badge variant', () => {
+    assert.ok(src.includes('diag-badge error'), 'Should have error badge variant');
+  });
+
+  it('has warning badge variant', () => {
+    assert.ok(src.includes('diag-badge warning'), 'Should have warning badge variant');
+  });
+
+  it('uses --danger color for errors', () => {
+    // Check CSS section for .has-error or .diag-badge.error using --danger
+    const styleIdx = src.indexOf('<style>');
+    const styleBlock = src.slice(styleIdx);
+    assert.ok(styleBlock.includes('.has-error') && styleBlock.includes('var(--danger'), 'Should use --danger for errors');
+  });
+
+  it('uses --warn color for warnings', () => {
+    const styleIdx = src.indexOf('<style>');
+    const styleBlock = src.slice(styleIdx);
+    assert.ok(styleBlock.includes('.has-warning') && styleBlock.includes('var(--warn'), 'Should use --warn for warnings');
+  });
+
+  it('shows diagnostic badges conditionally', () => {
+    assert.ok(src.includes('{#if dirDiag}') || src.includes('{#if fileDiag}'), 'Should conditionally show diagnostic badges');
+  });
+
+  it('applies has-error to folder names via dirDiag', () => {
+    assert.ok(src.includes('dirDiag'), 'Should use dirDiag for folder diagnostics');
+    assert.ok(src.includes('getForDirectory(entry.path)'), 'Should call getForDirectory');
+  });
+
+  it('applies has-error to file names via fileDiag', () => {
+    assert.ok(src.includes('fileDiag'), 'Should use fileDiag for file diagnostics');
+    assert.ok(src.includes('getForFile(entry.path)'), 'Should call getForFile');
+  });
+});

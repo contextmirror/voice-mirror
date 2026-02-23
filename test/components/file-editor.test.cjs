@@ -192,10 +192,10 @@ describe('FileEditor.svelte: external file support', () => {
     assert.ok(src.includes('readExternalFile'), 'Should import readExternalFile');
   });
 
-  it('uriToRelativePath returns { path, external } object', () => {
+  it('imports uriToRelativePath from editor-lsp.svelte.js', () => {
     assert.ok(
-      src.includes('external: false') && src.includes('external: true'),
-      'Should distinguish internal vs external paths'
+      src.includes('uriToRelativePath') && src.includes('editor-lsp.svelte.js'),
+      'Should import uriToRelativePath from editor-lsp'
     );
   });
 

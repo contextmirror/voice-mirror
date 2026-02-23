@@ -13,6 +13,7 @@
   import { lensStore } from '../../lib/stores/lens.svelte.js';
   import { lensSetVisible, startFileWatching, stopFileWatching } from '../../lib/api.js';
   import { projectStore } from '../../lib/stores/project.svelte.js';
+  import { lspDiagnosticsStore } from '../../lib/stores/lsp-diagnostics.svelte.js';
 
   let {
     onSend = () => {},
@@ -47,6 +48,21 @@
 
     return () => {
       stopFileWatching().catch(() => {});
+    };
+  });
+
+  // Start/stop LSP diagnostics store listener on project switch
+  $effect(() => {
+    const path = projectStore.activeProject?.path;
+    if (!path) return;
+
+    lspDiagnosticsStore.clear();
+    lspDiagnosticsStore.startListening(path).catch((err) => {
+      console.warn('[LensWorkspace] Failed to start diagnostics listener:', err);
+    });
+
+    return () => {
+      lspDiagnosticsStore.stopListening();
     };
   });
 </script>
