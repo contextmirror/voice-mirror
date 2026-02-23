@@ -75,16 +75,14 @@ voice-mirror/
 │   │   ├── mcp/                        # Native Rust MCP server
 │   │   │   ├── mod.rs
 │   │   │   ├── server.rs               # stdio JSON-RPC server
-│   │   │   ├── tools.rs                # Tool registry (8 groups, dynamic load/unload)
+│   │   │   ├── tools.rs                # Tool registry (4 groups, dynamic load/unload)
 │   │   │   ├── pipe_router.rs          # Concurrent pipe message routing
-│   │   │   └── handlers/               # 6 tool handler modules
+│   │   │   └── handlers/               # 4 tool handler modules
 │   │   │       ├── mod.rs
 │   │   │       ├── core.rs             # voice_send, voice_inbox, voice_listen, voice_status
 │   │   │       ├── memory.rs           # search, get, remember, forget, stats, flush
 │   │   │       ├── browser.rs          # Browser automation via named pipe to WebView2
-│   │   │       ├── n8n.rs              # n8n workflow management
-│   │   │       ├── diagnostic.rs       # Pipeline diagnostics
-│   │   │       └── facades.rs          # Single-tool facades for voice mode
+│   │   │       └── n8n.rs              # n8n workflow management
 │   │   ├── ipc/                        # Named pipe IPC (MCP binary <-> Tauri app)
 │   │   │   ├── protocol.rs             # McpToApp / AppToMcp message enums
 │   │   │   ├── pipe_server.rs          # Named pipe server (Tauri side)
@@ -445,8 +443,8 @@ The voice pipeline is fully Rust-native (no separate child process):
 The MCP server is a native Rust binary (`voice-mirror-mcp`) that communicates via stdio JSON-RPC:
 
 - Entry point: `src-tauri/src/bin/mcp.rs`
-- Tool registry: `src-tauri/src/mcp/tools.rs` (8 groups, dynamic load/unload)
-- Handlers: `src-tauri/src/mcp/handlers/` (6 handler modules)
+- Tool registry: `src-tauri/src/mcp/tools.rs` (4 groups, dynamic load/unload)
+- Handlers: `src-tauri/src/mcp/handlers/` (4 handler modules)
 - Pipe router: `src-tauri/src/mcp/pipe_router.rs` (concurrent oneshot/mpsc routing)
 - Named pipe IPC connects the MCP binary to the running Tauri app for real-time communication
 

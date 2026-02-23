@@ -52,8 +52,8 @@
 |  │                                                      │ |
 |  │  mcp/          Native Rust MCP server                │ |
 |  │  ├── server    stdio JSON-RPC transport              │ |
-|  │  ├── tools     Tool registry (8 groups)             │ |
-|  │  ├── handlers  6 handler modules                     │ |
+|  │  ├── tools     Tool registry (4 groups)             │ |
+|  │  ├── handlers  4 handler modules                     │ |
 |  │  └── pipe_router Concurrent pipe message routing     │ |
 |  │                                                      │ |
 |  │  ipc/          Named pipe server (Win) / Unix socket │ |
@@ -519,10 +519,8 @@ Tauri app backend (Rust)
 | `mcp/handlers/browser.rs` | Browser control via named pipe to WebView2 |
 | `mcp/handlers/memory.rs` | Persistent memory system |
 | `mcp/handlers/n8n.rs` | n8n workflow automation |
-| `mcp/handlers/diagnostic.rs` | Pipeline diagnostic tools |
-| `mcp/handlers/facades.rs` | Single-tool wrappers for voice mode |
 
-### Tool Groups (10)
+### Tool Groups (4)
 
 | Group | Tools | Always Loaded | Description |
 |-------|-------|---------------|-------------|
@@ -530,10 +528,6 @@ Tauri app backend (Rust)
 | `memory` | 6 | No | Persistent memory (search, remember, forget, stats, flush) |
 | `browser` | 16 | No | Chrome browser control and web research |
 | `n8n` | 22 | No | n8n workflow automation |
-| `diagnostic` | 1 | No | Pipeline diagnostic tools |
-| `memory-facade` | 1 | No | Single-tool memory wrapper (for voice mode) |
-| `n8n-facade` | 1 | No | Single-tool n8n wrapper (for voice mode) |
-| `browser-facade` | 1 | No | Single-tool browser wrapper (for voice mode) |
 
 ### Communication
 

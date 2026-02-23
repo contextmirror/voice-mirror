@@ -44,8 +44,6 @@
     },
   ];
 
-  // Note: facade groups (memory-facade, n8n-facade, browser-facade) and diagnostic
-  // are internal — selected automatically via tool profiles, not shown in the UI.
 
   // ---- Default profiles ----
 
@@ -53,10 +51,6 @@
     'voice-assistant': {
       label: 'Voice Assistant',
       groups: ['core', 'memory', 'browser'],
-    },
-    'voice-assistant-lite': {
-      label: 'Voice Assistant (Lite)',
-      groups: ['core', 'memory-facade', 'browser-facade'],
     },
     'n8n-workflows': {
       label: 'n8n Workflows',

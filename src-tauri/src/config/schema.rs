@@ -468,9 +468,6 @@ fn default_tool_profiles() -> HashMap<String, ToolProfile> {
     m.insert("minimal".into(), ToolProfile {
         groups: vec!["core".into()],
     });
-    m.insert("voice-assistant-lite".into(), ToolProfile {
-        groups: vec!["core".into(), "memory-facade".into(), "browser-facade".into()],
-    });
     m
 }
 

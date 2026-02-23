@@ -409,14 +409,6 @@ async fn route_tool_call(
         "n8n_delete_tag" => handlers::n8n::handle_n8n_delete_tag(args, data_dir).await,
         "n8n_list_variables" => handlers::n8n::handle_n8n_list_variables(args, data_dir).await,
 
-        // ---- Diagnostic tools ----
-        "pipeline_trace" => handlers::diagnostic::handle_pipeline_trace(args, data_dir).await,
-
-        // ---- Facade tools (voice mode) ----
-        "memory_manage" => handlers::facades::handle_memory_manage(args, data_dir).await,
-        "n8n_manage" => handlers::facades::handle_n8n_manage(args, data_dir).await,
-        "browser_manage" => handlers::facades::handle_browser_manage(args, data_dir, router).await,
-
         _ => McpToolResult::error(format!("Unknown tool: {}", name)),
     }
 }

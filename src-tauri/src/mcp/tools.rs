@@ -671,139 +671,6 @@ fn build_all_groups() -> HashMap<String, ToolGroupDef> {
         },
     );
 
-    // ---- Diagnostic ----
-    groups.insert(
-        "diagnostic".into(),
-        ToolGroupDef {
-            name: "diagnostic".into(),
-            description: "Pipeline diagnostic tools".into(),
-            always_loaded: false,
-            keywords: vec![
-                "diagnostic".into(), "trace".into(), "pipeline".into(),
-                "debug".into(), "test pipeline".into(),
-            ],
-            dependencies: vec![],
-            tools: vec![ToolDef {
-                name: "pipeline_trace".into(),
-                description: "Send a test message through the live Voice Mirror pipeline and trace every stage.".into(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "message": { "type": "string", "description": "The test message to send through the pipeline" },
-                        "timeout_seconds": { "type": "number", "description": "Max wait time (default: 30)" }
-                    },
-                    "required": ["message"]
-                }),
-            }],
-        },
-    );
-
-    // ---- Facade groups (single-tool wrappers for voice mode) ----
-    groups.insert(
-        "memory-facade".into(),
-        ToolGroupDef {
-            name: "memory-facade".into(),
-            description: "Memory system (single tool: memory_manage)".into(),
-            always_loaded: false,
-            keywords: vec![
-                "remember".into(), "memory".into(), "recall".into(), "forget".into(),
-                "what did i say".into(), "previously".into(), "last time".into(),
-                "you told me".into(), "i mentioned".into(),
-            ],
-            dependencies: vec![],
-            tools: vec![ToolDef {
-                name: "memory_manage".into(),
-                description: "Manage persistent memories. Actions: search, remember, forget, stats, flush.".into(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "action": { "type": "string", "enum": ["search", "remember", "forget", "stats", "flush"], "description": "Action to perform" },
-                        "query": { "type": "string" },
-                        "content": { "type": "string" },
-                        "tier": { "type": "string", "enum": ["core", "stable", "notes"] },
-                        "content_or_id": { "type": "string" },
-                        "confirmed": { "type": "boolean" },
-                        "max_results": { "type": "number" },
-                        "topics": { "type": "array", "items": { "type": "string" } },
-                        "decisions": { "type": "array", "items": { "type": "string" } },
-                        "action_items": { "type": "array", "items": { "type": "string" } },
-                        "summary": { "type": "string" }
-                    },
-                    "required": ["action"]
-                }),
-            }],
-        },
-    );
-
-    groups.insert(
-        "n8n-facade".into(),
-        ToolGroupDef {
-            name: "n8n-facade".into(),
-            description: "n8n workflow automation (single tool: n8n_manage)".into(),
-            always_loaded: false,
-            keywords: vec![
-                "n8n".into(), "workflow".into(), "automation".into(),
-                "trigger".into(), "webhook".into(),
-            ],
-            dependencies: vec![],
-            tools: vec![ToolDef {
-                name: "n8n_manage".into(),
-                description: "Manage n8n workflows. Actions: list, get, create, trigger, status, delete.".into(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "action": { "type": "string", "enum": ["list", "get", "create", "trigger", "status", "delete"] },
-                        "workflow_id": { "type": "string" },
-                        "name": { "type": "string" },
-                        "nodes": { "type": "array", "items": { "type": "object" } },
-                        "connections": { "type": "object" },
-                        "data": { "type": "object" },
-                        "confirmed": { "type": "boolean" },
-                        "active_only": { "type": "boolean" }
-                    },
-                    "required": ["action"]
-                }),
-            }],
-        },
-    );
-
-    groups.insert(
-        "browser-facade".into(),
-        ToolGroupDef {
-            name: "browser-facade".into(),
-            description: "Browser control and web research (single tool: browser_manage)".into(),
-            always_loaded: false,
-            keywords: vec![
-                "search".into(), "browse".into(), "website".into(), "web".into(),
-                "google".into(), "open page".into(), "fetch url".into(),
-                "look up".into(), "find online".into(), "what is".into(),
-                "who is".into(), "latest news".into(),
-            ],
-            dependencies: vec![],
-            tools: vec![ToolDef {
-                name: "browser_manage".into(),
-                description: "Control Chrome browser and do web research. Actions: search, open, fetch, snapshot, screenshot, click, type, tabs, navigate, start, stop.".into(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "action": { "type": "string", "enum": ["search", "open", "fetch", "snapshot", "screenshot", "click", "type", "tabs", "navigate", "start", "stop"] },
-                        "query": { "type": "string" },
-                        "url": { "type": "string" },
-                        "ref": { "type": "string" },
-                        "text": { "type": "string" },
-                        "request": { "type": "object" },
-                        "targetId": { "type": "string" },
-                        "profile": { "type": "string" },
-                        "max_results": { "type": "number" },
-                        "timeout": { "type": "number" },
-                        "max_length": { "type": "number" }
-                    },
-                    "required": ["action"]
-                }),
-            }],
-        },
-    );
-
     groups
 }
 
@@ -880,7 +747,7 @@ mod tests {
     fn test_list_groups() {
         let reg = ToolRegistry::new();
         let groups = reg.list_groups();
-        assert!(groups.len() >= 8); // core, memory, browser, n8n, diagnostic, memory-facade, n8n-facade, browser-facade
+        assert!(groups.len() >= 4); // core, memory, browser, n8n
     }
 
     #[test]

@@ -109,7 +109,6 @@ Config is stored in platform-appropriate locations:
         toolProfile: "voice-assistant",  // Active tool profile name (Claude Code only)
         toolProfiles: {            // Saved tool profiles (which MCP groups to pre-load)
             "voice-assistant":      { groups: ["core", "memory", "browser"] },
-            "voice-assistant-lite": { groups: ["core", "memory-facade", "browser-facade"] },
             "n8n-workflows":        { groups: ["core", "n8n"] },
             "web-browser":          { groups: ["core", "browser"] },
             "full-toolbox":         { groups: ["core", "memory", "browser", "n8n"] },
@@ -332,7 +331,6 @@ Tool profiles control which MCP tool groups are pre-loaded when using a CLI agen
 | Profile | Groups | Use Case |
 |---------|--------|----------|
 | **voice-assistant** | core, memory, browser | General voice assistant (default) |
-| **voice-assistant-lite** | core, memory-facade, browser-facade | Lighter footprint with facade tools |
 | **n8n-workflows** | core, n8n | Workflow automation focus |
 | **web-browser** | core, browser | Web research focus |
 | **full-toolbox** | core, memory, browser, n8n | Everything enabled |
