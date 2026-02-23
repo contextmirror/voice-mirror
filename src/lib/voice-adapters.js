@@ -136,7 +136,9 @@ export const STT_REGISTRY = {
     modelSizes: [
       { value: 'tiny', label: 'Fast (~77MB)' },
       { value: 'base', label: 'Balanced (~148MB, recommended)' },
-      { value: 'small', label: 'Accurate (~488MB, best quality)' },
+      { value: 'small', label: 'Accurate (~488MB)' },
+      { value: 'large-v3-turbo', label: 'Turbo (~574MB, best value)' },
+      { value: 'large-v3', label: 'Large v3 (~3.1GB, max accuracy)' },
     ],
     showModelName: false,
     showApiKey: false,

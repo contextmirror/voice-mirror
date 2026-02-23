@@ -85,6 +85,14 @@ export async function stopVoice() {
   return invoke('stop_voice');
 }
 
+export async function restartVoice() {
+  return invoke('restart_voice');
+}
+
+export async function ensureSttModel(modelSize) {
+  return invoke('ensure_stt_model', { modelSize });
+}
+
 export async function getVoiceStatus() {
   return invoke('get_voice_status');
 }

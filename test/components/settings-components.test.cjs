@@ -328,6 +328,31 @@ describe('VoiceSettings.svelte', () => {
   it('has save handler', () => {
     assert.ok(src.includes('saveVoiceSettings'), 'Should have saveVoiceSettings function');
   });
+
+  it('imports ensureSttModel and restartVoice from api', () => {
+    assert.ok(src.includes('ensureSttModel'), 'Should import ensureSttModel');
+    assert.ok(src.includes('restartVoice'), 'Should import restartVoice');
+    assert.ok(src.includes('getVoiceStatus'), 'Should import getVoiceStatus');
+  });
+
+  it('imports listen from Tauri event API', () => {
+    assert.ok(src.includes("from '@tauri-apps/api/event'"), 'Should import from @tauri-apps/api/event');
+    assert.ok(src.includes('listen'), 'Should import listen');
+  });
+
+  it('listens for stt-download-progress events', () => {
+    assert.ok(src.includes("'stt-download-progress'"), 'Should listen for stt-download-progress');
+  });
+
+  it('shows download progress toast with progress bar', () => {
+    assert.ok(src.includes("key: 'stt-model-download'"), 'Should use stt-model-download key for dedup');
+    assert.ok(src.includes('progress: 0'), 'Should start progress bar at 0');
+  });
+
+  it('restarts voice pipeline when STT model changes', () => {
+    assert.ok(src.includes('restartVoice()'), 'Should call restartVoice');
+    assert.ok(src.includes('sttChanged'), 'Should track whether STT changed');
+  });
 });
 
 // ---- KeybindRecorder.svelte ----
@@ -446,6 +471,27 @@ describe('voice-adapters.js', () => {
 
   it('exports getModelsForAdapter helper', () => {
     assert.ok(src.includes('export function getModelsForAdapter'), 'Should export getModelsForAdapter');
+  });
+
+  it('has large-v3-turbo model size option', () => {
+    assert.ok(src.includes("'large-v3-turbo'"), 'Should have large-v3-turbo model size');
+    assert.ok(src.includes('Turbo'), 'Should have Turbo label');
+    assert.ok(src.includes('574MB'), 'Should show ~574MB size');
+  });
+
+  it('has large-v3 model size option', () => {
+    assert.ok(src.includes("'large-v3'"), 'Should have large-v3 model size');
+    assert.ok(src.includes('Large v3'), 'Should have Large v3 label');
+    assert.ok(src.includes('3.1GB'), 'Should show ~3.1GB size');
+  });
+
+  it('has 5 whisper model sizes', () => {
+    // tiny, base, small, large-v3-turbo, large-v3
+    const matches = src.match(/\{ value: '/g);
+    // Count just in STT_REGISTRY section (modelSizes array)
+    const sttSection = src.split("'whisper-local'")[1]?.split('],')[0] || '';
+    const sttMatches = sttSection.match(/value: '/g);
+    assert.ok(sttMatches && sttMatches.length >= 5, 'Should have at least 5 STT model sizes');
   });
 });
 

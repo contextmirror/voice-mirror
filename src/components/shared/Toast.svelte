@@ -82,6 +82,20 @@
     </button>
   </div>
 
+  <!-- Progress bar (for downloads, etc.) -->
+  {#if toast.progress != null}
+    <div class="toast-progress-track">
+      <div
+        class="toast-progress-bar"
+        style="width: {Math.min(100, Math.max(0, toast.progress))}%"
+        role="progressbar"
+        aria-valuenow={toast.progress}
+        aria-valuemin="0"
+        aria-valuemax="100"
+      ></div>
+    </div>
+  {/if}
+
   <!-- Multi-action buttons row -->
   {#if hasMultiActions}
     <div class="toast-actions">
@@ -208,6 +222,21 @@
 
   .toast-action-btn:not(:first-child):hover {
     background: var(--bg);
+  }
+
+  /* Progress bar */
+  .toast-progress-track {
+    height: 3px;
+    background: var(--border);
+    border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+    overflow: hidden;
+  }
+
+  .toast-progress-bar {
+    height: 100%;
+    background: var(--accent);
+    transition: width 0.3s ease-out;
+    border-radius: 0 0 var(--radius-lg) var(--radius-lg);
   }
 
   /* Close button */

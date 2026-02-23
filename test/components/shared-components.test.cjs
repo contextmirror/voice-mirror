@@ -436,6 +436,24 @@ describe('Toast.svelte', () => {
     assert.ok(src.includes("import { fly } from 'svelte/transition'"), 'Should import fly');
     assert.ok(src.includes('transition:fly'), 'Should use fly transition');
   });
+
+  it('renders progress bar when toast.progress is present', () => {
+    assert.ok(src.includes('toast.progress != null'), 'Should check for progress field');
+    assert.ok(src.includes('toast-progress-track'), 'Should have progress track class');
+    assert.ok(src.includes('toast-progress-bar'), 'Should have progress bar class');
+  });
+
+  it('progress bar has correct ARIA attributes', () => {
+    assert.ok(src.includes('role="progressbar"'), 'Should have progressbar role');
+    assert.ok(src.includes('aria-valuenow'), 'Should have aria-valuenow');
+    assert.ok(src.includes('aria-valuemin="0"'), 'Should have aria-valuemin');
+    assert.ok(src.includes('aria-valuemax="100"'), 'Should have aria-valuemax');
+  });
+
+  it('progress bar uses accent color', () => {
+    assert.ok(src.includes('.toast-progress-bar'), 'Should style progress bar');
+    assert.ok(src.includes('var(--accent)'), 'Progress bar should use accent color');
+  });
 });
 
 // ---- ToastContainer.svelte ----

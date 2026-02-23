@@ -268,6 +268,81 @@ pub async fn inject_text(text: String) -> Result<(), String> {
     crate::services::text_injector::inject_text(&text).await
 }
 
+/// Ensure a Whisper STT model is downloaded and ready.
+///
+/// Downloads the model from HuggingFace if it doesn't exist locally.
+/// Emits `stt-download-progress` events with percentage and byte counts.
+/// Returns immediately if the model is already present on disk.
+#[tauri::command]
+pub async fn ensure_stt_model(app_handle: AppHandle, model_size: String) -> IpcResponse {
+    let data_dir = crate::services::platform::get_data_dir_with_fallback();
+    match crate::voice::stt::ensure_model_exists(&data_dir, &model_size, Some(&app_handle)).await {
+        Ok(path) => IpcResponse::ok(json!({
+            "path": path.display().to_string(),
+            "modelSize": model_size,
+        })),
+        Err(e) => IpcResponse::err(format!("{}", e)),
+    }
+}
+
+/// Restart the voice pipeline with the current configuration.
+///
+/// Reads the latest saved app config, builds a fresh `VoiceEngineConfig`,
+/// stops the pipeline if running, updates the engine config, then starts
+/// again. This picks up any config changes (STT model, TTS adapter, etc.)
+/// without requiring an app restart. Works for both AI voice and dictation modes.
+#[tauri::command]
+pub fn restart_voice(
+    app_handle: AppHandle,
+    voice_state: State<'_, VoiceEngineState>,
+) -> IpcResponse {
+    // Read the latest saved config so the engine picks up new STT model etc.
+    let app_cfg = super::config::get_config_snapshot();
+    let voice_cfg = crate::voice::VoiceEngineConfig {
+        mode: crate::voice::VoiceMode::from_str_flexible(
+            &app_cfg.behavior.activation_mode,
+        )
+        .unwrap_or_default(),
+        stt_adapter: app_cfg.voice.stt_adapter.clone(),
+        stt_model_size: app_cfg.voice.stt_model_size.clone(),
+        tts_adapter: app_cfg.voice.tts_adapter.clone(),
+        tts_voice: app_cfg.voice.tts_voice.clone(),
+        tts_speed: app_cfg.voice.tts_speed as f32,
+        tts_volume: app_cfg.voice.tts_volume as f32,
+        input_device: app_cfg.voice.input_device.clone(),
+        output_device: app_cfg.voice.output_device.clone(),
+        ..Default::default()
+    };
+
+    let mut engine = match voice_state.lock() {
+        Ok(guard) => guard,
+        Err(e) => return IpcResponse::err(format!("Failed to lock voice state: {}", e)),
+    };
+
+    let was_running = engine.is_running();
+    if was_running {
+        engine.stop();
+        tracing::info!("Voice engine stopped for restart");
+    }
+
+    // Update the engine config before starting so it uses the new model/adapter
+    engine.update_config(voice_cfg);
+
+    match engine.start(app_handle) {
+        Ok(()) => {
+            tracing::info!("Voice engine restarted successfully");
+            IpcResponse::ok(json!({
+                "running": true,
+                "wasRunning": was_running,
+            }))
+        }
+        Err(e) => {
+            tracing::error!("Failed to restart voice engine: {}", e);
+            IpcResponse::err(format!("Restart failed: {}", e))
+        }
+    }
+}
+
 // ── Tests ───────────────────────────────────────────────────────────
 
 #[cfg(test)]

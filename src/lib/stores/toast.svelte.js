@@ -17,6 +17,7 @@ import { configStore } from './config.svelte.js';
  * @property {{ label: string, callback: () => void }|null} action - Optional action button
  * @property {Array<{ label: string, callback: () => void }>|null} actions - Optional multiple action buttons
  * @property {string|null} key - Deduplication key
+ * @property {number|null} progress - Progress bar value 0-100, null for no bar
  * @property {number} createdAt - Creation timestamp
  */
 
@@ -57,6 +58,7 @@ function createToastStore() {
     action = null,
     actions = null,
     key = null,
+    progress = null,
   }) {
     // Respect the showToasts config setting (errors always shown)
     if (severity !== 'error' && configStore.value?.behavior?.showToasts === false) return null;
@@ -81,6 +83,7 @@ function createToastStore() {
       action,
       actions,
       key,
+      progress,
       createdAt: Date.now(),
     };
 
@@ -109,6 +112,15 @@ function createToastStore() {
   }
 
   /**
+   * Update an existing toast's properties (e.g., message, progress).
+   * @param {string} id - Toast ID to update
+   * @param {Partial<Toast>} updates - Properties to merge
+   */
+  function updateToast(id, updates) {
+    toasts = toasts.map(t => t.id === id ? { ...t, ...updates } : t);
+  }
+
+  /**
    * Dismiss all toasts.
    */
   function dismissAll() {
@@ -122,6 +134,7 @@ function createToastStore() {
   return {
     get toasts() { return toasts; },
     addToast,
+    updateToast,
     dismissToast,
     dismissAll,
   };

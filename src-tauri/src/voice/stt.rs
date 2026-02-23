@@ -12,6 +12,9 @@
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use serde::Serialize;
+use tauri::{AppHandle, Emitter};
+
 // ── STT Engine Trait ────────────────────────────────────────────────
 
 /// Common trait for all Speech-to-Text engines.
@@ -75,24 +78,94 @@ impl std::fmt::Display for SttError {
 
 impl std::error::Error for SttError {}
 
+// ── Model Descriptor Registry ───────────────────────────────────────
+
+/// Metadata for a Whisper GGML model file.
+struct ModelDescriptor {
+    /// Filename on disk (e.g., "ggml-base.en.bin").
+    filename: &'static str,
+    /// HuggingFace repo path (e.g., "ggerganov/whisper.cpp").
+    repo: &'static str,
+}
+
+/// Look up the model descriptor for a given size identifier.
+///
+/// Known sizes map to exact filenames. Unknown sizes fall back to
+/// the legacy `ggml-{size}.en.bin` pattern for backward compatibility.
+fn model_descriptor(size: &str) -> ModelDescriptor {
+    match size {
+        "tiny" => ModelDescriptor {
+            filename: "ggml-tiny.en.bin",
+            repo: "ggerganov/whisper.cpp",
+        },
+        "base" => ModelDescriptor {
+            filename: "ggml-base.en.bin",
+            repo: "ggerganov/whisper.cpp",
+        },
+        "small" => ModelDescriptor {
+            filename: "ggml-small.en.bin",
+            repo: "ggerganov/whisper.cpp",
+        },
+        "large-v3-turbo" => ModelDescriptor {
+            filename: "ggml-large-v3-turbo-q5_0.bin",
+            repo: "ggerganov/whisper.cpp",
+        },
+        "large-v3" => ModelDescriptor {
+            filename: "ggml-large-v3.bin",
+            repo: "ggerganov/whisper.cpp",
+        },
+        // Legacy / unknown — fall back to old naming convention
+        _ => ModelDescriptor {
+            filename: "",
+            repo: "ggerganov/whisper.cpp",
+        },
+    }
+}
+
+/// Get the model filename for a given size, using the descriptor registry.
+pub fn model_filename(size: &str) -> String {
+    let desc = model_descriptor(size);
+    if desc.filename.is_empty() {
+        format!("ggml-{}.en.bin", size)
+    } else {
+        desc.filename.to_string()
+    }
+}
+
 // ── Model Auto-Download ─────────────────────────────────────────────
+
+/// Progress event emitted during model download.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SttDownloadProgress {
+    pub model_size: String,
+    pub percent: u8,
+    pub downloaded_mb: f64,
+    pub total_mb: f64,
+}
 
 /// Ensure a whisper GGML model exists, downloading from HuggingFace if needed.
 ///
-/// Model files are stored at `{data_dir}/models/ggml-{size}.en.bin`.
-/// Uses an atomic download pattern: downloads to a `.tmp` file first,
-/// then renames to the final path to prevent corrupt partial downloads.
+/// Uses the model descriptor registry to resolve filenames. Downloads to a
+/// `.tmp` file first, then renames atomically to prevent corrupt partials.
+/// Emits `stt-download-progress` events via the AppHandle for UI feedback.
 ///
 /// # Arguments
 /// * `data_dir` - Application data directory
-/// * `model_size` - Model size identifier (e.g., "tiny", "base", "small")
+/// * `model_size` - Model size identifier (e.g., "tiny", "base", "large-v3-turbo")
+/// * `app_handle` - Optional Tauri AppHandle for emitting progress events
 ///
 /// # Returns
 /// The path to the model file.
-pub async fn ensure_model_exists(data_dir: &Path, model_size: &str) -> Result<PathBuf, SttError> {
-    let model_filename = format!("ggml-{}.en.bin", model_size);
+pub async fn ensure_model_exists(
+    data_dir: &Path,
+    model_size: &str,
+    app_handle: Option<&AppHandle>,
+) -> Result<PathBuf, SttError> {
+    let filename = model_filename(model_size);
+    let desc = model_descriptor(model_size);
     let models_dir = data_dir.join("models");
-    let model_path = models_dir.join(&model_filename);
+    let model_path = models_dir.join(&filename);
 
     if model_path.exists() {
         tracing::info!(path = %model_path.display(), "Whisper model already present");
@@ -105,8 +178,8 @@ pub async fn ensure_model_exists(data_dir: &Path, model_size: &str) -> Result<Pa
         .map_err(|e| SttError::DownloadError(format!("Failed to create models dir: {}", e)))?;
 
     let url = format!(
-        "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/{}",
-        model_filename
+        "https://huggingface.co/{}/resolve/main/{}",
+        desc.repo, filename
     );
 
     tracing::info!(url = %url, dest = %model_path.display(), "Downloading whisper model");
@@ -149,18 +222,25 @@ pub async fn ensure_model_exists(data_dir: &Path, model_size: &str) -> Result<Pa
             .map_err(|e| SttError::DownloadError(format!("Write error: {}", e)))?;
         downloaded += chunk.len() as u64;
 
-        // Log progress every ~5%
+        // Emit progress every ~5%
         if let Some(total) = total_size {
             let pct = ((downloaded as f64 / total as f64) * 100.0) as u8;
             if pct >= last_progress + 5 {
                 last_progress = pct;
+                let downloaded_mb = downloaded as f64 / 1_048_576.0;
+                let total_mb = total as f64 / 1_048_576.0;
                 tracing::info!(
                     "Downloading whisper {} model... {}% ({:.1} MB / {:.1} MB)",
-                    model_size,
-                    pct,
-                    downloaded as f64 / 1_048_576.0,
-                    total as f64 / 1_048_576.0
+                    model_size, pct, downloaded_mb, total_mb
                 );
+                if let Some(handle) = app_handle {
+                    let _ = handle.emit("stt-download-progress", SttDownloadProgress {
+                        model_size: model_size.to_string(),
+                        percent: pct,
+                        downloaded_mb,
+                        total_mb,
+                    });
+                }
             }
         }
     }
@@ -275,10 +355,11 @@ mod whisper_real {
 
         /// Create from a model size name, resolving the path in the data directory.
         ///
-        /// Standard model paths: `{data_dir}/models/ggml-{size}.en.bin`
+        /// Uses the model descriptor registry to resolve the correct filename
+        /// for each model size (e.g., "large-v3-turbo" -> "ggml-large-v3-turbo-q5_0.bin").
         pub fn from_model_size(data_dir: &Path, size: &str) -> Result<Self, SttError> {
-            let model_file = format!("ggml-{}.en.bin", size);
-            let model_path = data_dir.join("models").join(model_file);
+            let filename = model_filename(size);
+            let model_path = data_dir.join("models").join(filename);
             Self::new(&model_path)
         }
     }
@@ -457,10 +538,11 @@ mod whisper_stub {
 
         /// Create from a model size name, resolving the path in the data directory.
         ///
-        /// Standard model paths: `{data_dir}/models/ggml-{size}.en.bin`
+        /// Uses the model descriptor registry to resolve the correct filename
+        /// for each model size (e.g., "large-v3-turbo" -> "ggml-large-v3-turbo-q5_0.bin").
         pub fn from_model_size(data_dir: &Path, size: &str) -> Result<Self, SttError> {
-            let model_file = format!("ggml-{}.en.bin", size);
-            let model_path = data_dir.join("models").join(model_file);
+            let filename = model_filename(size);
+            let model_path = data_dir.join("models").join(filename);
             Self::new(&model_path)
         }
     }
@@ -631,13 +713,25 @@ pub fn create_stt_engine(
 // ── Helpers ─────────────────────────────────────────────────────────
 
 /// Guess the model size from the file path (e.g., "ggml-base.en.bin" -> "base").
+///
+/// Checks versioned names first (e.g., "large-v3-turbo") before generic names
+/// (e.g., "large") to avoid false substring matches.
 fn guess_model_size(path: &Path) -> String {
     let stem = path
         .file_stem()
         .and_then(|s| s.to_str())
         .unwrap_or("unknown");
 
-    for size in &["tiny", "base", "small", "medium", "large"] {
+    // Check versioned names first (most specific → least specific)
+    for size in &[
+        "large-v3-turbo",
+        "large-v3",
+        "tiny",
+        "base",
+        "small",
+        "medium",
+        "large",
+    ] {
         if stem.contains(size) {
             return (*size).to_string();
         }
@@ -755,7 +849,26 @@ mod tests {
         assert_eq!(guess_model_size(Path::new("ggml-small.en.bin")), "small");
         assert_eq!(guess_model_size(Path::new("ggml-medium.en.bin")), "medium");
         assert_eq!(guess_model_size(Path::new("ggml-large.bin")), "large");
+        assert_eq!(
+            guess_model_size(Path::new("ggml-large-v3-turbo-q5_0.bin")),
+            "large-v3-turbo"
+        );
+        assert_eq!(guess_model_size(Path::new("ggml-large-v3.bin")), "large-v3");
         assert_eq!(guess_model_size(Path::new("custom-model.bin")), "unknown");
+    }
+
+    #[test]
+    fn test_model_filename() {
+        assert_eq!(model_filename("tiny"), "ggml-tiny.en.bin");
+        assert_eq!(model_filename("base"), "ggml-base.en.bin");
+        assert_eq!(model_filename("small"), "ggml-small.en.bin");
+        assert_eq!(
+            model_filename("large-v3-turbo"),
+            "ggml-large-v3-turbo-q5_0.bin"
+        );
+        assert_eq!(model_filename("large-v3"), "ggml-large-v3.bin");
+        // Unknown falls back to legacy pattern
+        assert_eq!(model_filename("medium"), "ggml-medium.en.bin");
     }
 
     #[test]

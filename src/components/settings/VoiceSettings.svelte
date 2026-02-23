@@ -9,7 +9,8 @@
    */
   import { configStore, updateConfig } from '../../lib/stores/config.svelte.js';
   import { toastStore } from '../../lib/stores/toast.svelte.js';
-  import { listAudioDevices, setVoiceMode, registerShortcut, unregisterShortcut, configurePttKey, configureDictationKey } from '../../lib/api.js';
+  import { listAudioDevices, setVoiceMode, registerShortcut, unregisterShortcut, configurePttKey, configureDictationKey, ensureSttModel, restartVoice, getVoiceStatus } from '../../lib/api.js';
+  import { listen } from '@tauri-apps/api/event';
   import { STT_REGISTRY } from '../../lib/voice-adapters.js';
   import KeybindRecorder from './KeybindRecorder.svelte';
   import TTSConfig from './TTSConfig.svelte';
@@ -139,6 +140,10 @@
   async function saveVoiceSettings() {
     saving = true;
     try {
+      // Capture previous STT config BEFORE updateConfig mutates the store
+      const prevModelSize = configStore.value?.voice?.sttModelSize || 'base';
+      const prevAdapter = configStore.value?.voice?.sttAdapter || 'whisper-local';
+
       const patch = {
         behavior: {
           activationMode,
@@ -205,6 +210,49 @@
       }
 
       toastStore.addToast({ message: 'Voice settings saved', severity: 'success' });
+
+      // Auto-download STT model if changed and using local Whisper
+      const sttChanged = sttModelSize !== prevModelSize || sttAdapter !== prevAdapter;
+
+      if (sttChanged && sttAdapter === 'whisper-local') {
+        const downloadToastId = toastStore.addToast({
+          message: `Downloading Whisper model (${sttModelSize})...`,
+          severity: 'info',
+          duration: 0,
+          key: 'stt-model-download',
+          progress: 0,
+        });
+
+        const unlisten = await listen('stt-download-progress', (event) => {
+          const { percent, downloadedMb, totalMb } = event.payload;
+          if (downloadToastId) {
+            toastStore.updateToast(downloadToastId, {
+              message: `Downloading model... ${percent}% (${Math.round(downloadedMb)} / ${Math.round(totalMb)} MB)`,
+              progress: percent,
+            });
+          }
+        });
+
+        try {
+          await ensureSttModel(sttModelSize);
+          unlisten();
+          toastStore.dismissToast(downloadToastId);
+          toastStore.addToast({ message: 'Model ready', severity: 'success' });
+        } catch (dlErr) {
+          unlisten();
+          toastStore.dismissToast(downloadToastId);
+          toastStore.addToast({ message: `Model download failed: ${dlErr}`, severity: 'error' });
+        }
+
+        // Restart voice pipeline if it was running (applies to both AI voice + dictation)
+        const status = await getVoiceStatus().catch(() => null);
+        if (status?.data?.running) {
+          await restartVoice().catch((err) => {
+            console.warn('[VoiceSettings] Voice restart failed:', err);
+          });
+          toastStore.addToast({ message: 'Voice engine restarted with new model', severity: 'info' });
+        }
+      }
     } catch (err) {
       console.error('[VoiceSettings] Save failed:', err);
       toastStore.addToast({ message: 'Failed to save voice settings', severity: 'error' });

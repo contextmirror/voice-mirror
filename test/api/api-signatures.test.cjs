@@ -174,6 +174,8 @@ describe('api.js -- exported async functions', () => {
     // Voice
     'startVoice',
     'stopVoice',
+    'restartVoice',
+    'ensureSttModel',
     'getVoiceStatus',
     'setVoiceMode',
     'listAudioDevices',

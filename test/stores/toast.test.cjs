@@ -238,6 +238,32 @@ describe('toast.svelte.js -- key-based deduplication', () => {
   });
 });
 
+describe('toast.svelte.js -- progress support', () => {
+  it('addToast accepts progress parameter', () => {
+    assert.ok(src.includes('progress = null'), 'addToast should accept progress param with null default');
+  });
+
+  it('includes progress in toast object', () => {
+    const toastObj = src.split('const toast = {')[1]?.split('};')[0] || '';
+    assert.ok(toastObj.includes('progress'), 'Toast object should include progress field');
+  });
+
+  it('has updateToast method', () => {
+    assert.ok(src.includes('function updateToast'), 'Should have updateToast method');
+  });
+
+  it('exposes updateToast in store API', () => {
+    assert.ok(src.includes('updateToast,'), 'Store should expose updateToast');
+  });
+
+  it('updateToast merges updates into existing toast', () => {
+    assert.ok(
+      src.includes("t.id === id ? { ...t, ...updates }"),
+      'updateToast should merge updates with spread'
+    );
+  });
+});
+
 describe('toast.svelte.js -- suppressed toast returns null', () => {
   it('returns null (not empty string) when toasts are suppressed', () => {
     assert.ok(src.includes('return null'), 'Should return null when suppressed');
