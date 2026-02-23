@@ -9,7 +9,7 @@
   import StatusDropdown from './StatusDropdown.svelte';
   import OutlinePanel from './OutlinePanel.svelte';
 
-  let { onFileClick = () => {}, onFileDblClick = () => {}, onChangeClick = () => {}, activeFilePath = null, activeFileHasLsp = false, onSymbolClick = () => {} } = $props();
+  let { onFileClick = () => {}, onFileDblClick = () => {}, onChangeClick = () => {}, onChangeDblClick = () => {}, activeFilePath = null, activeDiffPath = null, activeFileHasLsp = false, onSymbolClick = () => {} } = $props();
 
   // State
   let activeTab = $state('files');
@@ -532,7 +532,9 @@
         {#each gitChanges as change}
           <button
             class="change-item"
+            class:active={change.path === activeDiffPath}
             onclick={() => onChangeClick(change)}
+            ondblclick={() => onChangeDblClick(change)}
             oncontextmenu={(e) => handleContextMenu(e, change, false, true)}
           >
             <svg class="tree-icon"><use href="{spriteUrl}#{chooseIconName(change.path, 'file')}" /></svg>
@@ -737,6 +739,10 @@
   }
   .change-item:hover {
     background: var(--bg-elevated);
+  }
+  .change-item.active {
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    color: var(--text-strong, var(--text));
   }
 
   .change-badge {

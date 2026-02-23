@@ -571,6 +571,38 @@ describe('FileTree.svelte -- LSP diagnostic decorations', () => {
   });
 });
 
+describe('FileTree.svelte -- Changes tab parity with All Files', () => {
+  it('accepts onChangeDblClick prop', () => {
+    assert.ok(src.includes('onChangeDblClick'), 'Should have onChangeDblClick prop');
+  });
+
+  it('has ondblclick on change items', () => {
+    // Find the change-item button section and check it has ondblclick
+    const changeSection = src.substring(src.indexOf('class="change-item"'));
+    assert.ok(changeSection.includes('ondblclick'), 'Change items should have double-click handler');
+  });
+
+  it('calls onChangeDblClick on double-click', () => {
+    assert.ok(src.includes('onChangeDblClick(change)'), 'Should call onChangeDblClick with change');
+  });
+
+  it('accepts activeDiffPath prop', () => {
+    assert.ok(src.includes('activeDiffPath'), 'Should have activeDiffPath prop');
+  });
+
+  it('highlights active change item', () => {
+    assert.ok(src.includes('change.path === activeDiffPath'), 'Should compare change path to activeDiffPath');
+    // Check class:active on change-item
+    const changeSection = src.substring(src.indexOf('class="change-item"'));
+    assert.ok(changeSection.includes('class:active'), 'Change items should have active class');
+  });
+
+  it('has .change-item.active CSS rule', () => {
+    const styleBlock = src.substring(src.indexOf('<style>'));
+    assert.ok(styleBlock.includes('.change-item.active'), 'Should have active style for change items');
+  });
+});
+
 describe('FileTree.svelte -- Outline tab', () => {
   it('imports OutlinePanel', () => {
     assert.ok(src.includes("import OutlinePanel from"), 'Should import OutlinePanel');

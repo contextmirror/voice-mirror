@@ -109,7 +109,9 @@
                   onFileClick={(entry) => tabsStore.openFile(entry)}
                   onFileDblClick={(entry) => tabsStore.pinTab(entry.path)}
                   onChangeClick={(change) => tabsStore.openDiff(change)}
+                  onChangeDblClick={(change) => tabsStore.pinTab(`diff:${change.path}`)}
                   activeFilePath={isFile ? tabsStore.activeTab?.path : null}
+                  activeDiffPath={isDiff ? tabsStore.activeTab?.path : null}
                   activeFileHasLsp={isFile && LSP_EXTENSIONS.has(activeExt)}
                   onSymbolClick={({ line, character }) => {
                     // Navigate to symbol position in the active file editor
