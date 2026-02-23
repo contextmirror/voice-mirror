@@ -379,10 +379,9 @@ describe('ChatPanel.svelte', () => {
     assert.ok(src.includes('onscroll={handleScroll}'), 'Should bind onscroll to handleScroll');
   });
 
-  it('has separate $effect for streaming text updates', () => {
-    // The streaming effect tracks last message text length for streaming appends
-    assert.ok(src.includes('lastMsg.text.length'), 'Should track last message text length');
-    assert.ok(src.includes('lastMsg.streaming'), 'Should track last message streaming flag');
+  it('has separate $effect for streaming scroll updates', () => {
+    // The streaming effect uses chatStore.isStreaming to minimize proxy subscriptions
+    assert.ok(src.includes('chatStore.isStreaming'), 'Should track isStreaming for scroll');
   });
 
   it('resets userScrolledUp when new messages arrive', () => {

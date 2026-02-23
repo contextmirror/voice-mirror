@@ -198,27 +198,32 @@
     showScreenshotPicker = false;
   }
 
+  // Track previous message count to detect new messages
+  let prevMessageCount = 0;
+
   // Auto-scroll when new messages are added (length changes)
   $effect(() => {
-    const _len = chatStore.messages.length;
-    if (!scrollContainer || _len === 0) return;
+    const len = chatStore.messages.length;
+    if (!scrollContainer || len === 0) return;
 
-    // Reset userScrolledUp when a new message arrives so we scroll to it
-    userScrolledUp = false;
+    if (len > prevMessageCount) {
+      // New message arrived — reset scroll lock so we follow it
+      userScrolledUp = false;
+    }
+    prevMessageCount = len;
 
     tick().then(() => {
       autoScroll(true);
     });
   });
 
-  // Auto-scroll during streaming updates (text content changes)
+  // Auto-scroll during streaming updates (text content changes).
+  // Only reads .length and .streaming to minimize proxy subscriptions.
   $effect(() => {
-    const msgs = chatStore.messages;
-    const lastMsg = msgs.length > 0 ? msgs[msgs.length - 1] : null;
-    // Track the last message's text length to react to streaming appends
-    const _textLen = lastMsg ? lastMsg.text.length : 0;
-    const _streaming = lastMsg ? lastMsg.streaming : false;
-    if (!scrollContainer || !_streaming) return;
+    const len = chatStore.messages.length;
+    if (!scrollContainer || len === 0) return;
+    const streaming = chatStore.isStreaming;
+    if (!streaming) return;
 
     tick().then(() => {
       autoScroll();
