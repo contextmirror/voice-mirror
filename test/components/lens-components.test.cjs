@@ -82,12 +82,12 @@ describe('LensToolbar.svelte', () => {
     assert.ok(src.includes('onsubmit'));
   });
 
-  it('disables back when canGoBack is false', () => {
-    assert.ok(src.includes('lensStore.canGoBack'));
+  it('has back button always enabled (WebView2 no-ops silently)', () => {
+    assert.ok(src.includes('handleBack'), 'Should have back handler');
   });
 
-  it('disables forward when canGoForward is false', () => {
-    assert.ok(src.includes('lensStore.canGoForward'));
+  it('has forward button always enabled (WebView2 no-ops silently)', () => {
+    assert.ok(src.includes('handleForward'), 'Should have forward handler');
   });
 
   it('binds url input value', () => {

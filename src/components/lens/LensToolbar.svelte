@@ -39,10 +39,10 @@
 
 <div class="lens-toolbar">
   <div class="toolbar-nav">
-    <button class="nav-btn" onclick={handleBack} disabled={!lensStore.canGoBack} title="Go back" aria-label="Go back">
+    <button class="nav-btn" onclick={handleBack} title="Go back" aria-label="Go back">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
     </button>
-    <button class="nav-btn" onclick={handleForward} disabled={!lensStore.canGoForward} title="Go forward" aria-label="Go forward">
+    <button class="nav-btn" onclick={handleForward} title="Go forward" aria-label="Go forward">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
     </button>
     <button class="nav-btn" onclick={handleReload} title="Reload (Shift+click for hard refresh)" aria-label="Reload page">
