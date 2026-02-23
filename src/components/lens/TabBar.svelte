@@ -2,6 +2,8 @@
   import { tabsStore } from '../../lib/stores/tabs.svelte.js';
   import TabContextMenu from './TabContextMenu.svelte';
 
+  let { onNewBrowserTab = () => {} } = $props();
+
   let tabMenu = $state({ visible: false, x: 0, y: 0, tab: null });
 
   function handleTabContextMenu(event, tab) {
@@ -73,7 +75,12 @@
           <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
         </svg>
       {/if}
-      {#if tab.type === 'diff' && tab.status}
+      {#if tab.type === 'diff' && tab.diffStats}
+        <span class="tab-diff-stats">
+          <span class="tab-diff-stats-add">+{tab.diffStats.additions}</span>
+          <span class="tab-diff-stats-del">-{tab.diffStats.deletions}</span>
+        </span>
+      {:else if tab.type === 'diff' && tab.status}
         <span
           class="tab-diff-badge"
           class:added={tab.status === 'added'}
@@ -113,6 +120,7 @@
   tab={tabMenu.tab}
   visible={tabMenu.visible}
   onClose={() => { tabMenu.visible = false; }}
+  {onNewBrowserTab}
 />
 
 <style>
@@ -300,5 +308,23 @@
   }
   .tab-diff-badge.deleted {
     background: var(--danger);
+  }
+
+  .tab-diff-stats {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    font-family: var(--font-mono);
+    flex-shrink: 0;
+  }
+
+  .tab-diff-stats-add {
+    color: var(--ok);
+  }
+
+  .tab-diff-stats-del {
+    color: var(--danger);
   }
 </style>

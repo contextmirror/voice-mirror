@@ -190,3 +190,45 @@ describe('TabBar.svelte: diff tab support', () => {
   });
 });
 
+describe('TabBar.svelte: diff stats badge', () => {
+  it('has tab-diff-stats class', () => {
+    assert.ok(src.includes('tab-diff-stats'), 'Should have diff stats class');
+  });
+
+  it('checks tab.diffStats for stats badge', () => {
+    assert.ok(src.includes('tab.diffStats'), 'Should check diffStats on tab');
+  });
+
+  it('shows additions count in stats badge', () => {
+    assert.ok(src.includes('tab-diff-stats-add'), 'Should have additions stat class');
+    assert.ok(src.includes('tab.diffStats.additions'), 'Should render additions count');
+  });
+
+  it('shows deletions count in stats badge', () => {
+    assert.ok(src.includes('tab-diff-stats-del'), 'Should have deletions stat class');
+    assert.ok(src.includes('tab.diffStats.deletions'), 'Should render deletions count');
+  });
+
+  it('falls back to A/M/D badge when no diffStats', () => {
+    // The {:else if tab.type === 'diff' && tab.status} block is the fallback
+    assert.ok(
+      src.includes('{:else if tab.type'),
+      'Should fall back to status badge when no diffStats'
+    );
+  });
+
+  it('stats additions use ok color', () => {
+    assert.ok(src.includes('.tab-diff-stats-add'), 'Should have add stat CSS rule');
+  });
+
+  it('stats deletions use danger color', () => {
+    assert.ok(src.includes('.tab-diff-stats-del'), 'Should have del stat CSS rule');
+  });
+
+  it('stats use monospace font', () => {
+    // The .tab-diff-stats rule uses font-family: var(--font-mono)
+    const statsSection = src.substring(src.indexOf('.tab-diff-stats'));
+    assert.ok(statsSection.includes('var(--font-mono)'), 'Should use mono font for stats');
+  });
+});
+

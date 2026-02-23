@@ -89,7 +89,7 @@
             <SplitPanel direction="horizontal" bind:ratio={previewRatio} minA={300} minB={140} collapseB={!layoutStore.showFileTree}>
               {#snippet panelA()}
                 <div class="preview-area">
-                  <TabBar />
+                  <TabBar onNewBrowserTab={() => lensPreviewRef?.createNewTab()} />
                   <!-- Always mount all views, toggle visibility with CSS to avoid destroy/recreate -->
                   <div class="preview-layer" class:visible={isBrowser}>
                     <BrowserTabBar onNewTab={() => lensPreviewRef?.createNewTab()} />

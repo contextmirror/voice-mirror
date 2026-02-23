@@ -76,6 +76,7 @@ function createTabsStore() {
         status: change.status,
         preview: true,
         dirty: false,
+        diffStats: null,
       };
 
       if (previewIdx !== -1) {
@@ -135,6 +136,16 @@ function createTabsStore() {
       const tab = tabs.find(t => t.id === id);
       if (tab) {
         tab.dirty = dirty;
+      }
+    },
+
+    /**
+     * Set diff stats (additions/deletions) on a diff tab.
+     */
+    setDiffStats(id, stats) {
+      const tab = tabs.find(t => t.id === id);
+      if (tab) {
+        tab.diffStats = stats;
       }
     },
 

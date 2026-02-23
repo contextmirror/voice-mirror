@@ -134,3 +134,35 @@ describe('tabs.svelte.js: tab switching on close', () => {
     );
   });
 });
+
+describe('tabs.svelte.js: diff tab support', () => {
+  it('has openDiff method', () => {
+    assert.ok(src.includes('openDiff('), 'Should have openDiff method');
+  });
+
+  it('openDiff creates diff tab with diffStats: null', () => {
+    assert.ok(src.includes('diffStats: null'), 'Should initialize diffStats as null');
+  });
+
+  it('openDiff uses diff: prefix for tab id', () => {
+    assert.ok(src.includes('`diff:${'), 'Should prefix diff tab ids');
+  });
+
+  it('openDiff sets type to diff', () => {
+    assert.ok(
+      src.includes("type: 'diff'"),
+      'Should set tab type to diff'
+    );
+  });
+
+  it('has setDiffStats method', () => {
+    assert.ok(src.includes('setDiffStats('), 'Should have setDiffStats method');
+  });
+
+  it('setDiffStats finds tab by id and sets stats', () => {
+    assert.ok(
+      src.includes('tab.diffStats = stats'),
+      'Should assign stats to tab.diffStats'
+    );
+  });
+});
