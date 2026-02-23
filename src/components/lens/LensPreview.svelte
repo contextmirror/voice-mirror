@@ -13,6 +13,7 @@
   let rafId = null;
   let unlistenUrl = null;
   let unlistenOpenTab = null;
+  let unlistenTitle = null;
   let setupDone = false;
   const LOADING_TIMEOUT_MS = 15000;
   let loadingTimer = null;
@@ -308,6 +309,15 @@
       }
     });
 
+    // Listen for page title changes from child WebView2 instances
+    unlistenTitle = await listen('lens-title-changed', (event) => {
+      const tabId = event.payload?.tabId;
+      const title = event.payload?.title;
+      if (tabId && title) {
+        browserTabsStore.setTabTitle(tabId, title);
+      }
+    });
+
     // Observe container resize — this serves two purposes:
     // 1. Sync webview bounds when the panel is resized
     // 2. Trigger first tab creation when the container becomes visible
@@ -345,6 +355,10 @@
     if (unlistenOpenTab) {
       unlistenOpenTab();
       unlistenOpenTab = null;
+    }
+    if (unlistenTitle) {
+      unlistenTitle();
+      unlistenTitle = null;
     }
     lensCloseAllTabs().catch(() => {});
     browserTabsStore.clearAll();

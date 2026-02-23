@@ -106,6 +106,20 @@ describe('LensPreview.svelte: bounds handling', () => {
   });
 });
 
+describe('LensPreview.svelte: page title tracking', () => {
+  it('listens for lens-title-changed events', () => {
+    assert.ok(src.includes('lens-title-changed'), 'Should listen for title change events');
+  });
+
+  it('calls browserTabsStore.setTabTitle on title change', () => {
+    assert.ok(src.includes('browserTabsStore.setTabTitle'), 'Should update tab title');
+  });
+
+  it('cleans up title listener on destroy', () => {
+    assert.ok(src.includes('unlistenTitle'), 'Should have unlistenTitle cleanup');
+  });
+});
+
 describe('LensPreview.svelte: dev server detection', () => {
   it('imports detectDevServers', () => {
     assert.ok(src.includes('detectDevServers'), 'Should import detectDevServers');

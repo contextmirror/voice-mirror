@@ -93,6 +93,88 @@ fn build_shortcut_script() -> String {
     )
 }
 
+/// Evaluate `document.title` in a child webview via the native WebView2 COM API
+/// and emit a `lens-title-changed` Tauri event with the result.
+///
+/// This must be done via COM because:
+/// 1. Tauri's `webview.eval()` is fire-and-forget (no return value)
+/// 2. Custom URI schemes (`register_uri_scheme_protocol`) don't intercept
+///    requests from child webviews — only the main app webview
+///
+/// Uses `std::thread::spawn` because `on_page_load` runs on the main Win32 GUI
+/// thread which has no tokio runtime context.
+fn report_page_title(app: &AppHandle, webview: &tauri::Webview, tab_id: String) {
+    let app = app.clone();
+    let webview = webview.clone();
+
+    std::thread::spawn(move || {
+        // Brief delay to let the page title settle (some pages set title via JS after load)
+        std::thread::sleep(std::time::Duration::from_millis(150));
+
+        let (tx, rx) = std::sync::mpsc::channel::<Option<String>>();
+
+        let eval_result = webview.with_webview(move |platform_webview| {
+            #[cfg(windows)]
+            {
+                use webview2_com::ExecuteScriptCompletedHandler;
+                use windows_core::HSTRING;
+
+                unsafe {
+                    let controller = platform_webview.controller();
+                    let core_webview = match controller.CoreWebView2() {
+                        Ok(wv) => wv,
+                        Err(_) => {
+                            let _ = tx.send(None);
+                            return;
+                        }
+                    };
+
+                    let js = HSTRING::from("document.title");
+                    let handler =
+                        ExecuteScriptCompletedHandler::create(Box::new(move |hresult, result| {
+                            if hresult.is_ok() {
+                                // ExecuteScript returns JSON-serialized string, e.g. "\"Google\""
+                                let title = result.trim_matches('"').to_string();
+                                if !title.is_empty() && title != "null" {
+                                    let _ = tx.send(Some(title));
+                                } else {
+                                    let _ = tx.send(None);
+                                }
+                            } else {
+                                let _ = tx.send(None);
+                            }
+                            Ok(())
+                        }));
+
+                    if let Err(_) = core_webview.ExecuteScript(&js, &handler) {
+                        // handler was moved, tx is gone — nothing to do
+                    }
+                }
+
+                #[cfg(not(windows))]
+                {
+                    let _ = tx.send(None);
+                }
+            }
+        });
+
+        if eval_result.is_err() {
+            return;
+        }
+
+        // Wait up to 2s for the COM callback
+        let title = match rx.recv_timeout(std::time::Duration::from_secs(2)) {
+            Ok(Some(t)) => t,
+            _ => return,
+        };
+        info!("[lens] Page title (tab {}): {}", tab_id, title);
+        let _ = app.emit(
+            "lens-title-changed",
+            serde_json::json!({ "tabId": tab_id, "title": title }),
+        );
+    });
+}
+
 /// Localhost-only dev-mode cache-busting script.
 /// 1. Unregisters all service workers (they intercept Vite HMR and cause stale/blank pages).
 /// 2. Overrides fetch() and XMLHttpRequest to bypass HTTP cache for dev servers.
@@ -160,7 +242,7 @@ async fn create_tab_webview(
             WebviewBuilder::new(&label_clone, tauri::WebviewUrl::External(parsed_url))
                 .initialization_script(&shortcut_script)
                 .initialization_script(CACHE_SCRIPT)
-                .on_page_load(move |_webview, payload| {
+                .on_page_load(move |webview, payload| {
                     if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
                         let url_str = payload.url().to_string();
                         info!("[lens] Page load finished (tab {}): {}", tab_id_for_handler, url_str);
@@ -168,6 +250,8 @@ async fn create_tab_webview(
                             "lens-url-changed",
                             serde_json::json!({ "url": url_str, "tabId": tab_id_for_handler }),
                         );
+                        // Extract page title via COM API and emit lens-title-changed event
+                        report_page_title(&app_for_handler, &webview, tab_id_for_handler.clone());
                     }
                 });
 
