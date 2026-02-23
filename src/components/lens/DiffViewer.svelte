@@ -255,41 +255,6 @@
     return exts;
   }
 
-  // ── Scrollbar jump-to-click ──
-  // Native scrollbar track clicks page-scroll by default. This overrides that
-  // to jump directly to the clicked position (like VS Code).
-
-  let scrollbarCleanup = null;
-
-  function attachScrollbarJump(viewOrEl) {
-    if (scrollbarCleanup) { scrollbarCleanup(); scrollbarCleanup = null; }
-    // Accept either a CodeMirror EditorView (has .scrollDOM) or a raw DOM element
-    const scroller = viewOrEl?.scrollDOM ?? viewOrEl;
-    if (!scroller) return;
-
-    function onMouseDown(e) {
-      // Only handle left-clicks in the scrollbar track area (rightmost 14px)
-      if (e.button !== 0) return;
-      const rect = scroller.getBoundingClientRect();
-      const scrollbarX = rect.right - 14;
-      if (e.clientX < scrollbarX) return;
-
-      e.preventDefault();
-      e.stopPropagation();
-
-      const clickY = e.clientY - rect.top;
-      const ratio = clickY / rect.height;
-      // Temporarily disable smooth scroll so the jump is instant
-      scroller.style.scrollBehavior = 'auto';
-      scroller.scrollTop = ratio * (scroller.scrollHeight - scroller.clientHeight);
-      // Restore smooth scroll on next frame
-      requestAnimationFrame(() => { scroller.style.scrollBehavior = ''; });
-    }
-
-    scroller.addEventListener('mousedown', onMouseDown, true);
-    scrollbarCleanup = () => scroller.removeEventListener('mousedown', onMouseDown, true);
-  }
-
   // ── Chunk tracking ──
 
   function updateChunkInfo(cm, v) {
@@ -370,7 +335,6 @@
     if (editorEl) {
       unifiedView = new cm.EditorView({ state, parent: editorEl });
       updateChunkInfo(cm, unifiedView);
-      attachScrollbarJump(unifiedView);
     }
   }
 
@@ -407,16 +371,12 @@
         collapseUnchanged: { margin: 3, minSize: 4 },
       });
       updateChunkInfo(cm, splitView.b);
-      // Attach jump-to-click on the .cm-mergeView outer scroller (not inner .cm-scroller)
-      const mergeViewEl = editorEl.querySelector('.cm-mergeView');
-      attachScrollbarJump(mergeViewEl || splitView.b);
     }
   }
 
   // ── Destroy/toggle ──
 
   function destroyView() {
-    if (scrollbarCleanup) { scrollbarCleanup(); scrollbarCleanup = null; }
     if (unifiedView) { unifiedView.destroy(); unifiedView = null; }
     if (splitView) { splitView.destroy(); splitView = null; }
     if (editorEl) editorEl.innerHTML = '';

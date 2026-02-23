@@ -548,13 +548,11 @@ describe('DiffViewer.svelte: scrollbar styling', () => {
   });
 });
 
-describe('DiffViewer.svelte: scrollbar jump-to-click', () => {
-  it('attachScrollbarJump accepts EditorView or raw DOM element', () => {
-    assert.ok(src.includes('viewOrEl?.scrollDOM ?? viewOrEl'), 'Should accept EditorView or raw element');
-  });
-
-  it('split mode attaches jump to .cm-mergeView element', () => {
-    assert.ok(src.includes("editorEl.querySelector('.cm-mergeView')"), 'Should query for .cm-mergeView');
+describe('DiffViewer.svelte: scrollbar behavior', () => {
+  it('relies on global scrollbar jump-to-click from main.js', () => {
+    // Scrollbar jump-to-click was moved to a global handler in main.js.
+    // DiffViewer no longer has its own attachScrollbarJump function.
+    assert.ok(!src.includes('attachScrollbarJump'), 'Should NOT have local scrollbar jump handler');
   });
 });
 
