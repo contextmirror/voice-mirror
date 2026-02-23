@@ -367,9 +367,6 @@ async fn route_tool_call(
         "memory_stats" => handlers::memory::handle_memory_stats(args, data_dir).await,
         "memory_flush" => handlers::memory::handle_memory_flush(args, data_dir).await,
 
-        // ---- Screen tools ----
-        "capture_screen" => handlers::screen::handle_capture_screen(args, data_dir).await,
-
         // ---- Browser tools ----
         "browser_start" => handlers::browser::handle_browser_start(args, data_dir, router).await,
         "browser_stop" => handlers::browser::handle_browser_stop(args, data_dir).await,
@@ -488,7 +485,7 @@ mod tests {
     fn test_handle_initialize() {
         let resp = handle_initialize(json!(1));
         let result = resp.result.unwrap();
-        assert_eq!(result["serverInfo"]["name"], "voice-mirror-electron");
+        assert_eq!(result["serverInfo"]["name"], "voice-mirror");
         assert!(result["capabilities"]["tools"]["listChanged"].as_bool().unwrap());
     }
 
@@ -503,8 +500,8 @@ mod tests {
         let resp = handle_tools_list(json!(1), &state);
         let result = resp.result.unwrap();
         let tools = result["tools"].as_array().unwrap();
-        // Default: core (4) + meta (3) = 7
-        assert_eq!(tools.len(), 7);
+        // Default: core (4)
+        assert_eq!(tools.len(), 4);
     }
 
     #[test]
@@ -519,25 +516,24 @@ mod tests {
     fn test_enabled_groups_loads_tools_at_startup() {
         // BUG-005 Fix 1: ENABLED_GROUPS should pre-load tool groups
         let mut registry = ToolRegistry::new();
-        // Default: only core + meta (7 tools)
-        assert_eq!(registry.list_tools().len(), 7);
+        // Default: only core (4 tools)
+        assert_eq!(registry.list_tools().len(), 4);
 
         // Apply enabled groups (simulating ENABLED_GROUPS env var)
-        registry.apply_enabled_groups("core,meta,memory,screen");
+        registry.apply_enabled_groups("core,memory");
         let tools = registry.list_tools();
 
-        // Should now have core (4) + meta (3) + memory (6) + screen (1) = 14
-        assert_eq!(tools.len(), 14);
+        // Should now have core (4) + memory (6) = 10
+        assert_eq!(tools.len(), 10);
         let tool_names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
         assert!(tool_names.contains(&"memory_search"));
-        assert!(tool_names.contains(&"capture_screen"));
     }
 
     #[test]
     fn test_enabled_groups_in_tools_list() {
         // Verify that tools/list returns all enabled-group tools
         let mut registry = ToolRegistry::new();
-        registry.apply_enabled_groups("core,meta,browser");
+        registry.apply_enabled_groups("core,browser");
 
         let state = McpServerState {
             registry,
@@ -548,13 +544,8 @@ mod tests {
         let resp = handle_tools_list(json!(1), &state);
         let result = resp.result.unwrap();
         let tools = result["tools"].as_array().unwrap();
-        // core (4) + meta (3) + browser (16) + screen (1, dependency) = 24
-        // Note: apply_enabled_groups only loads listed groups, not deps.
-        // Browser is listed but screen is not — so just core+meta+browser = 23
-        // Actually apply_enabled_groups sets loaded = allowed, so only the listed groups.
-        // Let's check: the fn sets loaded = allowed = {core, meta, browser}
-        // Browser's dependency on screen is NOT auto-resolved by apply_enabled_groups.
-        assert!(tools.len() > 7, "Should have more than default 7 tools");
+        // core (4) + browser (16) = 20
+        assert!(tools.len() > 4, "Should have more than default 4 tools");
         let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
         assert!(names.contains(&"browser_start"));
     }

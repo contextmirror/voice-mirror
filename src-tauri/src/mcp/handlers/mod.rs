@@ -3,7 +3,6 @@
 //! Each module implements a group of related tools:
 //! - `core`        -- Voice I/O tools (voice_send, voice_inbox, voice_listen, voice_status)
 //! - `memory`      -- Memory system (search, remember, forget, get, stats, flush)
-//! - `screen`      -- Screen capture (capture_screen)
 //! - `browser`     -- Browser control (16 tools, pipe IPC)
 //! - `n8n`         -- n8n REST API integration (22 tools)
 //! - `diagnostic`  -- Pipeline tracing (trace_pipeline)
@@ -11,7 +10,6 @@
 
 pub mod core;
 pub mod memory;
-pub mod screen;
 pub mod browser;
 pub mod n8n;
 pub mod diagnostic;

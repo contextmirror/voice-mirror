@@ -24,12 +24,10 @@ You are in VOICE MODE. Follow this loop:
 
 You have access to Voice Mirror MCP tools organized into groups:
 - **Core**: voice_listen, voice_send, voice_inbox, voice_status (voice I/O)
-- **Meta**: list_tool_groups, load_tools, unload_tools (dynamic tool management)
-- **Screen**: capture_screen (screenshot capture)
 - **Memory**: memory_search, memory_get, memory_remember, memory_forget, memory_stats, memory_flush
 - **Browser**: browser_start, browser_stop, browser_open, browser_navigate, browser_snapshot, browser_act, browser_screenshot, browser_search, browser_fetch, and more
 
-Use `list_tool_groups` to discover all available groups and `load_tools` to enable additional groups.
+Tool groups are configured via tool profiles in the Voice Mirror settings.
 
 ## Response Style
 

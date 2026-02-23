@@ -52,8 +52,8 @@
 |  │                                                      │ |
 |  │  mcp/          Native Rust MCP server                │ |
 |  │  ├── server    stdio JSON-RPC transport              │ |
-|  │  ├── tools     Tool registry (11 groups)             │ |
-|  │  ├── handlers  8 handler modules                     │ |
+|  │  ├── tools     Tool registry (8 groups)             │ |
+|  │  ├── handlers  6 handler modules                     │ |
 |  │  └── pipe_router Concurrent pipe message routing     │ |
 |  │                                                      │ |
 |  │  ipc/          Named pipe server (Win) / Unix socket │ |
@@ -503,7 +503,6 @@ Tauri app backend (Rust)
     │
     ├── Voice pipeline (speak, listen)
     ├── Browser bridge (WebView2 control)
-    ├── Screen capture
     ├── Memory system
     ├── Config access
     └── Chat history
@@ -514,22 +513,20 @@ Tauri app backend (Rust)
 | Module | Purpose |
 |--------|---------|
 | `mcp/server.rs` | JSON-RPC transport, request routing |
-| `mcp/tools.rs` | Tool registry (11 groups, dynamic load/unload) |
+| `mcp/tools.rs` | Tool registry (10 groups, dynamic load/unload) |
 | `mcp/pipe_router.rs` | Concurrent pipe message routing (oneshot for browser responses, mpsc for user messages) |
 | `mcp/handlers/core.rs` | Core voice communication handlers |
 | `mcp/handlers/browser.rs` | Browser control via named pipe to WebView2 |
-| `mcp/handlers/screen.rs` | Screen capture handlers |
 | `mcp/handlers/memory.rs` | Persistent memory system |
 | `mcp/handlers/n8n.rs` | n8n workflow automation |
 | `mcp/handlers/diagnostic.rs` | Pipeline diagnostic tools |
 | `mcp/handlers/facades.rs` | Single-tool wrappers for voice mode |
 
-### Tool Groups (11)
+### Tool Groups (10)
 
 | Group | Tools | Always Loaded | Description |
 |-------|-------|---------------|-------------|
 | `core` | 4 | Yes | Voice communication (send, inbox, listen, status) |
-| `screen` | 1 | No | Screen capture |
 | `memory` | 6 | No | Persistent memory (search, remember, forget, stats, flush) |
 | `browser` | 16 | No | Chrome browser control and web research |
 | `n8n` | 22 | No | n8n workflow automation |

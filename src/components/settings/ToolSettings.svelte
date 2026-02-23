@@ -22,13 +22,6 @@
       alwaysLoaded: true,
     },
     {
-      id: 'screen',
-      name: 'Screen',
-      description: 'Screen capture and vision analysis',
-      toolCount: 1,
-      alwaysLoaded: false,
-    },
-    {
       id: 'memory',
       name: 'Memory',
       description: 'Persistent memory system (search, store, recall, forget)',
@@ -59,11 +52,11 @@
   const DEFAULT_PROFILES = {
     'voice-assistant': {
       label: 'Voice Assistant',
-      groups: ['core','screen', 'memory', 'browser'],
+      groups: ['core', 'memory', 'browser'],
     },
     'voice-assistant-lite': {
       label: 'Voice Assistant (Lite)',
-      groups: ['core','screen', 'memory-facade', 'browser-facade'],
+      groups: ['core', 'memory-facade', 'browser-facade'],
     },
     'n8n-workflows': {
       label: 'n8n Workflows',
@@ -71,11 +64,11 @@
     },
     'web-browser': {
       label: 'Web Browser',
-      groups: ['core','screen', 'browser'],
+      groups: ['core', 'browser'],
     },
     'full-toolbox': {
       label: 'Full Toolbox',
-      groups: ['core','screen', 'memory', 'browser', 'n8n'],
+      groups: ['core', 'memory', 'browser', 'n8n'],
     },
     'minimal': {
       label: 'Minimal',
@@ -86,7 +79,7 @@
   // ---- Local state ----
 
   let activeProfile = $state('voice-assistant');
-  let enabledGroups = $state(new Set(['core','screen', 'memory', 'browser']));
+  let enabledGroups = $state(new Set(['core', 'memory', 'browser']));
   let saving = $state(false);
 
   // ---- Derived values ----

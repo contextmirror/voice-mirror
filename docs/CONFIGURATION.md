@@ -108,11 +108,11 @@ Config is stored in platform-appropriate locations:
         systemPrompt: null,        // Custom system prompt / persona (optional)
         toolProfile: "voice-assistant",  // Active tool profile name (Claude Code only)
         toolProfiles: {            // Saved tool profiles (which MCP groups to pre-load)
-            "voice-assistant":      { groups: ["core", "screen", "memory", "browser"] },
-            "voice-assistant-lite": { groups: ["core", "screen", "memory-facade", "browser-facade"] },
+            "voice-assistant":      { groups: ["core", "memory", "browser"] },
+            "voice-assistant-lite": { groups: ["core", "memory-facade", "browser-facade"] },
             "n8n-workflows":        { groups: ["core", "n8n"] },
-            "web-browser":          { groups: ["core", "screen", "browser"] },
-            "full-toolbox":         { groups: ["core", "screen", "memory", "browser", "n8n"] },
+            "web-browser":          { groups: ["core", "browser"] },
+            "full-toolbox":         { groups: ["core", "memory", "browser", "n8n"] },
             "minimal":              { groups: ["core"] }
         },
         endpoints: {
@@ -331,11 +331,11 @@ Tool profiles control which MCP tool groups are pre-loaded when using a CLI agen
 
 | Profile | Groups | Use Case |
 |---------|--------|----------|
-| **voice-assistant** | core, screen, memory, browser | General voice assistant (default) |
-| **voice-assistant-lite** | core, screen, memory-facade, browser-facade | Lighter footprint with facade tools |
+| **voice-assistant** | core, memory, browser | General voice assistant (default) |
+| **voice-assistant-lite** | core, memory-facade, browser-facade | Lighter footprint with facade tools |
 | **n8n-workflows** | core, n8n | Workflow automation focus |
-| **web-browser** | core, screen, browser | Web research focus |
-| **full-toolbox** | core, screen, memory, browser, n8n | Everything enabled |
+| **web-browser** | core, browser | Web research focus |
+| **full-toolbox** | core, memory, browser, n8n | Everything enabled |
 | **minimal** | core | Bare minimum tools |
 
 Custom profiles can be created through the Settings UI.

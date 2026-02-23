@@ -511,32 +511,6 @@ fn build_all_groups() -> HashMap<String, ToolGroupDef> {
         },
     );
 
-    // ---- Screen ----
-    groups.insert(
-        "screen".into(),
-        ToolGroupDef {
-            name: "screen".into(),
-            description: "Screen capture and vision analysis".into(),
-            always_loaded: false,
-            keywords: vec![
-                "screen".into(), "screenshot".into(), "look at".into(),
-                "what do you see".into(), "my display".into(), "monitor".into(),
-                "what's on".into(), "show me".into(),
-            ],
-            dependencies: vec![],
-            tools: vec![ToolDef {
-                name: "capture_screen".into(),
-                description: "Capture a screenshot of the user's screen for visual analysis.".into(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "display": { "description": "Display index (default: 0). Response includes displays_available count so you can request other monitors." }
-                    }
-                }),
-            }],
-        },
-    );
-
     // ---- Memory ----
     groups.insert(
         "memory".into(),
@@ -636,7 +610,7 @@ fn build_all_groups() -> HashMap<String, ToolGroupDef> {
                 "look up".into(), "find online".into(), "what is".into(),
                 "who is".into(), "latest news".into(),
             ],
-            dependencies: vec!["screen".into()],
+            dependencies: vec![],
             tools: vec![
                 ToolDef { name: "browser_start".into(), description: "Launch a managed Chrome browser instance with CDP debugging enabled.".into(), input_schema: json!({ "type": "object", "properties": { "profile": { "type": "string", "description": "Browser profile name (default: \"default\")" } } }) },
                 ToolDef { name: "browser_stop".into(), description: "Stop the managed Chrome browser instance.".into(), input_schema: json!({ "type": "object", "properties": { "profile": { "type": "string" } } }) },
@@ -805,7 +779,7 @@ fn build_all_groups() -> HashMap<String, ToolGroupDef> {
                 "look up".into(), "find online".into(), "what is".into(),
                 "who is".into(), "latest news".into(),
             ],
-            dependencies: vec!["screen".into()],
+            dependencies: vec![],
             tools: vec![ToolDef {
                 name: "browser_manage".into(),
                 description: "Control Chrome browser and do web research. Actions: search, open, fetch, snapshot, screenshot, click, type, tabs, navigate, start, stop.".into(),
@@ -840,9 +814,8 @@ mod tests {
     #[test]
     fn test_registry_new() {
         let reg = ToolRegistry::new();
-        // Core and meta should be loaded by default
+        // Core should be loaded by default
         assert!(reg.is_tool_loaded("voice_send"));
-        assert!(reg.is_tool_loaded("load_tools"));
         // Memory should not be loaded by default
         assert!(!reg.is_tool_loaded("memory_search"));
     }
@@ -851,8 +824,8 @@ mod tests {
     fn test_list_tools_default() {
         let reg = ToolRegistry::new();
         let tools = reg.list_tools();
-        // Should have core (4) + meta (3) = 7 tools
-        assert_eq!(tools.len(), 7);
+        // Should have core (4) tools
+        assert_eq!(tools.len(), 4);
     }
 
     #[test]
@@ -887,13 +860,9 @@ mod tests {
     }
 
     #[test]
-    fn test_browser_loads_screen_dependency() {
+    fn test_browser_loads_without_dependencies() {
         let mut reg = ToolRegistry::new();
-        assert!(!reg.is_tool_loaded("capture_screen"));
-
         let _names = reg.load_group("browser").unwrap();
-        // Screen should have been loaded as a dependency
-        assert!(reg.is_tool_loaded("capture_screen"));
         assert!(reg.is_tool_loaded("browser_start"));
     }
 
@@ -911,7 +880,7 @@ mod tests {
     fn test_list_groups() {
         let reg = ToolRegistry::new();
         let groups = reg.list_groups();
-        assert!(groups.len() >= 7); // core, screen, memory, browser, n8n, diagnostic, facades
+        assert!(groups.len() >= 8); // core, memory, browser, n8n, diagnostic, memory-facade, n8n-facade, browser-facade
     }
 
     #[test]
