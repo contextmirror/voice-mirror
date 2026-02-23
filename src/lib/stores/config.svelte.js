@@ -109,12 +109,12 @@ const DEFAULT_CONFIG = {
     systemPrompt: null,
     toolProfile: 'voice-assistant',
     toolProfiles: {
-      'voice-assistant': { groups: ['core', 'meta', 'screen', 'memory', 'browser'] },
-      'n8n-workflows': { groups: ['core', 'meta', 'n8n'] },
-      'web-browser': { groups: ['core', 'meta', 'screen', 'browser'] },
-      'full-toolbox': { groups: ['core', 'meta', 'screen', 'memory', 'browser', 'n8n'] },
-      'minimal': { groups: ['core', 'meta'] },
-      'voice-assistant-lite': { groups: ['core', 'meta', 'screen', 'memory-facade', 'browser-facade'] },
+      'voice-assistant': { groups: ['core','screen', 'memory', 'browser'] },
+      'n8n-workflows': { groups: ['core','n8n'] },
+      'web-browser': { groups: ['core','screen', 'browser'] },
+      'full-toolbox': { groups: ['core','screen', 'memory', 'browser', 'n8n'] },
+      'minimal': { groups: ['core'] },
+      'voice-assistant-lite': { groups: ['core','screen', 'memory-facade', 'browser-facade'] },
     },
     endpoints: {
       ollama: 'http://127.0.0.1:11434',

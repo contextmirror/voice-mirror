@@ -454,22 +454,22 @@ fn default_tool_profile() -> String { "voice-assistant".into() }
 fn default_tool_profiles() -> HashMap<String, ToolProfile> {
     let mut m = HashMap::new();
     m.insert("voice-assistant".into(), ToolProfile {
-        groups: vec!["core".into(), "meta".into(), "screen".into(), "memory".into(), "browser".into()],
+        groups: vec!["core".into(),"screen".into(), "memory".into(), "browser".into()],
     });
     m.insert("n8n-workflows".into(), ToolProfile {
-        groups: vec!["core".into(), "meta".into(), "n8n".into()],
+        groups: vec!["core".into(),"n8n".into()],
     });
     m.insert("web-browser".into(), ToolProfile {
-        groups: vec!["core".into(), "meta".into(), "screen".into(), "browser".into()],
+        groups: vec!["core".into(),"screen".into(), "browser".into()],
     });
     m.insert("full-toolbox".into(), ToolProfile {
-        groups: vec!["core".into(), "meta".into(), "screen".into(), "memory".into(), "browser".into(), "n8n".into()],
+        groups: vec!["core".into(),"screen".into(), "memory".into(), "browser".into(), "n8n".into()],
     });
     m.insert("minimal".into(), ToolProfile {
-        groups: vec!["core".into(), "meta".into()],
+        groups: vec!["core".into()],
     });
     m.insert("voice-assistant-lite".into(), ToolProfile {
-        groups: vec!["core".into(), "meta".into(), "screen".into(), "memory-facade".into(), "browser-facade".into()],
+        groups: vec!["core".into(),"screen".into(), "memory-facade".into(), "browser-facade".into()],
     });
     m
 }

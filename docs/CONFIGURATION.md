@@ -108,12 +108,12 @@ Config is stored in platform-appropriate locations:
         systemPrompt: null,        // Custom system prompt / persona (optional)
         toolProfile: "voice-assistant",  // Active tool profile name (Claude Code only)
         toolProfiles: {            // Saved tool profiles (which MCP groups to pre-load)
-            "voice-assistant":      { groups: ["core", "meta", "screen", "memory", "browser"] },
-            "voice-assistant-lite": { groups: ["core", "meta", "screen", "memory-facade", "browser-facade"] },
-            "n8n-workflows":        { groups: ["core", "meta", "n8n"] },
-            "web-browser":          { groups: ["core", "meta", "screen", "browser"] },
-            "full-toolbox":         { groups: ["core", "meta", "screen", "memory", "browser", "n8n"] },
-            "minimal":              { groups: ["core", "meta"] }
+            "voice-assistant":      { groups: ["core", "screen", "memory", "browser"] },
+            "voice-assistant-lite": { groups: ["core", "screen", "memory-facade", "browser-facade"] },
+            "n8n-workflows":        { groups: ["core", "n8n"] },
+            "web-browser":          { groups: ["core", "screen", "browser"] },
+            "full-toolbox":         { groups: ["core", "screen", "memory", "browser", "n8n"] },
+            "minimal":              { groups: ["core"] }
         },
         endpoints: {
             ollama: "http://127.0.0.1:11434",
@@ -331,12 +331,12 @@ Tool profiles control which MCP tool groups are pre-loaded when using a CLI agen
 
 | Profile | Groups | Use Case |
 |---------|--------|----------|
-| **voice-assistant** | core, meta, screen, memory, browser | General voice assistant (default) |
-| **voice-assistant-lite** | core, meta, screen, memory-facade, browser-facade | Lighter footprint with facade tools |
-| **n8n-workflows** | core, meta, n8n | Workflow automation focus |
-| **web-browser** | core, meta, screen, browser | Web research focus |
-| **full-toolbox** | core, meta, screen, memory, browser, n8n | Everything enabled |
-| **minimal** | core, meta | Bare minimum tools |
+| **voice-assistant** | core, screen, memory, browser | General voice assistant (default) |
+| **voice-assistant-lite** | core, screen, memory-facade, browser-facade | Lighter footprint with facade tools |
+| **n8n-workflows** | core, n8n | Workflow automation focus |
+| **web-browser** | core, screen, browser | Web research focus |
+| **full-toolbox** | core, screen, memory, browser, n8n | Everything enabled |
+| **minimal** | core | Bare minimum tools |
 
 Custom profiles can be created through the Settings UI.
 

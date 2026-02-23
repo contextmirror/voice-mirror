@@ -112,10 +112,9 @@ impl ToolRegistry {
         .map(|s| s.to_string())
         .collect();
 
-        // Default: load core + meta
+        // Default: load core
         let mut loaded = HashSet::new();
         loaded.insert("core".into());
-        loaded.insert("meta".into());
 
         Self {
             groups,
@@ -512,47 +511,6 @@ fn build_all_groups() -> HashMap<String, ToolGroupDef> {
         },
     );
 
-    // ---- Meta ----
-    groups.insert(
-        "meta".into(),
-        ToolGroupDef {
-            name: "meta".into(),
-            description: "Tool management (load, unload, list groups)".into(),
-            always_loaded: true,
-            keywords: vec![],
-            dependencies: vec![],
-            tools: vec![
-                ToolDef {
-                    name: "load_tools".into(),
-                    description: "Load a tool group to make its tools available. Call list_tool_groups first to see what groups exist. Groups: screen, memory, browser.".into(),
-                    input_schema: json!({
-                        "type": "object",
-                        "properties": {
-                            "group": { "type": "string", "description": "Tool group to load (e.g. \"browser\", \"memory\", \"screen\")" }
-                        },
-                        "required": ["group"]
-                    }),
-                },
-                ToolDef {
-                    name: "unload_tools".into(),
-                    description: "Unload a tool group to reduce context. Cannot unload core or meta groups.".into(),
-                    input_schema: json!({
-                        "type": "object",
-                        "properties": {
-                            "group": { "type": "string", "description": "Tool group to unload" }
-                        },
-                        "required": ["group"]
-                    }),
-                },
-                ToolDef {
-                    name: "list_tool_groups".into(),
-                    description: "List all available tool groups and their loaded status.".into(),
-                    input_schema: json!({ "type": "object", "properties": {} }),
-                },
-            ],
-        },
-    );
-
     // ---- Screen ----
     groups.insert(
         "screen".into(),
@@ -943,7 +901,7 @@ mod tests {
     fn test_apply_profile() {
         let mut reg = ToolRegistry::new();
         reg.apply_profile(&ToolProfile {
-            groups: vec!["core".into(), "meta".into(), "memory".into()],
+            groups: vec!["core".into(), "memory".into()],
         });
         assert!(reg.is_tool_loaded("memory_search"));
         assert!(!reg.is_tool_loaded("browser_start"));
@@ -953,7 +911,7 @@ mod tests {
     fn test_list_groups() {
         let reg = ToolRegistry::new();
         let groups = reg.list_groups();
-        assert!(groups.len() >= 7); // core, meta, screen, memory, browser, n8n, diagnostic, facades
+        assert!(groups.len() >= 7); // core, screen, memory, browser, n8n, diagnostic, facades
     }
 
     #[test]

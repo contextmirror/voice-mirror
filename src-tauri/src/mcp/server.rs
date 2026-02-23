@@ -343,62 +343,10 @@ async fn route_tool_call(
     name: &str,
     args: &Value,
     data_dir: &std::path::Path,
-    state: Arc<Mutex<McpServerState>>,
+    _state: Arc<Mutex<McpServerState>>,
     router: Option<&Arc<PipeRouter>>,
 ) -> McpToolResult {
     match name {
-        // ---- Meta tools ----
-        "load_tools" => {
-            let group = args.get("group").and_then(|v| v.as_str()).unwrap_or("");
-            if group.is_empty() {
-                return McpToolResult::error("Error: group is required");
-            }
-            let mut state = state.lock().await;
-            match state.registry.load_group(group) {
-                Ok(tool_names) => {
-                    state.tools_changed = true;
-                    McpToolResult::text(format!(
-                        "Loaded tool group \"{}\" ({} tools):\n{}",
-                        group,
-                        tool_names.len(),
-                        tool_names.join(", ")
-                    ))
-                }
-                Err(e) => McpToolResult::error(e),
-            }
-        }
-        "unload_tools" => {
-            let group = args.get("group").and_then(|v| v.as_str()).unwrap_or("");
-            if group.is_empty() {
-                return McpToolResult::error("Error: group is required");
-            }
-            let mut state = state.lock().await;
-            match state.registry.unload_group(group) {
-                Ok(count) => {
-                    state.tools_changed = true;
-                    McpToolResult::text(format!(
-                        "Unloaded tool group \"{}\". {} tools removed from context.",
-                        group, count
-                    ))
-                }
-                Err(e) => McpToolResult::error(e),
-            }
-        }
-        "list_tool_groups" => {
-            let state = state.lock().await;
-            let groups = state.registry.list_groups();
-            let mut lines = vec!["=== Tool Groups ===".to_string(), String::new()];
-            for g in &groups {
-                lines.push(format!(
-                    "[{}] {} ({} tools) -- {}",
-                    g.status, g.name, g.tool_count, g.description
-                ));
-                lines.push(format!("  Tools: {}", g.tool_names.join(", ")));
-                lines.push(String::new());
-            }
-            McpToolResult::text(lines.join("\n"))
-        }
-
         // ---- Core tools ----
         "voice_send" => handlers::core::handle_voice_send(args, data_dir, router).await,
         "voice_inbox" => {

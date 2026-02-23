@@ -773,14 +773,13 @@ describe('ToolSettings.svelte', () => {
   it('defines TOOL_GROUPS with user-facing groups only', () => {
     assert.ok(src.includes('const TOOL_GROUPS'), 'Should define TOOL_GROUPS');
     assert.ok(src.includes("id: 'core'"), 'Should have core group');
-    assert.ok(src.includes("id: 'meta'"), 'Should have meta group');
     assert.ok(src.includes("id: 'browser'"), 'Should have browser group');
     assert.ok(src.includes("id: 'memory'"), 'Should have memory group');
     assert.ok(src.includes("id: 'n8n'"), 'Should have n8n group');
   });
 
-  it('excludes internal facade and diagnostic groups from UI', () => {
-    // These are auto-selected by profiles, not shown to users
+  it('excludes internal and removed groups from UI', () => {
+    assert.ok(!src.includes("id: 'meta'"), 'Should NOT show meta group (removed)');
     assert.ok(!src.includes("id: 'diagnostic'"), 'Should NOT show diagnostic group');
     assert.ok(!src.includes("id: 'memory-facade'"), 'Should NOT show memory-facade group');
     assert.ok(!src.includes("id: 'n8n-facade'"), 'Should NOT show n8n-facade group');

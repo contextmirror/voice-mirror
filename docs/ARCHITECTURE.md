@@ -529,7 +529,6 @@ Tauri app backend (Rust)
 | Group | Tools | Always Loaded | Description |
 |-------|-------|---------------|-------------|
 | `core` | 4 | Yes | Voice communication (send, inbox, listen, status) |
-| `meta` | 3 | Yes | Tool management (load, unload, list groups) |
 | `screen` | 1 | No | Screen capture |
 | `memory` | 6 | No | Persistent memory (search, remember, forget, stats, flush) |
 | `browser` | 16 | No | Chrome browser control and web research |
