@@ -76,4 +76,55 @@ describe('FileEditor LSP integration', () => {
   it('sets view._lspPath for LSP handler access', () => {
     assert.ok(src.includes('_lspPath'), 'Should set _lspPath on view');
   });
+
+  // Phase 3-5: New feature integration
+  it('handles find-references action', () => {
+    assert.ok(src.includes("'find-references'"), 'Should handle find-references action');
+    assert.ok(src.includes('lsp.handleFindReferences'), 'Should call lsp.handleFindReferences');
+  });
+
+  it('handles rename-symbol action', () => {
+    assert.ok(src.includes("'rename-symbol'"), 'Should handle rename-symbol action');
+    assert.ok(src.includes('lsp.handleRenameSymbol'), 'Should call lsp.handleRenameSymbol');
+  });
+
+  it('handles quick-fix action', () => {
+    assert.ok(src.includes("'quick-fix'"), 'Should handle quick-fix action');
+    assert.ok(src.includes('lsp.handleCodeActions'), 'Should call lsp.handleCodeActions');
+  });
+
+  it('imports and mounts ReferencesPanel', () => {
+    assert.ok(src.includes('ReferencesPanel'), 'Should import ReferencesPanel');
+    assert.ok(src.includes('<ReferencesPanel'), 'Should mount ReferencesPanel');
+  });
+
+  it('imports and mounts CodeActionsMenu', () => {
+    assert.ok(src.includes('CodeActionsMenu'), 'Should import CodeActionsMenu');
+    assert.ok(src.includes('<CodeActionsMenu'), 'Should mount CodeActionsMenu');
+  });
+
+  it('imports and mounts RenameInput', () => {
+    assert.ok(src.includes('RenameInput'), 'Should import RenameInput');
+    assert.ok(src.includes('<RenameInput'), 'Should mount RenameInput');
+  });
+
+  it('uses lsp.showReferences for references visibility', () => {
+    assert.ok(src.includes('lsp.showReferences'), 'Should use lsp.showReferences');
+  });
+
+  it('uses lsp.referencesResult for references data', () => {
+    assert.ok(src.includes('lsp.referencesResult'), 'Should use lsp.referencesResult');
+  });
+
+  it('uses lsp.showRename for rename visibility', () => {
+    assert.ok(src.includes('lsp.showRename'), 'Should use lsp.showRename');
+  });
+
+  it('uses lsp.showCodeActions for code actions visibility', () => {
+    assert.ok(src.includes('lsp.showCodeActions'), 'Should use lsp.showCodeActions');
+  });
+
+  it('calls lsp.executeRename on rename confirm', () => {
+    assert.ok(src.includes('lsp.executeRename'), 'Should call lsp.executeRename');
+  });
 });

@@ -213,6 +213,120 @@ describe('editor-lsp.svelte.js: mapCompletionKind', () => {
   });
 });
 
+describe('editor-lsp.svelte.js: new feature state', () => {
+  it('has showReferences state', () => {
+    assert.ok(/let\s+showReferences\s*=\s*\$state\(/.test(src), 'Should have showReferences state');
+  });
+
+  it('has referencesResult state', () => {
+    assert.ok(/let\s+referencesResult\s*=\s*\$state\(/.test(src), 'Should have referencesResult state');
+  });
+
+  it('has showRename state', () => {
+    assert.ok(/let\s+showRename\s*=\s*\$state\(/.test(src), 'Should have showRename state');
+  });
+
+  it('has renamePosition state', () => {
+    assert.ok(/let\s+renamePosition\s*=\s*\$state\(/.test(src), 'Should have renamePosition state');
+  });
+
+  it('has renamePlaceholder state', () => {
+    assert.ok(/let\s+renamePlaceholder\s*=\s*\$state\(/.test(src), 'Should have renamePlaceholder state');
+  });
+
+  it('has showCodeActions state', () => {
+    assert.ok(/let\s+showCodeActions\s*=\s*\$state\(/.test(src), 'Should have showCodeActions state');
+  });
+
+  it('has codeActions state', () => {
+    assert.ok(/let\s+codeActions\s*=\s*\$state\(/.test(src), 'Should have codeActions state');
+  });
+
+  it('has codeActionsPosition state', () => {
+    assert.ok(/let\s+codeActionsPosition\s*=\s*\$state\(/.test(src), 'Should have codeActionsPosition state');
+  });
+});
+
+describe('editor-lsp.svelte.js: new feature handlers', () => {
+  it('has handleFindReferences handler', () => {
+    assert.ok(src.includes('handleFindReferences'), 'Should have handleFindReferences');
+  });
+
+  it('has handleRenameSymbol handler', () => {
+    assert.ok(src.includes('handleRenameSymbol'), 'Should have handleRenameSymbol');
+  });
+
+  it('has executeRename handler', () => {
+    assert.ok(src.includes('executeRename'), 'Should have executeRename');
+  });
+
+  it('has handleCodeActions handler', () => {
+    assert.ok(src.includes('handleCodeActions'), 'Should have handleCodeActions');
+  });
+
+  it('imports lspRequestReferences', () => {
+    assert.ok(src.includes('lspRequestReferences'), 'Should import lspRequestReferences');
+  });
+
+  it('imports lspPrepareRename', () => {
+    assert.ok(src.includes('lspPrepareRename'), 'Should import lspPrepareRename');
+  });
+
+  it('imports lspRename', () => {
+    assert.ok(src.includes('lspRename'), 'Should import lspRename');
+  });
+
+  it('imports lspApplyWorkspaceEdit', () => {
+    assert.ok(src.includes('lspApplyWorkspaceEdit'), 'Should import lspApplyWorkspaceEdit');
+  });
+
+  it('imports lspRequestCodeActions', () => {
+    assert.ok(src.includes('lspRequestCodeActions'), 'Should import lspRequestCodeActions');
+  });
+});
+
+describe('editor-lsp.svelte.js: new feature return object', () => {
+  it('returns showReferences getter', () => {
+    assert.ok(src.includes('get showReferences()'), 'Should return showReferences');
+  });
+
+  it('returns referencesResult getter', () => {
+    assert.ok(src.includes('get referencesResult()'), 'Should return referencesResult');
+  });
+
+  it('returns showRename getter', () => {
+    assert.ok(src.includes('get showRename()'), 'Should return showRename');
+  });
+
+  it('returns renamePosition getter', () => {
+    assert.ok(src.includes('get renamePosition()'), 'Should return renamePosition');
+  });
+
+  it('returns renamePlaceholder getter', () => {
+    assert.ok(src.includes('get renamePlaceholder()'), 'Should return renamePlaceholder');
+  });
+
+  it('returns showCodeActions getter', () => {
+    assert.ok(src.includes('get showCodeActions()'), 'Should return showCodeActions');
+  });
+
+  it('returns codeActions getter', () => {
+    assert.ok(src.includes('get codeActions()'), 'Should return codeActions');
+  });
+
+  it('returns setShowReferences setter', () => {
+    assert.ok(src.includes('setShowReferences('), 'Should return setShowReferences');
+  });
+
+  it('returns setShowRename setter', () => {
+    assert.ok(src.includes('setShowRename('), 'Should return setShowRename');
+  });
+
+  it('returns setShowCodeActions setter', () => {
+    assert.ok(src.includes('setShowCodeActions('), 'Should return setShowCodeActions');
+  });
+});
+
 describe('editor-lsp.svelte.js: diagnostics handling', () => {
   it('uses lspPositionToOffset for diagnostic positions', () => {
     assert.ok(src.includes('lspPositionToOffset'), 'Should use lspPositionToOffset');

@@ -7,8 +7,9 @@
   import spriteUrl from '../../assets/icons/file-icons-sprite.svg';
   import FileContextMenu from './FileContextMenu.svelte';
   import StatusDropdown from './StatusDropdown.svelte';
+  import OutlinePanel from './OutlinePanel.svelte';
 
-  let { onFileClick = () => {}, onFileDblClick = () => {}, onChangeClick = () => {} } = $props();
+  let { onFileClick = () => {}, onFileDblClick = () => {}, onChangeClick = () => {}, activeFilePath = null, activeFileHasLsp = false, onSymbolClick = () => {} } = $props();
 
   // State
   let activeTab = $state('files');
@@ -398,6 +399,11 @@
       class:active={activeTab === 'changes'}
       onclick={() => { activeTab = 'changes'; }}
     >{gitChanges.length} Changes</button>
+    <button
+      class="files-tab"
+      class:active={activeTab === 'outline'}
+      onclick={() => { activeTab = 'outline'; }}
+    >Outline</button>
     <StatusDropdown />
   </div>
 
@@ -542,6 +548,12 @@
           </button>
         {/each}
       {/if}
+    </div>
+  {/if}
+
+  {#if activeTab === 'outline'}
+    <div class="tree-scroll">
+      <OutlinePanel filePath={activeFilePath} hasLsp={activeFileHasLsp} {onSymbolClick} />
     </div>
   {/if}
 

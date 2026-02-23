@@ -7,6 +7,9 @@
   import { chatStore } from '../../lib/stores/chat.svelte.js';
   import { aiStatusStore } from '../../lib/stores/ai-status.svelte.js';
   import EditorContextMenu from './EditorContextMenu.svelte';
+  import ReferencesPanel from './ReferencesPanel.svelte';
+  import CodeActionsMenu from './CodeActionsMenu.svelte';
+  import RenameInput from './RenameInput.svelte';
   import { voiceMirrorEditorTheme } from '../../lib/editor-theme.js';
   import { createEditorLsp, LSP_EXTENSIONS, uriToRelativePath, lspPositionToOffset, mapCompletionKind } from '../../lib/editor-lsp.svelte.js';
 
@@ -179,6 +182,15 @@
       // LSP Actions
       case 'goto-definition':
         handleGoToDefinition();
+        break;
+      case 'find-references':
+        lsp.handleFindReferences(view, currentPath);
+        break;
+      case 'rename-symbol':
+        lsp.handleRenameSymbol(view, currentPath);
+        break;
+      case 'quick-fix':
+        lsp.handleCodeActions(view, currentPath);
         break;
 
       // Clipboard
@@ -523,6 +535,24 @@
     return () => { unlisten?.(); };
   });
 
+  // Listen for outline symbol navigation (from OutlinePanel via LensWorkspace)
+  $effect(() => {
+    function handleGotoPosition(e) {
+      if (!view) return;
+      const { line, character } = e.detail;
+      try {
+        const targetLine = view.state.doc.line(line + 1);
+        view.dispatch({
+          selection: { anchor: targetLine.from + Math.min(character, targetLine.length) },
+          scrollIntoView: true,
+        });
+        view.focus();
+      } catch {}
+    }
+    window.addEventListener('lens-goto-position', handleGotoPosition);
+    return () => { window.removeEventListener('lens-goto-position', handleGotoPosition); };
+  });
+
   onDestroy(() => {
     if (currentPath && lsp.hasLsp) {
       const root = projectStore.activeProject?.path || null;
@@ -582,7 +612,7 @@
         if (pos != null) {
           const line = view.state.doc.lineAt(pos);
           lineNumber = line.number;
-          const diagnostics = cachedDiagnostics.get(currentPath) || [];
+          const diagnostics = lsp.cachedDiagnostics.get(currentPath) || [];
           diagnostic = diagnostics.find(d => pos >= d.from && pos <= d.to);
         }
       }
@@ -597,7 +627,7 @@
 
       // Check for diagnostics on this line even if pos wasn't exact
       if (!diagnostic && lineNumber && currentPath) {
-        const diagnostics = cachedDiagnostics.get(currentPath) || [];
+        const diagnostics = lsp.cachedDiagnostics.get(currentPath) || [];
         diagnostic = diagnostics.find(d => {
           try { return view.state.doc.lineAt(d.from).number === lineNumber; } catch { return false; }
         });
@@ -626,13 +656,49 @@
   visible={editorMenu.visible}
   hasSelection={menuContext.hasSelection}
   selectedText={menuContext.selectedText}
-  hasLsp={hasLsp}
+  hasLsp={lsp.hasLsp}
   hasDiagnostic={menuContext.hasDiagnostic}
   diagnosticMessage={menuContext.diagnosticMessage}
   filePath={currentPath}
   lineNumber={menuContext.lineNumber}
   onClose={() => { editorMenu.visible = false; }}
   onAction={handleMenuAction}
+/>
+
+<ReferencesPanel
+  references={lsp.referencesResult}
+  visible={lsp.showReferences}
+  onClose={() => { lsp.setShowReferences(false); }}
+  onNavigate={(ref) => {
+    lsp.setShowReferences(false);
+    if (ref.path === currentPath && !ref.external) {
+      if (view) {
+        const line = view.state.doc.line((ref.range?.start?.line ?? 0) + 1);
+        view.dispatch({ selection: { anchor: line.from + (ref.range?.start?.character ?? 0) }, scrollIntoView: true });
+      }
+    } else {
+      const fileName = ref.path.split(/[/\\]/).pop() || ref.path;
+      tabsStore.openFile({ name: fileName, path: ref.path, readOnly: ref.external, external: ref.external });
+    }
+  }}
+/>
+
+<CodeActionsMenu
+  actions={lsp.codeActions}
+  visible={lsp.showCodeActions}
+  x={lsp.codeActionsPosition.x}
+  y={lsp.codeActionsPosition.y}
+  onClose={() => { lsp.setShowCodeActions(false); }}
+  onApply={(action) => { lsp.setShowCodeActions(false); }}
+/>
+
+<RenameInput
+  visible={lsp.showRename}
+  x={lsp.renamePosition.x}
+  y={lsp.renamePosition.y}
+  currentName={lsp.renamePlaceholder}
+  onConfirm={(newName) => { lsp.executeRename(view, currentPath, newName); }}
+  onCancel={() => { lsp.setShowRename(false); }}
 />
 
 <style>

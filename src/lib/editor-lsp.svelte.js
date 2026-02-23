@@ -6,7 +6,7 @@
  */
 
 import { listen } from '@tauri-apps/api/event';
-import { lspOpenFile, lspCloseFile, lspChangeFile, lspSaveFile, lspRequestCompletion, lspRequestHover, lspRequestDefinition } from './api.js';
+import { lspOpenFile, lspCloseFile, lspChangeFile, lspSaveFile, lspRequestCompletion, lspRequestHover, lspRequestDefinition, lspRequestReferences, lspPrepareRename, lspRename, lspApplyWorkspaceEdit, lspRequestCodeActions } from './api.js';
 import { projectStore } from './stores/project.svelte.js';
 import { tabsStore } from './stores/tabs.svelte.js';
 
@@ -69,6 +69,20 @@ export function createEditorLsp() {
   let hasLsp = $state(false);
   let cachedDiagnostics = $state(new Map());
 
+  // References state
+  let showReferences = $state(false);
+  let referencesResult = $state([]);
+
+  // Rename state
+  let showRename = $state(false);
+  let renamePosition = $state({ x: 0, y: 0 });
+  let renamePlaceholder = $state('');
+
+  // Code actions state
+  let showCodeActions = $state(false);
+  let codeActions = $state([]);
+  let codeActionsPosition = $state({ x: 0, y: 0 });
+
   let lspDebounceTimer = null;
   let diagnosticUnlisten = null;
 
@@ -121,6 +135,96 @@ export function createEditorLsp() {
       } else {
         const fileName = resolved.path.split(/[/\\]/).pop() || resolved.path;
         tabsStore.openFile({ name: fileName, path: resolved.path, readOnly: resolved.external, external: resolved.external });
+      }
+    } catch {}
+  }
+
+  async function handleFindReferences(view, currentPath) {
+    if (!view || !hasLsp || !currentPath) return;
+    const pos = view.state.selection.main.head;
+    const lineInfo = view.state.doc.lineAt(pos);
+    const line = lineInfo.number - 1;
+    const character = pos - lineInfo.from;
+    const root = projectStore.activeProject?.path || null;
+
+    try {
+      const result = await lspRequestReferences(currentPath, line, character, root);
+      if (result?.data?.locations?.length) {
+        referencesResult = result.data.locations.map(loc => {
+          const rootStr = projectStore.activeProject?.path || '';
+          const resolved = uriToRelativePath(loc.uri, rootStr);
+          return {
+            path: resolved?.path || loc.uri,
+            external: resolved?.external || false,
+            range: loc.range,
+          };
+        });
+        showReferences = true;
+      }
+    } catch {}
+  }
+
+  async function handleRenameSymbol(view, currentPath) {
+    if (!view || !hasLsp || !currentPath) return;
+    const pos = view.state.selection.main.head;
+    const lineInfo = view.state.doc.lineAt(pos);
+    const line = lineInfo.number - 1;
+    const character = pos - lineInfo.from;
+    const root = projectStore.activeProject?.path || null;
+
+    try {
+      const result = await lspPrepareRename(currentPath, line, character, root);
+      if (result?.data) {
+        const coords = view.coordsAtPos(pos);
+        renamePosition = { x: coords?.left || 0, y: (coords?.bottom || 0) + 4 };
+        renamePlaceholder = result.data.placeholder || view.state.sliceDoc(
+          lspPositionToOffset(view.state.doc, result.data.range?.start || { line, character }),
+          lspPositionToOffset(view.state.doc, result.data.range?.end || { line, character })
+        );
+        showRename = true;
+      }
+    } catch {}
+  }
+
+  async function executeRename(view, currentPath, newName) {
+    if (!view || !hasLsp || !currentPath) return;
+    const pos = view.state.selection.main.head;
+    const lineInfo = view.state.doc.lineAt(pos);
+    const line = lineInfo.number - 1;
+    const character = pos - lineInfo.from;
+    const root = projectStore.activeProject?.path || null;
+    showRename = false;
+
+    try {
+      const result = await lspRename(currentPath, line, character, newName, root);
+      if (result?.data?.workspaceEdit) {
+        await lspApplyWorkspaceEdit(result.data.workspaceEdit, root);
+      }
+    } catch (err) {
+      console.warn('[editor-lsp] Rename failed:', err);
+    }
+  }
+
+  async function handleCodeActions(view, currentPath, diagnosticsAtCursor) {
+    if (!view || !hasLsp || !currentPath) return;
+    const sel = view.state.selection.main;
+    const startLine = view.state.doc.lineAt(sel.from);
+    const endLine = view.state.doc.lineAt(sel.to);
+    const root = projectStore.activeProject?.path || null;
+
+    try {
+      const result = await lspRequestCodeActions(
+        currentPath,
+        startLine.number - 1, sel.from - startLine.from,
+        endLine.number - 1, sel.to - endLine.from,
+        diagnosticsAtCursor || [],
+        root
+      );
+      if (result?.data?.actions?.length) {
+        const coords = view.coordsAtPos(sel.head);
+        codeActionsPosition = { x: coords?.left || 0, y: (coords?.bottom || 0) + 4 };
+        codeActions = result.data.actions;
+        showCodeActions = true;
       }
     } catch {}
   }
@@ -243,9 +347,20 @@ export function createEditorLsp() {
     get lspVersion() { return lspVersion; },
     get hasLsp() { return hasLsp; },
     get cachedDiagnostics() { return cachedDiagnostics; },
+    get showReferences() { return showReferences; },
+    get referencesResult() { return referencesResult; },
+    get showRename() { return showRename; },
+    get renamePosition() { return renamePosition; },
+    get renamePlaceholder() { return renamePlaceholder; },
+    get showCodeActions() { return showCodeActions; },
+    get codeActions() { return codeActions; },
+    get codeActionsPosition() { return codeActionsPosition; },
 
     // Setters
     setHasLsp(val) { hasLsp = val; },
+    setShowReferences(val) { showReferences = val; },
+    setShowRename(val) { showRename = val; },
+    setShowCodeActions(val) { showCodeActions = val; },
 
     // Handlers
     openFile,
@@ -253,6 +368,10 @@ export function createEditorLsp() {
     changeFile,
     saveFile,
     handleGoToDefinition,
+    handleFindReferences,
+    handleRenameSymbol,
+    executeRename,
+    handleCodeActions,
 
     // CodeMirror extension factories
     completionSource,

@@ -103,6 +103,14 @@
                   onFileClick={(entry) => tabsStore.openFile(entry)}
                   onFileDblClick={(entry) => tabsStore.pinTab(entry.path)}
                   onChangeClick={(change) => tabsStore.openDiff(change)}
+                  activeFilePath={isFile ? tabsStore.activeTab?.path : null}
+                  activeFileHasLsp={isFile}
+                  onSymbolClick={({ line, character }) => {
+                    // Navigate to symbol position in the active file editor
+                    // The FileEditor will handle scrolling via its view
+                    const event = new CustomEvent('lens-goto-position', { detail: { line, character } });
+                    window.dispatchEvent(event);
+                  }}
                 />
               {/snippet}
             </SplitPanel>

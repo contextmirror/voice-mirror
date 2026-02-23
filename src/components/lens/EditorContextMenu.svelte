@@ -81,6 +81,21 @@
     onAction('goto-definition');
   }
 
+  function handleFindReferences() {
+    close();
+    onAction('find-references');
+  }
+
+  function handleRenameSymbol() {
+    close();
+    onAction('rename-symbol');
+  }
+
+  function handleQuickFix() {
+    close();
+    onAction('quick-fix');
+  }
+
   // ── Edit Actions ──
 
   function handleCut() {
@@ -167,9 +182,20 @@
         Go to Definition
         <span class="context-shortcut">Ctrl+Click</span>
       </button>
-      <button class="context-item context-item-disabled" disabled role="menuitem">
+      <button class="context-item" onclick={handleFindReferences} role="menuitem">
         Find References
+        <span class="context-shortcut">Shift+F12</span>
       </button>
+      <button class="context-item" onclick={handleRenameSymbol} role="menuitem">
+        Rename Symbol
+        <span class="context-shortcut">F2</span>
+      </button>
+      {#if hasDiagnostic}
+        <button class="context-item" onclick={handleQuickFix} role="menuitem">
+          Quick Fix...
+          <span class="context-shortcut">Ctrl+.</span>
+        </button>
+      {/if}
       <div class="context-separator"></div>
     {/if}
 

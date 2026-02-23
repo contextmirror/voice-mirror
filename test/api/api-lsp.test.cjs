@@ -42,4 +42,28 @@ describe('LSP API wrappers', () => {
     assert.ok(apiSrc.includes('export async function lspShutdown'));
     assert.ok(apiSrc.includes("invoke('lsp_shutdown'"));
   });
+  it('exports lspRequestDocumentSymbols', () => {
+    assert.ok(apiSrc.includes('export async function lspRequestDocumentSymbols'));
+    assert.ok(apiSrc.includes("invoke('lsp_request_document_symbols'"));
+  });
+  it('exports lspRequestReferences', () => {
+    assert.ok(apiSrc.includes('export async function lspRequestReferences'));
+    assert.ok(apiSrc.includes("invoke('lsp_request_references'"));
+  });
+  it('exports lspRequestCodeActions', () => {
+    assert.ok(apiSrc.includes('export async function lspRequestCodeActions'));
+    assert.ok(apiSrc.includes("invoke('lsp_request_code_actions'"));
+  });
+  it('exports lspPrepareRename', () => {
+    assert.ok(apiSrc.includes('export async function lspPrepareRename'));
+    assert.ok(apiSrc.includes("invoke('lsp_prepare_rename'"));
+  });
+  it('exports lspRename', () => {
+    assert.ok(apiSrc.includes('export async function lspRename'));
+    assert.ok(apiSrc.includes("invoke('lsp_rename'"));
+  });
+  it('exports lspApplyWorkspaceEdit', () => {
+    assert.ok(apiSrc.includes('export async function lspApplyWorkspaceEdit'));
+    assert.ok(apiSrc.includes("invoke('lsp_apply_workspace_edit'"));
+  });
 });
