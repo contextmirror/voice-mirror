@@ -34,7 +34,7 @@ describe('SettingsPanel.svelte', () => {
     assert.ok(src.includes("import AISettings from './AISettings.svelte'"), 'Should import AISettings');
   });
 
-  it('imports ToolSettings for CLI providers', () => {
+  it('imports and renders ToolSettings', () => {
     assert.ok(src.includes("import ToolSettings from './ToolSettings.svelte'"), 'Should import ToolSettings');
     assert.ok(src.includes('<ToolSettings'), 'Should render ToolSettings');
   });
