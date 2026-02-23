@@ -134,9 +134,9 @@ export const STT_REGISTRY = {
     label: 'Whisper (Local, default)',
     showModelSize: true,
     modelSizes: [
-      { value: 'tiny', label: 'tiny.en (~77MB, fastest)' },
-      { value: 'base', label: 'base.en (~148MB, recommended)' },
-      { value: 'small', label: 'small.en (~488MB, most accurate)' },
+      { value: 'tiny', label: 'Fast (~77MB)' },
+      { value: 'base', label: 'Balanced (~148MB, recommended)' },
+      { value: 'small', label: 'Accurate (~488MB, best quality)' },
     ],
     showModelName: false,
     showApiKey: false,
