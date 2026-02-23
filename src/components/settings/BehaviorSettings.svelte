@@ -18,6 +18,7 @@
   let startWithSystem = $state(false);
   let autoStartProvider = $state(false);
   let showToasts = $state(true);
+  let markdownPreview = $state(true);
   let debugMode = $state(false);
   let showDependencies = $state(false);
 
@@ -34,6 +35,7 @@
     startWithSystem = cfg.behavior?.startWithSystem === true;
     autoStartProvider = cfg.ai?.autoStart === true;
     showToasts = cfg.behavior?.showToasts !== false;
+    markdownPreview = cfg.editor?.markdownPreview !== false;
     debugMode = cfg.advanced?.debugMode === true;
     showDependencies = cfg.advanced?.showDependencies === true;
   });
@@ -54,6 +56,9 @@
         },
         ai: {
           autoStart: autoStartProvider,
+        },
+        editor: {
+          markdownPreview,
         },
         advanced: {
           debugMode,
@@ -119,6 +124,19 @@
         description="Show popup notifications for file operations and other events"
         checked={showToasts}
         onChange={(v) => (showToasts = v)}
+      />
+    </div>
+  </section>
+
+  <!-- Editor -->
+  <section class="settings-section">
+    <h3>Editor</h3>
+    <div class="settings-group">
+      <Toggle
+        label="Markdown Preview"
+        description="Show rendered preview by default when opening .md files"
+        checked={markdownPreview}
+        onChange={(v) => (markdownPreview = v)}
       />
     </div>
   </section>

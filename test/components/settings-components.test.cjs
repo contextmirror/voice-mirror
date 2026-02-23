@@ -661,6 +661,29 @@ describe('BehaviorSettings.svelte', () => {
   it('has Advanced section heading', () => {
     assert.ok(src.includes('>Advanced<'), 'Should have Advanced section heading');
   });
+
+  it('has Editor section heading', () => {
+    assert.ok(src.includes('>Editor<'), 'Should have Editor section heading');
+  });
+
+  it('has markdownPreview toggle', () => {
+    assert.ok(src.includes('markdownPreview'), 'Should have markdownPreview state');
+    assert.ok(src.includes('Markdown Preview'), 'Should show Markdown Preview label');
+  });
+
+  it('reads markdownPreview from editor config', () => {
+    assert.ok(
+      src.includes('cfg.editor?.markdownPreview'),
+      'Should read markdownPreview from config'
+    );
+  });
+
+  it('includes editor.markdownPreview in save patch', () => {
+    assert.ok(
+      src.includes('editor:') && src.includes('markdownPreview'),
+      'Should save markdownPreview to editor config'
+    );
+  });
 });
 
 // ---- DependencySettings.svelte ----

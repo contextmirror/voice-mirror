@@ -466,3 +466,25 @@ describe('FileEditor.svelte: markdown preview styles', () => {
     );
   });
 });
+
+describe('FileEditor.svelte: markdown preview config', () => {
+  it('imports configStore', () => {
+    assert.ok(src.includes('configStore'), 'Should import configStore');
+  });
+
+  it('derives markdownPreviewDefault from config', () => {
+    assert.ok(
+      src.includes('markdownPreviewDefault') && src.includes('editor?.markdownPreview'),
+      'Should derive preview default from editor config'
+    );
+  });
+
+  it('resets showPreview to config default on file load', () => {
+    const loadStart = src.indexOf('async function loadFile');
+    const chunk = src.slice(loadStart, loadStart + 500);
+    assert.ok(
+      chunk.includes('showPreview = markdownPreviewDefault'),
+      'Should reset showPreview to config default when loading a new file'
+    );
+  });
+});

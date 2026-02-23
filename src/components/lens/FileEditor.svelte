@@ -4,6 +4,7 @@
   import { readFile, readExternalFile, writeFile, lspRequestDefinition, lspApplyWorkspaceEdit, revealInExplorer, writeUserMessage, aiPtyInput } from '../../lib/api.js';
   import { tabsStore } from '../../lib/stores/tabs.svelte.js';
   import { projectStore } from '../../lib/stores/project.svelte.js';
+  import { configStore } from '../../lib/stores/config.svelte.js';
   import { chatStore } from '../../lib/stores/chat.svelte.js';
   import { aiStatusStore } from '../../lib/stores/ai-status.svelte.js';
   import EditorContextMenu from './EditorContextMenu.svelte';
@@ -30,6 +31,7 @@
 
   // Markdown preview state
   let isMarkdown = $derived(!!tab?.path?.match(/\.(md|markdown)$/i));
+  let markdownPreviewDefault = $derived(configStore.value?.editor?.markdownPreview !== false);
   let showPreview = $state(true);
   let markdownContent = $state('');
 
@@ -301,6 +303,7 @@
     error = null;
     isBinary = false;
     conflictDetected = false;
+    showPreview = markdownPreviewDefault;
 
     // Check if this is an external (read-only) file
     const isExternal = tab?.external || false;

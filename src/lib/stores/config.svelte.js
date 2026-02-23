@@ -82,6 +82,9 @@ const DEFAULT_CONFIG = {
     entries: [],
     activeIndex: 0,
   },
+  editor: {
+    markdownPreview: true,
+  },
   workspace: {
     showChat: false,
     showTerminal: false,
