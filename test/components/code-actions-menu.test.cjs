@@ -54,7 +54,16 @@ describe('CodeActionsMenu.svelte: grouping', () => {
   });
 
   it('uses $derived for grouped actions', () => {
-    assert.ok(src.includes('grouped = $derived'), 'Should use $derived for grouping');
+    assert.ok(src.includes('groups = $derived'), 'Should use $derived for grouping');
+  });
+
+  it('shows group labels when multiple groups exist', () => {
+    assert.ok(src.includes('code-actions-label'), 'Should have group label class');
+    assert.ok(src.includes('group.label'), 'Should render group label');
+  });
+
+  it('shows separator between groups', () => {
+    assert.ok(src.includes('code-actions-separator'), 'Should have separator class');
   });
 });
 

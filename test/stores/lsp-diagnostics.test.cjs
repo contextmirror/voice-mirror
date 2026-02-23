@@ -145,6 +145,30 @@ describe('lsp-diagnostics.svelte.js: diagnostics getter', () => {
   });
 });
 
+describe('lsp-diagnostics.svelte.js: raw diagnostics cache', () => {
+  it('maintains rawDiagnostics Map with $state', () => {
+    assert.ok(/let\s+rawDiagnostics\s*=\s*\$state\(new Map\(\)\)/.test(src), 'Should use $state for rawDiagnostics');
+  });
+
+  it('has getRawForFile method', () => {
+    assert.ok(src.includes('getRawForFile('), 'Should have getRawForFile method');
+  });
+
+  it('getRawForFile returns from rawDiagnostics Map', () => {
+    assert.ok(src.includes('rawDiagnostics.get(filePath)'), 'Should get from rawDiagnostics Map');
+  });
+
+  it('stores raw diagnostics in handleDiagnosticsEvent', () => {
+    assert.ok(src.includes('updatedRaw.set(relativePath, lspDiags)'), 'Should cache raw LSP diagnostics');
+  });
+
+  it('clears rawDiagnostics on clear()', () => {
+    const clearSection = src.slice(src.indexOf('clear()'));
+    const matches = clearSection.match(/new Map\(\)/g);
+    assert.ok(matches && matches.length >= 2, 'Should reset both diagnostics and rawDiagnostics');
+  });
+});
+
 describe('lsp-diagnostics.svelte.js: getForFile returns null when no diagnostics', () => {
   it('returns null when file not in Map', () => {
     assert.ok(src.includes('|| null'), 'Should return null for missing file');

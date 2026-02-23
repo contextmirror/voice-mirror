@@ -14,10 +14,6 @@
   let unlistenUrl = null;
   let unlistenOpenTab = null;
   let setupDone = false;
-  let retryCount = 0;
-  let retryTimer = null;
-  const MAX_RETRIES = 3;
-  const RETRY_DELAY_MS = 2000;
   const LOADING_TIMEOUT_MS = 15000;
   let loadingTimer = null;
   let detectionTimer = null;
@@ -246,6 +242,7 @@
 
   async function createFirstTab() {
     if (!containerEl) return;
+    if (lensStore.webviewReady) return; // Already created
 
     // Wait for layout to settle before measuring bounds (double rAF)
     await new Promise((resolve) => {
@@ -256,48 +253,24 @@
 
     const bounds = getAbsoluteBounds();
     if (!bounds || bounds.width <= 0 || bounds.height <= 0) {
-      console.warn('[LensPreview] Container has zero bounds, will retry');
-      scheduleRetry();
+      // Container is CSS-hidden (display:none when file tab is active).
+      // Don't waste retries — we'll try again when the container becomes visible
+      // via the ResizeObserver set up in onMount.
+      console.log('[LensPreview] Container has zero bounds, will create tab when visible');
       return;
     }
 
-    console.log('[LensPreview] Creating first browser tab at', bounds, retryCount > 0 ? `(retry ${retryCount})` : '');
+    console.log('[LensPreview] Creating first browser tab at', bounds);
 
     try {
       const tabId = await browserTabsStore.openTab(DEFAULT_URL, bounds);
       if (tabId) {
         lensStore.setWebviewReady(true);
-        retryCount = 0;
         console.log('[LensPreview] First browser tab ready');
-
-        // Observe container resize — sync bounds on next animation frame
-        if (resizeObserver) resizeObserver.disconnect();
-        const observer = new ResizeObserver(() => {
-          if (rafId) cancelAnimationFrame(rafId);
-          rafId = requestAnimationFrame(() => { rafId = null; syncBounds(); });
-        });
-        observer.observe(containerEl);
-        resizeObserver = observer;
-      } else {
-        scheduleRetry();
       }
     } catch (err) {
       console.error('[LensPreview] Failed to create first tab:', err);
-      scheduleRetry();
     }
-  }
-
-  function scheduleRetry() {
-    if (retryCount >= MAX_RETRIES) {
-      console.error(`[LensPreview] Giving up after ${MAX_RETRIES} retries`);
-      return;
-    }
-    retryCount++;
-    console.log(`[LensPreview] Retrying in ${RETRY_DELAY_MS}ms (attempt ${retryCount}/${MAX_RETRIES})`);
-    clearTimeout(retryTimer);
-    retryTimer = setTimeout(() => {
-      createFirstTab();
-    }, RETRY_DELAY_MS);
   }
 
   // Use onMount instead of $effect to avoid re-running on reactive state changes.
@@ -335,11 +308,29 @@
       }
     });
 
+    // Observe container resize — this serves two purposes:
+    // 1. Sync webview bounds when the panel is resized
+    // 2. Trigger first tab creation when the container becomes visible
+    //    (it starts with display:none if a file tab is active on load)
+    if (containerEl) {
+      const observer = new ResizeObserver(() => {
+        if (!lensStore.webviewReady) {
+          // Container just became visible — create the first tab
+          createFirstTab();
+        } else {
+          // Normal resize — sync bounds
+          if (rafId) cancelAnimationFrame(rafId);
+          rafId = requestAnimationFrame(() => { rafId = null; syncBounds(); });
+        }
+      });
+      observer.observe(containerEl);
+      resizeObserver = observer;
+    }
+
     await createFirstTab();
   });
 
   onDestroy(() => {
-    clearTimeout(retryTimer);
     clearTimeout(loadingTimer);
     clearTimeout(detectionTimer);
     if (rafId) cancelAnimationFrame(rafId);

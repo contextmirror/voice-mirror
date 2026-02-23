@@ -23,6 +23,9 @@
       onclick={() => browserTabsStore.switchTab(tab.id)}
       title={tab.url || tab.title}
     >
+      <svg class="browser-tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+      </svg>
       <span class="browser-tab-title">{truncate(tab.title)}</span>
       {#if browserTabsStore.tabs.length > 1}
         <button
@@ -73,9 +76,9 @@
   .browser-tab {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 6px;
     height: 28px;
-    padding: 0 12px;
+    padding: 0 10px;
     border: none;
     border-radius: 0;
     background: transparent;
@@ -103,6 +106,12 @@
     opacity: 0.6;
   }
 
+  .browser-tab-icon {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+  }
+
   .browser-tab-title {
     overflow: hidden;
     text-overflow: ellipsis;
@@ -110,7 +119,7 @@
   }
 
   .browser-tab-close {
-    display: none;
+    display: flex;
     align-items: center;
     justify-content: center;
     width: 14px;
@@ -122,11 +131,12 @@
     cursor: pointer;
     padding: 0;
     flex-shrink: 0;
+    visibility: hidden;
   }
 
   .browser-tab:hover .browser-tab-close,
   .browser-tab.active .browser-tab-close {
-    display: flex;
+    visibility: visible;
   }
 
   .browser-tab-close:hover {

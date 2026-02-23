@@ -127,4 +127,13 @@ describe('FileEditor LSP integration', () => {
   it('calls lsp.executeRename on rename confirm', () => {
     assert.ok(src.includes('lsp.executeRename'), 'Should call lsp.executeRename');
   });
+
+  it('imports lspDiagnosticsStore for pre-existing diagnostics', () => {
+    assert.ok(src.includes('lspDiagnosticsStore'), 'Should import lspDiagnosticsStore');
+    assert.ok(src.includes('lsp-diagnostics.svelte.js'), 'Should import from diagnostics store');
+  });
+
+  it('applies pre-existing diagnostics from store on file open', () => {
+    assert.ok(src.includes('getRawForFile'), 'Should check store for raw diagnostics when opening file');
+  });
 });

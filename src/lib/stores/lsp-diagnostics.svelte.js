@@ -21,6 +21,8 @@ function uriToRelativePath(uri, root) {
 function createLspDiagnosticsStore() {
   /** Map<relativePath, { errors: number, warnings: number }> */
   let diagnostics = $state(new Map());
+  /** Map<relativePath, Array<{range, severity, message, source, code}>> — raw LSP diagnostics */
+  let rawDiagnostics = $state(new Map());
   let unlisten = null;
 
   function handleDiagnosticsEvent(event, projectRoot) {
@@ -40,12 +42,16 @@ function createLspDiagnosticsStore() {
     }
 
     const updated = new Map(diagnostics);
+    const updatedRaw = new Map(rawDiagnostics);
     if (errors === 0 && warnings === 0) {
       updated.delete(relativePath);
+      updatedRaw.delete(relativePath);
     } else {
       updated.set(relativePath, { errors, warnings });
+      updatedRaw.set(relativePath, lspDiags);
     }
     diagnostics = updated;
+    rawDiagnostics = updatedRaw;
   }
 
   return {
@@ -72,9 +78,15 @@ function createLspDiagnosticsStore() {
       return { errors, warnings };
     },
 
+    /** Get raw LSP diagnostics array for a specific file path */
+    getRawForFile(filePath) {
+      return rawDiagnostics.get(filePath) || null;
+    },
+
     /** Clear all diagnostics (e.g. on project switch) */
     clear() {
       diagnostics = new Map();
+      rawDiagnostics = new Map();
     },
 
     /** Start listening for lsp-diagnostics events */

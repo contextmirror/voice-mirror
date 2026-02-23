@@ -187,10 +187,9 @@ describe('LensPreview.svelte', () => {
     assert.ok(src.includes('onMount'), 'Should use onMount for setup');
   });
 
-  it('retries webview creation on failure', () => {
-    assert.ok(src.includes('MAX_RETRIES'), 'Should have retry limit');
-    assert.ok(src.includes('scheduleRetry'), 'Should have retry scheduler');
-    assert.ok(src.includes('RETRY_DELAY_MS'), 'Should have retry delay');
+  it('defers tab creation when container is hidden', () => {
+    assert.ok(src.includes('will create tab when visible'), 'Should defer when container has zero bounds');
+    assert.ok(src.includes('ResizeObserver'), 'Should use ResizeObserver to detect visibility');
   });
 
   it('has loading timeout safety net', () => {

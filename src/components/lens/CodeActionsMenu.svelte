@@ -11,7 +11,7 @@
   let menuEl = $state(null);
 
   // Group actions by kind: quickfix first, then refactor, then source, then others
-  let grouped = $derived.by(() => {
+  let groups = $derived.by(() => {
     const quickfix = [];
     const refactor = [];
     const source = [];
@@ -23,8 +23,15 @@
       else if (kind.startsWith('source')) source.push(action);
       else other.push(action);
     }
-    return [...quickfix, ...refactor, ...source, ...other];
+    const result = [];
+    if (quickfix.length) result.push({ label: 'Quick Fix', items: quickfix });
+    if (refactor.length) result.push({ label: 'Refactor', items: refactor });
+    if (source.length) result.push({ label: 'Source Action', items: source });
+    if (other.length) result.push({ label: 'Other', items: other });
+    return result;
   });
+
+  let totalActions = $derived(groups.reduce((sum, g) => sum + g.items.length, 0));
 
   let menuStyle = $derived.by(() => {
     const maxX = typeof window !== 'undefined' ? window.innerWidth - 260 : x;
@@ -57,16 +64,22 @@
   });
 </script>
 
-{#if visible && grouped.length > 0}
+{#if visible && totalActions > 0}
   <div class="code-actions-menu" style={menuStyle} bind:this={menuEl} role="menu">
-    {#each grouped as action}
-      <button
-        class="code-action-item"
-        role="menuitem"
-        onclick={() => { onClose(); onApply(action); }}
-      >
-        {action.title}
-      </button>
+    {#each groups as group, gi}
+      {#if gi > 0}
+        <div class="code-actions-separator"></div>
+      {/if}
+      <div class="code-actions-label">{group.label}</div>
+      {#each group.items as action}
+        <button
+          class="code-action-item"
+          role="menuitem"
+          onclick={() => { onClose(); onApply(action); }}
+        >
+          {action.title}
+        </button>
+      {/each}
     {/each}
   </div>
 {/if}
@@ -106,5 +119,20 @@
   .code-action-item:hover {
     background: var(--accent);
     color: var(--bg);
+  }
+
+  .code-actions-separator {
+    height: 1px;
+    background: var(--border);
+    margin: 4px 0;
+  }
+
+  .code-actions-label {
+    padding: 4px 12px 2px;
+    font-size: 10px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-family: inherit;
   }
 </style>

@@ -259,6 +259,11 @@ export function createEditorLsp() {
 
   function hoverTooltipExtension(currentPath, hoverTooltip) {
     return hoverTooltip(async (v, pos) => {
+      // Skip hover tooltip if there's a diagnostic at this position
+      // (CodeMirror's lint tooltip already shows diagnostic info)
+      const diags = cachedDiagnostics.get(currentPath) || [];
+      if (diags.some(d => pos >= d.from && pos <= d.to)) return null;
+
       const lineInfo = v.state.doc.lineAt(pos);
       const line = lineInfo.number - 1;
       const character = pos - lineInfo.from;
@@ -285,10 +290,11 @@ export function createEditorLsp() {
     });
   }
 
-  function diagnosticListener(currentPath, view, cmCache) {
+  function diagnosticListener(currentPath, getView, cmCache) {
     return (event) => {
       const { uri, diagnostics: lspDiags } = event.payload;
-      if (!view || !currentPath) return;
+      const v = getView();
+      if (!v || !currentPath) return;
       const normalizedPath = currentPath.replace(/\\/g, '/');
       if (!uri.includes(normalizedPath)) return;
 
@@ -296,10 +302,10 @@ export function createEditorLsp() {
         const cm = cmCache;
         if (!cm) return;
         const cmDiags = lspDiags.map(d => {
-          let from = lspPositionToOffset(view.state.doc, d.range.start);
-          let to = lspPositionToOffset(view.state.doc, d.range.end);
-          from = Math.max(0, Math.min(from, view.state.doc.length));
-          to = Math.max(0, Math.min(to, view.state.doc.length));
+          let from = lspPositionToOffset(v.state.doc, d.range.start);
+          let to = lspPositionToOffset(v.state.doc, d.range.end);
+          from = Math.max(0, Math.min(from, v.state.doc.length));
+          to = Math.max(0, Math.min(to, v.state.doc.length));
           if (from > to) { const tmp = from; from = to; to = tmp; }
           return {
             from,
@@ -310,7 +316,7 @@ export function createEditorLsp() {
           };
         });
         cachedDiagnostics.set(currentPath, cmDiags);
-        view.dispatch(cm.setDiagnostics(view.state, cmDiags));
+        v.dispatch(cm.setDiagnostics(v.state, cmDiags));
       } catch (err) {
         console.warn('[editor-lsp] Failed to apply diagnostics:', err);
       }

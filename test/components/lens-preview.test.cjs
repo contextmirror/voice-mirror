@@ -83,9 +83,8 @@ describe('LensPreview.svelte: webview lifecycle', () => {
     assert.ok(src.includes('lens-url-changed'), 'Should listen for URL change events');
   });
 
-  it('has retry logic for webview creation', () => {
-    assert.ok(src.includes('MAX_RETRIES'), 'Should have retry limit');
-    assert.ok(src.includes('scheduleRetry'), 'Should have retry scheduling');
+  it('defers tab creation when container is hidden', () => {
+    assert.ok(src.includes('will create tab when visible'), 'Should defer creation when bounds are zero');
   });
 
   it('has loading timeout safety net', () => {

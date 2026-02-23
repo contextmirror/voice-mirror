@@ -12,6 +12,7 @@
   import RenameInput from './RenameInput.svelte';
   import { voiceMirrorEditorTheme } from '../../lib/editor-theme.js';
   import { createEditorLsp, LSP_EXTENSIONS, uriToRelativePath, lspPositionToOffset, mapCompletionKind } from '../../lib/editor-lsp.svelte.js';
+  import { lspDiagnosticsStore } from '../../lib/stores/lsp-diagnostics.svelte.js';
 
   let { tab } = $props();
 
@@ -476,11 +477,38 @@
         lsp.openFile(filePath, data.content, root);
       }
 
-      // Restore cached diagnostics if we have them
+      // Restore cached diagnostics if we have them (from editor's own cache)
       if (lsp.hasLsp && lsp.cachedDiagnostics.has(filePath) && view) {
         try {
           view.dispatch(cm.setDiagnostics(view.state, lsp.cachedDiagnostics.get(filePath)));
         } catch {}
+      }
+
+      // Also apply pre-existing diagnostics from the global store (received before file was opened).
+      // The TS language server scans the workspace and publishes diagnostics for files
+      // we haven't opened yet — the store has them, but the editor's listener wasn't active.
+      if (lsp.hasLsp && !lsp.cachedDiagnostics.has(filePath) && view) {
+        const storeDiags = lspDiagnosticsStore.getRawForFile(filePath);
+        if (storeDiags?.length) {
+          try {
+            const cmDiags = storeDiags.map(d => {
+              let from = lspPositionToOffset(view.state.doc, d.range.start);
+              let to = lspPositionToOffset(view.state.doc, d.range.end);
+              from = Math.max(0, Math.min(from, view.state.doc.length));
+              to = Math.max(0, Math.min(to, view.state.doc.length));
+              if (from > to) { const tmp = from; from = to; to = tmp; }
+              return {
+                from,
+                to,
+                severity: d.severity || 'error',
+                message: d.message,
+                source: d.source || undefined,
+              };
+            });
+            lsp.cachedDiagnostics.set(filePath, cmDiags);
+            view.dispatch(cm.setDiagnostics(view.state, cmDiags));
+          } catch {}
+        }
       }
     } catch (err) {
       if (filePath !== currentPath) return;
@@ -539,7 +567,7 @@
     if (!lsp.hasLsp || !currentPath) return;
     let unlisten;
     (async () => {
-      unlisten = await listen('lsp-diagnostics', lsp.diagnosticListener(currentPath, view, cmCache));
+      unlisten = await listen('lsp-diagnostics', lsp.diagnosticListener(currentPath, () => view, cmCache));
     })();
     return () => { unlisten?.(); };
   });
