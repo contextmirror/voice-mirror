@@ -570,3 +570,41 @@ describe('FileTree.svelte -- LSP diagnostic decorations', () => {
     assert.ok(src.includes('getForFile(entry.path)'), 'Should call getForFile');
   });
 });
+
+describe('FileTree.svelte -- Outline tab', () => {
+  it('imports OutlinePanel', () => {
+    assert.ok(src.includes("import OutlinePanel from"), 'Should import OutlinePanel');
+  });
+
+  it('has Outline tab button', () => {
+    assert.ok(src.includes('Outline'), 'Should have Outline tab text');
+  });
+
+  it('tracks active tab with class:active for outline', () => {
+    assert.ok(src.includes("activeTab === 'outline'"), 'outline tab has active class check');
+  });
+
+  it('accepts activeFilePath prop', () => {
+    assert.ok(src.includes('activeFilePath'), 'Should accept activeFilePath prop');
+  });
+
+  it('accepts activeFileHasLsp prop', () => {
+    assert.ok(src.includes('activeFileHasLsp'), 'Should accept activeFileHasLsp prop');
+  });
+
+  it('accepts onSymbolClick prop', () => {
+    assert.ok(src.includes('onSymbolClick'), 'Should accept onSymbolClick prop');
+  });
+
+  it('renders OutlinePanel when outline tab is active', () => {
+    assert.ok(src.includes('<OutlinePanel'), 'Should render OutlinePanel component');
+  });
+
+  it('passes filePath to OutlinePanel', () => {
+    assert.ok(src.includes('filePath={activeFilePath}'), 'Should pass activeFilePath as filePath');
+  });
+
+  it('passes hasLsp to OutlinePanel', () => {
+    assert.ok(src.includes('hasLsp={activeFileHasLsp}'), 'Should pass activeFileHasLsp as hasLsp');
+  });
+});

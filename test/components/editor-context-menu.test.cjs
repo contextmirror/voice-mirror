@@ -61,6 +61,40 @@ describe('EditorContextMenu.svelte: LSP actions section', () => {
   it('has "Find References" action', () => {
     assert.ok(src.includes('Find References'));
   });
+  it('Find References is not disabled', () => {
+    // It should be a real button, not disabled
+    assert.ok(src.includes('handleFindReferences'), 'Should have handleFindReferences handler');
+  });
+  it('has Shift+F12 shortcut for Find References', () => {
+    assert.ok(src.includes('Shift+F12'), 'Should show Shift+F12 shortcut');
+  });
+  it('has "Rename Symbol" action', () => {
+    assert.ok(src.includes('Rename Symbol'), 'Should have Rename Symbol');
+  });
+  it('has F2 shortcut for Rename Symbol', () => {
+    assert.ok(src.includes('F2'), 'Should show F2 shortcut');
+  });
+  it('has handleRenameSymbol handler', () => {
+    assert.ok(src.includes('handleRenameSymbol'), 'Should have handleRenameSymbol');
+  });
+  it('has "Quick Fix..." action', () => {
+    assert.ok(src.includes('Quick Fix...'), 'Should have Quick Fix');
+  });
+  it('has Ctrl+. shortcut for Quick Fix', () => {
+    assert.ok(src.includes('Ctrl+.'), 'Should show Ctrl+. shortcut');
+  });
+  it('has handleQuickFix handler', () => {
+    assert.ok(src.includes('handleQuickFix'), 'Should have handleQuickFix');
+  });
+  it('dispatches find-references action', () => {
+    assert.ok(src.includes("'find-references'"), 'Should dispatch find-references');
+  });
+  it('dispatches rename-symbol action', () => {
+    assert.ok(src.includes("'rename-symbol'"), 'Should dispatch rename-symbol');
+  });
+  it('dispatches quick-fix action', () => {
+    assert.ok(src.includes("'quick-fix'"), 'Should dispatch quick-fix');
+  });
 });
 
 describe('EditorContextMenu.svelte: edit actions section', () => {
