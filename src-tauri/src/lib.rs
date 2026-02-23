@@ -219,6 +219,7 @@ pub fn run() {
             lens_cmds::lens_close_webview,
             lens_cmds::lens_set_visible,
             lens_cmds::lens_hard_refresh,
+            lens_cmds::lens_clear_cache,
             // File tree
             files_cmds::list_directory,
             files_cmds::get_git_changes,

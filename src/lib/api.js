@@ -418,6 +418,11 @@ export async function lensHardRefresh() {
   return invoke('lens_hard_refresh');
 }
 
+/** Clear all browsing data (cache, cookies, localStorage) for the lens browser. */
+export async function lensClearCache() {
+  return invoke('lens_clear_cache');
+}
+
 // ============ Dev Server ============
 
 /**

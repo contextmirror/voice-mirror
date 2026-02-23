@@ -4,7 +4,7 @@
   import { projectStore } from '../../lib/stores/project.svelte.js';
   import { devServerManager } from '../../lib/stores/dev-server-manager.svelte.js';
   import { toastStore } from '../../lib/stores/toast.svelte.js';
-  import { lensCreateWebview, lensResizeWebview, lensCloseWebview, detectDevServers } from '../../lib/api.js';
+  import { lensCreateWebview, lensResizeWebview, lensCloseWebview, lensClearCache, detectDevServers } from '../../lib/api.js';
   import { listen } from '@tauri-apps/api/event';
 
   let containerEl = $state(null);
@@ -18,6 +18,7 @@
   const RETRY_DELAY_MS = 2000;
   const LOADING_TIMEOUT_MS = 15000;
   let loadingTimer = null;
+  let detectionTimer = null;
 
   function getAbsoluteBounds() {
     if (!containerEl) return null;
@@ -64,9 +65,14 @@
   let previousProjectIndex = null;
 
   // Trigger detection + navigation when active project changes.
-  // IMPORTANT: Set lastDetectedProject synchronously to prevent re-trigger loops.
-  // The updateProjectField call is deferred to avoid mutating entries (which this
-  // effect reads via activeProject), preventing an infinite reactive cascade.
+  //
+  // IMPORTANT: The detection timer is managed OUTSIDE the effect cleanup.
+  // Svelte 5 calls the effect cleanup on every re-trigger (including benign
+  // ones from file watcher, config updates, etc.). If we used `return () =>
+  // clearTimeout(timer)`, the cleanup would cancel the pending detection on
+  // re-trigger, and the guard would prevent re-scheduling — so detection
+  // would never run. Instead, we manage `detectionTimer` as a component-level
+  // variable and only cancel it when a REAL project switch happens.
   $effect(() => {
     const project = projectStore.activeProject;
     const currentIndex = projectStore.activeIndex;
@@ -86,7 +92,11 @@
     // Same project, same index → no change (prevents re-trigger on unrelated store updates)
     if (project.path === oldPath && currentIndex === oldIndex) return;
 
-    const timer = setTimeout(() => {
+    // Cancel any previous pending detection (real project switch)
+    clearTimeout(detectionTimer);
+    detectionTimer = setTimeout(() => {
+      detectionTimer = null;
+
       // Save current URL for the outgoing project (deferred to avoid entries mutation loop)
       if (oldIndex !== null && oldIndex !== currentIndex && lensStore.webviewReady) {
         const currentUrl = lensStore.url;
@@ -98,8 +108,6 @@
       devServerManager.handleProjectSwitch(oldPath, project.path);
       detectAndNavigate(project);
     }, 300);
-
-    return () => clearTimeout(timer);
   });
 
   // Also trigger detection when webview becomes ready (catches initial load race)
@@ -156,6 +164,10 @@
       }
 
       if (targetUrl) {
+        // Clear WebView2 disk cache before navigating to prevent stale content
+        // from a previously-cached localhost port (e.g. switching from solitaire
+        // on :3000 to Next.js on :3000 would show solitaire without this).
+        await lensClearCache().catch(() => {});
         lensStore.navigate(targetUrl);
       }
 
@@ -291,6 +303,7 @@
   onDestroy(() => {
     clearTimeout(retryTimer);
     clearTimeout(loadingTimer);
+    clearTimeout(detectionTimer);
     if (rafId) cancelAnimationFrame(rafId);
     if (resizeObserver) {
       resizeObserver.disconnect();

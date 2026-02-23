@@ -389,8 +389,9 @@ pub fn lens_set_visible(
     }
 }
 
-/// Hard-refresh the lens webview by navigating to the same URL with a cache buster.
-/// This forces the browser to bypass all caches and reload fresh content.
+/// Hard-refresh the lens webview by clearing all browsing data and reloading.
+/// This forces the browser to bypass all caches (disk, memory, service workers)
+/// and reload completely fresh content.
 #[tauri::command]
 pub fn lens_hard_refresh(
     app: AppHandle,
@@ -401,11 +402,39 @@ pub fn lens_hard_refresh(
         Err(e) => return e,
     };
 
-    match webview.eval("var u = new URL(location.href); u.searchParams.set('_cb', Date.now()); location.href = u.toString()") {
+    // Clear all browsing data (disk cache, cookies, localStorage, IndexedDB)
+    // before reloading to guarantee fresh content.
+    if let Err(e) = webview.clear_all_browsing_data() {
+        warn!("[lens] Failed to clear browsing data on hard refresh: {}", e);
+    }
+
+    match webview.eval("location.reload()") {
         Ok(()) => {
             let _ = app.emit("lens-url-changed", serde_json::json!({}));
             IpcResponse::ok_empty()
         }
         Err(e) => IpcResponse::err(format!("Failed to hard refresh: {}", e)),
+    }
+}
+
+/// Clear all browsing data (cache, cookies, localStorage, IndexedDB) for the
+/// lens webview. Called before navigating to a new dev server URL on project
+/// switch to prevent stale content from a previously-cached localhost port.
+#[tauri::command]
+pub fn lens_clear_cache(
+    app: AppHandle,
+    state: tauri::State<'_, LensState>,
+) -> IpcResponse {
+    let webview = match get_lens_webview(&app, &state) {
+        Ok(w) => w,
+        Err(e) => return e,
+    };
+
+    match webview.clear_all_browsing_data() {
+        Ok(()) => {
+            info!("[lens] Browsing data cleared");
+            IpcResponse::ok_empty()
+        }
+        Err(e) => IpcResponse::err(format!("Failed to clear browsing data: {}", e)),
     }
 }

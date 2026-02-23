@@ -120,6 +120,7 @@ describe('api.js -- critical Tauri command names', () => {
     'lens_close_webview',
     'lens_set_visible',
     'lens_hard_refresh',
+    'lens_clear_cache',
     // Dev Server
     'detect_dev_servers',
     'probe_port',
@@ -230,6 +231,7 @@ describe('api.js -- exported async functions', () => {
     'lensCloseWebview',
     'lensSetVisible',
     'lensHardRefresh',
+    'lensClearCache',
     // Dev Server
     'detectDevServers',
     'probePort',

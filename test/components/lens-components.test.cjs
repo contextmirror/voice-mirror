@@ -141,6 +141,10 @@ describe('LensPreview.svelte', () => {
     assert.ok(src.includes('lensCloseWebview'));
   });
 
+  it('imports lensClearCache from api', () => {
+    assert.ok(src.includes('lensClearCache'));
+  });
+
   it('imports listen from tauri event', () => {
     assert.ok(src.includes("from '@tauri-apps/api/event'"));
   });
@@ -215,7 +219,17 @@ describe('LensPreview.svelte', () => {
 
   it('debounces project detection with 300ms timeout', () => {
     assert.ok(src.includes('300'), 'Should use 300ms debounce delay');
-    assert.ok(src.includes('clearTimeout'), 'Should clear timeout on re-trigger');
+    assert.ok(src.includes('clearTimeout(detectionTimer)'), 'Should clear timer on real project switch');
+  });
+
+  it('manages detection timer outside effect cleanup to survive re-triggers', () => {
+    // Timer must NOT be in effect cleanup (return () => clearTimeout),
+    // because benign re-triggers would cancel pending detection.
+    assert.ok(src.includes('let detectionTimer'), 'Should have component-level detectionTimer');
+    // The effect body should NOT return a cleanup that clears detectionTimer
+    const effectBlock = src.split('$effect(() => {')[1]?.split('$effect(')[0] || '';
+    assert.ok(!effectBlock.includes('return () => clearTimeout(detectionTimer)'),
+      'Should NOT use effect cleanup for detectionTimer');
   });
 
   it('has detectAndNavigate function', () => {
@@ -236,6 +250,14 @@ describe('LensPreview.svelte', () => {
   it('saves lastBrowserUrl for outgoing project on switch', () => {
     assert.ok(src.includes('updateProjectField'), 'Should save URL for outgoing project');
     assert.ok(src.includes("'lastBrowserUrl'"), 'Should update lastBrowserUrl field');
+  });
+
+  it('clears WebView2 cache before navigating on project switch', () => {
+    assert.ok(src.includes('lensClearCache'), 'Should call lensClearCache');
+    // lensClearCache must come BEFORE lensStore.navigate in detectAndNavigate
+    const clearIdx = src.indexOf('lensClearCache');
+    const navigateIdx = src.indexOf('lensStore.navigate(targetUrl)');
+    assert.ok(clearIdx < navigateIdx, 'Should clear cache before navigating');
   });
 
   it('guards detectAndNavigate on webviewReady', () => {

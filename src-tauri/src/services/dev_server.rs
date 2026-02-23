@@ -116,15 +116,46 @@ pub fn is_port_listening(port: u16) -> bool {
 pub fn detect_package_manager(project_root: &str) -> String {
     let root = Path::new(project_root);
 
-    if root.join("bun.lockb").exists() || root.join("bun.lock").exists() {
-        "bun".to_string()
+    let detected = if root.join("bun.lockb").exists() || root.join("bun.lock").exists() {
+        "bun"
     } else if root.join("yarn.lock").exists() {
-        "yarn".to_string()
+        "yarn"
     } else if root.join("pnpm-lock.yaml").exists() {
-        "pnpm".to_string()
+        "pnpm"
     } else {
+        return "npm".to_string(); // npm is always available with Node.js
+    };
+
+    // Verify the detected package manager is actually installed.
+    // A project may have a lockfile from its original author (e.g. pnpm-lock.yaml)
+    // but the current user may not have that tool installed.
+    if is_command_available(detected) {
+        detected.to_string()
+    } else {
+        tracing::info!(
+            "[dev-server] Lockfile suggests `{}` but it's not installed, falling back to npm",
+            detected
+        );
         "npm".to_string()
     }
+}
+
+/// Check if a command is available on the system PATH.
+fn is_command_available(cmd: &str) -> bool {
+    let check = if cfg!(target_os = "windows") {
+        std::process::Command::new("where")
+            .arg(cmd)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+    } else {
+        std::process::Command::new("which")
+            .arg(cmd)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+    };
+    matches!(check, Ok(status) if status.success())
 }
 
 /// Build a start command from the package manager and script name.
@@ -135,6 +166,25 @@ fn make_start_command(pkg_manager: &str, script: &str) -> String {
 // ---------------------------------------------------------------------------
 // Detection helpers
 // ---------------------------------------------------------------------------
+
+/// Extract the port from a Bun entry file (e.g. `export default { port: 3001, fetch }`).
+/// Scans the entry file referenced in the script command for `port: NNNN` or `port = NNNN`.
+fn extract_bun_port_from_script(cmd: &str, root: &Path) -> Option<u16> {
+    // Find the .ts/.js entry file in the command
+    let entry = cmd.split_whitespace()
+        .find(|part| {
+            part.ends_with(".ts") || part.ends_with(".js")
+                || part.ends_with(".tsx") || part.ends_with(".jsx")
+        })?;
+
+    let entry_path = root.join(entry);
+    let content = std::fs::read_to_string(&entry_path).ok()?;
+
+    // Look for `port: NNNN` or `port = NNNN` patterns
+    let re = regex::Regex::new(r"port\s*[:=]\s*(\d{2,5})").ok()?;
+    let caps = re.captures(&content)?;
+    caps.get(1)?.as_str().parse::<u16>().ok()
+}
 
 /// Parse `tauri.conf.json` and extract `build.devUrl`.
 fn detect_from_tauri_conf(root: &Path, pkg_manager: &str) -> Option<DetectedDevServer> {
@@ -216,7 +266,15 @@ fn detect_from_package_json(root: &Path, pkg_manager: &str) -> Vec<DetectedDevSe
     let script_keys = ["dev", "start", "serve"];
     for key in &script_keys {
         if let Some(cmd) = scripts.get(*key).and_then(|v| v.as_str()) {
-            if let Some(server) = match_script_pattern(cmd, key, pkg_manager) {
+            if let Some(mut server) = match_script_pattern(cmd, key, pkg_manager) {
+                // For Bun servers, try to extract the port from the entry file
+                // since Bun defines port in `export default { port: NNNN, fetch }`
+                if server.framework == "Bun" {
+                    if let Some(port) = extract_bun_port_from_script(cmd, root) {
+                        server.port = port;
+                        server.url = format!("http://localhost:{}", port);
+                    }
+                }
                 results.push(server);
             }
         }
@@ -350,6 +408,38 @@ fn match_script_pattern(cmd: &str, script_key: &str, pkg_manager: &str) -> Optio
             source: "package.json".to_string(),
             running: false,
         });
+    }
+
+    // Bun dev server (bun run --hot, bun --hot, bun --watch)
+    if cmd.contains("bun run --hot") || cmd.contains("bun --hot") || cmd.contains("bun --watch") {
+        let port = port_override.unwrap_or(3000);
+        return Some(DetectedDevServer {
+            framework: "Bun".to_string(),
+            port,
+            url: format!("http://localhost:{}", port),
+            start_command: format!("{} run {}", pkg_manager, script_key),
+            source: "package.json".to_string(),
+            running: false,
+        });
+    }
+
+    // Bun server entry file (bun run index.ts, bun run src/index.ts, etc.)
+    // Bun can serve HTTP by exporting { port, fetch } from the entry file.
+    if cmd.starts_with("bun run ") || cmd.starts_with("bun ") {
+        // Check if it points to a .ts/.js file (not a script name like "bun run dev")
+        let parts: Vec<&str> = cmd.split_whitespace().collect();
+        let last = parts.last().unwrap_or(&"");
+        if last.ends_with(".ts") || last.ends_with(".js") || last.ends_with(".tsx") || last.ends_with(".jsx") {
+            let port = port_override.unwrap_or(3000);
+            return Some(DetectedDevServer {
+                framework: "Bun".to_string(),
+                port,
+                url: format!("http://localhost:{}", port),
+                start_command: format!("{} run {}", pkg_manager, script_key),
+                source: "package.json".to_string(),
+                running: false,
+            });
+        }
     }
 
     // Generic vite (must be after framework-specific checks that use vite internally)
@@ -715,6 +805,17 @@ mod tests {
         // Non-existent path → no lockfiles → "npm" default
         let pm = detect_package_manager("/this/path/does/not/exist");
         assert_eq!(pm, "npm");
+    }
+
+    #[test]
+    fn test_is_command_available_finds_node() {
+        // Node should be installed on any dev machine running these tests
+        assert!(is_command_available("node"));
+    }
+
+    #[test]
+    fn test_is_command_available_rejects_bogus() {
+        assert!(!is_command_available("totally_not_a_real_command_xyz_123"));
     }
 
     #[test]
