@@ -1,0 +1,278 @@
+# IDE Gap Analysis — Voice Mirror Lens vs Real IDEs
+
+> Internal doc. Tracks what Voice Mirror's Lens workspace has vs what VS Code / Zed / Cursor offer.
+>
+> Last updated: 2026-02-23
+
+---
+
+## Current Status: "Capable Editor with AI Terminal"
+
+Someone **can** code in Lens today. The core loop works:
+
+1. Open project in file tree
+2. Open files in tabs (CodeMirror 6 editor)
+3. Edit with syntax highlighting, autocomplete, LSP diagnostics
+4. Save with Ctrl+S
+5. Open a shell tab, run `npm test` or `cargo build`
+6. See git changes, open diffs
+7. AI terminal (Claude Code) is always available for voice-driven development
+
+What's missing is everything that makes a "real IDE" feel seamless — the gaps below.
+
+---
+
+## Feature Comparison
+
+| Feature | VS Code | Zed | Voice Mirror | Gap |
+|---------|---------|-----|-------------|-----|
+| Editor (syntax, save) | Full | Full | Full | None |
+| LSP (diagnostics, hover, completion) | Full | Full | Tier 1 done | Tier 2 pending |
+| Go-to-definition | Full | Full | Full | None |
+| Find references | Full | Full | Full | None |
+| Rename symbol | Full | Full | Full | None |
+| Code actions | Full | Full | Full | None |
+| Document outline | Full | Full | Full | None |
+| Git status + diff | Full | Full | Basic | Medium |
+| Global text search | Full | Full | None | Critical |
+| Split editor | Full | Full | None | High |
+| Multi-cursor | Full | Full | None | Medium |
+| Debug adapter (DAP) | Full | Partial | None | Low priority |
+| Extensions/plugins | Massive | Growing | None | Not planned |
+| Command palette (commands) | Full | Full | 6 commands | Medium |
+| Terminal | Full | Partial | Rich (tabs) | Minor gaps |
+| Minimap | Full | Full | Diff only | Low |
+| Breadcrumbs | Full | Full | None | Low |
+| Find & replace (in file) | Full | Full | None | High |
+
+---
+
+## Gap Details
+
+### 1. Global Text Search (Ctrl+Shift+F) — CRITICAL
+
+**What real IDEs have:** A panel where you type a query and it searches the **content** of every file in the project. Regex support, file filters, replace-all. VS Code's search panel is one of its most-used features.
+
+**What we have:** `CommandPalette.svelte` does fuzzy **file name** search only. The backend has `search_files()` (`src-tauri/src/commands/files.rs:913-961`) but it only searches file paths, not content.
+
+**Why it matters:** Without this, finding where a function is called, where a string appears, or doing a project-wide rename is impossible without the terminal (`grep`/`rg`). This is the single most impactful missing feature for coding workflows.
+
+**What's needed:**
+- Backend: `grep_files(query, path, options)` command using `grep`/`ripgrep` (or Rust's `grep` crate)
+- Frontend: Search panel component (input + results list + file previews)
+- Keyboard shortcut: Ctrl+Shift+F to open
+- Bonus: Replace-all support
+
+**Estimated scope:** Medium — backend is straightforward, UI is the bulk of work.
+
+---
+
+### 2. Find & Replace (In-File) — HIGH
+
+**What real IDEs have:** Ctrl+F opens a find bar within the editor. Ctrl+H adds replace. Supports regex, case-sensitive, whole-word toggles. Highlight all matches. Navigate between matches.
+
+**What we have:** Nothing. CodeMirror 6 has `@codemirror/search` which provides this **out of the box** — we just haven't added it to the editor extensions.
+
+**Why it matters:** Basic editing necessity. Finding a variable name in a 500-line file without Ctrl+F is painful.
+
+**What's needed:**
+- Add `@codemirror/search` to FileEditor.svelte's extensions
+- That's essentially it — the package provides the UI, keybindings, and logic
+
+**Estimated scope:** Tiny — literally one import + one line in the extensions array.
+
+---
+
+### 3. Split Editor (Side-by-Side Files) — HIGH
+
+**What real IDEs have:** Drag a tab to the side to split the editor area. View two files simultaneously. Essential for comparing implementations, writing tests alongside code, or referencing an interface while implementing it.
+
+**What we have:** Single editor view. Only one tab's content is visible at a time. The layout is a fixed 3-panel split (Chat | Editor/Preview | FileTree) with terminal below.
+
+**Why it matters:** Comparing two files requires flipping between tabs, which breaks flow. Writing a test file while looking at the implementation is a core workflow.
+
+**What's needed:**
+- Editor area needs to support 1-2 editor panes (horizontal or vertical split)
+- Tab drag-to-split gesture or a "Split Right" command
+- Each pane maintains its own active tab
+- `SplitPanel.svelte` already exists and could be reused
+
+**Estimated scope:** Large — requires rethinking the editor area layout in LensWorkspace.svelte and managing two independent editor instances with their own tab bars.
+
+---
+
+### 4. Multi-Cursor Editing — MEDIUM
+
+**What real IDEs have:** Ctrl+D selects the next occurrence of the current selection and adds a cursor there. Alt+Click adds a cursor at an arbitrary position. Type once, edit everywhere. Ctrl+Shift+L selects ALL occurrences.
+
+**What we have:** Nothing. CodeMirror 6 supports multi-cursor natively, but we haven't wired any keybindings for it.
+
+**Why it matters:** Renaming a local variable, changing repeated patterns, or editing structured data (like adding a field to multiple objects) is much faster with multi-cursor than find-and-replace.
+
+**What's needed:**
+- Wire Ctrl+D → select next occurrence (CodeMirror's `selectNextOccurrence`)
+- Wire Alt+Click → add cursor (default CM behavior, may need explicit enable)
+- Wire Ctrl+Shift+L → select all occurrences
+
+**Estimated scope:** Small — CodeMirror has this built-in, just needs keybinding configuration.
+
+---
+
+### 5. Git Integration (Beyond Status) — MEDIUM
+
+**What real IDEs have:** Full source control panel — stage/unstage files, write commit messages, push/pull, branch switching, merge conflict resolution, inline blame annotations, commit history viewer.
+
+**What we have:**
+- `getGitChanges()` — shows modified/added/deleted files in the file tree (`files.rs:140-230`)
+- `getFileGitContent()` — fetches HEAD version for diff view (`api.js:507-509`)
+- Diff viewer with unified/split modes, chunk navigation, minimap
+- File tree shows change count badge
+
+**Why it matters:** Developers live in git. Having to switch to the terminal for `git add`, `git commit`, `git push`, `git checkout` breaks flow — especially in a voice-driven workflow where saying "commit these changes" should just work.
+
+**What's needed (progressive):**
+1. **Stage/unstage** — checkbox per file in the git changes view
+2. **Commit** — message input + commit button (calls `git commit`)
+3. **Push/pull** — buttons in a source control panel header
+4. **Branch indicator** — show current branch in status bar
+5. **Branch switching** — dropdown to switch branches
+6. **Inline blame** — gutter annotations showing last commit per line
+
+**Estimated scope:** Large overall, but can be incremental. Stage + commit alone would be high-value.
+
+**Voice Mirror advantage:** With AI + voice, "commit these changes with a good message" could auto-generate the commit message and execute — no other IDE does this natively.
+
+---
+
+### 6. Command Palette (Full Commands) — MEDIUM
+
+**What real IDEs have:** Ctrl+Shift+P opens a command palette that lists **every available command** — hundreds of them. Theme switching, format document, toggle word wrap, restart LSP, run test, etc. Extensions register their own commands too.
+
+**What we have:** `CommandPalette.svelte` with:
+- Fuzzy file search (via `fuzzysort`)
+- 6 hardcoded commands: Open Lens, New Session (TODO), Toggle Terminal, Toggle Chat, Toggle File Tree, Settings
+
+**Why it matters:** The command palette is the discovery mechanism for IDE features. Users find features by typing what they want. Without it, features are hidden behind menus or unknown shortcuts.
+
+**What's needed:**
+- Command registry system (array of `{ id, label, category, handler, keybinding }`)
+- Register all existing actions (LSP commands, editor actions, view toggles, settings)
+- Show keybinding hints next to commands
+- Category grouping in results
+
+**Estimated scope:** Medium — the palette UI exists, it just needs a command registry and more commands registered.
+
+---
+
+### 7. Debug Adapter Protocol (DAP) — LOW PRIORITY
+
+**What real IDEs have:** Set breakpoints by clicking the gutter. Press F5 to start debugging. Step through code line by line. Inspect variables, call stack, watch expressions. Conditional breakpoints.
+
+**What we have:** Nothing. Zero debug infrastructure.
+
+**Why it matters (less than you'd think):** With AI-driven development, `console.log` debugging + asking Claude "why does this fail?" is often faster than traditional debugging. Most Voice Mirror users will lean on the AI terminal for debugging rather than a visual debugger.
+
+**What's needed (if ever):**
+- DAP client in Rust (like the LSP client)
+- Breakpoint UI in the editor gutter
+- Debug panel (variables, call stack, watch)
+- Launch configuration system
+- Language-specific debug adapters (Node.js, Python, LLDB for Rust)
+
+**Estimated scope:** Massive — this is one of the most complex IDE features. VS Code's debugger is thousands of files. Zed's is still limited.
+
+**Recommendation:** Defer indefinitely. Let the AI terminal handle debugging via voice commands. Revisit if users specifically request it.
+
+---
+
+### 8. Extensions / Plugins — NOT PLANNED
+
+**What real IDEs have:** VS Code has 50,000+ extensions. Zed has a growing extension system. Cursor inherited VS Code's extensions. Extensions add languages, themes, debuggers, linters, formatters, and entirely new features.
+
+**What we have:** Nothing. All features are built-in.
+
+**Why it matters (debatable):** Extensions are what made VS Code dominant. But they also bring:
+- Performance overhead
+- Security risks (supply chain)
+- Maintenance burden (API stability promises)
+- Complexity for users (which extension? conflicts?)
+
+**Recommendation:** Don't build a VS Code-style extension system. Instead, lean into:
+- **MCP servers** as the "extension" mechanism — users add capabilities via MCP
+- **Built-in language support** via LSP (already working)
+- **Theme customization** (already working)
+- **Tool profiles** for different workflows (already working)
+
+Voice Mirror's extension story is: "Add an MCP server" — not "install a VS Code extension."
+
+---
+
+### 9. Terminal Gaps — MINOR
+
+**What real IDEs have:** Split terminals (side by side), search in scrollback, drag-to-reorder tabs, send text to terminal programmatically, terminal profiles (bash, zsh, PowerShell), link detection (clickable URLs/file paths).
+
+**What we have (solid):**
+- Multiple terminal tabs (AI + shell + dev-server)
+- Rename tabs
+- Close tabs
+- Reorder tabs (`.moveTab()`)
+- Dev-server tabs with framework metadata
+- 5000-line scrollback
+- Full PTY support via ghostty-web WASM
+
+**What's missing:**
+- Split terminals (two side by side) — would need layout work
+- Search in scrollback (Ctrl+Shift+F in terminal)
+- Clickable links/file paths
+- Terminal profiles (let user pick default shell)
+
+**Estimated scope:** Small to medium per feature. None are critical.
+
+---
+
+### 10. Code Minimap — LOW
+
+**What real IDEs have:** A miniature overview of the entire file on the right side of the editor. Shows your position. Clickable to jump to a section. Highlighted search results, git changes, errors.
+
+**What we have:** `DiffMinimap.svelte` — but only in the diff viewer, showing change locations. No minimap in the regular editor.
+
+**Why it matters:** Helpful for orientation in large files (500+ lines). Less important with AI navigation ("go to the save function").
+
+**What's needed:**
+- CodeMirror doesn't have a built-in minimap (unlike Monaco/VS Code)
+- Would need a custom extension or canvas-based renderer
+- Alternative: use document outline (already implemented) for navigation
+
+**Estimated scope:** Large for a proper minimap. Skip in favor of the existing outline panel.
+
+---
+
+## Priority Ranking
+
+| Priority | Feature | Impact | Effort | Rationale |
+|----------|---------|--------|--------|-----------|
+| 1 | Find & Replace (in-file) | High | Tiny | One import. Unblocks basic editing. |
+| 2 | Multi-cursor | High | Small | Wire existing CM feature. Power-user essential. |
+| 3 | Global text search | Critical | Medium | Most-requested missing feature for coding. |
+| 4 | Command palette expansion | Medium | Medium | Discovery mechanism for all features. |
+| 5 | Split editor | High | Large | Key workflow for test+implementation. |
+| 6 | Git stage + commit | Medium | Medium | Close the git loop without terminal. |
+| 7 | Terminal search | Low | Small | Nice-to-have for scrollback. |
+| 8 | Breadcrumbs | Low | Small | File path context in editor. |
+| 9 | Code minimap | Low | Large | Outline panel is a good substitute. |
+| 10 | Debug adapter | Low | Massive | AI terminal handles this better. |
+| -- | Extensions | None | Massive | MCP servers are our extension model. |
+
+---
+
+## Voice Mirror's Unique Angle
+
+The gap list above looks daunting, but Voice Mirror doesn't need to close every gap to be compelling. The features no other IDE has:
+
+1. **Voice as first-class input** — "rename this function to handleSubmit" works via AI + LSP rename
+2. **Persistent AI memory** — Claude remembers your codebase across sessions
+3. **Always-on-top overlay** — code while referencing other apps
+4. **MCP tool ecosystem** — browser control, n8n workflows, memory system
+5. **AI-native terminal** — Claude Code is embedded, not a bolt-on extension
+
+The strategy: close the top 3-4 gaps (find/replace, multi-cursor, global search, split editor) so Lens is **comfortable enough** for real coding, then double down on the voice+AI features no one else has.
