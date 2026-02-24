@@ -76,3 +76,19 @@ describe('api.js -- LSP formatting function parameters', () => {
     );
   });
 });
+
+// ============ LSP Signature Help ============
+
+describe('api.js LSP: signature help', () => {
+  it('exports lspRequestSignatureHelp', () => {
+    assert.ok(src.includes('export async function lspRequestSignatureHelp('), 'Should export lspRequestSignatureHelp');
+  });
+
+  it('invokes lsp_request_signature_help', () => {
+    assert.ok(src.includes("invoke('lsp_request_signature_help'"), 'Should invoke lsp_request_signature_help');
+  });
+
+  it('passes path, line, character, projectRoot', () => {
+    assert.ok(src.includes('lspRequestSignatureHelp(path'), 'Should accept path parameter');
+  });
+});

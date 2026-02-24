@@ -328,6 +328,44 @@ describe('editor-lsp.svelte.js: formatting', () => {
   });
 });
 
+describe('editor-lsp.svelte.js: signature help', () => {
+  it('has requestSignatureHelp handler', () => {
+    assert.ok(src.includes('requestSignatureHelp'), 'Should have requestSignatureHelp');
+  });
+
+  it('has dismissSignatureHelp handler', () => {
+    assert.ok(src.includes('dismissSignatureHelp'), 'Should have dismissSignatureHelp');
+  });
+
+  it('imports lspRequestSignatureHelp', () => {
+    assert.ok(src.includes('lspRequestSignatureHelp'), 'Should import lspRequestSignatureHelp');
+  });
+
+  it('has showSignatureHelp state', () => {
+    assert.ok(src.includes('showSignatureHelp'), 'Should have showSignatureHelp state');
+  });
+
+  it('has signatureHelpData state', () => {
+    assert.ok(src.includes('signatureHelpData'), 'Should have signatureHelpData state');
+  });
+
+  it('has signatureHelpPos state', () => {
+    assert.ok(src.includes('signatureHelpPos'), 'Should have signatureHelpPos state');
+  });
+
+  it('exports showSignatureHelp getter', () => {
+    assert.ok(src.includes('get showSignatureHelp()'), 'Should export showSignatureHelp getter');
+  });
+
+  it('exports signatureHelpData getter', () => {
+    assert.ok(src.includes('get signatureHelpData()'), 'Should export signatureHelpData getter');
+  });
+
+  it('dismisses signature help in reset()', () => {
+    assert.ok(src.includes('dismissSignatureHelp'), 'Should dismiss signature help on reset');
+  });
+});
+
 describe('editor-lsp.svelte.js: diagnostics handling', () => {
   it('uses lspPositionToOffset for diagnostic positions', () => {
     assert.ok(src.includes('lspPositionToOffset'), 'Should use lspPositionToOffset');

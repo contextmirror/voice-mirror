@@ -142,6 +142,7 @@ describe('api.js -- critical Tauri command names', () => {
     // LSP
     'lsp_request_formatting',
     'lsp_request_range_formatting',
+    'lsp_request_signature_help',
   ];
 
   for (const cmd of criticalCommands) {
@@ -288,6 +289,7 @@ describe('api.js -- exported async functions', () => {
     'lspApplyWorkspaceEdit',
     'lspRequestFormatting',
     'lspRequestRangeFormatting',
+    'lspRequestSignatureHelp',
   ];
 
   for (const fn of expectedExports) {

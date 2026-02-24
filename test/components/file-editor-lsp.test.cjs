@@ -147,4 +147,29 @@ describe('FileEditor LSP integration', () => {
   it('has Shift+Alt+F keybinding for format', () => {
     assert.ok(extSrc.includes('Shift-Alt-f'), 'Should have Shift-Alt-f keybinding in editor-extensions.js');
   });
+
+  // LSP signature help integration
+  it('imports SignatureHelp component', () => {
+    assert.ok(src.includes('SignatureHelp'), 'Should import SignatureHelp');
+  });
+
+  it('mounts SignatureHelp component', () => {
+    assert.ok(src.includes('<SignatureHelp'), 'Should mount SignatureHelp');
+  });
+
+  it('passes lsp.showSignatureHelp to component', () => {
+    assert.ok(src.includes('lsp.showSignatureHelp'), 'Should use lsp.showSignatureHelp');
+  });
+
+  it('passes lsp.signatureHelpData to component', () => {
+    assert.ok(src.includes('lsp.signatureHelpData'), 'Should use lsp.signatureHelpData');
+  });
+
+  it('has onSignatureHelp option in editor-extensions', () => {
+    assert.ok(extSrc.includes('onSignatureHelp'), 'Should have onSignatureHelp in editor-extensions');
+  });
+
+  it('has Ctrl-Shift-Space keybinding', () => {
+    assert.ok(extSrc.includes('Ctrl-Shift-Space'), 'Should have Ctrl-Shift-Space keybinding');
+  });
 });
