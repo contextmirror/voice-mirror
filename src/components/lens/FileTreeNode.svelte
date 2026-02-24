@@ -211,11 +211,11 @@
   /* Diagnostic decorations */
 
   .tree-name.has-error {
-    color: var(--danger, #ef4444);
+    color: var(--danger);
   }
 
   .tree-name.has-warning {
-    color: var(--warn, #f59e0b);
+    color: var(--warn);
   }
 
   .diag-badge {
@@ -233,12 +233,12 @@
   }
 
   .diag-badge.error {
-    background: var(--danger, #ef4444);
-    color: var(--bg, #000);
+    background: var(--danger);
+    color: var(--bg);
   }
 
   .diag-badge.warning {
-    background: var(--warn, #f59e0b);
-    color: var(--bg, #000);
+    background: var(--warn);
+    color: var(--bg);
   }
 </style>

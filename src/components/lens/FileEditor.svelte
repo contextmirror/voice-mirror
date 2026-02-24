@@ -649,7 +649,7 @@
   }
 
   .error-text {
-    color: var(--danger, #ef4444);
+    color: var(--danger);
   }
 
   .binary-title {
@@ -666,12 +666,12 @@
   .file-editor :global(.lsp-hover-tooltip) {
     max-width: 500px;
     padding: 6px 10px;
-    font-family: var(--font-mono, monospace);
+    font-family: var(--font-mono);
     font-size: 12px;
     line-height: 1.4;
     color: var(--text);
-    background: var(--bgElevated, #1e1e1e);
-    border: 1px solid var(--muted, #444);
+    background: var(--bg-elevated);
+    border: 1px solid var(--muted);
     border-radius: 4px;
     white-space: pre-wrap;
     word-break: break-word;
@@ -682,9 +682,9 @@
     align-items: center;
     gap: 8px;
     padding: 6px 12px;
-    background: var(--warn-subtle, rgba(245, 158, 11, 0.15));
-    border-bottom: 1px solid var(--warn, #f59e0b);
-    color: var(--warn, #f59e0b);
+    background: color-mix(in srgb, var(--warn) 15%, transparent);
+    border-bottom: 1px solid var(--warn);
+    color: var(--warn);
     font-size: 12px;
     font-family: var(--font-family);
   }
@@ -703,8 +703,8 @@
   }
 
   .conflict-reload {
-    background: var(--warn, #f59e0b);
-    color: var(--bg, #000);
+    background: var(--warn);
+    color: var(--bg);
     font-weight: 600;
   }
 
@@ -714,12 +714,12 @@
 
   .conflict-dismiss {
     background: transparent;
-    color: var(--warn, #f59e0b);
-    border: 1px solid var(--warn, #f59e0b);
+    color: var(--warn);
+    border: 1px solid var(--warn);
   }
 
   .conflict-dismiss:hover {
-    background: var(--warn-subtle, rgba(245, 158, 11, 0.15));
+    background: color-mix(in srgb, var(--warn) 15%, transparent);
   }
 
   .readonly-banner {
@@ -727,9 +727,9 @@
     align-items: center;
     gap: 6px;
     padding: 4px 12px;
-    background: var(--bg-elevated, #1a1a2e);
-    border-bottom: 1px solid var(--muted, #666);
-    color: var(--muted, #999);
+    background: var(--bg-elevated);
+    border-bottom: 1px solid var(--muted);
+    color: var(--muted);
     font-size: 11px;
     font-family: var(--font-family);
   }
@@ -740,11 +740,11 @@
   }
 
   .file-editor :global(.cm-lintPoint-error) {
-    border-bottom-color: var(--danger, #ef4444);
+    border-bottom-color: var(--danger);
   }
 
   .file-editor :global(.cm-lintPoint-warning) {
-    border-bottom-color: var(--warn, #f59e0b);
+    border-bottom-color: var(--warn);
   }
 
 </style>

@@ -679,7 +679,7 @@
   }
 
   .error-text {
-    color: var(--danger, #ef4444);
+    color: var(--danger);
   }
 
   /* Context menu */
@@ -692,7 +692,7 @@
     border: 1px solid var(--border);
     border-radius: 6px;
     padding: 4px 0;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 4px 16px color-mix(in srgb, var(--bg) 30%, transparent);
     -webkit-app-region: no-drag;
     font-family: var(--font-family);
   }

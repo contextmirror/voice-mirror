@@ -206,7 +206,7 @@
     color: var(--text);
   }
   .change-action.discard:hover {
-    color: var(--danger, #ef4444);
+    color: var(--danger);
   }
 
   .tree-icon {
