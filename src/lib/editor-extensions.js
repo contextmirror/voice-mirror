@@ -102,7 +102,7 @@ export function buildEditorExtensions(cm, lsp, options) {
       { key: 'F2', run: (v) => { lsp.handleRenameSymbol(v, filePath); return true; } },
       { key: 'Shift-F12', run: (v) => { lsp.handleFindReferences(v, filePath); return true; } },
       { key: 'Mod-.', run: (v) => { lsp.handleCodeActions(v, filePath); return true; } },
-      { key: 'Ctrl-Shift-Space', run: (v) => { lsp.requestSignatureHelp(v, filePath, null); return true; } },
+      { key: 'Ctrl-Shift-,', run: (v) => { lsp.requestSignatureHelp(v, filePath, null); return true; } },
     ]));
   }
 
