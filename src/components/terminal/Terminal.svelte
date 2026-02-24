@@ -185,19 +185,47 @@
         term.write('\x1b[2J\x1b[3J\x1b[H');
         break;
       case 'start':
-        // Provider is ready. Reveal the terminal after a delay to let
-        // the TUI finish drawing. Uses direct DOM to bypass Svelte batching.
+        // Provider is ready. The terminal was frozen during the switch
+        // (see providerSwitchHandler) — all TUI output has been accumulating
+        // in the WASM buffer without rendering. Now we unfreeze after a delay
+        // to let the TUI finish its initial draw burst.
+        //
+        // CRITICAL: Before unfreezing, do a nuclear reset to discard any
+        // stale output from the OLD provider that leaked into the WASM buffer
+        // between the switch and this 'start' event. During the gap, the old
+        // process was still sending stdout before it exited, and those bytes
+        // were write()-ed to the fresh terminal — polluting it with content
+        // meant for the old layout. The reset wipes that slate clean.
+        if (isSwitching && term.reset) {
+          term.reset();
+          if (term.freeze) term.freeze();
+        }
         isSwitching = false;
         if (switchRevealTimer) clearTimeout(switchRevealTimer);
         switchRevealTimer = setTimeout(() => {
           switchRevealTimer = null;
           if (term) {
+            // Unfreeze rendering first so the resize triggers a visible repaint
+            if (term.unfreeze) term.unfreeze();
             fitTerminal();
             resizePtyIfChanged();
-            // Force a full canvas resize + redraw cycle. This resets
-            // canvas.width/height + ctx.scale() for DPI + forceAll render.
-            // Same thing that happens when you move/resize the window.
-            if (term.refresh) term.refresh();
+            // Automated "jiggle" — the ONE thing that always fixes the display.
+            // Resize by -1 row then restore on next frame. This forces the full
+            // WASM terminal resize path (text reflow + DirtyState.FULL + canvas
+            // reset + forceAll render) which consistently produces clean output.
+            // Every other approach (forceAll, forceDirty, freeze/unfreeze alone)
+            // has failed because they don't trigger WASM text reflow.
+            const savedCols = term.cols;
+            const savedRows = term.rows;
+            if (savedRows > 2) {
+              term.resize(savedCols, savedRows - 1);
+              requestAnimationFrame(() => {
+                if (term && !isSwitching) {
+                  term.resize(savedCols, savedRows);
+                  resizePtyIfChanged();
+                }
+              });
+            }
           }
           if (containerEl) containerEl.style.visibility = '';
         }, 500);
@@ -211,6 +239,11 @@
         }
         break;
       case 'exit':
+        // During a provider switch, drop the exit event entirely.
+        // The old process's mode-reset sequences and "Process exited" message
+        // would pollute the new terminal's WASM buffer. The 'start' handler
+        // does a second reset to clear any leaked output.
+        if (isSwitching) break;
         // Reset terminal modes on provider exit so stale state
         // (mouse tracking, alt screen) doesn't leak to next provider.
         // Use escape sequences here (not term.reset()) to preserve the
@@ -222,17 +255,11 @@
         );
         term.writeln('');
         term.writeln(`\x1b[33m[Process exited with code ${data.code ?? '?'}]\x1b[0m`);
-        // Only reveal the terminal if this is a standalone exit (not a switch).
-        // During a provider switch, the container stays hidden until the
-        // 'start' handler's reveal timer fires — otherwise the user sees
-        // garbled partial-frame renders from the new TUI's initialization.
-        if (!isSwitching) {
-          if (switchRevealTimer) {
-            clearTimeout(switchRevealTimer);
-            switchRevealTimer = null;
-          }
-          if (containerEl) containerEl.style.visibility = '';
+        if (switchRevealTimer) {
+          clearTimeout(switchRevealTimer);
+          switchRevealTimer = null;
         }
+        if (containerEl) containerEl.style.visibility = '';
         break;
     }
   }
@@ -372,7 +399,17 @@
         // in the exact same state as initial startup — which always renders
         // cleanly. Without this, the old provider's canvas pixels, dirty-row
         // tracking, and WASM buffer state leak into the new provider's render.
-        if (term) term.reset();
+        if (term) {
+          term.reset();
+          // Freeze rendering IMMEDIATELY after reset. The render loop keeps
+          // running but skips all drawing. Writes via write() still go to the
+          // WASM parser (maintaining terminal state), but the canvas is not
+          // updated. This prevents painting partial TUI frames during startup
+          // — the TUI sends 8-14 separate write() calls with escape sequence
+          // fragments, and each intermediate state looks garbled. We unfreeze
+          // in the 'start' handler to paint a single clean frame.
+          if (term.freeze) term.freeze();
+        }
       };
       window.addEventListener('ai-provider-switching', providerSwitchHandler);
 
