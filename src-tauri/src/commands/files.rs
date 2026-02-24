@@ -1609,48 +1609,39 @@ pub async fn generate_commit_message(root: Option<String>) -> IpcResponse {
     let config = crate::commands::config::get_config_snapshot();
     let ai = &config.ai;
 
-    // Find endpoint + model + optional API key
-    // Check local providers first (no key needed), then cloud providers
+    // Build ordered list of candidate providers: local first (no key needed), then cloud
     let local_providers = ["ollama", "lmstudio", "jan"];
     let cloud_providers = ["openai", "gemini", "groq", "grok", "mistral", "openrouter", "deepseek"];
 
-    let mut found_provider: Option<(String, String, Option<String>)> = None; // (endpoint, model, api_key)
+    // (name, endpoint, model, api_key)
+    let mut candidates: Vec<(&str, String, String, Option<String>)> = Vec::new();
 
-    // Try local providers first
     for provider in &local_providers {
         if let Some(endpoint) = ai.endpoints.get(*provider) {
             if !endpoint.is_empty() {
                 let model = default_commit_model(provider);
-                found_provider = Some((endpoint.clone(), model, None));
-                info!("generate_commit_message: using local provider {}", provider);
-                break;
+                candidates.push((provider, endpoint.clone(), model, None));
             }
         }
     }
 
-    // Try cloud providers if no local found
-    if found_provider.is_none() {
-        for provider in &cloud_providers {
-            if let Some(Some(key)) = ai.api_keys.get(*provider) {
-                if !key.is_empty() {
-                    let endpoint = ai.endpoints.get(*provider)
-                        .cloned()
-                        .unwrap_or_else(|| default_cloud_endpoint(provider).to_string());
-                    let model = default_commit_model(provider);
-                    found_provider = Some((endpoint, model, Some(key.clone())));
-                    info!("generate_commit_message: using cloud provider {}", provider);
-                    break;
-                }
+    for provider in &cloud_providers {
+        if let Some(Some(key)) = ai.api_keys.get(*provider) {
+            if !key.is_empty() {
+                let endpoint = ai.endpoints.get(*provider)
+                    .cloned()
+                    .unwrap_or_else(|| default_cloud_endpoint(provider).to_string());
+                let model = default_commit_model(provider);
+                candidates.push((provider, endpoint, model, Some(key.clone())));
             }
         }
     }
 
-    let (endpoint, model, api_key) = match found_provider {
-        Some(p) => p,
-        None => return IpcResponse::err(
+    if candidates.is_empty() {
+        return IpcResponse::err(
             "No AI provider configured. Add an API key or start a local LLM in Settings."
-        ),
-    };
+        );
+    }
 
     // Build the prompt
     let prompt = format!(
@@ -1664,62 +1655,91 @@ pub async fn generate_commit_message(root: Option<String>) -> IpcResponse {
         diff_for_prompt.trim()
     );
 
-    // Build the chat completions URL
-    // Handles: ".../v1", ".../v1/", ".../openai", ".../openai/" (Gemini), and bare base URLs
-    let trimmed = endpoint.trim_end_matches('/');
-    let url = if trimmed.ends_with("/v1") || trimmed.ends_with("/openai") {
-        format!("{}/chat/completions", trimmed)
-    } else if trimmed.contains("/v1/") || trimmed.ends_with("/chat/completions") {
-        trimmed.to_string()
-    } else {
-        format!("{}/v1/chat/completions", trimmed)
-    };
+    // Try each candidate provider in order, falling back on connection errors
+    let client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(3))
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new());
 
-    let client = reqwest::Client::new();
-    let mut request = client.post(&url)
-        .header("Content-Type", "application/json");
+    let mut last_error = String::new();
 
-    if let Some(key) = &api_key {
-        request = request.header("Authorization", format!("Bearer {}", key));
+    for (name, endpoint, model, api_key) in &candidates {
+        info!("generate_commit_message: trying provider '{}'", name);
+
+        // Build the chat completions URL
+        let trimmed = endpoint.trim_end_matches('/');
+        let url = if trimmed.ends_with("/v1") || trimmed.ends_with("/openai") {
+            format!("{}/chat/completions", trimmed)
+        } else if trimmed.contains("/v1/") || trimmed.ends_with("/chat/completions") {
+            trimmed.to_string()
+        } else {
+            format!("{}/v1/chat/completions", trimmed)
+        };
+
+        let mut request = client.post(&url)
+            .header("Content-Type", "application/json");
+
+        if let Some(key) = api_key {
+            request = request.header("Authorization", format!("Bearer {}", key));
+        }
+
+        let body = serde_json::json!({
+            "model": model,
+            "messages": [{ "role": "user", "content": prompt }],
+            "max_tokens": 200,
+            "temperature": 0.3,
+        });
+
+        let response = match request.json(&body).send().await {
+            Ok(r) => r,
+            Err(e) => {
+                warn!("generate_commit_message: provider '{}' failed to connect: {}", name, e);
+                last_error = format!("{}: {}", name, e);
+                continue; // Try next provider
+            }
+        };
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body_text = response.text().await.unwrap_or_default();
+            warn!("generate_commit_message: provider '{}' returned {}: {}", name, status, body_text);
+            last_error = format!("{} returned {}", name, status);
+            continue; // Try next provider
+        }
+
+        let json: serde_json::Value = match response.json().await {
+            Ok(j) => j,
+            Err(e) => {
+                warn!("generate_commit_message: provider '{}' returned invalid JSON: {}", name, e);
+                last_error = format!("{}: invalid response", name);
+                continue;
+            }
+        };
+
+        let message = json["choices"][0]["message"]["content"]
+            .as_str()
+            .unwrap_or("")
+            .trim()
+            .trim_matches('`')
+            .trim()
+            .to_string();
+
+        if message.is_empty() {
+            warn!("generate_commit_message: provider '{}' returned empty message", name);
+            last_error = format!("{}: empty response", name);
+            continue;
+        }
+
+        info!("generate_commit_message: provider '{}' generated '{}'", name, message);
+        return IpcResponse::ok(serde_json::json!({ "message": message }));
     }
 
-    let body = serde_json::json!({
-        "model": model,
-        "messages": [{ "role": "user", "content": prompt }],
-        "max_tokens": 200,
-        "temperature": 0.3,
-    });
-
-    let response = match request.json(&body).send().await {
-        Ok(r) => r,
-        Err(e) => return IpcResponse::err(format!("AI request failed: {}", e)),
-    };
-
-    if !response.status().is_success() {
-        let status = response.status();
-        let body = response.text().await.unwrap_or_default();
-        return IpcResponse::err(format!("AI provider returned {}: {}", status, body));
-    }
-
-    let json: serde_json::Value = match response.json().await {
-        Ok(j) => j,
-        Err(e) => return IpcResponse::err(format!("Failed to parse AI response: {}", e)),
-    };
-
-    let message = json["choices"][0]["message"]["content"]
-        .as_str()
-        .unwrap_or("")
-        .trim()
-        .trim_matches('`')
-        .trim()
-        .to_string();
-
-    if message.is_empty() {
-        return IpcResponse::err("AI returned an empty commit message");
-    }
-
-    info!("generate_commit_message: generated '{}'", message);
-    IpcResponse::ok(serde_json::json!({ "message": message }))
+    // All providers failed
+    IpcResponse::err(format!(
+        "All AI providers failed. Last error: {}. Check Settings to verify your API keys or start a local LLM.",
+        last_error
+    ))
 }
 
 /// Default model for commit message generation per provider.
