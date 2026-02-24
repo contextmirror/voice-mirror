@@ -1,5 +1,5 @@
 <script>
-  import { onMount, onDestroy, tick } from 'svelte';
+  import { onDestroy, tick } from 'svelte';
   import { readFile, getFileGitContent, revealInExplorer } from '../../lib/api.js';
   import { projectStore } from '../../lib/stores/project.svelte.js';
   import { tabsStore } from '../../lib/stores/tabs.svelte.js';
@@ -439,57 +439,81 @@
     }
   }
 
-  // ── Mount ──
+  // ── Load diff when tab changes (reactive — fires on mount AND tab switch) ──
 
-  onMount(async () => {
-    try {
-      const root = projectStore.activeProject?.path || null;
+  $effect(() => {
+    const path = tab?.path;
+    if (!path) return;
 
-      const [oldResult, newResult] = await Promise.all([
-        tab.status === 'added'
-          ? Promise.resolve({ success: true, data: { content: '', isNew: true } })
-          : getFileGitContent(tab.path, root),
-        tab.status === 'deleted'
-          ? Promise.resolve({ success: true, data: { content: '' } })
-          : readFile(tab.path, root),
-      ]);
+    // Reset state for new file
+    loading = true;
+    error = null;
+    isBinary = false;
+    destroyView();
 
-      const oldData = oldResult?.data || oldResult;
-      const newData = newResult?.data || newResult;
+    // Load diff content (async in effect — capture path to guard against race)
+    (async () => {
+      try {
+        const root = projectStore.activeProject?.path || null;
 
-      if (oldData?.binary || newData?.binary) {
-        isBinary = true;
+        const [oldResult, newResult] = await Promise.all([
+          tab.status === 'added'
+            ? Promise.resolve({ success: true, data: { content: '', isNew: true } })
+            : getFileGitContent(path, root),
+          tab.status === 'deleted'
+            ? Promise.resolve({ success: true, data: { content: '' } })
+            : readFile(path, root),
+        ]);
+
+        // Guard: tab may have changed while we were loading
+        if (tab?.path !== path) return;
+
+        const oldData = oldResult?.data || oldResult;
+        const newData = newResult?.data || newResult;
+
+        if (oldData?.binary || newData?.binary) {
+          isBinary = true;
+          loading = false;
+          return;
+        }
+
+        if (oldResult?.error && tab.status !== 'added') {
+          error = oldResult.error;
+          loading = false;
+          return;
+        }
+        if (newResult?.error && tab.status !== 'deleted') {
+          error = newResult.error;
+          loading = false;
+          return;
+        }
+
+        oldContent = oldData?.content ?? '';
+        newContent = newData?.content ?? '';
+
+        stats = countChanges(oldContent, newContent);
+        tabsStore.setDiffStats(tab.id, stats);
+
+        const cm = await loadCM();
+        const langSupport = await loadLanguage(path);
+
+        // Guard again after async loads
+        if (tab?.path !== path) return;
+
         loading = false;
-        return;
-      }
-
-      if (oldResult?.error && tab.status !== 'added') {
-        error = oldResult.error;
+        await tick();
+        if (viewMode === 'unified') {
+          await createUnifiedView(cm, langSupport);
+        } else {
+          await createSplitView(cm, langSupport);
+        }
+      } catch (err) {
+        if (tab?.path !== path) return;
+        console.error('[DiffViewer] Load failed:', err);
+        error = err.message || 'Failed to load diff';
         loading = false;
-        return;
       }
-      if (newResult?.error && tab.status !== 'deleted') {
-        error = newResult.error;
-        loading = false;
-        return;
-      }
-
-      oldContent = oldData?.content ?? '';
-      newContent = newData?.content ?? '';
-
-      stats = countChanges(oldContent, newContent);
-      tabsStore.setDiffStats(tab.id, stats);
-
-      const cm = await loadCM();
-      const langSupport = await loadLanguage(tab.path);
-
-      loading = false;
-      await createUnifiedView(cm, langSupport);
-    } catch (err) {
-      console.error('[DiffViewer] Mount failed:', err);
-      error = err.message || 'Failed to load diff';
-      loading = false;
-    }
+    })();
   });
 
   onDestroy(() => {

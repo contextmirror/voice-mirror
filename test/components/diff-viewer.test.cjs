@@ -27,8 +27,7 @@ describe('DiffViewer.svelte: imports', () => {
     assert.ok(src.includes('projectStore'), 'Should import projectStore');
   });
 
-  it('imports onMount and onDestroy from svelte', () => {
-    assert.ok(src.includes('onMount'), 'Should import onMount');
+  it('imports onDestroy from svelte', () => {
     assert.ok(src.includes('onDestroy'), 'Should import onDestroy');
   });
 
@@ -417,8 +416,9 @@ describe('DiffViewer.svelte: binary file handling', () => {
 });
 
 describe('DiffViewer.svelte: lifecycle', () => {
-  it('loads diff on mount', () => {
-    assert.ok(src.includes('onMount('), 'Should use onMount for initialization');
+  it('loads diff reactively when tab changes', () => {
+    assert.ok(src.includes('$effect('), 'Should use $effect for reactive loading');
+    assert.ok(src.includes('tab?.path'), 'Should watch tab.path for changes');
   });
 
   it('destroys views on cleanup', () => {
