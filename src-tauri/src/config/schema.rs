@@ -31,6 +31,8 @@ pub struct AppConfig {
     pub ai: AiConfig,
     #[serde(default)]
     pub projects: ProjectsConfig,
+    #[serde(default)]
+    pub editor: EditorConfig,
 }
 
 /// Wake word detection settings.
@@ -414,6 +416,25 @@ impl Default for AiConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolProfile {
     pub groups: Vec<String>,
+}
+
+/// Editor settings (formatting, preview).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EditorConfig {
+    #[serde(default = "default_true")]
+    pub markdown_preview: bool,
+    #[serde(default)]
+    pub format_on_save: bool,
+}
+
+impl Default for EditorConfig {
+    fn default() -> Self {
+        Self {
+            markdown_preview: true,
+            format_on_save: false,
+        }
+    }
 }
 
 /// Multi-project configuration.

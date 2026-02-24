@@ -206,7 +206,10 @@ export function createEditorLsp() {
   async function formatDocument(view, path, root) {
     if (!hasLsp) return false;
     try {
-      const result = await lspRequestFormatting(path, 2, true, root);
+      // Read tab size from editor state (defaults to 2 spaces)
+      const tabSize = view.state.tabSize || 2;
+      const insertSpaces = true; // CodeMirror uses spaces by default
+      const result = await lspRequestFormatting(path, tabSize, insertSpaces, root);
       if (result?.data?.edits?.length > 0) {
         const doc = view.state.doc;
         // Sort edits in reverse document order so earlier offsets aren't invalidated
