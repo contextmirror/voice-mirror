@@ -441,7 +441,7 @@
         {/if}
         {#if gpuInfo?.available && gpuInfo?.vendor !== 'nvidia'}
           <div class="gpu-warning">
-            {gpuInfo.name} detected — CUDA acceleration requires an NVIDIA GPU
+            {gpuInfo.name} detected — CUDA acceleration requires NVIDIA. Whisper will use CPU instead.
           </div>
         {/if}
         <Toggle
@@ -449,8 +449,8 @@
           description={gpuInfo?.available && gpuInfo?.vendor === 'nvidia'
             ? `Use ${gpuInfo.name} for faster transcription`
             : gpuInfo?.available
-              ? 'CUDA requires an NVIDIA GPU'
-              : 'No GPU detected'}
+              ? 'CUDA requires an NVIDIA GPU — CPU transcription still works'
+              : 'No GPU detected — CPU transcription still works'}
           checked={sttUseGpu}
           onChange={(v) => (sttUseGpu = v)}
           disabled={!gpuInfo?.available || !gpuInfo?.cudaCompiled || gpuInfo?.vendor !== 'nvidia'}
