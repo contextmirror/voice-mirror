@@ -40,8 +40,16 @@ describe('GitCommitPanel.svelte -- imports', () => {
     assert.ok(src.includes('gitPush'), 'Should import gitPush');
   });
 
-  it('imports generateCommitMessage from api.js', () => {
-    assert.ok(src.includes('generateCommitMessage'), 'Should import generateCommitMessage');
+  it('imports gitDiffStaged from api.js', () => {
+    assert.ok(src.includes('gitDiffStaged'), 'Should import gitDiffStaged');
+  });
+
+  it('imports chatStore from stores', () => {
+    assert.ok(src.includes('chatStore'), 'Should import chatStore');
+  });
+
+  it('imports layoutStore from stores', () => {
+    assert.ok(src.includes('layoutStore'), 'Should import layoutStore');
   });
 });
 
@@ -62,6 +70,10 @@ describe('GitCommitPanel.svelte -- props', () => {
 
   it('accepts onCommit prop', () => {
     assert.ok(src.includes('onCommit'), 'Should accept onCommit callback prop');
+  });
+
+  it('accepts onSend prop', () => {
+    assert.ok(src.includes('onSend'), 'Should accept onSend callback prop for chat routing');
   });
 
   it('accepts root prop', () => {
@@ -87,10 +99,14 @@ describe('GitCommitPanel.svelte -- UI elements', () => {
     assert.ok(src.includes('Push') || src.includes('push'), 'Should have push functionality');
   });
 
-  it('has AI generate button', () => {
+  it('has AI generate button that sends to chat', () => {
     assert.ok(
-      src.includes('generateCommitMessage') || src.includes('generate'),
-      'Should have AI commit message generation'
+      src.includes('handleGenerateMessage') || src.includes('ai-button'),
+      'Should have AI commit message generation button'
+    );
+    assert.ok(
+      src.includes('onSend'),
+      'Should route AI generation through chat via onSend'
     );
   });
 
@@ -117,8 +133,10 @@ describe('GitCommitPanel.svelte -- behavior', () => {
     assert.ok(src.includes('gitCommit'), 'Should call gitCommit');
   });
 
-  it('calls generateCommitMessage for AI generation', () => {
-    assert.ok(src.includes('generateCommitMessage'), 'Should call generateCommitMessage');
+  it('sends staged diff to chat for AI generation', () => {
+    assert.ok(src.includes('gitDiffStaged'), 'Should call gitDiffStaged to get diff');
+    assert.ok(src.includes('chatStore.addMessage'), 'Should add prompt to chat store');
+    assert.ok(src.includes('onSend'), 'Should call onSend to route to AI');
   });
 
   it('calls gitPush for push', () => {

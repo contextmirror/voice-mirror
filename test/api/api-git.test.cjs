@@ -1,7 +1,7 @@
 /**
  * api-git.test.cjs -- Source-inspection tests for git API wrappers in api.js
  *
- * Validates all 9 new git-related functions: exports, invoke names, and parameters.
+ * Validates all 8 git-related functions: exports, invoke names, and parameters.
  * Based on the plan spec -- does not read implementation code.
  */
 const { describe, it } = require('node:test');
@@ -71,12 +71,6 @@ describe('api.js -- git function exports', () => {
     );
   });
 
-  it('exports generateCommitMessage function', () => {
-    assert.ok(
-      src.includes('export async function generateCommitMessage('),
-      'Should export async function generateCommitMessage()'
-    );
-  });
 });
 
 // ============ Invoke names (must match Rust snake_case) ============
@@ -138,12 +132,6 @@ describe('api.js -- git invoke command names', () => {
     );
   });
 
-  it('generateCommitMessage invokes generate_commit_message', () => {
-    assert.ok(
-      src.includes("invoke('generate_commit_message'"),
-      "generateCommitMessage should invoke 'generate_commit_message'"
-    );
-  });
 });
 
 // ============ Parameters ============
@@ -207,13 +195,6 @@ describe('api.js -- git function parameters', () => {
     assert.ok(
       src.includes('gitDiffStaged(root') || src.includes('gitDiffStaged('),
       'gitDiffStaged should accept root parameter'
-    );
-  });
-
-  it('generateCommitMessage accepts root parameter', () => {
-    assert.ok(
-      src.includes('generateCommitMessage(root') || src.includes('generateCommitMessage('),
-      'generateCommitMessage should accept root parameter'
     );
   });
 

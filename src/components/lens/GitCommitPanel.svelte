@@ -1,7 +1,9 @@
 <script>
-  import { gitCommit, gitPush, generateCommitMessage } from '../../lib/api.js';
+  import { gitCommit, gitPush, gitDiffStaged } from '../../lib/api.js';
+  import { chatStore } from '../../lib/stores/chat.svelte.js';
+  import { layoutStore } from '../../lib/stores/layout.svelte.js';
 
-  let { branch = '', stagedCount = 0, onCommit = () => {}, root = null } = $props();
+  let { branch = '', stagedCount = 0, onCommit = () => {}, onSend = () => {}, root = null } = $props();
 
   let message = $state('');
   let committing = $state(false);
@@ -16,16 +18,35 @@
   async function handleGenerateMessage() {
     if (stagedCount === 0 || generating) return;
     clearError();
+    clearSuccess();
     generating = true;
     try {
-      const resp = await generateCommitMessage(root);
-      if (resp && resp.data && resp.data.message) {
-        message = resp.data.message;
-      } else if (resp && resp.error) {
-        error = resp.error;
+      const resp = await gitDiffStaged(root);
+      const diff = resp?.data?.diff || '';
+      if (!diff.trim()) {
+        error = 'No staged changes to generate a commit message for';
+        return;
       }
+      // Cap diff for readability in chat
+      const maxLen = 8 * 1024;
+      const displayDiff = diff.length > maxLen ? diff.slice(0, maxLen) + '\n...[truncated]' : diff;
+
+      const prompt = `Generate a concise git commit message for these staged changes.\n` +
+        `Use conventional commit format: type(scope): description\n` +
+        `Types: feat, fix, refactor, docs, chore, test, style\n` +
+        `Max 72 characters for the first line.\n` +
+        `Return ONLY the commit message, nothing else.\n\n` +
+        `\`\`\`diff\n${displayDiff}\n\`\`\``;
+
+      // Add to chat and route to AI
+      chatStore.addMessage('user', prompt);
+      layoutStore.showChat = true;
+      onSend(prompt);
+
+      success = 'Sent to AI — check chat';
+      setTimeout(clearSuccess, 3000);
     } catch (err) {
-      error = typeof err === 'string' ? err : (err.message || 'Failed to generate commit message');
+      error = typeof err === 'string' ? err : (err.message || 'Failed to get staged diff');
     } finally {
       generating = false;
     }
@@ -112,7 +133,7 @@
     ></textarea>
     <button
       class="ai-button"
-      title="Generate commit message with AI"
+      title="Ask AI to generate commit message"
       onclick={handleGenerateMessage}
       disabled={stagedCount === 0 || generating}
     >

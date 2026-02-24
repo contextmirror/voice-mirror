@@ -310,7 +310,6 @@ pub fn run() {
             files_cmds::git_discard,
             files_cmds::git_push,
             files_cmds::git_diff_staged,
-            files_cmds::generate_commit_message,
             // Shell terminals
             shell_cmds::shell_spawn,
             shell_cmds::shell_input,

@@ -12,7 +12,7 @@
   import GitCommitPanel from './GitCommitPanel.svelte';
   import { searchStore } from '../../lib/stores/search.svelte.js';
 
-  let { onFileClick = () => {}, onFileDblClick = () => {}, onChangeClick = () => {}, onChangeDblClick = () => {}, activeFilePath = null, activeDiffPath = null, activeFileHasLsp = false, onSymbolClick = () => {} } = $props();
+  let { onFileClick = () => {}, onFileDblClick = () => {}, onChangeClick = () => {}, onChangeDblClick = () => {}, activeFilePath = null, activeDiffPath = null, activeFileHasLsp = false, onSymbolClick = () => {}, onSend = () => {} } = $props();
 
   // State
   let activeTab = $state('files');
@@ -588,6 +588,7 @@
       branch={currentBranch}
       stagedCount={stagedChanges.length}
       onCommit={loadGitChanges}
+      {onSend}
       root={projectStore.activeProject?.path}
     />
     <div class="tree-scroll">

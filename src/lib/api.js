@@ -480,7 +480,6 @@ export async function gitCommit(message, root) { return invoke('git_commit', { m
 export async function gitDiscard(paths, root) { return invoke('git_discard', { paths, root: root || null }); }
 export async function gitPush(root) { return invoke('git_push', { root: root || null }); }
 export async function gitDiffStaged(root) { return invoke('git_diff_staged', { root: root || null }); }
-export async function generateCommitMessage(root) { return invoke('generate_commit_message', { root: root || null }); }
 
 /**
  * Create a new file with optional content.
