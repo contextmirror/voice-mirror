@@ -6,6 +6,7 @@
   let activeTool = $state('pen');
   let activeColor = $state('#ff0000');
   let activeSize = $state(3);
+  let sizeLabel = $derived(activeTool === 'text' ? `Font: ${activeSize * 4 + 8}px` : `Size: ${activeSize}`);
 
   const tools = [
     { id: 'pen', label: 'Pen', icon: 'M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25z' },
@@ -33,8 +34,16 @@
     await designCommand('set_color', { color });
   }
 
-  function sendSize() {
-    designCommand('set_size', { size: activeSize });
+  let sizeTimer = null;
+  function handleSizeInput(e) {
+    const val = parseInt(e.target.value, 10);
+    if (isNaN(val)) return;
+    activeSize = val;
+    // Debounce IPC — only send after 50ms of no movement
+    if (sizeTimer) clearTimeout(sizeTimer);
+    sizeTimer = setTimeout(() => {
+      designCommand('set_size', { size: activeSize });
+    }, 50);
   }
 
   async function undo() { await designCommand('undo', {}); }
@@ -101,10 +110,11 @@
       class="size-slider"
       min="1"
       max="20"
-      bind:value={activeSize}
-      oninput={sendSize}
-      title="Brush size: {activeSize}"
+      value={activeSize}
+      oninput={handleSizeInput}
+      title={sizeLabel}
     />
+    <span class="size-label">{sizeLabel}</span>
   </div>
 
   <div class="separator"></div>
@@ -224,10 +234,46 @@
   }
 
   .size-slider {
-    width: 60px;
-    height: 4px;
-    accent-color: var(--accent);
+    -webkit-appearance: none;
+    appearance: none;
+    width: 80px;
+    height: 14px;
+    background: transparent;
+    outline: none;
     cursor: pointer;
+    margin: 0;
+    padding: 0;
+  }
+
+  .size-slider::-webkit-slider-runnable-track {
+    width: 100%;
+    height: 4px;
+    background: color-mix(in srgb, var(--text) 25%, transparent);
+    border-radius: 2px;
+    border: none;
+  }
+
+  .size-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: none;
+    cursor: pointer;
+    margin-top: -5px;
+  }
+
+  .size-slider::-webkit-slider-thumb:hover {
+    background: color-mix(in srgb, var(--accent) 85%, white);
+  }
+
+  .size-label {
+    font-size: 10px;
+    color: var(--muted);
+    white-space: nowrap;
+    min-width: 52px;
   }
 
   .send-btn {

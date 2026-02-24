@@ -190,10 +190,11 @@
         ctx.font = stroke.fontSize + 'px sans-serif';
         ctx.textBaseline = 'top';
 
-        // Multiline support
+        // Multiline support (matches the textarea's line-height: 1.25)
+        var lineH = stroke.fontSize * 1.25;
         var lines = stroke.text.split('\n');
         for (var i = 0; i < lines.length; i++) {
-            ctx.fillText(lines[i], p.x, p.y + i * stroke.fontSize * 1.2);
+            ctx.fillText(lines[i], p.x, p.y + i * lineH);
         }
     }
 
@@ -311,55 +312,87 @@
     }
 
     // =========================================================================
-    // Text input overlay
+    // Text input overlay (Flameshot-style: click to place, auto-resize,
+    // draggable, font size = currentSize * 4 + 8)
     // =========================================================================
+
+    var _textDrag = null; // { startMouseX, startMouseY, startLeft, startTop }
+
+    function _getTextFontSize() {
+        // Maps slider 1-20 → 12px-88px (same formula as toolbar label)
+        return currentSize * 4 + 8;
+    }
 
     function _createTextInput(x, y) {
         _removeTextInput();
 
-        var fontSize = currentSize * 4 + 8;
-        var ta = document.createElement('textarea');
-        ta.style.cssText = [
+        var fontSize = _getTextFontSize();
+
+        // Outer container — handles drag & border
+        var wrapper = document.createElement('div');
+        wrapper.setAttribute('data-vm-text', '1');
+        wrapper.style.cssText = [
             'position:fixed',
             'left:' + x + 'px',
             'top:' + y + 'px',
-            'min-width:100px',
+            'min-width:60px',
+            'border:1.5px dashed ' + currentColor,
+            'border-radius:3px',
+            'z-index:1000000',
+            'cursor:move',
+            'box-sizing:border-box',
+            'padding:0'
+        ].join(';');
+
+        // Textarea (actual editing surface)
+        var ta = document.createElement('textarea');
+        ta.style.cssText = [
+            'display:block',
+            'width:100%',
+            'min-width:60px',
             'min-height:' + (fontSize + 8) + 'px',
             'background:transparent',
-            'border:1px dashed ' + currentColor,
+            'border:none',
             'outline:none',
             'color:' + currentColor,
             'font-size:' + fontSize + 'px',
             'font-family:sans-serif',
-            'line-height:1.2',
-            'padding:2px 4px',
-            'resize:none',
-            'z-index:1000000',
+            'line-height:1.25',
+            'padding:4px 6px',
+            'resize:both',
             'overflow:hidden',
             'white-space:pre-wrap',
-            'word-wrap:break-word'
+            'word-wrap:break-word',
+            'box-sizing:border-box',
+            'cursor:text'
         ].join(';');
 
         ta.rows = 1;
-        ta.setAttribute('data-vm-text', '1');
+        ta.placeholder = 'Type here...';
 
         var commitColor = currentColor;
         var commitFontSize = fontSize;
-        var commitX = x;
-        var commitY = y;
         var committed = false;
+
+        function getPosition() {
+            return {
+                x: parseFloat(wrapper.style.left) || x,
+                y: parseFloat(wrapper.style.top) || y
+            };
+        }
 
         function commit() {
             if (committed) return;
             committed = true;
             var val = ta.value;
+            var pos = getPosition();
             _removeTextInput();
             if (val.length === 0) return;
             strokes.push({
                 tool: 'text',
                 color: commitColor,
                 size: commitFontSize,
-                points: [{ x: commitX, y: commitY }],
+                points: [{ x: pos.x + 6, y: pos.y + 4 }],
                 text: val,
                 fontSize: commitFontSize
             });
@@ -367,8 +400,9 @@
             _redrawAll();
         }
 
-        ta.addEventListener('blur', commit);
+        // --- Keyboard ---
         ta.addEventListener('keydown', function (e) {
+            e.stopPropagation();
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 ta.blur();
@@ -377,20 +411,62 @@
                 ta.value = '';
                 ta.blur();
             }
-            // Auto-resize
-            ta.style.height = 'auto';
-            ta.style.height = ta.scrollHeight + 'px';
-            e.stopPropagation();
         });
         ta.addEventListener('input', function () {
+            // Auto-grow height
             ta.style.height = 'auto';
             ta.style.height = ta.scrollHeight + 'px';
         });
+        ta.addEventListener('blur', function () {
+            // Small delay so clicking the wrapper border doesn't commit
+            setTimeout(function () {
+                if (textInput && document.activeElement !== ta) {
+                    commit();
+                }
+            }, 150);
+        });
 
-        document.body.appendChild(ta);
-        textInput = ta;
+        // --- Drag (on the wrapper border / non-textarea area) ---
+        wrapper.addEventListener('mousedown', function (e) {
+            // Only drag from the wrapper border, not the textarea
+            if (e.target === ta) return;
+            e.preventDefault();
+            e.stopPropagation();
+            _textDrag = {
+                startMouseX: e.clientX,
+                startMouseY: e.clientY,
+                startLeft: parseFloat(wrapper.style.left) || x,
+                startTop: parseFloat(wrapper.style.top) || y
+            };
+
+            function onMove(ev) {
+                if (!_textDrag) return;
+                var dx = ev.clientX - _textDrag.startMouseX;
+                var dy = ev.clientY - _textDrag.startMouseY;
+                wrapper.style.left = (_textDrag.startLeft + dx) + 'px';
+                wrapper.style.top = (_textDrag.startTop + dy) + 'px';
+            }
+            function onUp() {
+                _textDrag = null;
+                window.removeEventListener('mousemove', onMove, true);
+                window.removeEventListener('mouseup', onUp, true);
+            }
+            window.addEventListener('mousemove', onMove, true);
+            window.addEventListener('mouseup', onUp, true);
+        });
+
+        // Stop canvas from receiving clicks on the text widget
+        wrapper.addEventListener('mousedown', function (e) { e.stopPropagation(); });
+        wrapper.addEventListener('mousemove', function (e) { e.stopPropagation(); });
+        wrapper.addEventListener('mouseup', function (e) { e.stopPropagation(); });
+
+        wrapper.appendChild(ta);
+        document.body.appendChild(wrapper);
+        textInput = wrapper;
+        textInput._textarea = ta;
+
         // Defer focus so mouseup doesn't steal it
-        setTimeout(function () { ta.focus(); }, 0);
+        setTimeout(function () { ta.focus(); }, 10);
     }
 
     function _removeTextInput() {
@@ -398,6 +474,7 @@
             textInput.parentNode.removeChild(textInput);
         }
         textInput = null;
+        _textDrag = null;
     }
 
     // =========================================================================
@@ -411,6 +488,11 @@
 
         var x = e.offsetX;
         var y = e.offsetY;
+
+        // Commit any active text input before starting a new action
+        if (textInput && textInput._textarea) {
+            textInput._textarea.blur();
+        }
 
         if (currentTool === 'text') {
             _createTextInput(x, y);
@@ -488,7 +570,10 @@
 
     function _handleKeyDown(e) {
         // Don't intercept when typing in text input
-        if (textInput && document.activeElement === textInput) return;
+        if (textInput) {
+            var ta = textInput._textarea || textInput;
+            if (document.activeElement === ta) return;
+        }
 
         if (e.key === 'Shift') {
             shiftHeld = true;
