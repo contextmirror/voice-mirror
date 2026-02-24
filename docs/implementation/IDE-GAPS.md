@@ -105,13 +105,13 @@ What's missing is everything that makes a "real IDE" feel seamless — the gaps 
 
 ### 5. Git Integration (Stage + Commit + Push) — DONE ✓
 
-**Status:** Core git workflow implemented. Changes tab shows staged/unstaged groups with stage/unstage/discard actions, commit panel with AI-powered message generation, branch indicator, and push support.
+**Status:** Core git workflow implemented. Changes tab shows staged/unstaged groups with stage/unstage/discard actions, commit panel with branch indicator, and push support.
 
-**Backend:** 9 new Rust commands (`git_stage`, `git_unstage`, `git_stage_all`, `git_unstage_all`, `git_commit`, `git_discard`, `git_push`, `git_diff_staged`, `generate_commit_message`). Modified `get_git_changes` to parse staged vs unstaged status separately + return branch name.
+**Backend:** 8 Rust commands (`git_stage`, `git_unstage`, `git_stage_all`, `git_unstage_all`, `git_commit`, `git_discard`, `git_push`, `git_diff_staged`). Modified `get_git_changes` to parse staged vs unstaged status separately + return branch name.
 
-**Frontend:** `GitCommitPanel.svelte` with branch indicator, commit textarea, AI sparkle button (provider-agnostic — works with any configured API/local LLM), Commit and Commit & Push buttons. FileTree Changes tab overhauled with staged/unstaged groups and hover-reveal action buttons.
+**Frontend:** `GitCommitPanel.svelte` with branch indicator (read-only), commit textarea, Commit and Commit & Push buttons. FileTree Changes tab overhauled with staged/unstaged groups and hover-reveal action buttons.
 
-**Still missing (future):** Branch switching, pull, merge conflict resolution, inline blame, commit history, hunk staging.
+**Still missing (future):** Branch switching (clickable branch indicator → dropdown picker, needs `git branch --list`, dirty worktree warnings, file tree refresh), pull, merge conflict resolution, inline blame, commit history, hunk staging.
 
 ---
 
