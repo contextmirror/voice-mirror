@@ -1,6 +1,8 @@
 <script>
   import { navigationStore } from '../../lib/stores/navigation.svelte.js';
   import { voiceStore } from '../../lib/stores/voice.svelte.js';
+  import { configStore } from '../../lib/stores/config.svelte.js';
+  import { setConfig } from '../../lib/api.js';
   import ChatList from './ChatList.svelte';
   import ProjectStrip from './ProjectStrip.svelte';
   import SessionPanel from './SessionPanel.svelte';
@@ -29,6 +31,20 @@
     voiceState === 'listening' ? 'listening' :
     ''
   );
+
+  // ---- TTS speed/volume quick controls ----
+  let ttsSpeed = $derived(configStore.value?.voice?.ttsSpeed ?? 1.0);
+  let ttsVolume = $derived(configStore.value?.voice?.ttsVolume ?? 1.0);
+
+  function handleSpeedChange(e) {
+    const v = parseFloat(e.target.value);
+    setConfig({ voice: { ttsSpeed: v } }).catch(() => {});
+  }
+
+  function handleVolumeChange(e) {
+    const v = parseFloat(e.target.value);
+    setConfig({ voice: { ttsVolume: v } }).catch(() => {});
+  }
 </script>
 
 <aside class="sidebar" class:collapsed={collapsed}>
@@ -84,8 +100,43 @@
     {/if}
   </button>
 
-  <!-- Voice Status + Collapse Toggle -->
+  <!-- TTS Quick Controls + Voice Status + Collapse Toggle -->
   <div class="sidebar-footer">
+    {#if !collapsed}
+      <div class="tts-controls">
+        <div class="tts-slider-row">
+          <svg class="tts-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+          <input
+            type="range"
+            class="tts-slider"
+            min="0.5"
+            max="2.0"
+            step="0.1"
+            value={ttsSpeed}
+            oninput={handleSpeedChange}
+            aria-label="TTS Speed"
+            title="Speed: {ttsSpeed.toFixed(1)}x"
+          />
+          <span class="tts-value">{ttsSpeed.toFixed(1)}x</span>
+        </div>
+        <div class="tts-slider-row">
+          <svg class="tts-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+          <input
+            type="range"
+            class="tts-slider"
+            min="0.1"
+            max="2.0"
+            step="0.1"
+            value={ttsVolume}
+            oninput={handleVolumeChange}
+            aria-label="TTS Volume"
+            title="Volume: {Math.round(ttsVolume * 100)}%"
+          />
+          <span class="tts-value">{Math.round(ttsVolume * 100)}%</span>
+        </div>
+      </div>
+    {/if}
+
     <!-- Voice status -->
     <div class="voice-status">
       <div class="voice-dot {voiceIndicatorClass}"></div>
@@ -283,6 +334,70 @@
   .collapsed .sidebar-footer {
     padding: 6px 4px;
     border-top: none;
+  }
+
+  /* ========== TTS Quick Controls ========== */
+  .tts-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 0 2px;
+  }
+
+  .tts-slider-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .tts-icon {
+    width: 14px;
+    height: 14px;
+    color: var(--muted);
+    flex-shrink: 0;
+  }
+
+  .tts-slider {
+    flex: 1;
+    height: 3px;
+    background: var(--border-strong, var(--border));
+    border-radius: 2px;
+    appearance: none;
+    -webkit-appearance: none;
+    cursor: pointer;
+    border: none;
+    padding: 0;
+    outline: none;
+    min-width: 0;
+  }
+
+  .tts-slider::-webkit-slider-thumb {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 12px;
+    height: 12px;
+    background: var(--accent);
+    border-radius: 50%;
+    cursor: pointer;
+    border: none;
+  }
+
+  .tts-slider::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    background: var(--accent);
+    border-radius: 50%;
+    cursor: pointer;
+    border: none;
+  }
+
+  .tts-value {
+    font-size: 10px;
+    color: var(--muted);
+    font-family: var(--font-mono);
+    min-width: 32px;
+    text-align: right;
+    white-space: nowrap;
   }
 
   /* ========== Voice Status ========== */
