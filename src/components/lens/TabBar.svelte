@@ -2,7 +2,7 @@
   import { tabsStore } from '../../lib/stores/tabs.svelte.js';
   import TabContextMenu from './TabContextMenu.svelte';
 
-  let { onNewBrowserTab = () => {} } = $props();
+  let {} = $props();
 
   let tabMenu = $state({ visible: false, x: 0, y: 0, tab: null });
 
@@ -29,7 +29,6 @@
   }
 
   function getTabIcon(tab) {
-    if (tab.type === 'browser') return 'globe';
     if (tab.type === 'diff') return 'diff';
     const ext = tab.title?.split('.').pop()?.toLowerCase() || '';
     if (['js', 'jsx', 'mjs', 'cjs', 'ts', 'tsx'].includes(ext)) return 'code';
@@ -61,9 +60,7 @@
       title={tab.path || tab.title}
     >
       <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        {#if getTabIcon(tab) === 'globe'}
-          <circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
-        {:else if getTabIcon(tab) === 'diff'}
+        {#if getTabIcon(tab) === 'diff'}
           <circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/>
         {:else}
           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
@@ -91,17 +88,15 @@
       {#if tab.dirty}
         <span class="dirty-dot"></span>
       {/if}
-      {#if tab.type !== 'browser'}
-        <button
-          class="tab-action"
-          class:pinned={!tab.preview}
-          onclick={(e) => { e.stopPropagation(); tabsStore.closeTab(tab.id); }}
-          aria-label="Close tab"
-        >
-          <svg class="icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
-          <svg class="icon-pin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 2h6l-1 7h4l-8 8-1-7H5z"/></svg>
-        </button>
-      {/if}
+      <button
+        class="tab-action"
+        class:pinned={!tab.preview}
+        onclick={(e) => { e.stopPropagation(); tabsStore.closeTab(tab.id); }}
+        aria-label="Close tab"
+      >
+        <svg class="icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        <svg class="icon-pin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 2h6l-1 7h4l-8 8-1-7H5z"/></svg>
+      </button>
     </div>
   {/each}
   <button class="tab-add" onclick={handleAddFile} aria-label="Open file" title="Open file">
@@ -120,7 +115,6 @@
   tab={tabMenu.tab}
   visible={tabMenu.visible}
   onClose={() => { tabMenu.visible = false; }}
-  {onNewBrowserTab}
 />
 
 <style>

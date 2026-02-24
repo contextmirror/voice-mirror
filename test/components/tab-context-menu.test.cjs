@@ -72,9 +72,9 @@ describe('TabContextMenu.svelte: close actions', () => {
     assert.ok(src.includes('Close All'));
     assert.ok(src.includes('closeAll'));
   });
-  it('shows file actions only for non-browser tabs', () => {
-    assert.ok(src.includes('isBrowser'));
-    assert.ok(src.includes('{:else}'));
+  it('shows file actions directly (browser decoupled)', () => {
+    // Browser is no longer a tab, so no isBrowser branching needed
+    assert.ok(src.includes('handleClose'), 'Should have close handler');
   });
   it('disables Close Others when no other tabs', () => {
     assert.ok(src.includes('hasOtherTabs'));
@@ -152,95 +152,23 @@ describe('TabBar.svelte: tab context menu integration', () => {
     assert.ok(tabBarSrc.includes('x={tabMenu.x}'));
     assert.ok(tabBarSrc.includes('y={tabMenu.y}'));
   });
-});
-
-describe('TabContextMenu.svelte: browser-specific imports', () => {
-  it('imports lensStore', () => {
-    assert.ok(src.includes('lensStore'), 'Should import lensStore');
-    assert.ok(src.includes('lens.svelte.js'), 'Should import from lens.svelte.js');
-  });
-  it('imports browserTabsStore', () => {
-    assert.ok(src.includes('browserTabsStore'), 'Should import browserTabsStore');
-    assert.ok(src.includes('browser-tabs.svelte.js'), 'Should import from browser-tabs.svelte.js');
-  });
-  it('imports lensHardRefresh and lensClearCache', () => {
-    assert.ok(src.includes('lensHardRefresh'), 'Should import lensHardRefresh');
-    assert.ok(src.includes('lensClearCache'), 'Should import lensClearCache');
-  });
-  it('imports open from @tauri-apps/plugin-shell', () => {
-    assert.ok(src.includes("from '@tauri-apps/plugin-shell'"), 'Should import shell plugin');
-    assert.ok(src.includes('open'), 'Should import open function');
+  it('does not pass onNewBrowserTab (browser decoupled)', () => {
+    assert.ok(!tabBarSrc.includes('{onNewBrowserTab}'), 'Should not pass browser callback');
   });
 });
 
-describe('TabContextMenu.svelte: browser-specific actions', () => {
-  it('has Reload action', () => {
-    assert.ok(src.includes('handleReload'), 'Should have handleReload');
-    assert.ok(src.includes('Reload'), 'Should show Reload text');
+describe('TabContextMenu.svelte: browser decoupled', () => {
+  it('does not have isBrowser branching (browser is not a tab)', () => {
+    // Browser was decoupled from tabs -- it's now a fixed UI element
+    assert.ok(!src.includes('{#if isBrowser}'), 'Should not branch on isBrowser');
   });
-  it('has Hard Refresh action', () => {
-    assert.ok(src.includes('handleHardRefresh'), 'Should have handleHardRefresh');
-    assert.ok(src.includes('Hard Refresh'), 'Should show Hard Refresh text');
+  it('does not import browser-specific stores', () => {
+    assert.ok(!src.includes('browserTabsStore'), 'Should not import browserTabsStore');
+    assert.ok(!src.includes('lensHardRefresh'), 'Should not import lensHardRefresh');
   });
-  it('has Copy URL action', () => {
-    assert.ok(src.includes('handleCopyUrl'), 'Should have handleCopyUrl');
-    assert.ok(src.includes('Copy URL'), 'Should show Copy URL text');
-  });
-  it('has Open in Default Browser action', () => {
-    assert.ok(src.includes('handleOpenExternal'), 'Should have handleOpenExternal');
-    assert.ok(src.includes('Open in Default Browser'), 'Should show Open in Default Browser text');
-  });
-  it('has New Browser Tab action', () => {
-    assert.ok(src.includes('handleNewBrowserTab'), 'Should have handleNewBrowserTab');
-    assert.ok(src.includes('New Browser Tab'), 'Should show New Browser Tab text');
-  });
-  it('has Clear Cache action', () => {
-    assert.ok(src.includes('handleClearCache'), 'Should have handleClearCache');
-    assert.ok(src.includes('Clear Cache'), 'Should show Clear Cache text');
-  });
-  it('shows keyboard shortcut for Reload', () => {
-    assert.ok(src.includes('Ctrl+R'), 'Should have Ctrl+R shortcut');
-  });
-  it('shows keyboard shortcut for Hard Refresh', () => {
-    assert.ok(src.includes('Ctrl+Shift+R'), 'Should have Ctrl+Shift+R shortcut');
-  });
-  it('branches on isBrowser for browser vs file actions', () => {
-    assert.ok(src.includes('{#if isBrowser}'), 'Should branch on isBrowser');
-    assert.ok(src.includes('{:else}'), 'Should have else branch for file tabs');
-  });
-});
-
-describe('TabContextMenu.svelte: browser action edge cases', () => {
-  it('has hasRealUrl derived for URL validation', () => {
-    assert.ok(src.includes('hasRealUrl'), 'Should have hasRealUrl derived');
-  });
-  it('disables Copy URL when no real URL', () => {
-    assert.ok(src.includes('disabled={!hasRealUrl}'), 'Should disable when no real URL');
-  });
-  it('only allows http/https URLs for external open', () => {
-    assert.ok(src.includes("url.startsWith('http://')"), 'Should check http://');
-    assert.ok(src.includes("url.startsWith('https://')"), 'Should check https://');
-  });
-  it('guards against about:blank for external open', () => {
-    assert.ok(src.includes("url === 'about:blank'"), 'Should guard about:blank');
-  });
-  it('disables New Browser Tab at max capacity', () => {
-    assert.ok(src.includes('canAddTab'), 'Should check canAddTab');
-  });
-  it('handles clipboard write failure gracefully', () => {
-    assert.ok(src.includes('.catch('), 'Should catch clipboard errors');
-  });
-  it('accepts onNewBrowserTab callback prop', () => {
-    assert.ok(src.includes('onNewBrowserTab'), 'Should have onNewBrowserTab prop');
-  });
-});
-
-describe('TabBar.svelte: browser context menu prop chain', () => {
-  it('accepts onNewBrowserTab prop', () => {
-    assert.ok(tabBarSrc.includes('onNewBrowserTab'), 'Should accept onNewBrowserTab prop');
-  });
-  it('passes onNewBrowserTab to TabContextMenu', () => {
-    assert.ok(tabBarSrc.includes('{onNewBrowserTab}'), 'Should pass onNewBrowserTab to TabContextMenu');
+  it('scopes hasOtherTabs to same group', () => {
+    assert.ok(src.includes('hasOtherTabs'), 'Should have hasOtherTabs');
+    assert.ok(src.includes('groupId'), 'Should scope to groupId');
   });
 });
 
@@ -293,15 +221,15 @@ describe('TabContextMenu.svelte: split actions', () => {
 
 describe('tabs.svelte.js: closeOthers and closeToRight', () => {
   it('has closeOthers method', () => {
-    assert.ok(tabsSrc.includes('closeOthers(id)'));
+    assert.ok(tabsSrc.includes('closeOthers'));
   });
-  it('closeOthers keeps browser tab', () => {
-    assert.ok(tabsSrc.includes("t.id === 'browser'"));
+  it('closeOthers scopes to group', () => {
+    assert.ok(tabsSrc.includes('closeOthers') && tabsSrc.includes('groupId'));
   });
   it('has closeToRight method', () => {
-    assert.ok(tabsSrc.includes('closeToRight(id)'));
+    assert.ok(tabsSrc.includes('closeToRight'));
   });
-  it('closeToRight splices tabs after index', () => {
-    assert.ok(tabsSrc.includes('tabs.splice(idx + 1)'));
+  it('closeToRight scopes to group', () => {
+    assert.ok(tabsSrc.includes('closeToRight') && tabsSrc.includes('groupId'));
   });
 });

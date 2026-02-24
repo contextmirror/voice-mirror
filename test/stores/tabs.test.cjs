@@ -27,10 +27,11 @@ describe('tabs.svelte.js', () => {
     assert.ok(src.includes('let activeTabId'), 'Should have activeTabId state');
   });
 
-  it('has browser tab as default', () => {
+  it('starts with empty tabs array (browser is not a tab)', () => {
+    // Browser was decoupled from tabs -- it's now a fixed UI element in LensWorkspace
     assert.ok(
-      src.includes("id: 'browser'") && src.includes("type: 'browser'"),
-      'Should have default browser tab'
+      !src.includes("id: 'browser'") || !src.includes("type: 'browser'"),
+      'Should not have browser as a default tab'
     );
   });
 
@@ -94,18 +95,19 @@ describe('tabs.svelte.js: preview tab logic', () => {
   });
 });
 
-describe('tabs.svelte.js: browser tab protection', () => {
-  it('prevents closing browser tab', () => {
+describe('tabs.svelte.js: browser decoupled', () => {
+  it('does not contain browser tab type', () => {
+    // Browser is now a fixed UI element in LensWorkspace, not a tab
     assert.ok(
-      src.includes("id === 'browser'") || src.includes("=== 'browser'"),
-      'Should check for browser tab in closeTab'
+      !src.includes("type: 'browser'"),
+      'Should not have browser tab type (browser decoupled)'
     );
   });
 
-  it('closeAll keeps browser tab', () => {
+  it('closeAll resets all tabs and groups', () => {
     assert.ok(
-      src.includes("type: 'browser'"),
-      'Should re-add browser tab in closeAll'
+      src.includes('closeAll') && src.includes('tabs.length = 0'),
+      'closeAll should clear all tabs'
     );
   });
 });

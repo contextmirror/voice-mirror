@@ -8,7 +8,7 @@
   let tabMenu = $state({ visible: false, x: 0, y: 0, tab: null });
   let dragOverIndex = $state(-1);
 
-  let groupTabs = $derived(tabsStore.getTabsForGroup ? tabsStore.getTabsForGroup(groupId) : tabsStore.tabs.filter(t => (t.groupId || 1) === groupId && t.type !== 'browser'));
+  let groupTabs = $derived(tabsStore.getTabsForGroup ? tabsStore.getTabsForGroup(groupId) : tabsStore.tabs.filter(t => (t.groupId || 1) === groupId));
   let activeTabId = $derived(editorGroupsStore.groups.get(groupId)?.activeTabId);
   let isFocused = $derived(editorGroupsStore.focusedGroupId === groupId);
 

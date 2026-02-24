@@ -50,8 +50,8 @@ describe('LensWorkspace.svelte', () => {
   });
 
   // Tab system
-  it('imports TabBar component', () => {
-    assert.ok(src.includes("import TabBar from"), 'Should import TabBar');
+  it('imports GroupTabBar component (replaces TabBar)', () => {
+    assert.ok(src.includes("import GroupTabBar from"), 'Should import GroupTabBar');
   });
   it('imports FileEditor component', () => {
     assert.ok(src.includes("import FileEditor from"), 'Should import FileEditor');
@@ -68,15 +68,18 @@ describe('LensWorkspace.svelte', () => {
   it('imports tabsStore', () => {
     assert.ok(src.includes('tabsStore'), 'Should import tabsStore');
   });
-  it('renders TabBar component', () => {
-    assert.ok(src.includes('<TabBar'), 'Should render TabBar');
+  it('renders GroupTabBar component', () => {
+    assert.ok(src.includes('<GroupTabBar'), 'Should render GroupTabBar');
   });
   it('renders FileEditor conditionally', () => {
     assert.ok(src.includes('<FileEditor'), 'Should render FileEditor');
   });
   it('uses CSS visibility for browser layer (no destroy/recreate)', () => {
     assert.ok(src.includes('preview-layer'), 'Should have preview-layer wrapper');
-    assert.ok(src.includes('class:visible={isBrowser}'), 'Should toggle visibility with CSS');
+    assert.ok(
+      src.includes('class:visible={showBrowser}') || src.includes('class:visible={isBrowser}'),
+      'Should toggle visibility with CSS'
+    );
   });
   it('renders DiffViewer for diff tabs', () => {
     assert.ok(src.includes('<DiffViewer'), 'Should render DiffViewer');

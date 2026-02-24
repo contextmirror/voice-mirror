@@ -115,8 +115,9 @@ describe('TabBar.svelte: icon mapping', () => {
     assert.ok(src.includes('getTabIcon'), 'Should have icon mapping function');
   });
 
-  it('returns globe for browser tab', () => {
-    assert.ok(src.includes("'globe'"), 'Should return globe for browser');
+  it('does not have globe icon (browser decoupled)', () => {
+    // Browser is no longer a tab type — it's a fixed UI element
+    assert.ok(!src.includes("'globe'"), 'Should not have globe icon for browser');
   });
 
   it('returns diff icon for diff tabs', () => {

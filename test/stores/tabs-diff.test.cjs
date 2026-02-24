@@ -19,7 +19,7 @@ describe('tabs.svelte.js: openDiff method', () => {
   });
 
   it('accepts a change parameter', () => {
-    assert.ok(src.includes('openDiff(change)'), 'Should accept change parameter');
+    assert.ok(src.includes('openDiff(change'), 'Should accept change parameter');
   });
 
   it('creates tabs with type diff', () => {
