@@ -214,14 +214,24 @@
 
     function _drawPixelate(stroke) {
         if (stroke.points.length < 2) return;
-        if (!stroke.imageData) return;
-
         var p0 = stroke.points[0];
         var p1 = stroke.points[1];
         var x = Math.min(p0.x, p1.x);
         var y = Math.min(p0.y, p1.y);
+        var w = Math.abs(p1.x - p0.x);
+        var h = Math.abs(p1.y - p0.y);
 
-        ctx.putImageData(stroke.imageData, x, y);
+        if (stroke.imageData) {
+            // Finalized: draw the mosaic
+            ctx.putImageData(stroke.imageData, x, y);
+        } else {
+            // Preview during drag: show dashed selection rectangle
+            ctx.setLineDash([4, 4]);
+            ctx.strokeStyle = stroke.color;
+            ctx.lineWidth = 1;
+            ctx.strokeRect(x, y, w, h);
+            ctx.setLineDash([]);
+        }
     }
 
     // =========================================================================
@@ -251,6 +261,7 @@
         var data = srcData.data;
         var out = ctx.createImageData(w, h);
         var outData = out.data;
+        var hasContent = false;
 
         // Process each blockSize x blockSize block
         for (var by = 0; by < h; by += blockSize) {
@@ -276,13 +287,10 @@
                 var bAvg = Math.round(bSum / count);
                 var aAvg = Math.round(aSum / count);
 
-                // Transparent regions → neutral grey so the area is visibly obscured
-                if (aAvg < 30) {
-                    rAvg = 128;
-                    gAvg = 128;
-                    bAvg = 128;
-                    aAvg = 255;
-                }
+                // Skip fully transparent blocks (canvas overlay has no page content)
+                if (aAvg < 30) continue;
+
+                hasContent = true;
 
                 // Fill entire block with the averaged color
                 for (var py2 = 0; py2 < bh; py2++) {
@@ -297,6 +305,8 @@
             }
         }
 
+        // Nothing to pixelate — all transparent (no annotations in this region)
+        if (!hasContent) return null;
         return out;
     }
 
@@ -462,6 +472,12 @@
             var rw = Math.abs(p1.x - p0.x);
             var rh = Math.abs(p1.y - p0.y);
             currentStroke.imageData = _computePixelate(rx, ry, rw, rh);
+            // No content to pixelate (canvas is transparent here) — discard
+            if (!currentStroke.imageData) {
+                currentStroke = null;
+                _redrawAll();
+                return;
+            }
         }
 
         strokes.push(currentStroke);

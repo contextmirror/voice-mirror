@@ -33,9 +33,8 @@
     await designCommand('set_color', { color });
   }
 
-  async function setSize(e) {
-    activeSize = Number(e.target.value);
-    await designCommand('set_size', { size: activeSize });
+  function sendSize() {
+    designCommand('set_size', { size: activeSize });
   }
 
   async function undo() { await designCommand('undo', {}); }
@@ -102,8 +101,8 @@
       class="size-slider"
       min="1"
       max="20"
-      value={activeSize}
-      oninput={setSize}
+      bind:value={activeSize}
+      oninput={sendSize}
       title="Brush size: {activeSize}"
     />
   </div>
