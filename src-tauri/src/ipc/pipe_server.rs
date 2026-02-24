@@ -316,7 +316,9 @@ async fn handle_capture_action(
             tokio::task::spawn_blocking(move || {
                 #[cfg(target_os = "windows")]
                 {
-                    let mut windows = crate::commands::screenshot::list_visible_windows()?;
+                    // Use metadata-only variant (no thumbnails/icons) to keep
+                    // MCP response under Claude Code's 30KB limit.
+                    let mut windows = crate::commands::screenshot::list_visible_windows_metadata()?;
                     if let Some(ref f) = filter {
                         let f_lower = f.to_lowercase();
                         windows.retain(|w| {
@@ -347,7 +349,7 @@ async fn handle_capture_action(
                     let target_hwnd = if let Some(h) = hwnd {
                         h
                     } else if let Some(ref t) = title {
-                        let windows = crate::commands::screenshot::list_visible_windows()?;
+                        let windows = crate::commands::screenshot::list_visible_windows_metadata()?;
                         let t_lower = t.to_lowercase();
                         windows
                             .iter()

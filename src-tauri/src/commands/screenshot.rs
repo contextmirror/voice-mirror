@@ -20,6 +20,17 @@ pub struct WindowInfo {
     pub icon: String,
 }
 
+/// Lightweight window info without thumbnails/icons (for MCP tool responses).
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct WindowInfoLight {
+    pub hwnd: i64,
+    pub title: String,
+    #[serde(rename = "processName")]
+    pub process_name: String,
+    pub width: i32,
+    pub height: i32,
+}
+
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct MonitorInfo {
     pub index: u32,
@@ -633,6 +644,96 @@ mod win32 {
         results
     }
 
+    /// Enumerate visible windows returning only metadata (no thumbnails/icons).
+    /// Much faster than `enumerate_windows` — skips all bitmap capture.
+    pub fn enumerate_windows_metadata(our_pid: u32) -> Vec<WindowInfoLight> {
+        let mut results: Vec<WindowInfoLight> = Vec::new();
+
+        struct EnumCtx {
+            our_pid: u32,
+            results: *mut Vec<WindowInfoLight>,
+        }
+
+        unsafe {
+            let results_ptr = &mut results as *mut Vec<WindowInfoLight>;
+
+            let mut ctx = EnumCtx {
+                our_pid,
+                results: results_ptr,
+            };
+
+            unsafe extern "system" fn enum_callback(
+                hwnd: HWND,
+                lparam: LPARAM,
+            ) -> windows_core::BOOL {
+                let ctx = &mut *(lparam.0 as *mut EnumCtx);
+
+                if !IsWindowVisible(hwnd).as_bool() {
+                    return windows_core::BOOL(1);
+                }
+
+                if IsIconic(hwnd).as_bool() {
+                    return windows_core::BOOL(1);
+                }
+
+                let mut title_buf = [0u16; 256];
+                let title_len = GetWindowTextW(hwnd, &mut title_buf);
+                if title_len == 0 {
+                    return windows_core::BOOL(1);
+                }
+                let title = String::from_utf16_lossy(&title_buf[..title_len as usize]);
+                if title.is_empty() || title == "Voice Mirror" {
+                    return windows_core::BOOL(1);
+                }
+
+                let mut cloaked: i32 = 0;
+                let _ = DwmGetWindowAttribute(
+                    hwnd,
+                    DWMWA_CLOAKED,
+                    &mut cloaked as *mut _ as *mut c_void,
+                    std::mem::size_of::<i32>() as u32,
+                );
+                if cloaked != 0 {
+                    return windows_core::BOOL(1);
+                }
+
+                let mut rect = RECT::default();
+                let _ = GetWindowRect(hwnd, &mut rect);
+                let w = rect.right - rect.left;
+                let h = rect.bottom - rect.top;
+                if w < 100 || h < 50 {
+                    return windows_core::BOOL(1);
+                }
+
+                let mut pid: u32 = 0;
+                GetWindowThreadProcessId(hwnd, Some(&mut pid));
+                if pid == ctx.our_pid {
+                    return windows_core::BOOL(1);
+                }
+
+                let process_name = get_process_name(pid).unwrap_or_default();
+
+                let results = &mut *ctx.results;
+                results.push(WindowInfoLight {
+                    hwnd: hwnd.0 as i64,
+                    title,
+                    process_name,
+                    width: w,
+                    height: h,
+                });
+
+                windows_core::BOOL(1)
+            }
+
+            let _ = EnumWindows(
+                Some(enum_callback),
+                LPARAM(&mut ctx as *mut EnumCtx as isize),
+            );
+        }
+
+        results
+    }
+
     /// Enumerate all monitors.
     pub fn enumerate_monitors() -> Vec<MonitorInfo> {
         let mut results: Vec<MonitorInfo> = Vec::new();
@@ -766,6 +867,13 @@ pub fn capture_window_as_base64(hwnd: i64) -> Result<(String, i32, i32), String>
 pub fn list_visible_windows() -> Result<Vec<WindowInfo>, String> {
     let our_pid = std::process::id();
     Ok(win32::enumerate_windows(our_pid))
+}
+
+/// List visible windows metadata only (no thumbnails/icons). Used by MCP tools.
+#[cfg(target_os = "windows")]
+pub fn list_visible_windows_metadata() -> Result<Vec<WindowInfoLight>, String> {
+    let our_pid = std::process::id();
+    Ok(win32::enumerate_windows_metadata(our_pid))
 }
 
 // ── Platform-native screen capture (cross-platform) ────────────────────
