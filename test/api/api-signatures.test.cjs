@@ -130,6 +130,7 @@ describe('api.js -- critical Tauri command names', () => {
     'delete_entry',
     'reveal_in_explorer',
     'search_files',
+    'search_content',
   ];
 
   for (const cmd of criticalCommands) {

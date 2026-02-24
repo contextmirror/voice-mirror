@@ -109,6 +109,7 @@ describe('shortcuts: IN_APP_SHORTCUTS entries', () => {
     { id: 'switch-terminal', keys: 'Ctrl+T', label: 'Switch to terminal' },
     { id: 'close-panel', keys: 'Escape', label: 'Close current panel/modal' },
     { id: 'open-file-search', keys: 'F1', label: 'Search files and commands' },
+    { id: 'open-text-search', keys: 'Ctrl+Shift+F', label: 'Search in files' },
   ];
 
   for (const { id, keys, label } of expectedInApp) {
@@ -241,6 +242,27 @@ describe('shortcuts: setupInAppShortcuts', () => {
     assert.ok(
       src.includes("actionHandlers['open-file-search']"),
       'Should dispatch to open-file-search action handler'
+    );
+  });
+
+  it('handles Ctrl+Shift+F for open-text-search', () => {
+    assert.ok(
+      src.includes("event.shiftKey") && src.includes("event.key === 'F'"),
+      'Should handle Ctrl+Shift+F for open-text-search'
+    );
+    assert.ok(
+      src.includes("actionHandlers['open-text-search']"),
+      'Should dispatch to open-text-search action handler'
+    );
+  });
+
+  it('Ctrl+Shift+F works even inside INPUT/TEXTAREA', () => {
+    // The Ctrl+Shift+F check is placed BEFORE the INPUT/TEXTAREA guard
+    const shiftFIndex = src.indexOf("event.key === 'F'");
+    const inputGuardIndex = src.indexOf("tag === 'INPUT'");
+    assert.ok(
+      shiftFIndex < inputGuardIndex,
+      'Ctrl+Shift+F handler should be before INPUT/TEXTAREA guard'
     );
   });
 

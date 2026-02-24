@@ -90,5 +90,74 @@ describe('LensToolbar.svelte', () => {
   });
 });
 
+// ============ FileTree: Search tab ============
+
+describe('FileTree.svelte — Search tab integration', () => {
+  const ftSrc = readComponent('FileTree.svelte');
+
+  it('imports SearchPanel', () => {
+    assert.ok(
+      ftSrc.includes("import SearchPanel from './SearchPanel.svelte'"),
+      'FileTree should import SearchPanel'
+    );
+  });
+
+  it('imports searchStore', () => {
+    assert.ok(
+      ftSrc.includes("import { searchStore }"),
+      'FileTree should import searchStore'
+    );
+  });
+
+  it('has search tab button text', () => {
+    assert.ok(
+      ftSrc.includes('>Search'),
+      'FileTree should have Search tab button'
+    );
+  });
+
+  it('search tab shows totalMatches count', () => {
+    assert.ok(
+      ftSrc.includes('searchStore.totalMatches'),
+      'Search tab should display totalMatches count'
+    );
+  });
+
+  it('has lens-focus-search event listener', () => {
+    assert.ok(
+      ftSrc.includes('lens-focus-search'),
+      'FileTree should listen for lens-focus-search event'
+    );
+  });
+
+  it('switches to search tab on lens-focus-search', () => {
+    assert.ok(
+      ftSrc.includes("activeTab = 'search'"),
+      'lens-focus-search handler should set activeTab to search'
+    );
+  });
+
+  it('renders SearchPanel when activeTab is search', () => {
+    assert.ok(
+      ftSrc.includes("<SearchPanel"),
+      'FileTree should render SearchPanel component'
+    );
+  });
+
+  it('conditionally renders search tab content', () => {
+    assert.ok(
+      ftSrc.includes("{#if activeTab === 'search'}"),
+      'FileTree should conditionally render search tab'
+    );
+  });
+
+  it('SearchPanel onResultClick opens file and dispatches goto-position', () => {
+    assert.ok(
+      ftSrc.includes('lens-goto-position'),
+      'FileTree should dispatch lens-goto-position on search result click'
+    );
+  });
+});
+
 // ============ LensPreview ============
 // Detailed LensPreview tests are in lens-preview.test.cjs
