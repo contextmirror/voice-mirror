@@ -244,6 +244,53 @@ describe('TabBar.svelte: browser context menu prop chain', () => {
   });
 });
 
+// ============ Split actions ============
+
+describe('TabContextMenu.svelte: split actions', () => {
+  it('has "Split Right" menu item', () => {
+    assert.ok(src.includes('Split Right'), 'Should have Split Right menu item');
+  });
+
+  it('has "Split Down" menu item', () => {
+    assert.ok(src.includes('Split Down'), 'Should have Split Down menu item');
+  });
+
+  it('has "Open to the Side" menu item', () => {
+    assert.ok(
+      src.includes('Open to the Side') || src.includes('Open to Side'),
+      'Should have Open to the Side menu item'
+    );
+  });
+
+  it('imports editorGroupsStore', () => {
+    assert.ok(
+      src.includes('editorGroupsStore') || src.includes('editor-groups.svelte.js'),
+      'Should import editorGroupsStore'
+    );
+  });
+
+  it('Split Right calls splitGroup with horizontal', () => {
+    assert.ok(
+      src.includes('splitGroup') && src.includes("'horizontal'"),
+      'Split Right should call splitGroup with horizontal direction'
+    );
+  });
+
+  it('Split Down calls splitGroup with vertical', () => {
+    assert.ok(
+      src.includes('splitGroup') && src.includes("'vertical'"),
+      'Split Down should call splitGroup with vertical direction'
+    );
+  });
+
+  it('shows Ctrl+\\ shortcut hint for Split Right', () => {
+    assert.ok(
+      src.includes('Ctrl+\\') || src.includes('Ctrl+\\\\'),
+      'Should show keyboard shortcut hint for Split Right'
+    );
+  });
+});
+
 describe('tabs.svelte.js: closeOthers and closeToRight', () => {
   it('has closeOthers method', () => {
     assert.ok(tabsSrc.includes('closeOthers(id)'));

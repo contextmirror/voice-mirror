@@ -343,6 +343,60 @@ describe('shortcuts: $state reactivity', () => {
   });
 });
 
+// ============ Split editor keybindings ============
+
+describe('shortcuts: split editor keybindings', () => {
+  it('has split-editor in IN_APP_SHORTCUTS', () => {
+    assert.ok(
+      src.includes("'split-editor'") || src.includes('"split-editor"'),
+      'IN_APP_SHORTCUTS should contain split-editor'
+    );
+  });
+
+  it('has focus-group-1 in IN_APP_SHORTCUTS', () => {
+    assert.ok(
+      src.includes("'focus-group-1'") || src.includes('"focus-group-1"'),
+      'IN_APP_SHORTCUTS should contain focus-group-1'
+    );
+  });
+
+  it('has focus-group-2 in IN_APP_SHORTCUTS', () => {
+    assert.ok(
+      src.includes("'focus-group-2'") || src.includes('"focus-group-2"'),
+      'IN_APP_SHORTCUTS should contain focus-group-2'
+    );
+  });
+
+  it('handles Ctrl+\\ for split-editor', () => {
+    assert.ok(
+      src.includes("event.key === '\\\\'") || src.includes("'Ctrl+\\\\'") || src.includes("Ctrl+\\\\"),
+      'Should handle Ctrl+\\ for split-editor'
+    );
+  });
+
+  it('handles Ctrl+1 for focus-group-1', () => {
+    assert.ok(
+      src.includes("event.key === '1'") || src.includes("'Ctrl+1'") || src.includes("Ctrl+1"),
+      'Should handle Ctrl+1 for focus-group-1'
+    );
+  });
+
+  it('handles Ctrl+2 for focus-group-2', () => {
+    assert.ok(
+      src.includes("event.key === '2'") || src.includes("'Ctrl+2'") || src.includes("Ctrl+2"),
+      'Should handle Ctrl+2 for focus-group-2'
+    );
+  });
+
+  it('Ctrl+1/2 skips when inside .cm-editor', () => {
+    // The .cm-editor guard should also cover the group focus shortcuts
+    assert.ok(
+      src.includes('.cm-editor'),
+      'Should check for .cm-editor to skip shortcuts inside CodeMirror'
+    );
+  });
+});
+
 // ============ Tauri event listeners ============
 
 describe('shortcuts: Tauri event listeners', () => {

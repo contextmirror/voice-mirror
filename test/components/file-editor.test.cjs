@@ -367,6 +367,19 @@ describe('FileEditor.svelte: gutter context menu fallback (BUG-004)', () => {
   });
 });
 
+describe('FileEditor.svelte: group support', () => {
+  it('accepts groupId prop', () => {
+    assert.ok(src.includes('groupId'), 'Should accept groupId prop');
+  });
+
+  it('defaults groupId to 1', () => {
+    assert.ok(
+      src.includes('groupId') && (src.includes('= 1') || src.includes('?? 1')),
+      'Should default groupId to 1'
+    );
+  });
+});
+
 describe('FileEditor.svelte: lifecycle', () => {
   it('uses $effect to react to tab changes', () => {
     assert.ok(src.includes('$effect'), 'Should use $effect for reactive loading');

@@ -135,6 +135,99 @@ describe('tabs.svelte.js: tab switching on close', () => {
   });
 });
 
+// ============ groupId support ============
+
+describe('tabs.svelte.js: groupId support', () => {
+  it('tab objects include groupId field', () => {
+    assert.ok(src.includes('groupId'), 'Tab objects should have groupId field');
+  });
+
+  it('openFile sets groupId on new tabs', () => {
+    // openFile should assign a groupId when creating a tab
+    const openFileStart = src.indexOf('openFile(');
+    const chunk = src.slice(openFileStart, openFileStart + 1500);
+    assert.ok(chunk.includes('groupId'), 'openFile should set groupId on new tabs');
+  });
+
+  it('has getTabsForGroup method', () => {
+    assert.ok(src.includes('getTabsForGroup(') || src.includes('getTabsForGroup ('), 'Should have getTabsForGroup method');
+  });
+
+  it('has getActiveTabForGroup method', () => {
+    assert.ok(
+      src.includes('getActiveTabForGroup(') || src.includes('getActiveTabForGroup ('),
+      'Should have getActiveTabForGroup method'
+    );
+  });
+});
+
+// ============ split operations ============
+
+describe('tabs.svelte.js: split operations', () => {
+  it('has openFileToSide method', () => {
+    assert.ok(src.includes('openFileToSide(') || src.includes('openFileToSide ('), 'Should have openFileToSide method');
+  });
+
+  it('has moveTab method', () => {
+    assert.ok(src.includes('moveTab(') || src.includes('moveTab ('), 'Should have moveTab method');
+  });
+
+  it('has reorderTab method', () => {
+    assert.ok(src.includes('reorderTab(') || src.includes('reorderTab ('), 'Should have reorderTab method');
+  });
+});
+
+// ============ group-scoped operations ============
+
+describe('tabs.svelte.js: group-scoped operations', () => {
+  it('closeTab checks if group becomes empty', () => {
+    assert.ok(
+      src.includes('closeTab') && (src.includes('groupId') || src.includes('closeGroup')),
+      'closeTab should check if the group becomes empty'
+    );
+  });
+
+  it('closeOthers scopes to groupId', () => {
+    assert.ok(
+      src.includes('closeOthers') && src.includes('groupId'),
+      'closeOthers should scope to groupId'
+    );
+  });
+
+  it('closeToRight scopes to groupId', () => {
+    assert.ok(
+      src.includes('closeToRight') && src.includes('groupId'),
+      'closeToRight should scope to groupId'
+    );
+  });
+
+  it('openFile respects targetGroupId parameter', () => {
+    assert.ok(
+      src.includes('targetGroupId') || src.includes('groupId'),
+      'openFile should accept a target group'
+    );
+  });
+
+  it('preview replacement scoped to group', () => {
+    // Preview tab replacement should only replace preview tabs in the same group
+    assert.ok(
+      src.includes('preview') && src.includes('groupId'),
+      'Preview replacement should be scoped to group'
+    );
+  });
+});
+
+// ============ browser tab removed ============
+
+describe('tabs.svelte.js: browser tab removal', () => {
+  it('imports editorGroupsStore', () => {
+    assert.ok(
+      src.includes('editorGroupsStore') || src.includes('editor-groups.svelte.js'),
+      'Should import editorGroupsStore for group management'
+    );
+  });
+});
+
 describe('tabs.svelte.js: diff tab support', () => {
   it('has openDiff method', () => {
     assert.ok(src.includes('openDiff('), 'Should have openDiff method');

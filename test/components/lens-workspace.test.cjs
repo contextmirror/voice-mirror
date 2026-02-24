@@ -182,6 +182,131 @@ describe('LensWorkspace.svelte', () => {
     assert.ok(src.includes('.catch('), 'Should catch file watcher errors');
   });
 
+  // Split editor
+  it('imports editorGroupsStore', () => {
+    assert.ok(
+      src.includes('editorGroupsStore') || src.includes('editor-groups.svelte.js'),
+      'Should import editorGroupsStore'
+    );
+  });
+
+  it('imports GroupTabBar', () => {
+    assert.ok(
+      src.includes('GroupTabBar') || src.includes("import GroupTabBar from"),
+      'Should import GroupTabBar component'
+    );
+  });
+
+  it('has renderNode snippet', () => {
+    assert.ok(
+      src.includes('renderNode') || src.includes('{#snippet renderNode'),
+      'Should have renderNode snippet for recursive grid rendering'
+    );
+  });
+
+  it('renderNode handles leaf nodes', () => {
+    assert.ok(
+      src.includes("type === 'leaf'") || src.includes("node.type === 'leaf'"),
+      'renderNode should handle leaf nodes'
+    );
+  });
+
+  it('renderNode handles branch nodes with SplitPanel', () => {
+    // Branch nodes are rendered as nested SplitPanel instances
+    assert.ok(
+      src.includes("type === 'branch'") || src.includes("node.type"),
+      'renderNode should handle branch nodes'
+    );
+    assert.ok(src.includes('SplitPanel'), 'Branch nodes should use SplitPanel');
+  });
+
+  it('has editorPane snippet', () => {
+    assert.ok(
+      src.includes('editorPane') || src.includes('{#snippet editorPane'),
+      'Should have editorPane snippet'
+    );
+  });
+
+  it('editorPane accepts groupId parameter', () => {
+    assert.ok(
+      src.includes('editorPane(') && src.includes('groupId'),
+      'editorPane should accept groupId parameter'
+    );
+  });
+
+  it('has showBrowser local state', () => {
+    assert.ok(src.includes('showBrowser'), 'Should have showBrowser local state');
+  });
+
+  it('has global-strip with browser button', () => {
+    assert.ok(
+      src.includes('global-strip') || src.includes('browser-btn'),
+      'Should have global strip with browser button'
+    );
+  });
+
+  it('has editor-grid container', () => {
+    assert.ok(src.includes('editor-grid'), 'Should have editor-grid container');
+  });
+
+  it('editor-grid hidden when browser showing', () => {
+    assert.ok(
+      src.includes('class:hidden={showBrowser}') || src.includes('showBrowser'),
+      'editor-grid should be hidden when browser is showing'
+    );
+  });
+
+  // Action handlers for split
+  it('wires split-editor action handler', () => {
+    assert.ok(
+      src.includes('split-editor') || src.includes('splitGroup'),
+      'Should wire split-editor action handler'
+    );
+  });
+
+  it('wires focus-group-1 action handler', () => {
+    assert.ok(
+      src.includes('focus-group-1') || src.includes('setFocusedGroup'),
+      'Should wire focus-group-1 action handler'
+    );
+  });
+
+  it('wires focus-group-2 action handler', () => {
+    assert.ok(
+      src.includes('focus-group-2') || src.includes('setFocusedGroup'),
+      'Should wire focus-group-2 action handler'
+    );
+  });
+
+  it('uses setActionHandler from shortcuts store', () => {
+    assert.ok(
+      src.includes('setActionHandler'),
+      'Should use setActionHandler from shortcuts store'
+    );
+  });
+
+  // Browser decoupling
+  it('showBrowser controls browser visibility (not tab type)', () => {
+    assert.ok(
+      src.includes('showBrowser') && !src.includes("type === 'browser'"),
+      'showBrowser state should control browser, not tab type'
+    );
+  });
+
+  it('lensSetVisible uses showBrowser state', () => {
+    assert.ok(
+      src.includes('lensSetVisible') && src.includes('showBrowser'),
+      'lensSetVisible should use showBrowser state'
+    );
+  });
+
+  it('file click sets showBrowser to false', () => {
+    assert.ok(
+      src.includes('showBrowser = false') || src.includes('showBrowser=false'),
+      'Clicking a file should hide the browser'
+    );
+  });
+
   // CSS
   it('has workspace-content with flex and margins', () => {
     assert.ok(src.includes('.workspace-content'));
