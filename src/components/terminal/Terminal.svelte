@@ -14,6 +14,7 @@
   import { listen } from '@tauri-apps/api/event';
   import { aiRawInput, aiPtyResize } from '../../lib/api.js';
   import { currentThemeName } from '../../lib/stores/theme.svelte.js';
+  import { aiStatusStore } from '../../lib/stores/ai-status.svelte.js';
 
   let { onRegisterActions = undefined } = $props();
 
@@ -201,6 +202,13 @@
           if (term.freeze) term.freeze();
         }
         isSwitching = false;
+        // Update cursor style for the new provider — Claude Code renders
+        // its own cursor, others (OpenCode) rely on the terminal cursor.
+        if (term && term.options) {
+          const isClaude = aiStatusStore.providerType === 'claude';
+          term.options.cursorStyle = isClaude ? 'none' : 'bar';
+          term.options.cursorBlink = !isClaude;
+        }
         if (switchRevealTimer) clearTimeout(switchRevealTimer);
         switchRevealTimer = setTimeout(() => {
           switchRevealTimer = null;
@@ -281,8 +289,11 @@
 
       // Create ghostty-web Terminal instance
       const ghosttyTerm = new Terminal({
-        cursorBlink: false,
-        cursorStyle: 'none',
+        // Claude Code renders its own cursor — hide the terminal cursor to
+        // avoid a duplicate green bar. Other TUIs (OpenCode) rely on the
+        // terminal cursor for their input field.
+        cursorBlink: aiStatusStore.providerType !== 'claude',
+        cursorStyle: aiStatusStore.providerType === 'claude' ? 'none' : 'bar',
         fontSize: 13,
         fontFamily: getCssVar('--font-mono') || "'Cascadia Code', 'Fira Code', monospace",
         theme: buildTermTheme(),
