@@ -638,7 +638,7 @@ fn build_all_groups() -> HashMap<String, ToolGroupDef> {
         ToolGroupDef {
             name: "capture".into(),
             description: "Window capture and screenshots (2 tools)".into(),
-            always_loaded: false,
+            always_loaded: true,
             keywords: vec![
                 "screenshot".into(), "capture".into(), "window".into(),
                 "screen".into(), "game".into(), "application".into(),
