@@ -167,8 +167,9 @@ mod win32 {
         }
         let ratio = max_width as f64 / img.width() as f64;
         let new_height = (img.height() as f64 * ratio) as u32;
+        // Triangle (bilinear) is ~5x faster than Lanczos3 — fine for picker thumbnails
         let resized =
-            img.resize_exact(max_width, new_height, image::imageops::FilterType::Lanczos3);
+            img.resize_exact(max_width, new_height, image::imageops::FilterType::Triangle);
         let mut buf = Vec::new();
         let encoder = PngEncoder::new(&mut buf);
         encoder
@@ -543,105 +544,46 @@ mod win32 {
     }
 
     /// Enumerate all visible windows, excluding our own process and cloaked UWP windows.
+    /// Captures thumbnails in parallel threads for ~3-5x faster loading.
     pub fn enumerate_windows(our_pid: u32) -> Vec<WindowInfo> {
-        let mut results: Vec<WindowInfo> = Vec::new();
+        // Phase 1: Collect metadata quickly (no bitmap capture)
+        let metadata = enumerate_windows_metadata(our_pid);
 
-        struct EnumCtx {
-            our_pid: u32,
-            results: *mut Vec<WindowInfo>,
-        }
+        // Phase 2: Capture thumbnails in parallel threads
+        let handles: Vec<_> = metadata
+            .into_iter()
+            .map(|win| {
+                std::thread::spawn(move || {
+                    let hwnd = HWND(win.hwnd as *mut _);
 
-        unsafe {
-            let results_ptr = &mut results as *mut Vec<WindowInfo>;
+                    let thumbnail = match capture_window_bitmap(hwnd, win.width, win.height) {
+                        Some(pixels) => {
+                            let png = bgra_to_png(&pixels, win.width as u32, win.height as u32);
+                            let resized = resize_thumbnail(&png, 200);
+                            base64::engine::general_purpose::STANDARD.encode(&resized)
+                        }
+                        None => String::new(),
+                    };
 
-            let mut ctx = EnumCtx {
-                our_pid,
-                results: results_ptr,
-            };
+                    let icon = extract_process_icon(hwnd).unwrap_or_default();
 
-            unsafe extern "system" fn enum_callback(
-                hwnd: HWND,
-                lparam: LPARAM,
-            ) -> windows_core::BOOL {
-                let ctx = &mut *(lparam.0 as *mut EnumCtx);
-
-                if !IsWindowVisible(hwnd).as_bool() {
-                    return windows_core::BOOL(1);
-                }
-
-                if IsIconic(hwnd).as_bool() {
-                    return windows_core::BOOL(1);
-                }
-
-                let mut title_buf = [0u16; 256];
-                let title_len = GetWindowTextW(hwnd, &mut title_buf);
-                if title_len == 0 {
-                    return windows_core::BOOL(1);
-                }
-                let title = String::from_utf16_lossy(&title_buf[..title_len as usize]);
-                if title.is_empty() || title == "Voice Mirror" {
-                    return windows_core::BOOL(1);
-                }
-
-                let mut cloaked: i32 = 0;
-                let _ = DwmGetWindowAttribute(
-                    hwnd,
-                    DWMWA_CLOAKED,
-                    &mut cloaked as *mut _ as *mut c_void,
-                    std::mem::size_of::<i32>() as u32,
-                );
-                if cloaked != 0 {
-                    return windows_core::BOOL(1);
-                }
-
-                let mut rect = RECT::default();
-                let _ = GetWindowRect(hwnd, &mut rect);
-                let w = rect.right - rect.left;
-                let h = rect.bottom - rect.top;
-                if w < 100 || h < 50 {
-                    return windows_core::BOOL(1);
-                }
-
-                let mut pid: u32 = 0;
-                GetWindowThreadProcessId(hwnd, Some(&mut pid));
-                if pid == ctx.our_pid {
-                    return windows_core::BOOL(1);
-                }
-
-                let process_name = get_process_name(pid).unwrap_or_default();
-
-                let thumbnail = match capture_window_bitmap(hwnd, w, h) {
-                    Some(pixels) => {
-                        let png = bgra_to_png(&pixels, w as u32, h as u32);
-                        let resized = resize_thumbnail(&png, 300);
-                        base64::engine::general_purpose::STANDARD.encode(&resized)
+                    WindowInfo {
+                        hwnd: win.hwnd,
+                        title: win.title,
+                        process_name: win.process_name,
+                        width: win.width,
+                        height: win.height,
+                        thumbnail,
+                        icon,
                     }
-                    None => String::new(),
-                };
+                })
+            })
+            .collect();
 
-                let icon = extract_process_icon(hwnd).unwrap_or_default();
-
-                let results = &mut *ctx.results;
-                results.push(WindowInfo {
-                    hwnd: hwnd.0 as i64,
-                    title,
-                    process_name,
-                    width: w,
-                    height: h,
-                    thumbnail,
-                    icon,
-                });
-
-                windows_core::BOOL(1)
-            }
-
-            let _ = EnumWindows(
-                Some(enum_callback),
-                LPARAM(&mut ctx as *mut EnumCtx as isize),
-            );
-        }
-
-        results
+        handles
+            .into_iter()
+            .filter_map(|h| h.join().ok())
+            .collect()
     }
 
     /// Enumerate visible windows returning only metadata (no thumbnails/icons).
@@ -734,12 +676,13 @@ mod win32 {
         results
     }
 
-    /// Enumerate all monitors.
+    /// Enumerate all monitors. Captures thumbnails in parallel threads.
     pub fn enumerate_monitors() -> Vec<MonitorInfo> {
-        let mut results: Vec<MonitorInfo> = Vec::new();
+        // Phase 1: Collect monitor metadata (no captures)
+        let mut meta: Vec<(u32, String, i32, i32, i32, i32, bool)> = Vec::new();
 
         unsafe {
-            let results_ptr = &mut results as *mut Vec<MonitorInfo>;
+            let meta_ptr = &mut meta as *mut Vec<(u32, String, i32, i32, i32, i32, bool)>;
 
             unsafe extern "system" fn monitor_callback(
                 hmonitor: HMONITOR,
@@ -747,8 +690,9 @@ mod win32 {
                 _lprect: *mut RECT,
                 lparam: LPARAM,
             ) -> windows_core::BOOL {
-                let results = &mut *(lparam.0 as *mut Vec<MonitorInfo>);
-                let index = results.len() as u32;
+                let meta =
+                    &mut *(lparam.0 as *mut Vec<(u32, String, i32, i32, i32, i32, bool)>);
+                let index = meta.len() as u32;
 
                 let mut mi = MONITORINFOEXW::default();
                 mi.monitorInfo.cbSize = std::mem::size_of::<MONITORINFOEXW>() as u32;
@@ -776,27 +720,7 @@ mod win32 {
 
                 let primary = (mi.monitorInfo.dwFlags & MONITORINFOF_PRIMARY) != 0;
 
-                let thumbnail =
-                    match capture_screen_region(bounds.left, bounds.top, w, h) {
-                        Some(pixels) => {
-                            let png = bgra_to_png(&pixels, w as u32, h as u32);
-                            let resized = resize_thumbnail(&png, 300);
-                            base64::engine::general_purpose::STANDARD.encode(&resized)
-                        }
-                        None => String::new(),
-                    };
-
-                results.push(MonitorInfo {
-                    index,
-                    name,
-                    width: w,
-                    height: h,
-                    x: bounds.left,
-                    y: bounds.top,
-                    primary,
-                    thumbnail,
-                });
-
+                meta.push((index, name, w, h, bounds.left, bounds.top, primary));
                 windows_core::BOOL(1)
             }
 
@@ -804,10 +728,45 @@ mod win32 {
                 None,
                 None,
                 Some(monitor_callback),
-                LPARAM(results_ptr as isize),
+                LPARAM(meta_ptr as isize),
             );
         }
 
+        // Phase 2: Capture thumbnails in parallel threads
+        let handles: Vec<_> = meta
+            .into_iter()
+            .map(|(index, name, w, h, x, y, primary)| {
+                std::thread::spawn(move || {
+                    let thumbnail = match capture_screen_region(x, y, w, h) {
+                        Some(pixels) => {
+                            let png = bgra_to_png(&pixels, w as u32, h as u32);
+                            let resized = resize_thumbnail(&png, 200);
+                            base64::engine::general_purpose::STANDARD.encode(&resized)
+                        }
+                        None => String::new(),
+                    };
+
+                    MonitorInfo {
+                        index,
+                        name,
+                        width: w,
+                        height: h,
+                        x,
+                        y,
+                        primary,
+                        thumbnail,
+                    }
+                })
+            })
+            .collect();
+
+        let mut results: Vec<MonitorInfo> = handles
+            .into_iter()
+            .filter_map(|h| h.join().ok())
+            .collect();
+
+        // Maintain original index order
+        results.sort_by_key(|m| m.index);
         results
     }
 

@@ -424,9 +424,9 @@ describe('ScreenshotPicker.svelte', () => {
     assert.ok(src.includes('Entire Screen'), 'Should have Entire Screen tab');
   });
 
-  it('has picker-overlay with z-index 10001', () => {
+  it('has picker-overlay with z-index above design toolbar', () => {
     assert.ok(src.includes('picker-overlay'), 'Should have picker-overlay');
-    assert.ok(src.includes('z-index: 10001'), 'Should have z-index 10001');
+    assert.ok(src.includes('z-index: 10002'), 'Should have z-index 10002');
   });
 
   it('has Cancel and Share buttons', () => {

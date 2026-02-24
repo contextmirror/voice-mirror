@@ -141,8 +141,8 @@
   <div class="spacer"></div>
 
   <!-- Send to Claude -->
-  <button class="send-btn" onclick={onSend} title="Send annotated screenshot to Claude">
-    Send to Claude
+  <button class="send-btn" onclick={onSend} title="Send annotated screenshot to chat">
+    Send to Chat
   </button>
 </div>
 
