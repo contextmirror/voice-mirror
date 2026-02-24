@@ -26,6 +26,35 @@ pub fn start_voice(
     app_handle: AppHandle,
     voice_state: State<'_, VoiceEngineState>,
 ) -> IpcResponse {
+    // Read the saved config so the engine starts with user's settings
+    // (STT model, GPU toggle, TTS adapter, etc.) instead of hardcoded defaults.
+    let app_cfg = super::config::get_config_snapshot();
+    let voice_cfg = crate::voice::VoiceEngineConfig {
+        mode: crate::voice::VoiceMode::from_str_flexible(
+            &app_cfg.behavior.activation_mode,
+        )
+        .unwrap_or_default(),
+        stt_adapter: app_cfg.voice.stt_adapter.clone(),
+        stt_model_size: app_cfg.voice.stt_model_size.clone(),
+        stt_use_gpu: app_cfg.voice.stt_use_gpu,
+        tts_adapter: app_cfg.voice.tts_adapter.clone(),
+        tts_voice: app_cfg.voice.tts_voice.clone(),
+        tts_speed: app_cfg.voice.tts_speed as f32,
+        tts_volume: app_cfg.voice.tts_volume as f32,
+        input_device: app_cfg.voice.input_device.clone(),
+        output_device: app_cfg.voice.output_device.clone(),
+        ..Default::default()
+    };
+
+    tracing::info!(
+        stt_model = %voice_cfg.stt_model_size,
+        stt_adapter = %voice_cfg.stt_adapter,
+        use_gpu = voice_cfg.stt_use_gpu,
+        tts_adapter = %voice_cfg.tts_adapter,
+        mode = %voice_cfg.mode,
+        "start_voice: applying saved config"
+    );
+
     let mut engine = match voice_state.lock() {
         Ok(guard) => guard,
         Err(e) => return IpcResponse::err(format!("Failed to lock voice state: {}", e)),
@@ -34,6 +63,9 @@ pub fn start_voice(
     if engine.is_running() {
         return IpcResponse::err("Voice engine is already running");
     }
+
+    // Apply saved config before starting
+    engine.update_config(voice_cfg);
 
     match engine.start(app_handle) {
         Ok(()) => {
@@ -440,7 +472,15 @@ pub fn delete_stt_model(
         Ok(guard) => guard,
         Err(e) => return IpcResponse::err(format!("Failed to lock voice state: {}", e)),
     };
-    if engine.is_running() && engine.config().stt_model_size == model_size {
+    let active_model = engine.config().stt_model_size.clone();
+    let is_running = engine.is_running();
+    tracing::info!(
+        model_size = %model_size,
+        active_model = %active_model,
+        is_running = is_running,
+        "delete_stt_model requested"
+    );
+    if is_running && active_model == model_size {
         return IpcResponse::err(
             "Cannot delete the active model. Stop the voice engine first.",
         );
@@ -450,6 +490,7 @@ pub fn delete_stt_model(
     let data_dir = crate::services::platform::get_data_dir_with_fallback();
     let filename = crate::voice::stt::model_filename(&model_size);
     let model_path = data_dir.join("models").join(&filename);
+    tracing::info!(model_path = %model_path.display(), exists = model_path.exists(), "delete target");
 
     if !model_path.exists() {
         return IpcResponse::err("Model file not found");

@@ -91,8 +91,12 @@
   async function handleDeleteModel(modelSize) {
     deleting = modelSize;
     try {
-      await deleteSttModel(modelSize);
-      toastStore.addToast({ message: `Model "${modelDisplayName(modelSize)}" deleted`, severity: 'success' });
+      const result = await deleteSttModel(modelSize);
+      if (result?.success === false) {
+        toastStore.addToast({ message: result.error || 'Delete failed', severity: 'error' });
+      } else {
+        toastStore.addToast({ message: `Model "${modelDisplayName(modelSize)}" deleted`, severity: 'success' });
+      }
       refreshInstalledModels();
     } catch (err) {
       toastStore.addToast({ message: `${err}`, severity: 'error' });
