@@ -1,23 +1,27 @@
 <script>
+  import { onMount } from 'svelte';
   import LensToolbar from './LensToolbar.svelte';
   import DesignToolbar from './DesignToolbar.svelte';
   import LensPreview from './LensPreview.svelte';
   import BrowserTabBar from './BrowserTabBar.svelte';
   import FileTree from './FileTree.svelte';
-  import TabBar from './TabBar.svelte';
+  import GroupTabBar from './GroupTabBar.svelte';
   import FileEditor from './FileEditor.svelte';
   import DiffViewer from './DiffViewer.svelte';
   import SplitPanel from '../shared/SplitPanel.svelte';
   import ChatPanel from '../chat/ChatPanel.svelte';
   import TerminalTabs from '../terminal/TerminalTabs.svelte';
   import { tabsStore } from '../../lib/stores/tabs.svelte.js';
+  import { editorGroupsStore } from '../../lib/stores/editor-groups.svelte.js';
   import { layoutStore } from '../../lib/stores/layout.svelte.js';
   import { lensStore } from '../../lib/stores/lens.svelte.js';
+  import { browserTabsStore } from '../../lib/stores/browser-tabs.svelte.js';
   import { lensSetVisible, startFileWatching, stopFileWatching, lensCapturePreview } from '../../lib/api.js';
   import { attachmentsStore } from '../../lib/stores/attachments.svelte.js';
   import { projectStore } from '../../lib/stores/project.svelte.js';
   import { lspDiagnosticsStore } from '../../lib/stores/lsp-diagnostics.svelte.js';
   import { LSP_EXTENSIONS } from '../../lib/editor-lsp.svelte.js';
+  import { setActionHandler } from '../../lib/stores/shortcuts.svelte.js';
 
   let {
     onSend = () => {},
@@ -30,18 +34,24 @@
   let chatRatio = $state(0.18);       // chat vs center+right
   let previewRatio = $state(0.78);    // preview vs file tree
 
-  // Derive active tab type for display switching
-  let isBrowser = $derived(tabsStore.activeTab?.type === 'browser');
-  let isFile = $derived(tabsStore.activeTab?.type === 'file');
-  let isDiff = $derived(tabsStore.activeTab?.type === 'diff');
-  let activeExt = $derived(tabsStore.activeTab?.path?.split('.').pop()?.toLowerCase());
+  // Browser is a fixed UI element, not a tab
+  let showBrowser = $state(false);
 
-  // Toggle browser webview visibility when switching between browser and file tabs.
-  // Guard on webviewReady so we never call before the webview exists.
-  // When webviewReady transitions false→true, this effect re-fires and syncs visibility.
+  // Derive active file info for FileTree highlighting
+  let focusedGroupId = $derived(editorGroupsStore.focusedGroupId);
+  let activeTab = $derived(
+    tabsStore.getActiveTabForGroup
+      ? tabsStore.tabs.find(t => t.id === (editorGroupsStore.groups.get(focusedGroupId)?.activeTabId))
+      : tabsStore.activeTab
+  );
+  let isFile = $derived(activeTab?.type === 'file');
+  let isDiff = $derived(activeTab?.type === 'diff');
+  let activeExt = $derived(activeTab?.path?.split('.').pop()?.toLowerCase());
+
+  // Toggle browser webview visibility
   $effect(() => {
     if (!lensStore.webviewReady) return;
-    lensSetVisible(isBrowser).catch(() => {});
+    lensSetVisible(showBrowser).catch(() => {});
   });
 
   // Start/stop file watcher when entering Lens mode or switching projects
@@ -92,7 +102,77 @@
       lspDiagnosticsStore.stopListening();
     };
   });
+
+  // ── Action handlers for split-editor shortcuts ──
+  onMount(() => {
+    setActionHandler('split-editor', () => {
+      if (editorGroupsStore.hasSplit) {
+        // Close the focused group (if not group 1)
+        if (editorGroupsStore.focusedGroupId !== 1) {
+          editorGroupsStore.closeGroup(editorGroupsStore.focusedGroupId);
+        }
+      } else {
+        const fId = editorGroupsStore.focusedGroupId;
+        const focusedActiveTab = tabsStore.getActiveTabForGroup
+          ? tabsStore.tabs.find(t => t.id === (editorGroupsStore.groups.get(fId)?.activeTabId))
+          : tabsStore.activeTab;
+        if (focusedActiveTab) {
+          const newGroupId = editorGroupsStore.splitGroup(fId, 'horizontal');
+          tabsStore.openFile({ name: focusedActiveTab.title, path: focusedActiveTab.path }, newGroupId);
+        }
+      }
+    });
+
+    setActionHandler('focus-group-1', () => editorGroupsStore.setFocusedGroup(1));
+    setActionHandler('focus-group-2', () => {
+      const ids = editorGroupsStore.allGroupIds;
+      if (ids.length >= 2) editorGroupsStore.setFocusedGroup(ids[1]);
+    });
+  });
 </script>
+
+{#snippet renderNode(node)}
+  {#if node.type === 'leaf'}
+    {@render editorPane(node.groupId)}
+  {:else}
+    <SplitPanel direction={node.direction} bind:ratio={node.ratio} minA={150} minB={150}>
+      {#snippet panelA()}
+        {@render renderNode(node.children[0])}
+      {/snippet}
+      {#snippet panelB()}
+        {@render renderNode(node.children[1])}
+      {/snippet}
+    </SplitPanel>
+  {/if}
+{/snippet}
+
+{#snippet editorPane(groupId)}
+  {@const groupActiveTabId = editorGroupsStore.groups.get(groupId)?.activeTabId}
+  {@const groupActiveTab = tabsStore.tabs.find(t => t.id === groupActiveTabId)}
+
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="editor-pane"
+       class:focused={editorGroupsStore.focusedGroupId === groupId}
+       onclick={() => editorGroupsStore.setFocusedGroup(groupId)}>
+
+    <GroupTabBar {groupId} />
+
+    {#if groupActiveTab?.type === 'file'}
+      <FileEditor tab={groupActiveTab} {groupId} />
+    {:else if groupActiveTab?.type === 'diff'}
+      <DiffViewer tab={groupActiveTab} />
+    {:else}
+      <div class="empty-pane">
+        <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="32" height="32">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+        </svg>
+        <span class="empty-text">Open a file to start editing</span>
+      </div>
+    {/if}
+  </div>
+{/snippet}
 
 <div class="lens-workspace">
   <div class="workspace-content">
@@ -111,10 +191,22 @@
             <SplitPanel direction="horizontal" bind:ratio={previewRatio} minA={300} minB={140} collapseB={!layoutStore.showFileTree}>
               {#snippet panelA()}
                 <div class="preview-area">
-                  <TabBar onNewBrowserTab={() => lensPreviewRef?.createNewTab()} />
-                  <!-- Always mount all views, toggle visibility with CSS to avoid destroy/recreate -->
-                  <div class="preview-layer" class:visible={isBrowser}>
-                    <BrowserTabBar onNewTab={() => lensPreviewRef?.createNewTab()} />
+                  <!-- Global Browser Strip -->
+                  <div class="global-strip">
+                    <button class="browser-btn" class:active={showBrowser}
+                            onclick={() => { showBrowser = !showBrowser; }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                      </svg>
+                      <span>Browser</span>
+                    </button>
+                  </div>
+
+                  <!-- Browser layer: always mounted, shown/hidden via CSS -->
+                  <div class="preview-layer" class:visible={showBrowser}>
+                    {#if browserTabsStore.tabs.length > 1}
+                      <BrowserTabBar onNewTab={() => lensPreviewRef?.createNewTab()} />
+                    {/if}
                     <LensToolbar />
                     {#if lensStore.designMode}
                       <DesignToolbar
@@ -124,27 +216,25 @@
                     {/if}
                     <LensPreview bind:this={lensPreviewRef} />
                   </div>
-                  {#if isFile}
-                    <FileEditor tab={tabsStore.activeTab} />
-                  {/if}
-                  {#if isDiff}
-                    <DiffViewer tab={tabsStore.activeTab} />
-                  {/if}
+
+                  <!-- Editor Grid (hidden when browser is showing) -->
+                  <div class="editor-grid" class:hidden={showBrowser}>
+                    {@render renderNode(editorGroupsStore.gridRoot)}
+                  </div>
                 </div>
               {/snippet}
               {#snippet panelB()}
                 <FileTree
-                  onFileClick={(entry) => tabsStore.openFile(entry)}
+                  onFileClick={(entry) => { showBrowser = false; tabsStore.openFile(entry, editorGroupsStore.focusedGroupId); }}
                   onFileDblClick={(entry) => tabsStore.pinTab(entry.path)}
                   onChangeClick={(change) => tabsStore.openDiff(change)}
                   onChangeDblClick={(change) => tabsStore.pinTab(`diff:${change.path}`)}
-                  activeFilePath={isFile ? tabsStore.activeTab?.path : null}
-                  activeDiffPath={isDiff ? tabsStore.activeTab?.path : null}
+                  activeFilePath={isFile ? activeTab?.path : null}
+                  activeDiffPath={isDiff ? activeTab?.path : null}
                   activeFileHasLsp={isFile && LSP_EXTENSIONS.has(activeExt)}
                   onSymbolClick={({ line, character }) => {
-                    // Navigate to symbol position in the active file editor
-                    // The FileEditor will handle scrolling via its view
-                    const event = new CustomEvent('lens-goto-position', { detail: { line, character } });
+                    const gId = editorGroupsStore.focusedGroupId;
+                    const event = new CustomEvent(`lens-goto-position-${gId}`, { detail: { line, character } });
                     window.dispatchEvent(event);
                   }}
                 />
@@ -171,7 +261,7 @@
     background: var(--bg);
   }
 
-  /* ── Workspace Content ── */
+  /* -- Workspace Content -- */
 
   .workspace-content {
     display: flex;
@@ -191,6 +281,36 @@
     position: relative;
   }
 
+  /* Global strip: browser toggle button */
+  .global-strip {
+    display: flex;
+    align-items: center;
+    height: 32px;
+    background: var(--bg);
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 40%, transparent);
+    padding: 0 4px;
+    -webkit-app-region: no-drag;
+    flex-shrink: 0;
+  }
+
+  .browser-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    font-size: 12px;
+    cursor: pointer;
+    border-radius: 4px;
+    font-family: var(--font-family);
+    -webkit-app-region: no-drag;
+    transition: background 0.12s ease, color 0.12s ease;
+  }
+  .browser-btn:hover { background: var(--bg-elevated); }
+  .browser-btn.active { color: var(--text); background: var(--bg-elevated); }
+
   /* Browser layer: always mounted, shown/hidden via CSS */
   .preview-layer {
     display: none;
@@ -203,7 +323,48 @@
     display: flex;
   }
 
-  /* ── Chat Panel ── */
+  /* Editor grid: recursive SplitPanel tree */
+  .editor-grid {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+  .editor-grid.hidden {
+    display: none;
+  }
+
+  /* Editor pane: per-group container */
+  .editor-pane {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    overflow: hidden;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  .editor-pane.focused {
+    /* Focus is shown via the GroupTabBar accent border */
+  }
+
+  .empty-pane {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    color: var(--muted);
+    gap: 8px;
+  }
+  .empty-pane .empty-icon {
+    opacity: 0.5;
+  }
+  .empty-pane .empty-text {
+    font-size: 13px;
+    font-family: var(--font-family);
+  }
+
+  /* -- Chat Panel -- */
 
   .chat-area {
     display: flex;
@@ -215,7 +376,7 @@
     border-radius: var(--radius-lg) 0 0 0;
   }
 
-  /* ── Terminal Panel ── */
+  /* -- Terminal Panel -- */
 
   .terminal-area {
     display: flex;

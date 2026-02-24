@@ -20,7 +20,7 @@
   import { buildEditorExtensions } from '../../lib/editor-extensions.js';
   import { loadLanguageExtension } from '../../lib/codemirror-languages.js';
 
-  let { tab } = $props();
+  let { tab, groupId = 1 } = $props();
 
   let editorEl;
   let view;
@@ -459,7 +459,9 @@
   });
 
   // Listen for outline symbol navigation (from OutlinePanel via LensWorkspace)
+  // Scoped by groupId so each editor instance only handles its own events
   $effect(() => {
+    const eventName = `lens-goto-position-${groupId}`;
     function handleGotoPosition(e) {
       if (!view) return;
       const { line, character } = e.detail;
@@ -472,8 +474,13 @@
         view.focus();
       } catch {}
     }
+    // Also listen to unscoped event for backwards compatibility
+    window.addEventListener(eventName, handleGotoPosition);
     window.addEventListener('lens-goto-position', handleGotoPosition);
-    return () => { window.removeEventListener('lens-goto-position', handleGotoPosition); };
+    return () => {
+      window.removeEventListener(eventName, handleGotoPosition);
+      window.removeEventListener('lens-goto-position', handleGotoPosition);
+    };
   });
 
   onDestroy(() => {

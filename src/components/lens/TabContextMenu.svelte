@@ -8,6 +8,7 @@
    *              New Browser Tab, Clear Cache.
    */
   import { tabsStore } from '../../lib/stores/tabs.svelte.js';
+  import { editorGroupsStore } from '../../lib/stores/editor-groups.svelte.js';
   import { projectStore } from '../../lib/stores/project.svelte.js';
   import { lensStore } from '../../lib/stores/lens.svelte.js';
   import { browserTabsStore } from '../../lib/stores/browser-tabs.svelte.js';
@@ -152,6 +153,46 @@
     close();
     lensClearCache().catch(() => {});
   }
+
+  // ── Split-editor actions ──
+
+  function handleSplitRight() {
+    close();
+    if (!tab) return;
+    const sourceGroup = tab.groupId || 1;
+    const newGroupId = editorGroupsStore.splitGroup(sourceGroup, 'horizontal');
+    if (tabsStore.moveTab) {
+      tabsStore.moveTab(tab.id, newGroupId);
+    }
+  }
+
+  function handleSplitDown() {
+    close();
+    if (!tab) return;
+    const sourceGroup = tab.groupId || 1;
+    const newGroupId = editorGroupsStore.splitGroup(sourceGroup, 'vertical');
+    if (tabsStore.moveTab) {
+      tabsStore.moveTab(tab.id, newGroupId);
+    }
+  }
+
+  function handleOpenToSide() {
+    close();
+    if (!tab) return;
+    const sourceGroup = tab.groupId || 1;
+    const allIds = editorGroupsStore.allGroupIds;
+    const otherGroup = allIds.find(id => id !== sourceGroup);
+    if (otherGroup) {
+      if (tabsStore.moveTab) {
+        tabsStore.moveTab(tab.id, otherGroup);
+      }
+    } else {
+      const newGroupId = editorGroupsStore.splitGroup(sourceGroup, 'horizontal');
+      if (tabsStore.moveTab) {
+        tabsStore.moveTab(tab.id, newGroupId);
+      }
+    }
+  }
 </script>
 
 {#if visible && tab}
@@ -194,6 +235,19 @@
       </button>
       <button class="context-item" onclick={handleCloseAll} role="menuitem">
         Close All
+      </button>
+
+      <div class="context-separator"></div>
+      <button class="context-item" onclick={handleSplitRight} role="menuitem">
+        Split Right
+        <span class="context-shortcut">Ctrl+\</span>
+      </button>
+      <button class="context-item" onclick={handleSplitDown} role="menuitem">
+        Split Down
+      </button>
+      <button class="context-item" onclick={handleOpenToSide} role="menuitem">
+        Open to the Side
+        <span class="context-shortcut">Ctrl+Enter</span>
       </button>
 
       {#if hasPath}
