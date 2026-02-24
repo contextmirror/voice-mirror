@@ -1278,6 +1278,19 @@ fn normalize_git_paths(paths: &[String]) -> Vec<String> {
     paths.iter().map(|p| p.replace('\\', "/")).collect()
 }
 
+/// Truncate a string at a safe UTF-8 character boundary.
+fn truncate_utf8(s: &str, max_bytes: usize) -> &str {
+    if s.len() <= max_bytes {
+        return s;
+    }
+    // Walk backwards from max_bytes to find a valid char boundary
+    let mut idx = max_bytes;
+    while idx > 0 && !s.is_char_boundary(idx) {
+        idx -= 1;
+    }
+    &s[..idx]
+}
+
 /// Resolve project root from optional override or auto-detection.
 fn resolve_root(root: Option<String>) -> Result<PathBuf, IpcResponse> {
     match root {
@@ -1539,7 +1552,7 @@ pub fn git_diff_staged(root: Option<String>) -> IpcResponse {
     const MAX_DIFF_SIZE: usize = 32 * 1024;
     let diff = String::from_utf8_lossy(&output.stdout);
     let diff = if diff.len() > MAX_DIFF_SIZE {
-        format!("{}...\n[diff truncated at 32KB]", &diff[..MAX_DIFF_SIZE])
+        format!("{}...\n[diff truncated at 32KB]", truncate_utf8(&diff, MAX_DIFF_SIZE))
     } else {
         diff.to_string()
     };
@@ -1577,7 +1590,7 @@ pub async fn generate_commit_message(root: Option<String>) -> IpcResponse {
 
     const MAX_PROMPT_DIFF: usize = 16 * 1024;
     let diff_for_prompt = if diff_output.len() > MAX_PROMPT_DIFF {
-        format!("{}...\n[truncated]", &diff_output[..MAX_PROMPT_DIFF])
+        format!("{}...\n[truncated]", truncate_utf8(&diff_output, MAX_PROMPT_DIFF))
     } else {
         diff_output
     };
@@ -1652,12 +1665,14 @@ pub async fn generate_commit_message(root: Option<String>) -> IpcResponse {
     );
 
     // Build the chat completions URL
-    let url = if endpoint.ends_with("/v1") || endpoint.ends_with("/v1/") {
-        format!("{}/chat/completions", endpoint.trim_end_matches('/'))
-    } else if endpoint.contains("/v1/") {
-        format!("{}/chat/completions", endpoint.trim_end_matches('/'))
+    // Handles: ".../v1", ".../v1/", ".../openai", ".../openai/" (Gemini), and bare base URLs
+    let trimmed = endpoint.trim_end_matches('/');
+    let url = if trimmed.ends_with("/v1") || trimmed.ends_with("/openai") {
+        format!("{}/chat/completions", trimmed)
+    } else if trimmed.contains("/v1/") || trimmed.ends_with("/chat/completions") {
+        trimmed.to_string()
     } else {
-        format!("{}/v1/chat/completions", endpoint.trim_end_matches('/'))
+        format!("{}/v1/chat/completions", trimmed)
     };
 
     let client = reqwest::Client::new();
@@ -1861,5 +1876,20 @@ mod tests {
         assert_eq!(default_cloud_endpoint("openai"), "https://api.openai.com/v1");
         assert_eq!(default_cloud_endpoint("deepseek"), "https://api.deepseek.com/v1");
         assert_eq!(default_cloud_endpoint("unknown"), "http://127.0.0.1:11434");
+    }
+
+    #[test]
+    fn test_truncate_utf8_ascii() {
+        let s = "hello world";
+        assert_eq!(truncate_utf8(s, 5), "hello");
+        assert_eq!(truncate_utf8(s, 100), s);
+    }
+
+    #[test]
+    fn test_truncate_utf8_multibyte() {
+        // Each emoji is 4 bytes
+        let s = "ab\u{1F600}cd"; // "ab😀cd" — 8 bytes total
+        assert_eq!(truncate_utf8(s, 3), "ab"); // 3 is mid-emoji, snap back to 2
+        assert_eq!(truncate_utf8(s, 6), "ab\u{1F600}"); // 6 = after emoji (2+4)
     }
 }

@@ -38,7 +38,7 @@
     committing = true;
     try {
       const resp = await gitCommit(message.trim(), root);
-      if (resp && resp.ok) {
+      if (resp && resp.success) {
         const hash = resp.data?.hash || '';
         success = hash ? `Committed ${hash.slice(0, 7)}` : 'Committed';
         message = '';
@@ -62,7 +62,7 @@
     committing = true;
     try {
       const resp = await gitCommit(message.trim(), root);
-      if (resp && resp.ok) {
+      if (resp && resp.success) {
         const hash = resp.data?.hash || '';
         message = '';
         onCommit?.();

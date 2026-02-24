@@ -635,7 +635,9 @@
             <svg class="tree-icon"><use href="{spriteUrl}#{chooseIconName(change.path, 'file')}" /></svg>
             <span class="change-path">{change.path}</span>
             <button class="change-action" title="Stage" onclick={(e) => { e.stopPropagation(); handleStage(change); }}>+</button>
-            <button class="change-action discard" title="Discard" onclick={(e) => { e.stopPropagation(); handleDiscard(change); }}>&times;</button>
+            {#if change.unstagedStatus !== 'added'}
+              <button class="change-action discard" title="Discard" onclick={(e) => { e.stopPropagation(); handleDiscard(change); }}>&times;</button>
+            {/if}
             <span
               class="change-badge"
               class:added={change.status === 'added'}
