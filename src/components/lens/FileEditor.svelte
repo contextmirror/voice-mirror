@@ -158,6 +158,7 @@
       lsp.closeFile(currentPath, root);
     }
     lsp.reset();
+    clearTimeout(sigHelpDebounce);
 
     currentPath = filePath;
     loading = true;
@@ -265,7 +266,9 @@
           onSelectionChanged(update) {
             if (lsp.showSignatureHelp) {
               const pos = update.state.selection.main.head;
-              if (pos < lsp.signatureHelpPos) {
+              const triggerLine = update.state.doc.lineAt(lsp.signatureHelpPos);
+              const cursorLine = update.state.doc.lineAt(pos);
+              if (pos < lsp.signatureHelpPos || cursorLine.number !== triggerLine.number) {
                 lsp.dismissSignatureHelp();
               }
             }
@@ -478,6 +481,7 @@
       const root = projectStore.activeProject?.path || null;
       lsp.closeFile(currentPath, root);
     }
+    clearTimeout(sigHelpDebounce);
     lsp.destroy();
     view?.destroy();
   });
