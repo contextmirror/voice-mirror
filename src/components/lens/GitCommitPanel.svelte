@@ -31,16 +31,12 @@
       const maxLen = 8 * 1024;
       const displayDiff = diff.length > maxLen ? diff.slice(0, maxLen) + '\n...[truncated]' : diff;
 
-      const prompt = `Generate a concise git commit message for these staged changes.\n` +
-        `Use conventional commit format: type(scope): description\n` +
-        `Types: feat, fix, refactor, docs, chore, test, style\n` +
-        `Max 72 characters for the first line.\n` +
-        `Return ONLY the commit message, nothing else.\n\n` +
+      const prompt = `Write a conventional commit message for this diff. Just the message, nothing else.\n\n` +
         `\`\`\`diff\n${displayDiff}\n\`\`\``;
 
       // Add to chat and route to AI
       chatStore.addMessage('user', prompt);
-      layoutStore.showChat = true;
+      if (!layoutStore.showChat) layoutStore.toggleChat();
       onSend(prompt);
 
       success = 'Sent to AI — check chat';
