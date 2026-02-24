@@ -296,7 +296,7 @@
     position: fixed;
     inset: 0;
     z-index: 10002;
-    background: rgba(0, 0, 0, 0.4);
+    background: color-mix(in srgb, var(--bg) 60%, transparent);
     display: flex;
     justify-content: center;
     align-items: flex-start;
@@ -310,7 +310,7 @@
     background: var(--bg-elevated);
     border: 1px solid var(--border-strong);
     border-radius: 12px;
-    box-shadow: var(--shadow-lg), 0 0 0 1px rgba(255, 255, 255, 0.03);
+    box-shadow: var(--shadow-lg), 0 0 0 1px color-mix(in srgb, var(--text) 3%, transparent);
     overflow: hidden;
     display: flex;
     flex-direction: column;

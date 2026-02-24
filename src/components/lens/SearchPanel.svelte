@@ -179,7 +179,7 @@
     font-family: var(--font-mono);
     background: var(--bg-elevated);
     color: var(--text);
-    border: 1px solid var(--border, rgba(255,255,255,0.1));
+    border: 1px solid var(--border);
     border-radius: 4px;
     outline: none;
     box-sizing: border-box;
@@ -225,7 +225,7 @@
     font-family: var(--font-mono);
     background: var(--bg-elevated);
     color: var(--text);
-    border: 1px solid var(--border, rgba(255,255,255,0.1));
+    border: 1px solid var(--border);
     border-radius: 4px;
     outline: none;
     box-sizing: border-box;
@@ -242,11 +242,11 @@
   }
 
   .search-error {
-    color: var(--danger, #ef4444);
+    color: var(--danger);
   }
 
   .search-truncated {
-    color: var(--warn, #f59e0b);
+    color: var(--warn);
   }
 
   .search-results {

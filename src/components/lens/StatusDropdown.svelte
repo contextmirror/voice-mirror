@@ -562,7 +562,7 @@
     border-bottom: none;
   }
   .manage-row:hover {
-    background: rgba(255, 255, 255, 0.03);
+    background: color-mix(in srgb, var(--text) 3%, transparent);
   }
 
   .manage-row-info {
