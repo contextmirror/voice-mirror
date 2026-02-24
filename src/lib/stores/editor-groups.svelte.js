@@ -188,7 +188,8 @@ function createEditorGroupsStore() {
     setActiveTabForGroup(groupId, tabId) {
       const group = groups.get(groupId);
       if (group) {
-        group.activeTabId = tabId;
+        // Must use Map.set() to trigger Svelte $state reactivity on Map entries
+        groups.set(groupId, { ...group, activeTabId: tabId });
       }
     },
 

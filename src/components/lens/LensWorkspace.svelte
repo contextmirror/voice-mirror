@@ -204,9 +204,7 @@
 
                   <!-- Browser layer: always mounted, shown/hidden via CSS -->
                   <div class="preview-layer" class:visible={showBrowser}>
-                    {#if browserTabsStore.tabs.length > 1}
-                      <BrowserTabBar onNewTab={() => lensPreviewRef?.createNewTab()} />
-                    {/if}
+                    <BrowserTabBar onNewTab={() => lensPreviewRef?.createNewTab()} />
                     <LensToolbar />
                     {#if lensStore.designMode}
                       <DesignToolbar
