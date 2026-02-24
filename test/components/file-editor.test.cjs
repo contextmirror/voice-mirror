@@ -13,6 +13,11 @@ const src = fs.readFileSync(
   'utf-8'
 );
 
+const mdPreviewCss = fs.readFileSync(
+  path.join(__dirname, '../../src/styles/markdown-preview.css'),
+  'utf-8'
+);
+
 describe('FileEditor.svelte', () => {
   it('has file-editor CSS class', () => {
     assert.ok(src.includes('file-editor'), 'Should have file-editor class');
@@ -422,46 +427,51 @@ describe('FileEditor.svelte: markdown preview', () => {
 });
 
 describe('FileEditor.svelte: markdown preview styles', () => {
+  it('imports markdown-preview.css', () => {
+    assert.ok(
+      src.includes("@import '../../styles/markdown-preview.css'"),
+      'Should import markdown-preview.css in style block'
+    );
+  });
+
   it('has table styling in markdown-preview', () => {
     assert.ok(
-      src.includes('.markdown-preview') && src.includes('border-collapse'),
+      mdPreviewCss.includes('.markdown-preview') && mdPreviewCss.includes('border-collapse'),
       'Should style tables in markdown preview'
     );
   });
 
   it('has heading styles', () => {
-    const previewIdx = src.indexOf('.markdown-preview');
-    const styleSection = src.slice(previewIdx);
     assert.ok(
-      styleSection.includes(':global(h1)') || styleSection.includes(':global(h2)'),
+      mdPreviewCss.includes(':global(h1)') && mdPreviewCss.includes(':global(h2)'),
       'Should have heading styles in markdown preview'
     );
   });
 
   it('has code block styling', () => {
     assert.ok(
-      src.includes('.markdown-preview') && src.includes(':global(pre)'),
+      mdPreviewCss.includes('.markdown-preview') && mdPreviewCss.includes(':global(pre)'),
       'Should have code block styles in preview'
     );
   });
 
   it('has blockquote styling', () => {
     assert.ok(
-      src.includes('.markdown-preview') && src.includes(':global(blockquote)'),
+      mdPreviewCss.includes('.markdown-preview') && mdPreviewCss.includes(':global(blockquote)'),
       'Should have blockquote styles in preview'
     );
   });
 
   it('has list styling', () => {
     assert.ok(
-      src.includes('.markdown-preview') && src.includes(':global(ul)'),
+      mdPreviewCss.includes('.markdown-preview') && mdPreviewCss.includes(':global(ul)'),
       'Should have list styles in preview'
     );
   });
 
   it('has collapsible code block support', () => {
     assert.ok(
-      src.includes('.markdown-preview') && src.includes('code-collapse'),
+      mdPreviewCss.includes('.markdown-preview') && mdPreviewCss.includes('code-collapse'),
       'Should have collapsible code block styles'
     );
   });

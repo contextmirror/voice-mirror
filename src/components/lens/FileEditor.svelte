@@ -16,6 +16,7 @@
   import { renderMarkdown } from '../../lib/markdown.js';
   import { createEditorLsp, LSP_EXTENSIONS, uriToRelativePath, lspPositionToOffset, mapCompletionKind } from '../../lib/editor-lsp.svelte.js';
   import { lspDiagnosticsStore } from '../../lib/stores/lsp-diagnostics.svelte.js';
+  import { buildEditorExtensions } from '../../lib/editor-extensions.js';
 
   let { tab } = $props();
 
@@ -56,7 +57,7 @@
     if (cmCache) return cmCache;
     const [
       { EditorView, basicSetup },
-      { EditorState },
+      { EditorState, EditorSelection },
       { keymap, hoverTooltip },
       { autocompletion },
       { setDiagnostics, lintGutter },
@@ -67,7 +68,7 @@
       import('@codemirror/autocomplete'),
       import('@codemirror/lint'),
     ]);
-    cmCache = { EditorView, basicSetup, EditorState, keymap, hoverTooltip, autocompletion, setDiagnostics, lintGutter };
+    cmCache = { EditorView, basicSetup, EditorState, EditorSelection, keymap, hoverTooltip, autocompletion, setDiagnostics, lintGutter };
     return cmCache;
   }
 
@@ -352,53 +353,27 @@
       const ext = filePath.split('.').pop()?.toLowerCase() || '';
       lsp.setHasLsp(!isExternal && LSP_EXTENSIONS.has(ext));
 
-      const extensions = [
-        cm.basicSetup,
-        ...voiceMirrorEditorTheme,
-        ...(isReadOnly ? [cm.EditorState.readOnly.of(true)] : []),
-        cm.lintGutter(),
-        cm.autocompletion(lsp.hasLsp ? {
-          override: [lsp.completionSource(filePath)],
-          maxRenderedOptions: 20,
-        } : {
-          activateOnTyping: true,
-          maxRenderedOptions: 20,
-        }),
-        cm.EditorView.updateListener.of((update) => {
-          // Dismiss context menu on any document change or viewport scroll
-          if ((update.docChanged || update.viewportChanged) && editorMenu.visible) {
+      const extensions = buildEditorExtensions(cm, lsp, {
+        isReadOnly,
+        filePath,
+        voiceMirrorEditorTheme,
+        onDocChanged: (update) => {
+          tabsStore.setDirty(tab.id, true);
+          tabsStore.pinTab(tab.id);
+          markdownContent = update.state.doc.toString();
+          if (lsp.hasLsp) {
+            const content = update.state.doc.toString();
+            const r = projectStore.activeProject?.path || null;
+            lsp.changeFile(currentPath, content, r);
+          }
+        },
+        onDismissMenu: () => {
+          if (editorMenu.visible) {
             editorMenu.visible = false;
           }
-          if (update.docChanged) {
-            tabsStore.setDirty(tab.id, true);
-            tabsStore.pinTab(tab.id);
-            markdownContent = update.state.doc.toString();
-            if (lsp.hasLsp) {
-              const content = update.state.doc.toString();
-              const r = projectStore.activeProject?.path || null;
-              lsp.changeFile(currentPath, content, r);
-            }
-          }
-        }),
-        cm.keymap.of([{
-          key: 'Mod-s',
-          run: () => { save(); return true; },
-        }]),
-      ];
-
-      // Add hover tooltip and LSP keybindings
-      if (lsp.hasLsp) {
-        extensions.push(lsp.hoverTooltipExtension(filePath, cm.hoverTooltip));
-        extensions.push(cm.keymap.of([
-          { key: 'F2', run: () => { lsp.handleRenameSymbol(view, currentPath); return true; } },
-          { key: 'Shift-F12', run: () => { lsp.handleFindReferences(view, currentPath); return true; } },
-          { key: 'Mod-.', run: () => { lsp.handleCodeActions(view, currentPath); return true; } },
-        ]));
-      }
-
-      // Context menu + optional Ctrl+Click go-to-definition
-      const domHandlers = {
-        contextmenu: (event, v) => {
+        },
+        onSave: () => save(),
+        onContextMenu: (event, v) => {
           event.preventDefault();
           const pos = v.posAtCoords({ x: event.clientX, y: event.clientY });
           if (pos == null) return true;
@@ -421,10 +396,7 @@
           };
           return true;
         },
-      };
-
-      if (lsp.hasLsp) {
-        domHandlers.click = async (event, v) => {
+        onClick: lsp.hasLsp ? async (event, v) => {
           if (!event.ctrlKey && !event.metaKey) return false;
           event.preventDefault();
           const pos = v.posAtCoords({ x: event.clientX, y: event.clientY });
@@ -456,10 +428,8 @@
             }
           } catch {}
           return true;
-        };
-      }
-
-      extensions.push(cm.EditorView.domEventHandlers(domHandlers));
+        } : null,
+      });
 
       if (langSupport && !Array.isArray(langSupport)) {
         extensions.splice(1, 0, langSupport);
@@ -794,6 +764,8 @@
 />
 
 <style>
+  @import '../../styles/markdown-preview.css';
+
   .file-editor {
     flex: 1;
     overflow: hidden;
@@ -933,227 +905,4 @@
     border-bottom-color: var(--warn, #f59e0b);
   }
 
-  /* ---- Markdown preview ---- */
-
-  .file-editor.hidden {
-    display: none;
-  }
-
-  .editor-preview-toolbar {
-    display: flex;
-    align-items: center;
-    gap: 2px;
-    padding: 4px 12px;
-    background: var(--bg-elevated);
-    border-bottom: 1px solid var(--border);
-    -webkit-app-region: no-drag;
-    flex-shrink: 0;
-  }
-
-  .preview-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    border: none;
-    border-radius: 4px;
-    background: transparent;
-    color: var(--text);
-    cursor: pointer;
-    transition: background var(--duration-fast) var(--ease-out);
-  }
-
-  .preview-btn:hover {
-    background: var(--bg);
-  }
-
-  .preview-btn.active {
-    background: color-mix(in srgb, var(--accent) 20%, transparent);
-    color: var(--accent);
-  }
-
-  .markdown-preview {
-    flex: 1;
-    overflow: auto;
-    padding: 24px 32px;
-    font-family: var(--font-family);
-    font-size: 14px;
-    line-height: 1.6;
-    color: var(--text);
-  }
-
-  .markdown-preview :global(h1) {
-    font-size: 24px;
-    margin: 1.5em 0 0.5em;
-    color: var(--text-strong);
-    font-weight: 600;
-    border-bottom: 1px solid var(--border);
-    padding-bottom: 0.3em;
-  }
-
-  .markdown-preview :global(h2) {
-    font-size: 20px;
-    margin: 1.25em 0 0.5em;
-    color: var(--text-strong);
-    font-weight: 600;
-    border-bottom: 1px solid var(--border);
-    padding-bottom: 0.3em;
-  }
-
-  .markdown-preview :global(h3) {
-    font-size: 16px;
-    margin: 1em 0 0.5em;
-    color: var(--text-strong);
-    font-weight: 600;
-  }
-
-  .markdown-preview :global(h4) {
-    font-size: 14px;
-    margin: 1em 0 0.5em;
-    color: var(--text-strong);
-    font-weight: 600;
-  }
-
-  .markdown-preview :global(h1:first-child),
-  .markdown-preview :global(h2:first-child),
-  .markdown-preview :global(h3:first-child) {
-    margin-top: 0;
-  }
-
-  .markdown-preview :global(p) {
-    margin: 0 0 1em 0;
-  }
-
-  .markdown-preview :global(p:last-child) {
-    margin-bottom: 0;
-  }
-
-  .markdown-preview :global(table) {
-    border-collapse: collapse;
-    width: 100%;
-    margin: 1em 0;
-    font-size: 0.9em;
-  }
-
-  .markdown-preview :global(th),
-  .markdown-preview :global(td) {
-    border: 1px solid var(--border);
-    padding: 8px 12px;
-    text-align: left;
-  }
-
-  .markdown-preview :global(th) {
-    background: var(--bg-elevated);
-    font-weight: 600;
-    color: var(--text-strong);
-  }
-
-  .markdown-preview :global(pre) {
-    margin: 1em 0;
-    padding: 12px 16px;
-    background: var(--bg-elevated);
-    border-radius: var(--radius-md);
-    border: 1px solid var(--border);
-    overflow-x: auto;
-    font-size: 13px;
-  }
-
-  .markdown-preview :global(pre code) {
-    background: none;
-    padding: 0;
-    font-size: 0.85em;
-    line-height: 1.5;
-  }
-
-  .markdown-preview :global(code) {
-    font-family: var(--font-mono);
-    font-size: 0.9em;
-    background: var(--bg-elevated);
-    padding: 0.15em 0.4em;
-    border-radius: var(--radius-sm);
-  }
-
-  .markdown-preview :global(blockquote) {
-    border-left: 3px solid var(--accent);
-    padding: 8px 16px;
-    margin: 1em 0;
-    color: var(--muted);
-    background: color-mix(in srgb, var(--accent) 5%, transparent);
-    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-  }
-
-  .markdown-preview :global(ul),
-  .markdown-preview :global(ol) {
-    padding-left: 24px;
-    margin: 0.5em 0 1em;
-  }
-
-  .markdown-preview :global(li) {
-    margin: 0.25em 0;
-  }
-
-  .markdown-preview :global(a) {
-    color: var(--accent);
-    text-decoration: underline;
-    text-underline-offset: 2px;
-  }
-
-  .markdown-preview :global(a:hover) {
-    color: var(--accent-hover);
-  }
-
-  .markdown-preview :global(strong) {
-    font-weight: 600;
-    color: var(--text-strong);
-  }
-
-  .markdown-preview :global(hr) {
-    border: none;
-    border-top: 1px solid var(--border);
-    margin: 1.5em 0;
-  }
-
-  .markdown-preview :global(img) {
-    max-width: 100%;
-    border-radius: var(--radius-md);
-  }
-
-  .markdown-preview :global(details.code-collapse) {
-    margin: 1em 0;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    overflow: hidden;
-  }
-
-  .markdown-preview :global(details.code-collapse summary) {
-    padding: 6px 12px;
-    font-size: 12px;
-    font-family: var(--font-mono);
-    color: var(--muted);
-    background: var(--bg-elevated);
-    cursor: pointer;
-    user-select: none;
-    list-style: none;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .markdown-preview :global(details.code-collapse summary::before) {
-    content: '▶';
-    font-size: 9px;
-    transition: transform var(--duration-fast) var(--ease-in-out);
-  }
-
-  .markdown-preview :global(details.code-collapse[open] summary::before) {
-    transform: rotate(90deg);
-  }
-
-  .markdown-preview :global(details.code-collapse pre) {
-    margin: 0;
-    border: none;
-    border-top: 1px solid var(--border);
-    border-radius: 0;
-  }
 </style>
