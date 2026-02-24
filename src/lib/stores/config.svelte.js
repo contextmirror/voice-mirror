@@ -104,6 +104,7 @@ const DEFAULT_CONFIG = {
   ai: {
     provider: 'claude',
     autoStart: false,
+    autoVoiceLoop: true,
     model: null,
     contextLength: 32768,
     autoDetect: true,

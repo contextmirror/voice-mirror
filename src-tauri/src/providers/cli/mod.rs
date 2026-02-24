@@ -337,7 +337,9 @@ impl Provider for CliProvider {
             // Queue voice loop command — injected after the TUI signals ready.
             // The voice pipeline auto-starts in App.svelte, so voice_listen
             // will be available by the time Claude processes this command.
-            {
+            // Only auto-inject if ai.autoVoiceLoop is enabled (default: true).
+            // When disabled, the user can press the Voice button manually.
+            if config.ai.auto_voice_loop {
                 let voice_loop_cmd = instructions::build_voice_loop_command(user_name);
                 let mut queue = self.ready_queue.lock().unwrap();
                 queue.push(voice_loop_cmd);

@@ -17,6 +17,7 @@
   let startMinimized = $state(false);
   let startWithSystem = $state(false);
   let autoStartProvider = $state(false);
+  let autoVoiceLoop = $state(true);
   let showToasts = $state(true);
   let markdownPreview = $state(true);
   let debugMode = $state(false);
@@ -34,6 +35,7 @@
     startMinimized = cfg.behavior?.startMinimized === true;
     startWithSystem = cfg.behavior?.startWithSystem === true;
     autoStartProvider = cfg.ai?.autoStart === true;
+    autoVoiceLoop = cfg.ai?.autoVoiceLoop !== false;
     showToasts = cfg.behavior?.showToasts !== false;
     markdownPreview = cfg.editor?.markdownPreview !== false;
     debugMode = cfg.advanced?.debugMode === true;
@@ -56,6 +58,7 @@
         },
         ai: {
           autoStart: autoStartProvider,
+          autoVoiceLoop,
         },
         editor: {
           markdownPreview,
@@ -111,6 +114,12 @@
         description="Start the selected AI provider automatically on launch"
         checked={autoStartProvider}
         onChange={(v) => (autoStartProvider = v)}
+      />
+      <Toggle
+        label="Auto Voice Loop"
+        description="Inject the voice listen/send loop on provider startup. Disable to use the Voice button instead."
+        checked={autoVoiceLoop}
+        onChange={(v) => (autoVoiceLoop = v)}
       />
     </div>
   </section>

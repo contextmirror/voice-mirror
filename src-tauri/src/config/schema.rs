@@ -370,6 +370,10 @@ pub struct AiConfig {
     pub provider: String,
     #[serde(default)]
     pub auto_start: bool,
+    /// Auto-inject voice loop command on provider startup (default: true).
+    /// When disabled, user must press the Voice button to start the voice loop.
+    #[serde(default = "default_true")]
+    pub auto_voice_loop: bool,
     #[serde(default)]
     pub model: Option<String>,
     #[serde(default = "default_context_length")]
@@ -393,6 +397,7 @@ impl Default for AiConfig {
         Self {
             provider: "claude".into(),
             auto_start: false,
+            auto_voice_loop: true,
             model: None,
             context_length: 32768,
             auto_detect: true,
