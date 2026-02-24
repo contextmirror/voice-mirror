@@ -33,7 +33,7 @@ What's missing is everything that makes a "real IDE" feel seamless — the gaps 
 | Rename symbol | Full | Full | Full | None |
 | Code actions | Full | Full | Full | None |
 | Document outline | Full | Full | Full | None |
-| Git status + diff | Full | Full | Basic | Medium |
+| Git status + diff | Full | Full | Stage/Commit/Push + AI | Minor gaps |
 | Global text search | Full | Full | Full | None |
 | Split editor | Full | Full | None | High |
 | Multi-cursor | Full | Full | Full | None |
@@ -103,29 +103,15 @@ What's missing is everything that makes a "real IDE" feel seamless — the gaps 
 
 ---
 
-### 5. Git Integration (Beyond Status) — MEDIUM
+### 5. Git Integration (Stage + Commit + Push) — DONE ✓
 
-**What real IDEs have:** Full source control panel — stage/unstage files, write commit messages, push/pull, branch switching, merge conflict resolution, inline blame annotations, commit history viewer.
+**Status:** Core git workflow implemented. Changes tab shows staged/unstaged groups with stage/unstage/discard actions, commit panel with AI-powered message generation, branch indicator, and push support.
 
-**What we have:**
-- `getGitChanges()` — shows modified/added/deleted files in the file tree (`files.rs:140-230`)
-- `getFileGitContent()` — fetches HEAD version for diff view (`api.js:507-509`)
-- Diff viewer with unified/split modes, chunk navigation, minimap
-- File tree shows change count badge
+**Backend:** 9 new Rust commands (`git_stage`, `git_unstage`, `git_stage_all`, `git_unstage_all`, `git_commit`, `git_discard`, `git_push`, `git_diff_staged`, `generate_commit_message`). Modified `get_git_changes` to parse staged vs unstaged status separately + return branch name.
 
-**Why it matters:** Developers live in git. Having to switch to the terminal for `git add`, `git commit`, `git push`, `git checkout` breaks flow — especially in a voice-driven workflow where saying "commit these changes" should just work.
+**Frontend:** `GitCommitPanel.svelte` with branch indicator, commit textarea, AI sparkle button (provider-agnostic — works with any configured API/local LLM), Commit and Commit & Push buttons. FileTree Changes tab overhauled with staged/unstaged groups and hover-reveal action buttons.
 
-**What's needed (progressive):**
-1. **Stage/unstage** — checkbox per file in the git changes view
-2. **Commit** — message input + commit button (calls `git commit`)
-3. **Push/pull** — buttons in a source control panel header
-4. **Branch indicator** — show current branch in status bar
-5. **Branch switching** — dropdown to switch branches
-6. **Inline blame** — gutter annotations showing last commit per line
-
-**Estimated scope:** Large overall, but can be incremental. Stage + commit alone would be high-value.
-
-**Voice Mirror advantage:** With AI + voice, "commit these changes with a good message" could auto-generate the commit message and execute — no other IDE does this natively.
+**Still missing (future):** Branch switching, pull, merge conflict resolution, inline blame, commit history, hunk staging.
 
 ---
 
@@ -241,7 +227,7 @@ Voice Mirror's extension story is: "Add an MCP server" — not "install a VS Cod
 | ~~2~~ | ~~Global text search~~ | ~~Critical~~ | ~~Medium~~ | ~~Done. Ctrl+Shift+F, Rust regex backend, SearchPanel in FileTree.~~ ✓ |
 | 3 | Command palette expansion | Medium | Medium | Discovery mechanism for all features. |
 | 4 | Split editor | High | Large | Key workflow for test+implementation. |
-| 5 | Git stage + commit | Medium | Medium | Close the git loop without terminal. |
+| ~~5~~ | ~~Git stage + commit~~ | ~~Medium~~ | ~~Medium~~ | ~~Done. Stage/unstage, commit, push, AI commit messages.~~ ✓ |
 | 6 | Terminal search | Low | Small | Nice-to-have for scrollback. |
 | 7 | Breadcrumbs | Low | Small | File path context in editor. |
 | 8 | Code minimap | Low | Large | Outline panel is a good substitute. |
@@ -260,4 +246,4 @@ The gap list above looks daunting, but Voice Mirror doesn't need to close every 
 4. **MCP tool ecosystem** — browser control, n8n workflows, memory system
 5. **AI-native terminal** — Claude Code is embedded, not a bolt-on extension
 
-The strategy: close the top 3-4 gaps (~~find/replace~~ ✓, ~~multi-cursor~~ ✓, ~~global search~~ ✓, split editor) so Lens is **comfortable enough** for real coding, then double down on the voice+AI features no one else has. Three of four done — split editor is the remaining big one.
+The strategy: close the top gaps so Lens is **comfortable enough** for real coding, then double down on the voice+AI features no one else has. Done: ~~find/replace~~ ✓, ~~multi-cursor~~ ✓, ~~global search~~ ✓, ~~git stage+commit~~ ✓. Remaining: split editor, command palette expansion.
