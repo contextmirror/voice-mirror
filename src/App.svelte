@@ -177,6 +177,11 @@
       setReleaseHandler('toggle-voice', handleVoiceRelease);
       setActionHandler('stats-dashboard', () => { statsVisible = !statsVisible; });
       setActionHandler('open-file-search', () => { commandPaletteVisible = true; });
+      setActionHandler('open-text-search', () => {
+        navigationStore.setMode('lens');
+        if (!layoutStore.showFileTree) layoutStore.toggleFileTree();
+        window.dispatchEvent(new CustomEvent('lens-focus-search'));
+      });
 
       // Listen for PTT events from the unified input hook.
       // The Rust hook handles matching the configured key and emits

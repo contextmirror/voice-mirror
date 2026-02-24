@@ -8,6 +8,8 @@
   import FileContextMenu from './FileContextMenu.svelte';
   import StatusDropdown from './StatusDropdown.svelte';
   import OutlinePanel from './OutlinePanel.svelte';
+  import SearchPanel from './SearchPanel.svelte';
+  import { searchStore } from '../../lib/stores/search.svelte.js';
 
   let { onFileClick = () => {}, onFileDblClick = () => {}, onChangeClick = () => {}, onChangeDblClick = () => {}, activeFilePath = null, activeDiffPath = null, activeFileHasLsp = false, onSymbolClick = () => {} } = $props();
 
@@ -58,6 +60,13 @@
       unlistenTree?.();
       unlistenGit?.();
     };
+  });
+
+  // Listen for programmatic search tab activation (from Ctrl+Shift+F)
+  $effect(() => {
+    function handleFocusSearch() { activeTab = 'search'; }
+    window.addEventListener('lens-focus-search', handleFocusSearch);
+    return () => window.removeEventListener('lens-focus-search', handleFocusSearch);
   });
 
   async function handleTreeChanged(event) {
@@ -404,6 +413,11 @@
       class:active={activeTab === 'outline'}
       onclick={() => { activeTab = 'outline'; }}
     >Outline</button>
+    <button
+      class="files-tab"
+      class:active={activeTab === 'search'}
+      onclick={() => { activeTab = 'search'; }}
+    >Search{searchStore.totalMatches > 0 ? ` (${searchStore.totalMatches})` : ''}</button>
     <StatusDropdown />
   </div>
 
@@ -556,6 +570,20 @@
   {#if activeTab === 'outline'}
     <div class="tree-scroll">
       <OutlinePanel filePath={activeFilePath} hasLsp={activeFileHasLsp} {onSymbolClick} />
+    </div>
+  {/if}
+
+  {#if activeTab === 'search'}
+    <div class="tree-scroll">
+      <SearchPanel onResultClick={(result) => {
+        const name = result.path.split(/[/\\]/).pop() || result.path;
+        onFileClick({ name, path: result.path });
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('lens-goto-position', {
+            detail: { line: result.line - 1, character: result.character || 0 }
+          }));
+        }, 50);
+      }} />
     </div>
   {/if}
 

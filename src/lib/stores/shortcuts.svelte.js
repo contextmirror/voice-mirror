@@ -82,6 +82,11 @@ export const IN_APP_SHORTCUTS = {
     label: 'Search files and commands',
     category: 'in-app',
   },
+  'open-text-search': {
+    keys: 'Ctrl+Shift+F',
+    label: 'Search in files',
+    category: 'in-app',
+  },
 };
 
 // ============ Action Handlers ============
@@ -374,14 +379,21 @@ export function getActionHandler(id) {
  */
 export function setupInAppShortcuts() {
   function handleKeydown(event) {
+    const ctrl = event.ctrlKey || event.metaKey;
+
+    // Ctrl+Shift+F -> Search in files (works from any context including inputs)
+    if (ctrl && event.shiftKey && event.key === 'F') {
+      event.preventDefault();
+      actionHandlers['open-text-search']?.();
+      return;
+    }
+
     // Don't intercept shortcuts when user is typing in an input/textarea
     const tag = event.target?.tagName;
     if (tag === 'INPUT' || tag === 'TEXTAREA' || event.target?.isContentEditable) {
       // Only allow Escape in input fields
       if (event.key !== 'Escape') return;
     }
-
-    const ctrl = event.ctrlKey || event.metaKey;
 
     // Ctrl+, -> Open settings
     if (ctrl && event.key === ',') {
