@@ -1,2 +1,0 @@
-Hello from the git staging test!
-This file was created to test the new git staging UI feature.
