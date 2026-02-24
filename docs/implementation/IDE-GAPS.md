@@ -34,7 +34,7 @@ What's missing is everything that makes a "real IDE" feel seamless — the gaps 
 | Code actions | Full | Full | Full | None |
 | Document outline | Full | Full | Full | None |
 | Git status + diff | Full | Full | Basic | Medium |
-| Global text search | Full | Full | None | Critical |
+| Global text search | Full | Full | Full | None |
 | Split editor | Full | Full | None | High |
 | Multi-cursor | Full | Full | Full | None |
 | Debug adapter (DAP) | Full | Partial | None | Low priority |
@@ -49,21 +49,17 @@ What's missing is everything that makes a "real IDE" feel seamless — the gaps 
 
 ## Gap Details
 
-### 1. Global Text Search (Ctrl+Shift+F) — CRITICAL
+### 1. Global Text Search (Ctrl+Shift+F) — DONE ✓
 
-**What real IDEs have:** A panel where you type a query and it searches the **content** of every file in the project. Regex support, file filters, replace-all. VS Code's search panel is one of its most-used features.
+**Status:** Fully implemented. Ctrl+Shift+F opens Search tab in FileTree panel.
 
-**What we have:** `CommandPalette.svelte` does fuzzy **file name** search only. The backend has `search_files()` (`src-tauri/src/commands/files.rs:913-961`) but it only searches file paths, not content.
+**Backend:** `search_content` command in `files.rs` — uses `ignore::WalkBuilder` (gitignore-aware) + `regex::Regex` for content search. Supports case sensitivity, regex mode, whole-word matching, include/exclude glob filters. Caps at 200 files / 5000 matches.
 
-**Why it matters:** Without this, finding where a function is called, where a string appears, or doing a project-wide rename is impossible without the terminal (`grep`/`rg`). This is the single most impactful missing feature for coding workflows.
+**Frontend:** `SearchPanel.svelte` in FileTree's 4th tab — search input, Aa/regex/word toggles, include/exclude filters, results grouped by file with icons, match highlighting via `<mark>`, 300ms debounce. Click result navigates to file + line.
 
-**What's needed:**
-- Backend: `grep_files(query, path, options)` command using `grep`/`ripgrep` (or Rust's `grep` crate)
-- Frontend: Search panel component (input + results list + file previews)
-- Keyboard shortcut: Ctrl+Shift+F to open
-- Bonus: Replace-all support
+**Store:** `search.svelte.js` — reactive state with `searchId` counter to discard stale async responses.
 
-**Estimated scope:** Medium — backend is straightforward, UI is the bulk of work.
+**Keybinding:** Ctrl+Shift+F (works from any context including inputs/editors).
 
 ---
 
@@ -242,7 +238,7 @@ Voice Mirror's extension story is: "Add an MCP server" — not "install a VS Cod
 |----------|---------|--------|--------|-----------|
 | ~~1~~ | ~~Find & Replace (in-file)~~ | ~~High~~ | ~~Tiny~~ | ~~Already works via basicSetup.~~ ✓ |
 | ~~1~~ | ~~Multi-cursor~~ | ~~High~~ | ~~Small~~ | ~~Done. Ctrl+D, Ctrl+Shift+L, Ctrl+Alt+Up/Down.~~ ✓ |
-| 2 | Global text search | Critical | Medium | Most-requested missing feature for coding. |
+| ~~2~~ | ~~Global text search~~ | ~~Critical~~ | ~~Medium~~ | ~~Done. Ctrl+Shift+F, Rust regex backend, SearchPanel in FileTree.~~ ✓ |
 | 3 | Command palette expansion | Medium | Medium | Discovery mechanism for all features. |
 | 4 | Split editor | High | Large | Key workflow for test+implementation. |
 | 5 | Git stage + commit | Medium | Medium | Close the git loop without terminal. |
@@ -264,4 +260,4 @@ The gap list above looks daunting, but Voice Mirror doesn't need to close every 
 4. **MCP tool ecosystem** — browser control, n8n workflows, memory system
 5. **AI-native terminal** — Claude Code is embedded, not a bolt-on extension
 
-The strategy: close the top 3-4 gaps (find/replace, multi-cursor, global search, split editor) so Lens is **comfortable enough** for real coding, then double down on the voice+AI features no one else has.
+The strategy: close the top 3-4 gaps (~~find/replace~~ ✓, ~~multi-cursor~~ ✓, ~~global search~~ ✓, split editor) so Lens is **comfortable enough** for real coding, then double down on the voice+AI features no one else has. Three of four done — split editor is the remaining big one.

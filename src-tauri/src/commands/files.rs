@@ -1152,7 +1152,8 @@ pub fn search_content(
                     break;
                 }
 
-                // Trim long lines, keeping match visible
+                // Trim long lines, keeping match visible.
+                // Use char boundaries to avoid panicking on multi-byte UTF-8.
                 let (display_text, col_start, col_end) = if line.len() > MAX_LINE_LEN {
                     // Center the trim window around the match
                     let match_mid = (mat.start() + mat.end()) / 2;
@@ -1164,9 +1165,21 @@ pub fn search_content(
                         window_start
                     };
 
-                    let trimmed = &line[window_start..window_end];
-                    let adj_start = mat.start().saturating_sub(window_start);
-                    let adj_end = mat.end().saturating_sub(window_start).min(trimmed.len());
+                    // Snap to char boundaries to avoid slicing mid-character
+                    let safe_start = if line.is_char_boundary(window_start) {
+                        window_start
+                    } else {
+                        line.ceil_char_boundary(window_start)
+                    };
+                    let safe_end = if line.is_char_boundary(window_end) {
+                        window_end
+                    } else {
+                        line.floor_char_boundary(window_end)
+                    };
+
+                    let trimmed = &line[safe_start..safe_end];
+                    let adj_start = mat.start().saturating_sub(safe_start);
+                    let adj_end = mat.end().saturating_sub(safe_start).min(trimmed.len());
                     (trimmed.to_string(), adj_start as u32, adj_end as u32)
                 } else {
                     (line.to_string(), mat.start() as u32, mat.end() as u32)
