@@ -331,6 +331,8 @@ pub fn run() {
             lsp_cmds::lsp_request_code_actions,
             lsp_cmds::lsp_prepare_rename,
             lsp_cmds::lsp_rename,
+            lsp_cmds::lsp_request_formatting,
+            lsp_cmds::lsp_request_range_formatting,
             lsp_cmds::lsp_apply_workspace_edit,
             lsp_cmds::lsp_get_status,
             lsp_cmds::lsp_shutdown,

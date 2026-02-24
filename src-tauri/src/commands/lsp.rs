@@ -402,6 +402,81 @@ pub async fn lsp_rename(
     }
 }
 
+/// Request document formatting for an entire file.
+#[tauri::command]
+pub async fn lsp_request_formatting(
+    path: String,
+    tab_size: u32,
+    insert_spaces: bool,
+    project_root: String,
+    state: State<'_, LspManagerState>,
+) -> Result<IpcResponse, ()> {
+    let ext = match extension_from_path(&path) {
+        Some(e) => e,
+        None => return Ok(IpcResponse::err("Could not determine file extension")),
+    };
+
+    let lang_id = match detection::language_id_for_extension(&ext) {
+        Some(id) => id.to_string(),
+        None => return Ok(IpcResponse::err(format!("No LSP support for .{} files", ext))),
+    };
+
+    let uri = types::file_uri(&path, &project_root);
+
+    let mut manager = state.0.lock().await;
+    match manager
+        .request_formatting(&uri, &lang_id, tab_size, insert_spaces)
+        .await
+    {
+        Ok(result) => Ok(IpcResponse::ok(result)),
+        Err(e) => Ok(IpcResponse::err(e)),
+    }
+}
+
+/// Request formatting for a range within a file.
+#[tauri::command]
+pub async fn lsp_request_range_formatting(
+    path: String,
+    range_start_line: u32,
+    range_start_char: u32,
+    range_end_line: u32,
+    range_end_char: u32,
+    tab_size: u32,
+    insert_spaces: bool,
+    project_root: String,
+    state: State<'_, LspManagerState>,
+) -> Result<IpcResponse, ()> {
+    let ext = match extension_from_path(&path) {
+        Some(e) => e,
+        None => return Ok(IpcResponse::err("Could not determine file extension")),
+    };
+
+    let lang_id = match detection::language_id_for_extension(&ext) {
+        Some(id) => id.to_string(),
+        None => return Ok(IpcResponse::err(format!("No LSP support for .{} files", ext))),
+    };
+
+    let uri = types::file_uri(&path, &project_root);
+
+    let mut manager = state.0.lock().await;
+    match manager
+        .request_range_formatting(
+            &uri,
+            &lang_id,
+            range_start_line,
+            range_start_char,
+            range_end_line,
+            range_end_char,
+            tab_size,
+            insert_spaces,
+        )
+        .await
+    {
+        Ok(result) => Ok(IpcResponse::ok(result)),
+        Err(e) => Ok(IpcResponse::err(e)),
+    }
+}
+
 /// Apply a workspace edit (multi-file text edits from rename or code actions).
 ///
 /// Parses a WorkspaceEdit's `changes` map (uri -> TextEdit[]), reads each file,

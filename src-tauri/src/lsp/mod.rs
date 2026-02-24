@@ -279,6 +279,12 @@ impl LspManager {
                         "dynamicRegistration": false,
                         "prepareSupport": true
                     },
+                    "formatting": {
+                        "dynamicRegistration": false
+                    },
+                    "rangeFormatting": {
+                        "dynamicRegistration": false
+                    },
                     "publishDiagnostics": {
                         "relatedInformation": false
                     }
@@ -880,6 +886,108 @@ impl LspManager {
         let result = response.get("result").cloned().unwrap_or(Value::Null);
 
         Ok(serde_json::json!({ "workspaceEdit": result }))
+    }
+
+    /// Request document formatting for an entire file.
+    pub async fn request_formatting(
+        &mut self,
+        uri: &str,
+        lang_id: &str,
+        tab_size: u32,
+        insert_spaces: bool,
+    ) -> Result<Value, String> {
+        let server = self
+            .servers
+            .get_mut(lang_id)
+            .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
+
+        let params = serde_json::json!({
+            "textDocument": { "uri": uri },
+            "options": {
+                "tabSize": tab_size,
+                "insertSpaces": insert_spaces
+            }
+        });
+
+        let rx = client::send_request(
+            &mut server.stdin,
+            &server.pending_requests,
+            "textDocument/formatting",
+            params,
+            &server.next_id,
+        )
+        .await?;
+
+        let response = tokio::time::timeout(std::time::Duration::from_secs(10), rx)
+            .await
+            .map_err(|_| "Formatting request timed out".to_string())?
+            .map_err(|_| "Formatting response channel closed".to_string())?;
+
+        let result = response.get("result").cloned().unwrap_or(Value::Null);
+
+        // Result is TextEdit[] or null
+        let edits = if result.is_array() {
+            result
+        } else {
+            Value::Array(vec![])
+        };
+
+        Ok(serde_json::json!({ "edits": edits }))
+    }
+
+    /// Request formatting for a range within a file.
+    pub async fn request_range_formatting(
+        &mut self,
+        uri: &str,
+        lang_id: &str,
+        range_start_line: u32,
+        range_start_char: u32,
+        range_end_line: u32,
+        range_end_char: u32,
+        tab_size: u32,
+        insert_spaces: bool,
+    ) -> Result<Value, String> {
+        let server = self
+            .servers
+            .get_mut(lang_id)
+            .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
+
+        let params = serde_json::json!({
+            "textDocument": { "uri": uri },
+            "range": {
+                "start": { "line": range_start_line, "character": range_start_char },
+                "end": { "line": range_end_line, "character": range_end_char }
+            },
+            "options": {
+                "tabSize": tab_size,
+                "insertSpaces": insert_spaces
+            }
+        });
+
+        let rx = client::send_request(
+            &mut server.stdin,
+            &server.pending_requests,
+            "textDocument/rangeFormatting",
+            params,
+            &server.next_id,
+        )
+        .await?;
+
+        let response = tokio::time::timeout(std::time::Duration::from_secs(10), rx)
+            .await
+            .map_err(|_| "Range formatting request timed out".to_string())?
+            .map_err(|_| "Range formatting response channel closed".to_string())?;
+
+        let result = response.get("result").cloned().unwrap_or(Value::Null);
+
+        // Result is TextEdit[] or null
+        let edits = if result.is_array() {
+            result
+        } else {
+            Value::Array(vec![])
+        };
+
+        Ok(serde_json::json!({ "edits": edits }))
     }
 
     /// Get status information for all servers.
