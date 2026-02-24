@@ -11,7 +11,7 @@ npm install
 # Run in development mode (rebuilds MCP binary + Vite HMR + Rust auto-rebuild)
 npm run dev
 
-# Run JS tests (2818+ tests)
+# Run JS tests (3400+ tests)
 npm test
 
 # Run Rust tests
@@ -39,21 +39,22 @@ voice-mirror/
 │   ├── src/
 │   │   ├── main.rs                     # App entry, window creation
 │   │   ├── lib.rs                      # Tauri plugin + command registration, lens-bridge URI scheme
-│   │   ├── commands/                   # 13 Tauri command modules (100 commands)
+│   │   ├── commands/                   # 14 Tauri command modules (116 commands)
 │   │   │   ├── mod.rs
 │   │   │   ├── config.rs               # get_config, set_config, reset_config, get_platform_info, migrate
 │   │   │   ├── window.rs               # Window management (11 commands)
-│   │   │   ├── voice.rs                # Voice pipeline (12 commands)
+│   │   │   ├── voice.rs                # Voice pipeline (17 commands)
 │   │   │   ├── ai.rs                   # AI provider lifecycle (13 commands)
 │   │   │   ├── chat.rs                 # Chat history (6 commands)
 │   │   │   ├── files.rs                # File operations (13 commands)
 │   │   │   ├── screenshot.rs           # Screen/window capture (6 commands)
 │   │   │   ├── shell.rs                # Shell PTY spawning (5 commands)
-│   │   │   ├── lens.rs                 # WebView2 browser preview (10 commands)
-│   │   │   ├── lsp.rs                  # Language server protocol (9 commands)
+│   │   │   ├── lens.rs                 # WebView2 browser preview (14 commands)
+│   │   │   ├── lsp.rs                  # Language server protocol (15 commands)
 │   │   │   ├── dev_server.rs           # Dev server detection (3 commands)
 │   │   │   ├── tools.rs                # CLI tool/dependency management (3 commands)
-│   │   │   └── shortcuts.rs            # Global shortcut registration (4 commands)
+│   │   │   ├── shortcuts.rs            # Global shortcut registration (4 commands)
+│   │   │   └── design.rs              # Design tool commands (1 command)
 │   │   ├── config/                     # Config system
 │   │   │   ├── mod.rs
 │   │   │   ├── schema.rs               # Config struct definitions (AppConfig + 13 sub-structs)
@@ -75,13 +76,14 @@ voice-mirror/
 │   │   ├── mcp/                        # Native Rust MCP server
 │   │   │   ├── mod.rs
 │   │   │   ├── server.rs               # stdio JSON-RPC server
-│   │   │   ├── tools.rs                # Tool registry (4 groups, dynamic load/unload)
+│   │   │   ├── tools.rs                # Tool registry (5 groups, dynamic load/unload)
 │   │   │   ├── pipe_router.rs          # Concurrent pipe message routing
-│   │   │   └── handlers/               # 4 tool handler modules
+│   │   │   └── handlers/               # 5 tool handler modules
 │   │   │       ├── mod.rs
 │   │   │       ├── core.rs             # voice_send, voice_inbox, voice_listen, voice_status
 │   │   │       ├── memory.rs           # search, get, remember, forget, stats, flush
 │   │   │       ├── browser.rs          # Browser automation via named pipe to WebView2
+│   │   │       ├── capture.rs          # Screen/window capture
 │   │   │       └── n8n.rs              # n8n workflow management
 │   │   ├── ipc/                        # Named pipe IPC (MCP binary <-> Tauri app)
 │   │   │   ├── protocol.rs             # McpToApp / AppToMcp message enums
@@ -104,19 +106,18 @@ voice-mirror/
 ├── src/                                # Svelte 5 frontend
 │   ├── App.svelte                      # Root component
 │   ├── main.js                         # Entry point
-│   ├── components/                     # 60 UI components across 7 directories
+│   ├── components/                     # 63 UI components across 7 directories
 │   │   ├── chat/                       # 7 components: ChatPanel, ChatBubble, ChatInput, etc.
-│   │   ├── lens/                       # 16 components: workspace, editor, file tree, preview, etc.
+│   │   ├── lens/                       # 23 components: workspace, editor, file tree, preview, etc.
 │   │   ├── settings/                   # 13 components (9 top-level + 4 appearance sub-panels)
 │   │   ├── sidebar/                    # 4 components: Sidebar, ChatList, SessionPanel, ProjectStrip
 │   │   ├── overlay/                    # 2 components: Orb, OverlayPanel
 │   │   ├── terminal/                   # 3 components: Terminal, ShellTerminal, TerminalTabs
-│   │   └── shared/                     # 15 components: Button, SplitPanel, ResizeEdges, etc.
+│   │   └── shared/                     # 11 components: Button, SplitPanel, ResizeEdges, etc.
 │   ├── lib/
-│   │   ├── api.js                      # 102 invoke() wrappers for all Tauri commands
+│   │   ├── api.js                      # 102+ invoke() wrappers for all Tauri commands
 │   │   ├── utils.js                    # deepMerge, formatTime, uid
 │   │   ├── markdown.js                 # marked + DOMPurify
-│   │   ├── updater.js                  # Tauri updater integration
 │   │   ├── orb-presets.js              # Orb animation presets
 │   │   ├── avatar-presets.js           # Avatar preset system
 │   │   ├── voice-greeting.js           # Voice greeting text
@@ -124,8 +125,9 @@ voice-mirror/
 │   │   ├── providers.js                # AI provider definitions
 │   │   ├── file-icons.js               # File type icon mapping
 │   │   ├── editor-theme.js             # CodeMirror theme (Voice Mirror custom)
+│   │   ├── editor-lsp.svelte.js        # LSP integration for CodeMirror editor
 │   │   ├── local-llm-instructions.js   # System prompt for API providers
-│   │   └── stores/                     # 16 reactive stores (Svelte 5 runes)
+│   │   └── stores/                     # 18 reactive stores (Svelte 5 runes)
 │   │       ├── config.svelte.js        # DEFAULT_CONFIG, config state
 │   │       ├── theme.svelte.js         # PRESETS, deriveTheme(), theme state
 │   │       ├── ai-status.svelte.js     # AI provider status
@@ -139,8 +141,10 @@ voice-mirror/
 │   │       ├── lens.svelte.js          # Lens navigation state
 │   │       ├── project.svelte.js       # Project path + file tree
 │   │       ├── terminal-tabs.svelte.js # Terminal tab management
+│   │       ├── browser-tabs.svelte.js  # Browser tab management
 │   │       ├── layout.svelte.js        # Panel layout state
 │   │       ├── attachments.svelte.js   # Chat attachment management
+│   │       ├── lsp-diagnostics.svelte.js # LSP diagnostic state
 │   │       └── dev-server-manager.svelte.js # Dev server detection
 │   └── styles/                         # 9 CSS files
 │       ├── tokens.css                  # Design tokens (CSS custom properties)
@@ -152,7 +156,7 @@ voice-mirror/
 │       ├── orb.css                     # Orb animation styles
 │       ├── notifications.css           # Toast notification styles
 │       └── animations.css              # Shared animations
-├── test/                               # Frontend tests (2476+)
+├── test/                               # Frontend tests (3400+)
 │   ├── unit/                           # Direct-import tests (.mjs)
 │   ├── stores/                         # Source-inspection tests for stores
 │   ├── api/                            # API wrapper tests
@@ -175,7 +179,7 @@ voice-mirror/
 | `build` | Builds MCP binary (release) + `tauri build` | Production build |
 | `preview` | `vite preview` | Preview production build |
 | `check` | `svelte-check` | Svelte type checking |
-| `test` | `node --test "test/**/*.test.cjs" "test/**/*.test.mjs"` | Run all JS tests (2818+) |
+| `test` | `node --test "test/**/*.test.cjs" "test/**/*.test.mjs"` | Run all JS tests (3400+) |
 | `test:rust` | `cd src-tauri && cargo test` | Run Rust tests |
 | `test:all` | `npm test && npm run test:rust` | Run both JS and Rust tests |
 
@@ -260,7 +264,7 @@ Development builds enable `native-ml` by default (configured in `tauri.conf.json
 ### Running Tests
 
 ```bash
-# All JS tests (2818+)
+# All JS tests (3400+)
 npm test
 
 # Single JS test file
@@ -443,8 +447,8 @@ The voice pipeline is fully Rust-native (no separate child process):
 The MCP server is a native Rust binary (`voice-mirror-mcp`) that communicates via stdio JSON-RPC:
 
 - Entry point: `src-tauri/src/bin/mcp.rs`
-- Tool registry: `src-tauri/src/mcp/tools.rs` (4 groups, dynamic load/unload)
-- Handlers: `src-tauri/src/mcp/handlers/` (4 handler modules)
+- Tool registry: `src-tauri/src/mcp/tools.rs` (5 groups, dynamic load/unload)
+- Handlers: `src-tauri/src/mcp/handlers/` (5 handler modules)
 - Pipe router: `src-tauri/src/mcp/pipe_router.rs` (concurrent oneshot/mpsc routing)
 - Named pipe IPC connects the MCP binary to the running Tauri app for real-time communication
 

@@ -1,4 +1,5 @@
 use super::IpcResponse;
+use crate::util::escape_js_string;
 use tauri::{AppHandle, Manager};
 use tracing::info;
 
@@ -80,12 +81,4 @@ pub fn design_command(
         Ok(()) => IpcResponse::ok_empty(),
         Err(e) => IpcResponse::err(format!("Failed to execute design JS: {}", e)),
     }
-}
-
-/// Escape a string for safe embedding inside a JS single-quoted string literal.
-fn escape_js_string(s: &str) -> String {
-    s.replace('\\', "\\\\")
-        .replace('\'', "\\'")
-        .replace('\n', "\\n")
-        .replace('\r', "\\r")
 }

@@ -2,6 +2,9 @@
 //!
 //! Exposes LSP manager operations to the frontend: opening/closing files,
 //! requesting completions, hover info, definitions, and managing server lifecycle.
+//!
+//! Note: Async Tauri commands that take `State<'_>` (a reference) must return
+//! `Result<T, E>` due to Tauri's `AsyncCommandMustReturnResult` constraint.
 
 use serde_json::json;
 use tauri::{AppHandle, State};
@@ -407,10 +410,10 @@ pub async fn lsp_rename(
 pub async fn lsp_apply_workspace_edit(
     edits: serde_json::Value,
     project_root: String,
-) -> Result<IpcResponse, ()> {
+) -> IpcResponse {
     let changes = match edits.get("changes").and_then(|c| c.as_object()) {
         Some(c) => c,
-        None => return Ok(IpcResponse::ok(json!({ "filesChanged": [] }))),
+        None => return IpcResponse::ok(json!({ "filesChanged": [] })),
     };
 
     let mut files_changed: Vec<String> = Vec::new();
@@ -419,10 +422,10 @@ pub async fn lsp_apply_workspace_edit(
         let rel_path = match types::uri_to_relative_path(uri, &project_root) {
             Some(p) => p,
             None => {
-                return Ok(IpcResponse::err(format!(
+                return IpcResponse::err(format!(
                     "Cannot resolve URI to project path: {}",
                     uri
-                )));
+                ));
             }
         };
 
@@ -432,10 +435,10 @@ pub async fn lsp_apply_workspace_edit(
         let content = match tokio::fs::read_to_string(&full_path).await {
             Ok(c) => c,
             Err(e) => {
-                return Ok(IpcResponse::err(format!(
+                return IpcResponse::err(format!(
                     "Failed to read {}: {}",
                     rel_path, e
-                )));
+                ));
             }
         };
 
@@ -522,16 +525,16 @@ pub async fn lsp_apply_workspace_edit(
         };
 
         if let Err(e) = tokio::fs::write(&full_path, &final_content).await {
-            return Ok(IpcResponse::err(format!(
+            return IpcResponse::err(format!(
                 "Failed to write {}: {}",
                 rel_path, e
-            )));
+            ));
         }
 
         files_changed.push(rel_path);
     }
 
-    Ok(IpcResponse::ok(json!({ "filesChanged": files_changed })))
+    IpcResponse::ok(json!({ "filesChanged": files_changed }))
 }
 
 /// Get the status of all running LSP servers.

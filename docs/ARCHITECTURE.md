@@ -15,14 +15,14 @@
 |  │  Settings panel (9 tabs)                             │ |
 |  │  Sidebar (navigation, chat list, project strip)      │ |
 |  │  Theme engine (8 presets + custom themes)            │ |
-|  │  16 reactive stores (Svelte 5 runes)                 │ |
+|  │  18 reactive stores (Svelte 5 runes)                 │ |
 |  │  API layer: invoke('command', { args }) → Rust       │ |
 |  └──────────────────────────────────────────────────────┘ |
 |                         │ invoke()                        |
 |                         ▼                                 |
 |  ┌─ Rust Backend (Tauri commands) ──────────────────────┐ |
 |  │                                                      │ |
-|  │  commands/     Tauri command handlers (13 modules)    │ |
+|  │  commands/     Tauri command handlers (14 modules)    │ |
 |  │  ├── config    Config CRUD (get, set, reset)         │ |
 |  │  ├── window    Window management (pos, bounds, quit) │ |
 |  │  ├── voice     Voice pipeline control                │ |
@@ -52,8 +52,8 @@
 |  │                                                      │ |
 |  │  mcp/          Native Rust MCP server                │ |
 |  │  ├── server    stdio JSON-RPC transport              │ |
-|  │  ├── tools     Tool registry (4 groups)             │ |
-|  │  ├── handlers  4 handler modules                     │ |
+|  │  ├── tools     Tool registry (5 groups)             │ |
+|  │  ├── handlers  5 handler modules                     │ |
 |  │  └── pipe_router Concurrent pipe message routing     │ |
 |  │                                                      │ |
 |  │  ipc/          Named pipe server (Win) / Unix socket │ |
@@ -85,7 +85,7 @@ The Rust backend manages the lifecycle of all child processes (PTY terminals, MC
 
 ## Tauri Commands
 
-100 commands across 13 modules. The frontend communicates with the backend by calling `invoke('command_name', { args })`, which routes to a `#[tauri::command]` Rust function that returns `Result<T, String>`.
+116 commands across 14 modules. The frontend communicates with the backend by calling `invoke('command_name', { args })`, which routes to a `#[tauri::command]` Rust function that returns `Result<T, String>`.
 
 ### commands/config.rs (5 commands)
 | Command | Purpose |
@@ -111,11 +111,12 @@ The Rust backend manages the lifecycle of all child processes (PTY terminals, MC
 | `quit_app` | Quit application |
 | `get_process_stats` | Get memory/CPU usage stats |
 
-### commands/voice.rs (12 commands)
+### commands/voice.rs (17 commands)
 | Command | Purpose |
 |---------|---------|
 | `start_voice` | Start voice pipeline |
 | `stop_voice` | Stop voice pipeline |
+| `restart_voice` | Restart voice pipeline |
 | `get_voice_status` | Get pipeline state |
 | `set_voice_mode` | Switch activation mode |
 | `list_audio_devices` | List system audio devices |
@@ -125,6 +126,10 @@ The Rust backend manages the lifecycle of all child processes (PTY terminals, MC
 | `configure_ptt_key` | Set PTT keybinding |
 | `configure_dictation_key` | Set dictation keybinding |
 | `inject_text` | Inject text via OS input simulation |
+| `ensure_stt_model` | Download/ensure STT model is available |
+| `detect_gpu` | Detect GPU for CUDA acceleration |
+| `list_stt_models` | List available STT models |
+| `delete_stt_model` | Delete a downloaded STT model |
 
 ### commands/ai.rs (13 commands)
 | Command | Purpose |
@@ -189,9 +194,13 @@ The Rust backend manages the lifecycle of all child processes (PTY terminals, MC
 | `shell_kill` | Kill shell process |
 | `shell_list` | List active shells |
 
-### commands/lens.rs (10 commands)
+### commands/lens.rs (14 commands)
 | Command | Purpose |
 |---------|---------|
+| `lens_create_tab` | Create browser tab |
+| `lens_close_tab` | Close browser tab |
+| `lens_switch_tab` | Switch active browser tab |
+| `lens_close_all_tabs` | Close all browser tabs |
 | `lens_create_webview` | Create browser preview WebView2 |
 | `lens_navigate` | Navigate to URL |
 | `lens_go_back` / `lens_go_forward` | Browser history navigation |
@@ -202,7 +211,7 @@ The Rust backend manages the lifecycle of all child processes (PTY terminals, MC
 | `lens_hard_refresh` | Hard refresh (bypass cache) |
 | `lens_clear_cache` | Clear WebView2 cache |
 
-### commands/lsp.rs (9 commands)
+### commands/lsp.rs (15 commands)
 | Command | Purpose |
 |---------|---------|
 | `lsp_open_file` | Notify LSP of file open |
@@ -212,6 +221,12 @@ The Rust backend manages the lifecycle of all child processes (PTY terminals, MC
 | `lsp_request_completion` | Request completions |
 | `lsp_request_hover` | Request hover info |
 | `lsp_request_definition` | Request go-to-definition |
+| `lsp_request_document_symbols` | Request document symbols (outline) |
+| `lsp_request_references` | Find all references |
+| `lsp_request_code_actions` | Request code actions |
+| `lsp_prepare_rename` | Prepare rename (validate position) |
+| `lsp_rename` | Execute rename refactoring |
+| `lsp_apply_workspace_edit` | Apply workspace edit |
 | `lsp_get_status` | Get LSP server status |
 | `lsp_shutdown` | Shut down LSP server |
 
@@ -229,6 +244,11 @@ The Rust backend manages the lifecycle of all child processes (PTY terminals, MC
 | `check_npm_versions` | Check npm package versions |
 | `update_npm_package` | Update an npm package |
 
+### commands/design.rs (1 command)
+| Command | Purpose |
+|---------|---------|
+| `design_command` | Execute design tool commands |
+
 ### commands/shortcuts.rs (4 commands)
 | Command | Purpose |
 |---------|---------|
@@ -243,7 +263,7 @@ The Rust backend manages the lifecycle of all child processes (PTY terminals, MC
 
 The frontend is a Svelte 5 application built with Vite. It runs inside the Tauri WebView — there is no Node.js context, no preload script, and no `window.voiceMirror` bridge. All backend communication goes through `invoke()` calls defined in `src/lib/api.js`.
 
-### Components (60 files, 7 directories)
+### Components (63 files, 7 directories)
 
 **Chat** (7 components):
 | Component | Purpose |
@@ -256,11 +276,10 @@ The frontend is a Svelte 5 application built with Vite. It runs inside the Tauri
 | `StreamingCursor.svelte` | Animated cursor for streaming responses |
 | `ToolCard.svelte` | Tool call display (name, status, result) |
 
-**Lens** (16 components):
+**Lens** (23 components):
 | Component | Purpose |
 |-----------|---------|
 | `LensWorkspace.svelte` | Layout orchestrator (SplitPanel nesting) |
-| `LensPanel.svelte` | Main panel container |
 | `LensToolbar.svelte` | Browser URL bar (back/forward/refresh/URL) |
 | `LensPreview.svelte` | Native Tauri child WebView2 container |
 | `FileEditor.svelte` | CodeMirror 6 editor |
@@ -271,7 +290,15 @@ The frontend is a Svelte 5 application built with Vite. It runs inside the Tauri
 | `EditorContextMenu.svelte` | Editor right-click menu |
 | `CommandPalette.svelte` | Ctrl+P file search |
 | `DiffViewer.svelte` | File diff viewer |
+| `DiffMinimap.svelte` | Diff minimap sidebar |
+| `DiffToolbar.svelte` | Diff toolbar controls |
 | `StatusDropdown.svelte` | Status bar dropdown |
+| `OutlinePanel.svelte` | Document symbol outline (LSP) |
+| `ReferencesPanel.svelte` | Find references panel (LSP) |
+| `CodeActionsMenu.svelte` | Code actions menu (LSP) |
+| `RenameInput.svelte` | Inline rename input (LSP) |
+| `BrowserTabBar.svelte` | Browser tab strip |
+| `DesignToolbar.svelte` | Design toolbar |
 | `McpTab.svelte` | MCP server status tab |
 | `LspTab.svelte` | LSP server status tab |
 | `ServersTab.svelte` | Server management tab |
@@ -314,7 +341,7 @@ The frontend is a Svelte 5 application built with Vite. It runs inside the Tauri
 | `ShellTerminal.svelte` | Shell PTY terminal (user shells) |
 | `TerminalTabs.svelte` | Tabbed container: AI tab + shell tabs + unified toolbar |
 
-**Shared** (15 components):
+**Shared** (11 components):
 | Component | Purpose |
 |-----------|---------|
 | `Button.svelte` | Reusable button component |
@@ -322,18 +349,14 @@ The frontend is a Svelte 5 application built with Vite. It runs inside the Tauri
 | `TextInput.svelte` | Text input component |
 | `Toggle.svelte` | Toggle switch component |
 | `Slider.svelte` | Range slider component |
-| `Skeleton.svelte` | Loading skeleton placeholder |
-| `ErrorState.svelte` | Error display component |
 | `Toast.svelte` | Individual toast notification |
 | `ToastContainer.svelte` | Toast notification container |
 | `TitleBar.svelte` | Custom title bar (frameless window) |
 | `SplitPanel.svelte` | Resizable split panel layout |
 | `ResizeEdges.svelte` | Frameless window resize handles |
 | `StatsBar.svelte` | Process statistics bar |
-| `OnboardingModal.svelte` | First-run onboarding wizard |
-| `WhatsNewModal.svelte` | Changelog display modal |
 
-### Stores (16 reactive stores using Svelte 5 runes)
+### Stores (18 reactive stores using Svelte 5 runes)
 
 All stores live in `src/lib/stores/` and use `.svelte.js` extension for rune support:
 
@@ -352,13 +375,15 @@ All stores live in `src/lib/stores/` and use `.svelte.js` extension for rune sup
 | `lens.svelte.js` | Lens navigation state |
 | `project.svelte.js` | Project path + file tree |
 | `terminal-tabs.svelte.js` | Terminal tab management |
+| `browser-tabs.svelte.js` | Browser tab management |
 | `layout.svelte.js` | Panel layout state |
 | `attachments.svelte.js` | Chat attachment management |
+| `lsp-diagnostics.svelte.js` | LSP diagnostic state |
 | `dev-server-manager.svelte.js` | Dev server detection and management |
 
 ### API Layer (`src/lib/api.js`)
 
-102 `invoke()` wrapper functions that map to Tauri commands. The frontend never calls `invoke()` directly — all calls go through this module, which handles serialization, error formatting, and typing.
+102+ `invoke()` wrapper functions that map to Tauri commands. The frontend never calls `invoke()` directly — all calls go through this module, which handles serialization, error formatting, and typing.
 
 ```javascript
 // Example: api.js wraps Tauri invoke() calls
@@ -379,10 +404,9 @@ export async function startVoice() {
 
 | Module | Purpose |
 |--------|---------|
-| `api.js` | 102 invoke() wrappers for all Tauri commands |
+| `api.js` | 102+ invoke() wrappers for all Tauri commands |
 | `markdown.js` | Secure markdown rendering (marked + DOMPurify) |
 | `utils.js` | Utility functions (deepMerge, formatTime, uid) |
-| `updater.js` | App update checking |
 | `orb-presets.js` | Orb animation presets |
 | `voice-greeting.js` | Voice greeting logic |
 | `voice-adapters.js` | Voice engine adapters |
@@ -390,6 +414,7 @@ export async function startVoice() {
 | `providers.js` | AI provider definitions |
 | `file-icons.js` | File type icon mapping |
 | `editor-theme.js` | CodeMirror theme (Voice Mirror custom) |
+| `editor-lsp.svelte.js` | LSP integration for CodeMirror editor |
 | `avatar-presets.js` | Avatar/orb preset system |
 
 ---
@@ -513,20 +538,22 @@ Tauri app backend (Rust)
 | Module | Purpose |
 |--------|---------|
 | `mcp/server.rs` | JSON-RPC transport, request routing |
-| `mcp/tools.rs` | Tool registry (10 groups, dynamic load/unload) |
+| `mcp/tools.rs` | Tool registry (50 tools, 5 groups, dynamic load/unload) |
 | `mcp/pipe_router.rs` | Concurrent pipe message routing (oneshot for browser responses, mpsc for user messages) |
 | `mcp/handlers/core.rs` | Core voice communication handlers |
 | `mcp/handlers/browser.rs` | Browser control via named pipe to WebView2 |
 | `mcp/handlers/memory.rs` | Persistent memory system |
 | `mcp/handlers/n8n.rs` | n8n workflow automation |
+| `mcp/handlers/capture.rs` | Screen/window capture handlers |
 
-### Tool Groups (4)
+### Tool Groups (5)
 
 | Group | Tools | Always Loaded | Description |
 |-------|-------|---------------|-------------|
 | `core` | 4 | Yes | Voice communication (send, inbox, listen, status) |
 | `memory` | 6 | No | Persistent memory (search, remember, forget, stats, flush) |
 | `browser` | 16 | No | Chrome browser control and web research |
+| `capture` | 2 | No | Window/screen capture |
 | `n8n` | 22 | No | n8n workflow automation |
 
 ### Communication
@@ -739,7 +766,7 @@ npm run test:rust    # cargo test --bin voice-mirror-mcp
 
 Unit tests for MCP handlers, IPC protocol, and tool registry. Note: `cargo test --lib` fails on Windows due to WebView2 DLL issues — use `cargo check --tests` for compilation verification.
 
-### JavaScript Tests (2818+)
+### JavaScript Tests (3400+)
 
 ```bash
 npm test
@@ -757,7 +784,7 @@ Uses `node:test` + `node:assert/strict`. Two patterns:
 npm install          # Install frontend dependencies
 npm run dev          # Tauri dev mode with HMR (also rebuilds MCP binary)
 npm run build        # Build production Tauri app (also rebuilds MCP binary)
-npm test             # Run JS test suite (2818+ tests)
+npm test             # Run JS test suite (3400+ tests)
 npm run test:rust    # Run Rust tests (cargo test --bin voice-mirror-mcp)
 npm run test:all     # Run both JS and Rust tests
 npm run check        # Svelte type checking

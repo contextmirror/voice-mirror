@@ -247,13 +247,6 @@ describe('providers.js', () => {
     assert.ok(src.includes('export const MCP_PROVIDERS'), 'Should export MCP_PROVIDERS');
   });
 
-  it('exports getProviderIcon helper', () => {
-    assert.ok(src.includes('export function getProviderIcon'), 'Should export getProviderIcon');
-  });
-
-  it('exports getProviderName helper', () => {
-    assert.ok(src.includes('export function getProviderName'), 'Should export getProviderName');
-  });
 });
 
 // ---- VoiceSettings.svelte ----
@@ -491,14 +484,6 @@ describe('voice-adapters.js', () => {
 
   it('exports formatKeybind helper', () => {
     assert.ok(src.includes('export function formatKeybind'), 'Should export formatKeybind');
-  });
-
-  it('exports getVoicesForAdapter helper', () => {
-    assert.ok(src.includes('export function getVoicesForAdapter'), 'Should export getVoicesForAdapter');
-  });
-
-  it('exports getModelsForAdapter helper', () => {
-    assert.ok(src.includes('export function getModelsForAdapter'), 'Should export getModelsForAdapter');
   });
 
   it('has large-v3-turbo model size option', () => {

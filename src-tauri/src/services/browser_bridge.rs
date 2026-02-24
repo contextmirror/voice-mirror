@@ -263,13 +263,7 @@ fn get_webview(
         .ok_or_else(|| "Lens webview not found".into())
 }
 
-/// Escape a string for safe inclusion in JavaScript single-quoted strings.
-fn escape_js(s: &str) -> String {
-    s.replace('\\', "\\\\")
-        .replace('\'', "\\'")
-        .replace('\n', "\\n")
-        .replace('\r', "\\r")
-}
+use crate::util::escape_js_string as escape_js;
 
 // ---------------------------------------------------------------------------
 // Snapshot JS

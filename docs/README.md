@@ -25,13 +25,18 @@ Design docs and implementation plans in `docs/internal/`:
 
 | File | Description |
 |------|-------------|
+| [BUGS.md](internal/BUGS.md) | Known bugs tracker |
+| [CAPTURE-LIST-BLOAT.md](internal/CAPTURE-LIST-BLOAT.md) | Capture list performance analysis |
+| [CODE-NAVIGATION-MCP.md](internal/CODE-NAVIGATION-MCP.md) | Code navigation via MCP tools |
+| [DEV-SERVER-CHECKLIST.md](internal/DEV-SERVER-CHECKLIST.md) | Dev server feature implementation checklist |
+| [DEV-SERVER-DETECTION.md](internal/DEV-SERVER-DETECTION.md) | Dev server auto-detection and workspace browser integration |
+| [IDE-GAPS.md](internal/IDE-GAPS.md) | IDE feature gap analysis |
+| [INSTALLER-PLAN.md](internal/INSTALLER-PLAN.md) | Installer and optional component plan |
 | [LSP-DESIGN.md](internal/LSP-DESIGN.md) | LSP integration design and architecture |
 | [MCP-SERVERS.md](internal/MCP-SERVERS.md) | External MCP server management plan |
-| [DEV-SERVER-DETECTION.md](internal/DEV-SERVER-DETECTION.md) | Dev server auto-detection and workspace browser integration |
-| [DEV-SERVER-CHECKLIST.md](internal/DEV-SERVER-CHECKLIST.md) | Dev server feature implementation checklist |
+| [STT-MODELS.md](internal/STT-MODELS.md) | Speech-to-text model documentation |
+| [TERMINAL-RENDERING-BUG.md](internal/TERMINAL-RENDERING-BUG.md) | Terminal rendering glitch analysis and fix |
 | [UNIFIED-SERVER-PLAN.md](internal/UNIFIED-SERVER-PLAN.md) | Unified server plan (Servers/MCP/LSP tabs) |
-| [INSTALLER-PLAN.md](internal/INSTALLER-PLAN.md) | Installer and optional component plan |
-| [BUGS.md](internal/BUGS.md) | Known bugs tracker |
 
 ## Suggested Reading Order
 

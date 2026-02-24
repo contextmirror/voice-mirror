@@ -24,10 +24,6 @@ export async function resetConfig() {
   return invoke('reset_config');
 }
 
-export async function getPlatformInfo() {
-  return invoke('get_platform_info');
-}
-
 // ============ Window ============
 
 export async function getWindowPosition() {
@@ -38,20 +34,8 @@ export async function setWindowPosition(x, y) {
   return invoke('set_window_position', { x, y });
 }
 
-export async function saveWindowBounds() {
-  return invoke('save_window_bounds');
-}
-
 export async function minimizeWindow() {
   return invoke('minimize_window');
-}
-
-export async function maximizeWindow() {
-  return invoke('maximize_window');
-}
-
-export async function quitApp() {
-  return invoke('quit_app');
 }
 
 export async function setWindowSize(width, height) {
@@ -103,10 +87,6 @@ export async function setVoiceMode(mode) {
 
 export async function listAudioDevices() {
   return invoke('list_audio_devices');
-}
-
-export async function stopSpeaking() {
-  return invoke('stop_speaking');
 }
 
 export async function speakText(text) {
@@ -195,10 +175,6 @@ export async function aiPtyResize(cols, rows) {
   return invoke('ai_pty_resize', { cols, rows });
 }
 
-export async function interruptAi() {
-  return invoke('interrupt_ai');
-}
-
 export async function sendVoiceLoop(senderName) {
   return invoke('send_voice_loop', { senderName });
 }
@@ -233,10 +209,6 @@ export async function setProvider(providerId, options = {}) {
     cols: options.cols,
     rows: options.rows,
   });
-}
-
-export async function getProvider() {
-  return invoke('get_provider');
 }
 
 /**
@@ -301,10 +273,6 @@ export async function exportChatToFile(path, content) {
 
 // ============ Screenshot ============
 
-export async function takeScreenshot() {
-  return invoke('take_screenshot');
-}
-
 export async function listMonitors() {
   return invoke('list_monitors');
 }
@@ -327,14 +295,6 @@ export async function lensCapturePreview() {
 }
 
 // ============ Tools ============
-
-/**
- * Scan for CLI tools the app depends on.
- * Returns an array of { name, available, version, path } objects.
- */
-export async function scanCliTools() {
-  return invoke('scan_cli_tools');
-}
 
 /**
  * Check npm package versions (installed vs latest) and system tool status.
@@ -362,10 +322,6 @@ export async function unregisterShortcut(id) {
   return invoke('unregister_shortcut', { id });
 }
 
-export async function listShortcuts() {
-  return invoke('list_shortcuts');
-}
-
 export async function unregisterAllShortcuts() {
   return invoke('unregister_all_shortcuts');
 }
@@ -378,20 +334,7 @@ export async function getProcessStats() {
 
 // ============ Config Migration ============
 
-/**
- * Attempt to migrate settings from the old Electron app.
- * Returns the migrated config if an old config was found,
- * or null/empty if nothing to migrate.
- */
-export async function migrateElectronConfig() {
-  return invoke('migrate_electron_config');
-}
-
 // ============ Lens ============
-
-export async function lensCreateWebview(url, x, y, width, height) {
-  return invoke('lens_create_webview', { url, x, y, width, height });
-}
 
 export async function lensNavigate(url) {
   return invoke('lens_navigate', { url });
@@ -411,10 +354,6 @@ export async function lensReload() {
 
 export async function lensResizeWebview(x, y, width, height) {
   return invoke('lens_resize_webview', { x, y, width, height });
-}
-
-export async function lensCloseWebview() {
-  return invoke('lens_close_webview');
 }
 
 export async function lensSetVisible(visible) {
@@ -508,10 +447,6 @@ export async function listDirectory(path, root) {
 
 export async function getGitChanges(root) {
   return invoke('get_git_changes', { root: root || null });
-}
-
-export async function getProjectRoot() {
-  return invoke('get_project_root');
 }
 
 export async function readFile(path, root) {
@@ -653,14 +588,6 @@ export async function shellKill(id) {
   return invoke('shell_kill', { id });
 }
 
-/**
- * List active shell terminal sessions.
- * @returns {Promise<Object>}
- */
-export async function shellList() {
-  return invoke('shell_list');
-}
-
 // ============ LSP ============
 
 export async function lspOpenFile(path, content, projectRoot) {
@@ -693,10 +620,6 @@ export async function lspRequestDefinition(path, line, character, projectRoot) {
 
 export async function lspGetStatus() {
   return invoke('lsp_get_status');
-}
-
-export async function lspShutdown() {
-  return invoke('lsp_shutdown');
 }
 
 export async function lspRequestDocumentSymbols(path, projectRoot) {

@@ -7,11 +7,11 @@ pub mod pipe_client;
 pub mod pipe_server;
 pub mod protocol;
 
-use once_cell::sync::OnceCell;
+use std::sync::OnceLock;
 
 /// Global pipe name, set once during app setup.
 /// Read by the CLI provider when writing MCP config.
-static PIPE_NAME: OnceCell<String> = OnceCell::new();
+static PIPE_NAME: OnceLock<String> = OnceLock::new();
 
 /// Set the global pipe name (called once during Tauri setup).
 pub fn set_pipe_name(name: String) {

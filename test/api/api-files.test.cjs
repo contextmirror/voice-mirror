@@ -1,8 +1,8 @@
 /**
- * api-files.test.js -- Source-inspection tests for file/directory API wrappers
+ * api-files.test.js -- Parameter-passing tests for file/directory API wrappers
  *
- * Verifies the listDirectory, getGitChanges, and getProjectRoot functions
- * exist in api.js with correct invoke() calls and parameter passing.
+ * Export/invoke existence is already covered by api-signatures.test.cjs.
+ * These tests verify correct parameter passing patterns.
  */
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
@@ -12,30 +12,7 @@ const path = require('node:path');
 const SRC_PATH = path.join(__dirname, '../../src/lib/api.js');
 const src = fs.readFileSync(SRC_PATH, 'utf-8');
 
-describe('api.js -- Files section', () => {
-  it('has a Files section comment', () => {
-    assert.ok(
-      src.includes('// ============ Files'),
-      'Should have organized Files section'
-    );
-  });
-});
-
-describe('api.js -- listDirectory', () => {
-  it('exports async function listDirectory', () => {
-    assert.ok(
-      src.includes('export async function listDirectory('),
-      'Should export listDirectory'
-    );
-  });
-
-  it('invokes list_directory command', () => {
-    assert.ok(
-      src.includes("invoke('list_directory'"),
-      'Should call invoke with list_directory'
-    );
-  });
-
+describe('api.js -- listDirectory parameter passing', () => {
   it('passes path parameter', () => {
     assert.ok(
       src.includes('{ path:'),
@@ -65,21 +42,7 @@ describe('api.js -- listDirectory', () => {
   });
 });
 
-describe('api.js -- getGitChanges', () => {
-  it('exports async function getGitChanges', () => {
-    assert.ok(
-      src.includes('export async function getGitChanges('),
-      'Should export getGitChanges'
-    );
-  });
-
-  it('invokes get_git_changes command', () => {
-    assert.ok(
-      src.includes("invoke('get_git_changes'"),
-      'Should call invoke with get_git_changes'
-    );
-  });
-
+describe('api.js -- getGitChanges parameter passing', () => {
   it('accepts root parameter in function signature', () => {
     assert.ok(
       src.includes('getGitChanges(root)') || src.includes('getGitChanges(root,'),
@@ -95,37 +58,7 @@ describe('api.js -- getGitChanges', () => {
   });
 });
 
-describe('api.js -- getProjectRoot', () => {
-  it('exports async function getProjectRoot', () => {
-    assert.ok(
-      src.includes('export async function getProjectRoot('),
-      'Should export getProjectRoot'
-    );
-  });
-
-  it('invokes get_project_root command', () => {
-    assert.ok(
-      src.includes("invoke('get_project_root')"),
-      'Should call invoke with get_project_root'
-    );
-  });
-});
-
-describe('api.js -- readFile', () => {
-  it('exports async function readFile', () => {
-    assert.ok(
-      src.includes('export async function readFile('),
-      'Should export readFile'
-    );
-  });
-
-  it('invokes read_file command', () => {
-    assert.ok(
-      src.includes("invoke('read_file'"),
-      'Should call invoke with read_file'
-    );
-  });
-
+describe('api.js -- readFile parameter passing', () => {
   it('accepts path and root parameters', () => {
     assert.ok(
       src.includes('readFile(path, root)') || src.includes('readFile(path,root)'),
@@ -134,21 +67,7 @@ describe('api.js -- readFile', () => {
   });
 });
 
-describe('api.js -- readExternalFile', () => {
-  it('exports async function readExternalFile', () => {
-    assert.ok(
-      src.includes('export async function readExternalFile('),
-      'Should export readExternalFile'
-    );
-  });
-
-  it('invokes read_external_file command', () => {
-    assert.ok(
-      src.includes("invoke('read_external_file'"),
-      'Should call invoke with read_external_file'
-    );
-  });
-
+describe('api.js -- readExternalFile parameter passing', () => {
   it('accepts path parameter', () => {
     assert.ok(
       src.includes('readExternalFile(path)'),
@@ -157,21 +76,7 @@ describe('api.js -- readExternalFile', () => {
   });
 });
 
-describe('api.js -- writeFile', () => {
-  it('exports async function writeFile', () => {
-    assert.ok(
-      src.includes('export async function writeFile('),
-      'Should export writeFile'
-    );
-  });
-
-  it('invokes write_file command', () => {
-    assert.ok(
-      src.includes("invoke('write_file'"),
-      'Should call invoke with write_file'
-    );
-  });
-
+describe('api.js -- writeFile parameter passing', () => {
   it('accepts path, content, and root parameters', () => {
     assert.ok(
       src.includes('writeFile(path, content, root)') || src.includes('writeFile(path,content,root)'),
@@ -180,21 +85,7 @@ describe('api.js -- writeFile', () => {
   });
 });
 
-describe('api.js -- getFileGitContent', () => {
-  it('exports async function getFileGitContent', () => {
-    assert.ok(
-      src.includes('export async function getFileGitContent('),
-      'Should export getFileGitContent'
-    );
-  });
-
-  it('invokes get_file_git_content command', () => {
-    assert.ok(
-      src.includes("invoke('get_file_git_content'"),
-      'Should call invoke with get_file_git_content'
-    );
-  });
-
+describe('api.js -- getFileGitContent parameter passing', () => {
   it('accepts path and root parameters', () => {
     assert.ok(
       src.includes('getFileGitContent(path, root)') || src.includes('getFileGitContent(path,root)'),
@@ -210,21 +101,7 @@ describe('api.js -- getFileGitContent', () => {
   });
 });
 
-describe('api.js -- startFileWatching', () => {
-  it('exports async function startFileWatching', () => {
-    assert.ok(
-      src.includes('export async function startFileWatching('),
-      'Should export startFileWatching'
-    );
-  });
-
-  it('invokes start_file_watching command', () => {
-    assert.ok(
-      src.includes("invoke('start_file_watching'"),
-      'Should call invoke with start_file_watching'
-    );
-  });
-
+describe('api.js -- startFileWatching parameter passing', () => {
   it('passes projectRoot parameter', () => {
     assert.ok(
       src.includes('startFileWatching(projectRoot)'),
@@ -233,22 +110,6 @@ describe('api.js -- startFileWatching', () => {
     assert.ok(
       src.includes('{ projectRoot }') || src.includes('projectRoot'),
       'Should pass projectRoot to invoke'
-    );
-  });
-});
-
-describe('api.js -- stopFileWatching', () => {
-  it('exports async function stopFileWatching', () => {
-    assert.ok(
-      src.includes('export async function stopFileWatching('),
-      'Should export stopFileWatching'
-    );
-  });
-
-  it('invokes stop_file_watching command', () => {
-    assert.ok(
-      src.includes("invoke('stop_file_watching')"),
-      'Should call invoke with stop_file_watching'
     );
   });
 });

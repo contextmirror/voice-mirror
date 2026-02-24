@@ -1,6 +1,14 @@
 use std::path::PathBuf;
 use tracing::{info, warn};
 
+/// Escape a string for safe embedding inside a JS single-quoted string literal.
+pub fn escape_js_string(s: &str) -> String {
+    s.replace('\\', "\\\\")
+        .replace('\'', "\\'")
+        .replace('\n', "\\n")
+        .replace('\r', "\\r")
+}
+
 /// Check if a directory looks like the Voice Mirror project root.
 pub fn is_project_root(path: &std::path::Path) -> bool {
     path.join("src-tauri").join("tauri.conf.json").exists()

@@ -485,37 +485,6 @@
     overflow: hidden;
   }
 
-  .view-placeholder {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    color: var(--muted);
-    user-select: none;
-  }
-
-  .view-placeholder h2 {
-    color: var(--text-strong);
-    font-size: 20px;
-    font-weight: 600;
-    margin: 0;
-  }
-
-  .view-placeholder p {
-    margin: 0;
-    font-size: 14px;
-  }
-
-  .view-placeholder .placeholder-icon {
-    width: 48px;
-    height: 48px;
-    color: var(--muted);
-    opacity: 0.5;
-    margin-bottom: 8px;
-  }
-
   /* ========== Titlebar Provider Status ========== */
   .titlebar-provider-status {
     display: flex;

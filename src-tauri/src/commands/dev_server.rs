@@ -14,7 +14,7 @@ use crate::services::dev_server;
 /// for known framework patterns (Vite, Next.js, CRA, Angular, SvelteKit, Tauri).
 /// Also probes each detected port to see if a server is currently running.
 #[tauri::command]
-pub fn detect_dev_servers(project_root: String) -> Result<IpcResponse, String> {
+pub fn detect_dev_servers(project_root: String) -> IpcResponse {
     let servers = dev_server::detect_dev_servers(&project_root);
     let pkg_manager = dev_server::detect_package_manager(&project_root);
 
@@ -31,22 +31,22 @@ pub fn detect_dev_servers(project_root: String) -> Result<IpcResponse, String> {
         );
     }
 
-    Ok(IpcResponse::ok(serde_json::json!({
+    IpcResponse::ok(serde_json::json!({
         "servers": servers,
         "packageManager": pkg_manager,
-    })))
+    }))
 }
 
 /// Check if a specific port is accepting TCP connections on localhost.
 ///
 /// Returns `{ listening: true/false }`.
 #[tauri::command]
-pub fn probe_port(port: u16) -> Result<IpcResponse, String> {
+pub fn probe_port(port: u16) -> IpcResponse {
     let listening = dev_server::is_port_listening(port);
 
-    Ok(IpcResponse::ok(serde_json::json!({
+    IpcResponse::ok(serde_json::json!({
         "listening": listening,
-    })))
+    }))
 }
 
 /// Kill the process listening on a specific port.
@@ -54,16 +54,16 @@ pub fn probe_port(port: u16) -> Result<IpcResponse, String> {
 /// Uses platform-specific commands (netstat+taskkill on Windows, lsof+kill on Unix).
 /// Returns `{ killed: true }` on success.
 #[tauri::command]
-pub fn kill_port_process(port: u16) -> Result<IpcResponse, String> {
+pub fn kill_port_process(port: u16) -> IpcResponse {
     tracing::info!("[dev-server] kill_port_process port={}", port);
 
     match dev_server::kill_port_process(port) {
-        Ok(()) => Ok(IpcResponse::ok(serde_json::json!({
+        Ok(()) => IpcResponse::ok(serde_json::json!({
             "killed": true,
-        }))),
+        })),
         Err(e) => {
             tracing::warn!("[dev-server] kill_port_process failed: {}", e);
-            Ok(IpcResponse::err(&e))
+            IpcResponse::err(&e)
         }
     }
 }
@@ -74,9 +74,7 @@ mod tests {
 
     #[test]
     fn test_detect_dev_servers_empty_dir() {
-        let result = detect_dev_servers("/nonexistent/path".to_string());
-        assert!(result.is_ok());
-        let resp = result.unwrap();
+        let resp = detect_dev_servers("/nonexistent/path".to_string());
         assert!(resp.success);
         let data = resp.data.unwrap();
         assert!(data["servers"].as_array().unwrap().is_empty());
@@ -85,9 +83,7 @@ mod tests {
 
     #[test]
     fn test_probe_port_closed() {
-        let result = probe_port(1);
-        assert!(result.is_ok());
-        let resp = result.unwrap();
+        let resp = probe_port(1);
         assert!(resp.success);
         assert!(!resp.data.unwrap()["listening"].as_bool().unwrap());
     }

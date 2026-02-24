@@ -204,6 +204,26 @@ mod win32 {
         p1 < 15 && p2 < 15 && p3 < 15
     }
 
+    /// Create a BITMAPINFO struct for 32-bit BGRA pixel capture.
+    fn create_bitmapinfo(width: i32, height: i32) -> BITMAPINFO {
+        BITMAPINFO {
+            bmiHeader: BITMAPINFOHEADER {
+                biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
+                biWidth: width,
+                biHeight: height,
+                biPlanes: 1,
+                biBitCount: 32,
+                biCompression: BI_RGB.0,
+                biSizeImage: 0,
+                biXPelsPerMeter: 0,
+                biYPelsPerMeter: 0,
+                biClrUsed: 0,
+                biClrImportant: 0,
+            },
+            bmiColors: [RGBQUAD::default()],
+        }
+    }
+
     /// Capture a window's content as raw BGRA pixels using a multi-tier strategy.
     pub fn capture_window_bitmap(hwnd: HWND, width: i32, height: i32) -> Option<Vec<u8>> {
         if width <= 0 || height <= 0 {
@@ -231,22 +251,7 @@ mod win32 {
 
             let old_bmp = SelectObject(hdc_mem, hbmp.into());
 
-            let mut bmi = BITMAPINFO {
-                bmiHeader: BITMAPINFOHEADER {
-                    biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
-                    biWidth: width,
-                    biHeight: height,
-                    biPlanes: 1,
-                    biBitCount: 32,
-                    biCompression: BI_RGB.0,
-                    biSizeImage: 0,
-                    biXPelsPerMeter: 0,
-                    biYPelsPerMeter: 0,
-                    biClrUsed: 0,
-                    biClrImportant: 0,
-                },
-                bmiColors: [RGBQUAD::default()],
-            };
+            let mut bmi = create_bitmapinfo(width, height);
 
             let pixel_count = (width * height * 4) as usize;
             let mut pixels = vec![0u8; pixel_count];
@@ -359,22 +364,7 @@ mod win32 {
 
             let _ = BitBlt(hdc_mem, 0, 0, w, h, Some(hdc_screen), x, y, SRCCOPY);
 
-            let mut bmi = BITMAPINFO {
-                bmiHeader: BITMAPINFOHEADER {
-                    biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
-                    biWidth: w,
-                    biHeight: h,
-                    biPlanes: 1,
-                    biBitCount: 32,
-                    biCompression: BI_RGB.0,
-                    biSizeImage: 0,
-                    biXPelsPerMeter: 0,
-                    biYPelsPerMeter: 0,
-                    biClrUsed: 0,
-                    biClrImportant: 0,
-                },
-                bmiColors: [RGBQUAD::default()],
-            };
+            let mut bmi = create_bitmapinfo(w, h);
 
             let pixel_count = (w * h * 4) as usize;
             let mut pixels = vec![0u8; pixel_count];
@@ -474,22 +464,7 @@ mod win32 {
         let hdc_mem = CreateCompatibleDC(Some(hdc_screen));
         let old_bmp = SelectObject(hdc_mem, hbm_color.into());
 
-        let mut bmi = BITMAPINFO {
-            bmiHeader: BITMAPINFOHEADER {
-                biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
-                biWidth: w,
-                biHeight: h,
-                biPlanes: 1,
-                biBitCount: 32,
-                biCompression: BI_RGB.0,
-                biSizeImage: 0,
-                biXPelsPerMeter: 0,
-                biYPelsPerMeter: 0,
-                biClrUsed: 0,
-                biClrImportant: 0,
-            },
-            bmiColors: [RGBQUAD::default()],
-        };
+        let mut bmi = create_bitmapinfo(w, h);
 
         let pixel_count = (w * h * 4) as usize;
         let mut pixels = vec![0u8; pixel_count];

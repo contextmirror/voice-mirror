@@ -44,4 +44,4 @@ If you do not know the answer, say so briefly. Do not guess or make things up.`;
  * The default system prompt for when no custom prompt is configured.
  * Used as a fallback in ai-status.svelte.js.
  */
-export const DEFAULT_LOCAL_LLM_PROMPT = buildLocalLlmInstructions();
+const DEFAULT_LOCAL_LLM_PROMPT = buildLocalLlmInstructions();

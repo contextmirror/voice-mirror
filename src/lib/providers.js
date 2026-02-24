@@ -40,7 +40,7 @@ export const PROVIDER_ICONS = {
 export const CLI_PROVIDERS = ['claude', 'opencode'];
 export const LOCAL_PROVIDERS = ['ollama', 'lmstudio', 'jan'];
 export const MCP_PROVIDERS = ['claude', 'opencode'];
-export const DICTATION_PROVIDERS = ['dictation'];
+const DICTATION_PROVIDERS = ['dictation'];
 
 // ---- Default endpoints for local providers ----
 
@@ -82,11 +82,11 @@ export const PROVIDER_GROUPS = [
 // ---- Helper functions ----
 
 /** Get the icon metadata for a provider ID, or null if not found. */
-export function getProviderIcon(id) {
+function getProviderIcon(id) {
   return PROVIDER_ICONS[id] || null;
 }
 
 /** Get the display name for a provider ID, falling back to the raw ID. */
-export function getProviderName(id) {
+function getProviderName(id) {
   return PROVIDER_NAMES[id] || id;
 }

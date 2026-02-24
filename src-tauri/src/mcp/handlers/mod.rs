@@ -85,16 +85,6 @@ impl McpToolResult {
         }
     }
 
-    /// Create a result with multiple text items.
-    pub fn multi_text(texts: Vec<String>) -> Self {
-        Self {
-            content: texts
-                .into_iter()
-                .map(|t| McpContent::Text { text: t })
-                .collect(),
-            is_error: false,
-        }
-    }
 }
 
 #[cfg(test)]

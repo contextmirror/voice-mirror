@@ -31,12 +31,12 @@ describe('api.js -- Tauri invoke import', () => {
 });
 
 describe('api.js -- invoke command count', () => {
-  it('has at least 35 invoke() calls', () => {
+  it('has at least 100 invoke() calls', () => {
     const invokeMatches = src.match(/invoke\(\s*'/g);
     assert.ok(invokeMatches, 'Should have invoke() calls');
     assert.ok(
-      invokeMatches.length >= 35,
-      `Expected at least 35 invoke() calls, found ${invokeMatches.length}`
+      invokeMatches.length >= 100,
+      `Expected at least 100 invoke() calls, found ${invokeMatches.length}`
     );
   });
 });
@@ -47,14 +47,10 @@ describe('api.js -- critical Tauri command names', () => {
     'get_config',
     'set_config',
     'reset_config',
-    'get_platform_info',
     // Window
     'get_window_position',
     'set_window_position',
-    'save_window_bounds',
     'minimize_window',
-    'maximize_window',
-    'quit_app',
     'set_window_size',
     'set_always_on_top',
     'set_resizable',
@@ -65,7 +61,6 @@ describe('api.js -- critical Tauri command names', () => {
     'get_voice_status',
     'set_voice_mode',
     'list_audio_devices',
-    'stop_speaking',
     'speak_text',
     'ptt_press',
     'ptt_release',
@@ -78,11 +73,9 @@ describe('api.js -- critical Tauri command names', () => {
     'ai_pty_input',
     'ai_raw_input',
     'ai_pty_resize',
-    'interrupt_ai',
     'send_voice_loop',
     'scan_providers',
     'set_provider',
-    'get_provider',
     'list_models',
     // Inbox / Messaging
     'write_user_message',
@@ -94,30 +87,23 @@ describe('api.js -- critical Tauri command names', () => {
     'chat_rename',
     'export_chat_to_file',
     // Screenshot
-    'take_screenshot',
     'list_monitors',
     'list_windows',
     'capture_monitor',
     'capture_window',
     // Tools
-    'scan_cli_tools',
     'check_npm_versions',
     'update_npm_package',
     // Shortcuts
     'register_shortcut',
     'unregister_shortcut',
-    'list_shortcuts',
     'unregister_all_shortcuts',
-    // Migration
-    'migrate_electron_config',
     // Lens
-    'lens_create_webview',
     'lens_navigate',
     'lens_go_back',
     'lens_go_forward',
     'lens_reload',
     'lens_resize_webview',
-    'lens_close_webview',
     'lens_set_visible',
     'lens_hard_refresh',
     'lens_clear_cache',
@@ -136,7 +122,6 @@ describe('api.js -- critical Tauri command names', () => {
     // Files
     'list_directory',
     'get_git_changes',
-    'get_project_root',
     'read_file',
     'write_file',
     'create_file',
@@ -163,14 +148,10 @@ describe('api.js -- exported async functions', () => {
     'getConfig',
     'setConfig',
     'resetConfig',
-    'getPlatformInfo',
     // Window
     'getWindowPosition',
     'setWindowPosition',
-    'saveWindowBounds',
     'minimizeWindow',
-    'maximizeWindow',
-    'quitApp',
     'setWindowSize',
     'setAlwaysOnTop',
     'setResizable',
@@ -183,7 +164,6 @@ describe('api.js -- exported async functions', () => {
     'getVoiceStatus',
     'setVoiceMode',
     'listAudioDevices',
-    'stopSpeaking',
     'speakText',
     'pttPress',
     'pttRelease',
@@ -197,11 +177,9 @@ describe('api.js -- exported async functions', () => {
     'aiPtyInput',
     'aiRawInput',
     'aiPtyResize',
-    'interruptAi',
     'sendVoiceLoop',
     'scanProviders',
     'setProvider',
-    'getProvider',
     'listModels',
     // Messaging
     'writeUserMessage',
@@ -213,33 +191,27 @@ describe('api.js -- exported async functions', () => {
     'chatRename',
     'exportChatToFile',
     // Screenshot
-    'takeScreenshot',
     'listMonitors',
     'listWindows',
     'captureMonitor',
     'captureWindow',
     'lensCapturePreview',
     // Tools
-    'scanCliTools',
     'checkNpmVersions',
     'updateNpmPackage',
     // Shortcuts
     'registerShortcut',
     'unregisterShortcut',
-    'listShortcuts',
     'unregisterAllShortcuts',
     // Performance Stats
     'getProcessStats',
     // Migration
-    'migrateElectronConfig',
     // Lens
-    'lensCreateWebview',
     'lensNavigate',
     'lensGoBack',
     'lensGoForward',
     'lensReload',
     'lensResizeWebview',
-    'lensCloseWebview',
     'lensSetVisible',
     'lensHardRefresh',
     'lensClearCache',
@@ -261,7 +233,6 @@ describe('api.js -- exported async functions', () => {
     // Files
     'listDirectory',
     'getGitChanges',
-    'getProjectRoot',
     'readFile',
     'readExternalFile',
     'writeFile',
@@ -279,7 +250,6 @@ describe('api.js -- exported async functions', () => {
     'shellInput',
     'shellResize',
     'shellKill',
-    'shellList',
     // LSP
     'lspOpenFile',
     'lspCloseFile',
@@ -289,7 +259,6 @@ describe('api.js -- exported async functions', () => {
     'lspRequestHover',
     'lspRequestDefinition',
     'lspGetStatus',
-    'lspShutdown',
     'lspRequestDocumentSymbols',
     'lspRequestReferences',
     'lspRequestCodeActions',
@@ -319,7 +288,7 @@ describe('api.js -- exported async functions', () => {
 });
 
 describe('api.js -- section organization', () => {
-  const sections = ['Config', 'Window', 'Voice', 'AI', 'Inbox', 'Chat', 'Tools', 'Shortcuts', 'Performance Stats', 'Config Migration', 'Lens', 'Browser Tabs', 'Dev Server', 'GPU / Model Management', 'Files'];
+  const sections = ['Config', 'Window', 'Voice', 'AI', 'Inbox', 'Chat', 'Screenshot', 'Tools', 'Shortcuts', 'Performance Stats', 'Config Migration', 'Design Overlay', 'Lens', 'Browser Tabs', 'Dev Server', 'GPU / Model Management', 'Files', 'Shell Terminals', 'LSP'];
 
   for (const section of sections) {
     it(`has "${section}" section comment`, () => {
