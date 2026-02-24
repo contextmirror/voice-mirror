@@ -48,6 +48,18 @@
     <button class="nav-btn" onclick={handleReload} title="Reload (Shift+click for hard refresh)" aria-label="Reload page">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
     </button>
+    <button
+      class="nav-btn"
+      class:active={lensStore.designMode}
+      onclick={() => lensStore.setDesignMode(!lensStore.designMode)}
+      title="Design Mode"
+      aria-label="Toggle design mode"
+    >
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M10.5 1.5l4 4-8 8H2.5v-4l8-8z"/>
+        <path d="M8.5 3.5l4 4"/>
+      </svg>
+    </button>
   </div>
 
   <form class="url-bar" onsubmit={handleSubmit}>
@@ -96,6 +108,11 @@
 
   .nav-btn:hover:not(:disabled) {
     background: var(--bg);
+  }
+
+  .nav-btn.active {
+    background: var(--accent);
+    color: var(--bg);
   }
 
   .nav-btn:disabled {

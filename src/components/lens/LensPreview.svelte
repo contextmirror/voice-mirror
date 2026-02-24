@@ -5,7 +5,7 @@
   import { devServerManager } from '../../lib/stores/dev-server-manager.svelte.js';
   import { toastStore } from '../../lib/stores/toast.svelte.js';
   import { browserTabsStore } from '../../lib/stores/browser-tabs.svelte.js';
-  import { lensResizeWebview, lensCloseAllTabs, lensClearCache, detectDevServers } from '../../lib/api.js';
+  import { lensResizeWebview, lensCloseAllTabs, lensClearCache, detectDevServers, designCommand } from '../../lib/api.js';
   import { listen } from '@tauri-apps/api/event';
 
   let containerEl = $state(null);
@@ -240,6 +240,21 @@
     } else {
       // Restore correct bounds
       syncBounds();
+    }
+  });
+
+  // Enable/disable the design canvas overlay when design mode changes
+  $effect(() => {
+    const isDesignMode = lensStore.designMode;
+    if (!lensStore.webviewReady) return;
+    if (isDesignMode) {
+      designCommand('enable', {}).catch((err) => {
+        console.warn('[LensPreview] Design enable failed:', err);
+      });
+    } else {
+      designCommand('disable', {}).catch((err) => {
+        console.warn('[LensPreview] Design disable failed:', err);
+      });
     }
   });
 

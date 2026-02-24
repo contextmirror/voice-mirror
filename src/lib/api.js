@@ -431,6 +431,13 @@ export async function lensClearCache() {
   return invoke('lens_clear_cache');
 }
 
+// ============ Design Overlay ============
+
+/** Send a design overlay command (set_tool, set_color, undo, redo, clear, enable, disable). */
+export async function designCommand(action, args = {}) {
+  return invoke('design_command', { action, args });
+}
+
 // ============ Browser Tabs ============
 
 export async function lensCreateTab(tabId, url, x, y, width, height) {

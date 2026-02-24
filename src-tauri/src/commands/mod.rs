@@ -11,6 +11,7 @@ pub mod window;
 pub mod lens;
 pub mod shell;
 pub mod lsp;
+pub mod design;
 
 use serde_json::Value;
 

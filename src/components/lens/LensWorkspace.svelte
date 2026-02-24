@@ -1,5 +1,6 @@
 <script>
   import LensToolbar from './LensToolbar.svelte';
+  import DesignToolbar from './DesignToolbar.svelte';
   import LensPreview from './LensPreview.svelte';
   import BrowserTabBar from './BrowserTabBar.svelte';
   import FileTree from './FileTree.svelte';
@@ -12,7 +13,8 @@
   import { tabsStore } from '../../lib/stores/tabs.svelte.js';
   import { layoutStore } from '../../lib/stores/layout.svelte.js';
   import { lensStore } from '../../lib/stores/lens.svelte.js';
-  import { lensSetVisible, startFileWatching, stopFileWatching } from '../../lib/api.js';
+  import { lensSetVisible, startFileWatching, stopFileWatching, lensCapturePreview } from '../../lib/api.js';
+  import { attachmentsStore } from '../../lib/stores/attachments.svelte.js';
   import { projectStore } from '../../lib/stores/project.svelte.js';
   import { lspDiagnosticsStore } from '../../lib/stores/lsp-diagnostics.svelte.js';
   import { LSP_EXTENSIONS } from '../../lib/editor-lsp.svelte.js';
@@ -56,6 +58,26 @@
     };
   });
 
+  /** Capture the annotated browser screenshot and add it as a chat attachment. */
+  async function handleDesignSend() {
+    try {
+      const result = await lensCapturePreview();
+      if (result?.success && result?.data) {
+        attachmentsStore.add({
+          path: result.data.path,
+          dataUrl: result.data.dataUrl,
+          type: 'image/png',
+          name: 'Design Annotation',
+        });
+      } else {
+        console.warn('[LensWorkspace] Design capture failed:', result?.error || result);
+      }
+    } catch (err) {
+      console.error('[LensWorkspace] Design capture error:', err);
+    }
+    lensStore.setDesignMode(false);
+  }
+
   // Start/stop LSP diagnostics store listener on project switch
   $effect(() => {
     const path = projectStore.activeProject?.path;
@@ -94,6 +116,12 @@
                   <div class="preview-layer" class:visible={isBrowser}>
                     <BrowserTabBar onNewTab={() => lensPreviewRef?.createNewTab()} />
                     <LensToolbar />
+                    {#if lensStore.designMode}
+                      <DesignToolbar
+                        onSend={handleDesignSend}
+                        onClose={() => lensStore.setDesignMode(false)}
+                      />
+                    {/if}
                     <LensPreview bind:this={lensPreviewRef} />
                   </div>
                   {#if isFile}

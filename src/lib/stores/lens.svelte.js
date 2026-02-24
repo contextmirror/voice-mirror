@@ -20,6 +20,7 @@ function createLensStore() {
   /** @type {Array<{port: number, framework?: string, source?: string, running?: boolean, startCommand?: string, shellId?: string}>} */
   let devServers = $state([]);
   let devServerLoading = $state(false);
+  let designMode = $state(false);
 
   return {
     get url() { return url; },
@@ -32,6 +33,7 @@ function createLensStore() {
     get pageTitle() { return pageTitle; },
     get devServers() { return devServers; },
     get devServerLoading() { return devServerLoading; },
+    get designMode() { return designMode; },
 
     /** The first running dev server, or null if none are running */
     get activeDevServer() {
@@ -48,6 +50,7 @@ function createLensStore() {
     setPageTitle(title) { pageTitle = title; },
     setDevServers(servers) { devServers = servers; },
     setDevServerLoading(val) { devServerLoading = val; },
+    setDesignMode(val) { designMode = val; },
 
     /**
      * Hide the native webview so DOM overlays (dropdowns, modals, palettes)
@@ -114,6 +117,7 @@ function createLensStore() {
       pageTitle = '';
       devServers = [];
       devServerLoading = false;
+      designMode = false;
     },
   };
 }

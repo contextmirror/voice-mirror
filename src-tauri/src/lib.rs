@@ -22,6 +22,7 @@ use commands::lens as lens_cmds;
 use commands::shell as shell_cmds;
 use commands::dev_server as dev_server_cmds;
 use commands::lsp as lsp_cmds;
+use commands::design as design_cmds;
 
 use providers::manager::AiManager;
 use providers::ProviderEvent;
@@ -329,6 +330,8 @@ pub fn run() {
             dev_server_cmds::detect_dev_servers,
             dev_server_cmds::probe_port,
             dev_server_cmds::kill_port_process,
+            // Design canvas overlay
+            design_cmds::design_command,
         ])
         .setup(|app| {
             // Migrate data from old Electron directory before anything reads it

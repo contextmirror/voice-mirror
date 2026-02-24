@@ -243,6 +243,8 @@ describe('api.js -- exported async functions', () => {
     'lensSetVisible',
     'lensHardRefresh',
     'lensClearCache',
+    // Design Overlay
+    'designCommand',
     // Browser Tabs
     'lensCreateTab',
     'lensCloseTab',
