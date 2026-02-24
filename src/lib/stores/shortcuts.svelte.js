@@ -87,6 +87,21 @@ export const IN_APP_SHORTCUTS = {
     label: 'Search in files',
     category: 'in-app',
   },
+  'split-editor': {
+    keys: 'Ctrl+\\',
+    label: 'Split editor right',
+    category: 'in-app',
+  },
+  'focus-group-1': {
+    keys: 'Ctrl+1',
+    label: 'Focus first editor group',
+    category: 'in-app',
+  },
+  'focus-group-2': {
+    keys: 'Ctrl+2',
+    label: 'Focus second editor group',
+    category: 'in-app',
+  },
 };
 
 // ============ Action Handlers ============
@@ -420,6 +435,30 @@ export function setupInAppShortcuts() {
     if (event.key === 'F1' || (ctrl && event.key === 'p')) {
       event.preventDefault();
       actionHandlers['open-file-search']?.();
+      return;
+    }
+
+    // Ctrl+\ -> Split editor right
+    if (ctrl && event.key === '\\') {
+      if (event.target?.closest('.cm-editor')) return;
+      event.preventDefault();
+      actionHandlers['split-editor']?.();
+      return;
+    }
+
+    // Ctrl+1 -> Focus group 1
+    if (ctrl && event.key === '1') {
+      if (event.target?.closest('.cm-editor')) return;
+      event.preventDefault();
+      actionHandlers['focus-group-1']?.();
+      return;
+    }
+
+    // Ctrl+2 -> Focus group 2
+    if (ctrl && event.key === '2') {
+      if (event.target?.closest('.cm-editor')) return;
+      event.preventDefault();
+      actionHandlers['focus-group-2']?.();
       return;
     }
 
