@@ -632,6 +632,54 @@ fn build_all_groups() -> HashMap<String, ToolGroupDef> {
         },
     );
 
+    // ---- Capture (window screenshots) ----
+    groups.insert(
+        "capture".into(),
+        ToolGroupDef {
+            name: "capture".into(),
+            description: "Window capture and screenshots (2 tools)".into(),
+            always_loaded: false,
+            keywords: vec![
+                "screenshot".into(), "capture".into(), "window".into(),
+                "screen".into(), "game".into(), "application".into(),
+                "look at".into(), "show me".into(),
+            ],
+            dependencies: vec![],
+            tools: vec![
+                ToolDef {
+                    name: "capture_list_windows".into(),
+                    description: "List all visible windows on the user's desktop. Returns window titles, process names, and dimensions. Use this to find the right window before capturing.".into(),
+                    input_schema: json!({
+                        "type": "object",
+                        "properties": {
+                            "filter": {
+                                "type": "string",
+                                "description": "Optional filter to match window title or process name (case-insensitive substring match)"
+                            }
+                        }
+                    }),
+                },
+                ToolDef {
+                    name: "capture_window".into(),
+                    description: "Take a screenshot of a specific desktop window. The user must have the window open. Use capture_list_windows first to find the target, then capture by title or HWND. Returns the screenshot as an image.".into(),
+                    input_schema: json!({
+                        "type": "object",
+                        "properties": {
+                            "title": {
+                                "type": "string",
+                                "description": "Window title substring to match (case-insensitive). Captures the first matching window."
+                            },
+                            "hwnd": {
+                                "type": "number",
+                                "description": "Exact window handle (HWND) from capture_list_windows. More precise than title matching."
+                            }
+                        }
+                    }),
+                },
+            ],
+        },
+    );
+
     // ---- n8n ----
     groups.insert(
         "n8n".into(),
@@ -748,6 +796,15 @@ mod tests {
         let reg = ToolRegistry::new();
         let groups = reg.list_groups();
         assert!(groups.len() >= 4); // core, memory, browser, n8n
+    }
+
+    #[test]
+    fn test_capture_group() {
+        let mut reg = ToolRegistry::new();
+        let names = reg.load_group("capture").unwrap();
+        assert_eq!(names.len(), 2);
+        assert!(reg.is_tool_loaded("capture_list_windows"));
+        assert!(reg.is_tool_loaded("capture_window"));
     }
 
     #[test]

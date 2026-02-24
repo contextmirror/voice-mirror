@@ -63,6 +63,9 @@ uuid = { version = "1", features = ["v4"] }
 # Base64 encoding for screenshot data URLs
 base64 = "0.22"
 
+# Image encoding (bitmap → PNG) and thumbnail resize for native window capture
+image = { version = "0.25", default-features = false, features = ["png"] }
+
 # LSP client
 lsp-types = "0.97"
 which = "7"
@@ -81,7 +84,16 @@ trash = "5"
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.38"
 windows-core = "0.61"
-windows = { version = "0.61", features = ["Win32_System_Com_StructuredStorage", "Win32_Foundation"] }
+windows = { version = "0.61", features = [
+    "Win32_System_Com_StructuredStorage",
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_System_Threading",
+    "Win32_System_ProcessStatus",
+    "Win32_Graphics_Dwm",
+    "Win32_Storage_Xps",
+] }
 
 [[bin]]
 name = "voice-mirror-mcp"

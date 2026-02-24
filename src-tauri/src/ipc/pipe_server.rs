@@ -259,6 +259,123 @@ fn dispatch_message(msg: McpToApp, app_handle: &AppHandle) {
                 }
             });
         }
+        McpToApp::CaptureRequest { request_id, action, args } => {
+            info!(
+                "[PipeServer] Capture request: id={}, action={}",
+                request_id, action
+            );
+
+            let app = app_handle.clone();
+            tauri::async_runtime::spawn(async move {
+                let result = handle_capture_action(&app, &action, &args).await;
+
+                let response = match result {
+                    Ok(value) => AppToMcp::CaptureResponse {
+                        request_id,
+                        success: true,
+                        result: Some(value),
+                        error: None,
+                    },
+                    Err(e) => AppToMcp::CaptureResponse {
+                        request_id,
+                        success: false,
+                        result: None,
+                        error: Some(e),
+                    },
+                };
+
+                use tauri::Manager;
+                if let Some(pipe_state) = app.try_state::<PipeServerState>() {
+                    if let Err(e) = pipe_state.send(response) {
+                        warn!("[PipeServer] Failed to send capture response: {}", e);
+                    }
+                } else {
+                    warn!("[PipeServer] PipeServerState not available for capture response");
+                }
+            });
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Capture action handler
+// ---------------------------------------------------------------------------
+
+/// Handle a window capture action dispatched from the MCP binary.
+async fn handle_capture_action(
+    _app: &AppHandle,
+    action: &str,
+    args: &serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    match action {
+        "list_windows" => {
+            let filter = args
+                .get("filter")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            tokio::task::spawn_blocking(move || {
+                #[cfg(target_os = "windows")]
+                {
+                    let mut windows = crate::commands::screenshot::list_visible_windows()?;
+                    if let Some(ref f) = filter {
+                        let f_lower = f.to_lowercase();
+                        windows.retain(|w| {
+                            w.title.to_lowercase().contains(&f_lower)
+                                || w.process_name.to_lowercase().contains(&f_lower)
+                        });
+                    }
+                    serde_json::to_value(&windows).map_err(|e| format!("Serialize error: {}", e))
+                }
+                #[cfg(not(target_os = "windows"))]
+                {
+                    let _ = filter;
+                    Err("Window capture is Windows-only".into())
+                }
+            })
+            .await
+            .map_err(|e| format!("Task panicked: {}", e))?
+        }
+        "capture_window" => {
+            let title = args
+                .get("title")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            let hwnd = args.get("hwnd").and_then(|v| v.as_i64());
+            tokio::task::spawn_blocking(move || {
+                #[cfg(target_os = "windows")]
+                {
+                    let target_hwnd = if let Some(h) = hwnd {
+                        h
+                    } else if let Some(ref t) = title {
+                        let windows = crate::commands::screenshot::list_visible_windows()?;
+                        let t_lower = t.to_lowercase();
+                        windows
+                            .iter()
+                            .find(|w| w.title.to_lowercase().contains(&t_lower))
+                            .map(|w| w.hwnd)
+                            .ok_or_else(|| format!("No window found matching: {}", t))?
+                    } else {
+                        return Err("Either 'title' or 'hwnd' required".into());
+                    };
+                    let (base64_png, width, height) =
+                        crate::commands::screenshot::capture_window_as_base64(target_hwnd)?;
+                    Ok(serde_json::json!({
+                        "base64": base64_png,
+                        "contentType": "image/png",
+                        "width": width,
+                        "height": height
+                    }))
+                }
+                #[cfg(not(target_os = "windows"))]
+                {
+                    let _ = (title, hwnd);
+                    Err("Window capture is Windows-only".into())
+                }
+            })
+            .await
+            .map_err(|e| format!("Task panicked: {}", e))?
+        }
+        _ => Err(format!("Unknown capture action: {}", action)),
     }
 }
 

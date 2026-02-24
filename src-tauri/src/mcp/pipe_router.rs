@@ -67,13 +67,14 @@ impl PipeRouter {
     /// Route a single message to the appropriate handler.
     async fn dispatch(&self, msg: AppToMcp) {
         match &msg {
-            AppToMcp::BrowserResponse { request_id, .. } => {
+            AppToMcp::BrowserResponse { request_id, .. }
+            | AppToMcp::CaptureResponse { request_id, .. } => {
                 let mut waiters = self.browser_waiters.lock().await;
                 if let Some(tx) = waiters.remove(request_id) {
                     let _ = tx.send(msg);
                 } else {
                     warn!(
-                        "[PipeRouter] No waiter for browser response: {}",
+                        "[PipeRouter] No waiter for response: {}",
                         request_id
                     );
                 }

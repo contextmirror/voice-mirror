@@ -45,6 +45,15 @@ pub enum McpToApp {
         /// Action-specific arguments (tool input params).
         args: serde_json::Value,
     },
+    /// Window capture request from MCP binary.
+    CaptureRequest {
+        /// Unique request ID for matching responses.
+        request_id: String,
+        /// The capture action: "list_windows" or "capture_window"
+        action: String,
+        /// Action-specific arguments.
+        args: serde_json::Value,
+    },
 }
 
 /// Messages sent FROM the Tauri app TO the MCP binary.
@@ -68,6 +77,19 @@ pub enum AppToMcp {
     Shutdown,
     /// Response to a BrowserRequest.
     BrowserResponse {
+        /// The request_id this is responding to.
+        request_id: String,
+        /// Whether the action succeeded.
+        success: bool,
+        /// Result data (action-specific JSON).
+        #[serde(skip_serializing_if = "Option::is_none")]
+        result: Option<serde_json::Value>,
+        /// Error message if success is false.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+    },
+    /// Response to a CaptureRequest.
+    CaptureResponse {
         /// The request_id this is responding to.
         request_id: String,
         /// Whether the action succeeded.
@@ -260,6 +282,73 @@ mod tests {
                 assert!(!success);
                 assert!(result.is_none());
                 assert_eq!(error.unwrap(), "No webview active");
+            }
+            _ => panic!("wrong variant"),
+        }
+    }
+
+    #[test]
+    fn test_capture_request_roundtrip() {
+        let msg = McpToApp::CaptureRequest {
+            request_id: "cr-001".into(),
+            action: "list_windows".into(),
+            args: serde_json::json!({ "filter": "Firefox" }),
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        assert!(json.contains("\"type\":\"CaptureRequest\""));
+        let parsed: McpToApp = serde_json::from_str(&json).unwrap();
+        match parsed {
+            McpToApp::CaptureRequest { request_id, action, args } => {
+                assert_eq!(request_id, "cr-001");
+                assert_eq!(action, "list_windows");
+                assert_eq!(args["filter"], "Firefox");
+            }
+            _ => panic!("wrong variant"),
+        }
+    }
+
+    #[test]
+    fn test_capture_response_success_roundtrip() {
+        let msg = AppToMcp::CaptureResponse {
+            request_id: "cr-001".into(),
+            success: true,
+            result: Some(serde_json::json!([{ "hwnd": 12345, "title": "Firefox" }])),
+            error: None,
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        assert!(json.contains("\"type\":\"CaptureResponse\""));
+        // error field should be skipped when None
+        assert!(!json.contains("\"error\""));
+        let parsed: AppToMcp = serde_json::from_str(&json).unwrap();
+        match parsed {
+            AppToMcp::CaptureResponse { request_id, success, result, error } => {
+                assert_eq!(request_id, "cr-001");
+                assert!(success);
+                assert!(result.is_some());
+                assert!(error.is_none());
+            }
+            _ => panic!("wrong variant"),
+        }
+    }
+
+    #[test]
+    fn test_capture_response_error_roundtrip() {
+        let msg = AppToMcp::CaptureResponse {
+            request_id: "cr-002".into(),
+            success: false,
+            result: None,
+            error: Some("No window found matching: Notepad".into()),
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        // result field should be skipped when None
+        assert!(!json.contains("\"result\""));
+        let parsed: AppToMcp = serde_json::from_str(&json).unwrap();
+        match parsed {
+            AppToMcp::CaptureResponse { request_id, success, result, error } => {
+                assert_eq!(request_id, "cr-002");
+                assert!(!success);
+                assert!(result.is_none());
+                assert_eq!(error.unwrap(), "No window found matching: Notepad");
             }
             _ => panic!("wrong variant"),
         }

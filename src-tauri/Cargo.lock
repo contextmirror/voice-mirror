@@ -6324,6 +6324,7 @@ dependencies = [
  "dirs 6.0.0",
  "futures-util",
  "ignore",
+ "image",
  "lsp-types",
  "notify",
  "once_cell",

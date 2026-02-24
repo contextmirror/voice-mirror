@@ -385,6 +385,10 @@ async fn route_tool_call(
         "browser_cookies" => handlers::browser::handle_browser_cookies(args, data_dir, router).await,
         "browser_storage" => handlers::browser::handle_browser_storage(args, data_dir, router).await,
 
+        // ---- Capture tools ----
+        "capture_list_windows" => handlers::capture::handle_capture_list_windows(args, data_dir, router).await,
+        "capture_window" => handlers::capture::handle_capture_window(args, data_dir, router).await,
+
         // ---- n8n tools ----
         "n8n_list_workflows" => handlers::n8n::handle_n8n_list_workflows(args, data_dir).await,
         "n8n_get_workflow" => handlers::n8n::handle_n8n_get_workflow(args, data_dir).await,
