@@ -1,52 +1,16 @@
 <script>
-  import { gitCommit, gitPush, gitDiffStaged } from '../../lib/api.js';
-  import { chatStore } from '../../lib/stores/chat.svelte.js';
-  import { layoutStore } from '../../lib/stores/layout.svelte.js';
+  import { gitCommit, gitPush } from '../../lib/api.js';
 
-  let { branch = '', stagedCount = 0, onCommit = () => {}, onSend = () => {}, root = null } = $props();
+  let { branch = '', stagedCount = 0, onCommit = () => {}, root = null } = $props();
 
   let message = $state('');
   let committing = $state(false);
   let pushing = $state(false);
-  let generating = $state(false);
   let error = $state('');
   let success = $state('');
 
   function clearError() { error = ''; }
   function clearSuccess() { success = ''; }
-
-  async function handleGenerateMessage() {
-    if (stagedCount === 0 || generating) return;
-    clearError();
-    clearSuccess();
-    generating = true;
-    try {
-      const resp = await gitDiffStaged(root);
-      const diff = resp?.data?.diff || '';
-      if (!diff.trim()) {
-        error = 'No staged changes to generate a commit message for';
-        return;
-      }
-      // Cap diff for readability in chat
-      const maxLen = 8 * 1024;
-      const displayDiff = diff.length > maxLen ? diff.slice(0, maxLen) + '\n...[truncated]' : diff;
-
-      const prompt = `Write a conventional commit message for this diff. Just the message, nothing else.\n\n` +
-        `\`\`\`diff\n${displayDiff}\n\`\`\``;
-
-      // Add to chat and route to AI
-      chatStore.addMessage('user', prompt);
-      if (!layoutStore.showChat) layoutStore.toggleChat();
-      onSend(prompt);
-
-      success = 'Sent to AI — check chat';
-      setTimeout(clearSuccess, 3000);
-    } catch (err) {
-      error = typeof err === 'string' ? err : (err.message || 'Failed to get staged diff');
-    } finally {
-      generating = false;
-    }
-  }
 
   async function handleCommit() {
     if (!message.trim() || stagedCount === 0 || committing) return;
@@ -118,28 +82,14 @@
     </div>
   {/if}
 
-  <div class="commit-input-row">
-    <textarea
-      class="commit-textarea"
-      placeholder="Commit message..."
-      rows="2"
-      bind:value={message}
-      onkeydown={handleKeydown}
-      disabled={committing || pushing}
-    ></textarea>
-    <button
-      class="ai-button"
-      title="Ask AI to generate commit message"
-      onclick={handleGenerateMessage}
-      disabled={stagedCount === 0 || generating}
-    >
-      {#if generating}
-        <span class="spinner"></span>
-      {:else}
-        <span class="ai-sparkle">&#10024;</span>
-      {/if}
-    </button>
-  </div>
+  <textarea
+    class="commit-textarea"
+    placeholder="Commit message..."
+    rows="2"
+    bind:value={message}
+    onkeydown={handleKeydown}
+    disabled={committing || pushing}
+  ></textarea>
 
   {#if stagedCount === 0}
     <div class="stage-hint">Stage files to commit</div>
@@ -204,12 +154,6 @@
     text-overflow: ellipsis;
   }
 
-  .commit-input-row {
-    display: flex;
-    gap: 4px;
-    align-items: flex-start;
-  }
-
   .commit-textarea {
     flex: 1;
     min-height: 40px;
@@ -230,35 +174,6 @@
   }
   .commit-textarea::placeholder {
     color: var(--muted);
-  }
-
-  .ai-button {
-    width: 32px;
-    height: 32px;
-    flex-shrink: 0;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border: 1px solid var(--border, color-mix(in srgb, var(--muted) 30%, transparent));
-    background: var(--bg-elevated);
-    color: var(--muted);
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 16px;
-    -webkit-app-region: no-drag;
-    transition: color 0.15s, border-color 0.15s;
-  }
-  .ai-button:hover:not(:disabled) {
-    color: var(--accent);
-    border-color: var(--accent);
-  }
-  .ai-button:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-  }
-
-  .ai-sparkle {
-    line-height: 1;
   }
 
   .stage-hint {

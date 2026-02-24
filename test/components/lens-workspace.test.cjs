@@ -123,11 +123,6 @@ describe('LensWorkspace.svelte', () => {
     assert.ok(src.includes('onFileDblClick'), 'Should wire onFileDblClick to FileTree');
     assert.ok(src.includes('pinTab'), 'Should call pinTab on double-click');
   });
-  it('passes onSend to FileTree for AI commit messages', () => {
-    // FileTree needs onSend to route AI commit message generation to chat
-    const fileTreeBlock = src.slice(src.indexOf('<FileTree'), src.indexOf('/>', src.indexOf('<FileTree')) + 2);
-    assert.ok(fileTreeBlock.includes('onSend'), 'Should pass onSend to FileTree');
-  });
 
   // Panel toggles via layoutStore (collapse props, not conditional rendering)
   it('imports layoutStore', () => {

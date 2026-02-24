@@ -141,7 +141,6 @@
                   activeFilePath={isFile ? tabsStore.activeTab?.path : null}
                   activeDiffPath={isDiff ? tabsStore.activeTab?.path : null}
                   activeFileHasLsp={isFile && LSP_EXTENSIONS.has(activeExt)}
-                  {onSend}
                   onSymbolClick={({ line, character }) => {
                     // Navigate to symbol position in the active file editor
                     // The FileEditor will handle scrolling via its view

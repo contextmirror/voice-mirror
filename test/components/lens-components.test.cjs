@@ -264,20 +264,6 @@ describe('FileTree.svelte -- Git staging integration', () => {
     );
   });
 
-  it('accepts onSend prop', () => {
-    assert.ok(
-      ftSrc.includes('onSend'),
-      'FileTree should accept onSend prop'
-    );
-  });
-
-  it('passes onSend to GitCommitPanel', () => {
-    // Check that {onSend} or onSend= is passed to GitCommitPanel
-    assert.ok(
-      ftSrc.includes('{onSend}') || ftSrc.includes('onSend='),
-      'FileTree should pass onSend to GitCommitPanel'
-    );
-  });
 });
 
 // ============ LensPreview ============
