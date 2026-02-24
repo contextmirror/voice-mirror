@@ -1,6 +1,6 @@
 # LSP Integration — Design & Status
 
-> Internal design doc. `docs/internal/` is gitignored (some files force-added).
+> Internal design doc.
 
 ---
 

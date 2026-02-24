@@ -36,14 +36,14 @@ What's missing is everything that makes a "real IDE" feel seamless — the gaps 
 | Git status + diff | Full | Full | Basic | Medium |
 | Global text search | Full | Full | None | Critical |
 | Split editor | Full | Full | None | High |
-| Multi-cursor | Full | Full | None | Medium |
+| Multi-cursor | Full | Full | Full | None |
 | Debug adapter (DAP) | Full | Partial | None | Low priority |
 | Extensions/plugins | Massive | Growing | None | Not planned |
 | Command palette (commands) | Full | Full | 6 commands | Medium |
 | Terminal | Full | Partial | Rich (tabs) | Minor gaps |
 | Minimap | Full | Full | Diff only | Low |
 | Breadcrumbs | Full | Full | None | Low |
-| Find & replace (in file) | Full | Full | None | High |
+| Find & replace (in file) | Full | Full | Full | None |
 
 ---
 
@@ -67,19 +67,11 @@ What's missing is everything that makes a "real IDE" feel seamless — the gaps 
 
 ---
 
-### 2. Find & Replace (In-File) — HIGH
+### 2. Find & Replace (In-File) — DONE ✓
 
-**What real IDEs have:** Ctrl+F opens a find bar within the editor. Ctrl+H adds replace. Supports regex, case-sensitive, whole-word toggles. Highlight all matches. Navigate between matches.
+**Status:** Already works. `basicSetup` from the `codemirror` package bundles `@codemirror/search` with `searchKeymap` and `highlightSelectionMatches`. The editor theme already styles `.cm-panels`, `.cm-searchMatch`, and `.cm-searchMatch-selected`.
 
-**What we have:** Nothing. CodeMirror 6 has `@codemirror/search` which provides this **out of the box** — we just haven't added it to the editor extensions.
-
-**Why it matters:** Basic editing necessity. Finding a variable name in a 500-line file without Ctrl+F is painful.
-
-**What's needed:**
-- Add `@codemirror/search` to FileEditor.svelte's extensions
-- That's essentially it — the package provides the UI, keybindings, and logic
-
-**Estimated scope:** Tiny — literally one import + one line in the extensions array.
+**Keybindings:** Ctrl+F (find), Ctrl+H (find & replace), F3/Shift+F3 (next/prev), Alt+Enter (select all matches). Supports match case, regex, and whole-word toggles.
 
 ---
 
@@ -101,20 +93,17 @@ What's missing is everything that makes a "real IDE" feel seamless — the gaps 
 
 ---
 
-### 4. Multi-Cursor Editing — MEDIUM
+### 4. Multi-Cursor Editing — DONE ✓
 
-**What real IDEs have:** Ctrl+D selects the next occurrence of the current selection and adds a cursor there. Alt+Click adds a cursor at an arbitrary position. Type once, edit everywhere. Ctrl+Shift+L selects ALL occurrences.
+**Status:** Fully working. `basicSetup` bundles `searchKeymap` which includes `selectNextOccurrence` and `selectSelectionMatches`. Custom vertical cursor keybindings added in FileEditor.svelte.
 
-**What we have:** Nothing. CodeMirror 6 supports multi-cursor natively, but we haven't wired any keybindings for it.
-
-**Why it matters:** Renaming a local variable, changing repeated patterns, or editing structured data (like adding a field to multiple objects) is much faster with multi-cursor than find-and-replace.
-
-**What's needed:**
-- Wire Ctrl+D → select next occurrence (CodeMirror's `selectNextOccurrence`)
-- Wire Alt+Click → add cursor (default CM behavior, may need explicit enable)
-- Wire Ctrl+Shift+L → select all occurrences
-
-**Estimated scope:** Small — CodeMirror has this built-in, just needs keybinding configuration.
+**Keybindings:**
+- **Ctrl+D** → select next occurrence (via `searchKeymap`)
+- **Ctrl+Shift+L** → select all occurrences (via `searchKeymap`)
+- **Ctrl+Alt+Up** → add cursor on line above (custom)
+- **Ctrl+Alt+Down** → add cursor on line below (custom)
+- **Alt+Click** → add cursor at click position (CodeMirror default)
+- **Escape** → collapse to single cursor
 
 ---
 
@@ -251,16 +240,16 @@ Voice Mirror's extension story is: "Add an MCP server" — not "install a VS Cod
 
 | Priority | Feature | Impact | Effort | Rationale |
 |----------|---------|--------|--------|-----------|
-| 1 | Find & Replace (in-file) | High | Tiny | One import. Unblocks basic editing. |
-| 2 | Multi-cursor | High | Small | Wire existing CM feature. Power-user essential. |
-| 3 | Global text search | Critical | Medium | Most-requested missing feature for coding. |
-| 4 | Command palette expansion | Medium | Medium | Discovery mechanism for all features. |
-| 5 | Split editor | High | Large | Key workflow for test+implementation. |
-| 6 | Git stage + commit | Medium | Medium | Close the git loop without terminal. |
-| 7 | Terminal search | Low | Small | Nice-to-have for scrollback. |
-| 8 | Breadcrumbs | Low | Small | File path context in editor. |
-| 9 | Code minimap | Low | Large | Outline panel is a good substitute. |
-| 10 | Debug adapter | Low | Massive | AI terminal handles this better. |
+| ~~1~~ | ~~Find & Replace (in-file)~~ | ~~High~~ | ~~Tiny~~ | ~~Already works via basicSetup.~~ ✓ |
+| ~~1~~ | ~~Multi-cursor~~ | ~~High~~ | ~~Small~~ | ~~Done. Ctrl+D, Ctrl+Shift+L, Ctrl+Alt+Up/Down.~~ ✓ |
+| 2 | Global text search | Critical | Medium | Most-requested missing feature for coding. |
+| 3 | Command palette expansion | Medium | Medium | Discovery mechanism for all features. |
+| 4 | Split editor | High | Large | Key workflow for test+implementation. |
+| 5 | Git stage + commit | Medium | Medium | Close the git loop without terminal. |
+| 6 | Terminal search | Low | Small | Nice-to-have for scrollback. |
+| 7 | Breadcrumbs | Low | Small | File path context in editor. |
+| 8 | Code minimap | Low | Large | Outline panel is a good substitute. |
+| 9 | Debug adapter | Low | Massive | AI terminal handles this better. |
 | -- | Extensions | None | Massive | MCP servers are our extension model. |
 
 ---
