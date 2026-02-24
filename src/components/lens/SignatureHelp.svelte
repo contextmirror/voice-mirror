@@ -55,12 +55,12 @@
     return `left: ${left}px; top: ${top}px; transform: ${transform};`;
   });
 
-  // Escape key handler
+  // Escape key handler — dismiss but let the event continue so CodeMirror
+  // can also dismiss autocomplete in the same keystroke
   function handleKeydown(e) {
     if (e.key === 'Escape') {
-      e.preventDefault();
-      e.stopPropagation();
       onDismiss();
+      // Don't preventDefault or stopPropagation — let CodeMirror handle Escape too
     }
   }
 

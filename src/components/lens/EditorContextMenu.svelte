@@ -230,10 +230,12 @@
         Find References
         <span class="context-shortcut">Shift+F12</span>
       </button>
-      <button class="context-item" onclick={handleRenameSymbol} role="menuitem">
-        Rename Symbol
-        <span class="context-shortcut">F2</span>
-      </button>
+      {#if !tab?.readOnly}
+        <button class="context-item" onclick={handleRenameSymbol} role="menuitem">
+          Rename Symbol
+          <span class="context-shortcut">F2</span>
+        </button>
+      {/if}
       {#if hasDiagnostic}
         <button class="context-item" onclick={handleQuickFix} role="menuitem">
           Quick Fix...
@@ -243,18 +245,22 @@
       <div class="context-separator"></div>
     {/if}
 
-    <button class="context-item" onclick={handleCut} role="menuitem">
-      Cut
-      <span class="context-shortcut">Ctrl+X</span>
-    </button>
+    {#if !tab?.readOnly}
+      <button class="context-item" onclick={handleCut} role="menuitem">
+        Cut
+        <span class="context-shortcut">Ctrl+X</span>
+      </button>
+    {/if}
     <button class="context-item" onclick={handleCopy} role="menuitem">
       Copy
       <span class="context-shortcut">Ctrl+C</span>
     </button>
-    <button class="context-item" onclick={handlePaste} role="menuitem">
-      Paste
-      <span class="context-shortcut">Ctrl+V</span>
-    </button>
+    {#if !tab?.readOnly}
+      <button class="context-item" onclick={handlePaste} role="menuitem">
+        Paste
+        <span class="context-shortcut">Ctrl+V</span>
+      </button>
+    {/if}
     <button class="context-item" onclick={handleSelectAll} role="menuitem">
       Select All
       <span class="context-shortcut">Ctrl+A</span>

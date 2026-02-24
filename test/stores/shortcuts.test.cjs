@@ -245,6 +245,13 @@ describe('shortcuts: setupInAppShortcuts', () => {
     );
   });
 
+  it('handles Ctrl+P for open-file-search (standard IDE keybinding)', () => {
+    assert.ok(
+      src.includes("event.key === 'p'") || src.includes("key === 'p'"),
+      'Should handle Ctrl+P for quick file open'
+    );
+  });
+
   it('handles Ctrl+Shift+F for open-text-search', () => {
     assert.ok(
       src.includes("event.shiftKey") && src.includes("event.key === 'F'"),
@@ -270,6 +277,13 @@ describe('shortcuts: setupInAppShortcuts', () => {
     assert.ok(
       src.includes("event.key === 'Escape'") || src.includes("key === 'Escape'"),
       'Should handle Escape for close-panel'
+    );
+  });
+
+  it('lets CodeMirror handle Escape when editor is focused', () => {
+    assert.ok(
+      src.includes('.cm-editor'),
+      'Should check for .cm-editor to let CodeMirror handle Escape first'
     );
   });
 

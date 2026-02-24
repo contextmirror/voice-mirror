@@ -137,6 +137,15 @@ describe('EditorContextMenu.svelte: edit actions section', () => {
   it('uses navigator.clipboard for paste', () => {
     assert.ok(src.includes('navigator.clipboard'), 'Should use clipboard API for paste');
   });
+  it('hides Cut for read-only files', () => {
+    assert.ok(src.includes('tab?.readOnly'), 'Should check tab.readOnly to hide Cut/Paste');
+  });
+  it('hides Rename Symbol for read-only files', () => {
+    // Rename is under the readOnly guard in the LSP section
+    const renameIdx = src.indexOf('Rename Symbol');
+    const before = src.slice(Math.max(0, renameIdx - 200), renameIdx);
+    assert.ok(before.includes('readOnly'), 'Rename Symbol should be gated by readOnly check');
+  });
 });
 
 describe('EditorContextMenu.svelte: folding actions section', () => {

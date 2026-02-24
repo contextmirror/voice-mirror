@@ -76,6 +76,10 @@ describe('SignatureHelp.svelte', () => {
     assert.ok(src.includes("'Escape'"), 'Should handle Escape key');
   });
 
+  it('does not stopPropagation on Escape (lets CodeMirror dismiss autocomplete too)', () => {
+    assert.ok(!src.includes('e.stopPropagation()'), 'Should not block Escape from reaching CodeMirror');
+  });
+
   it('uses fixed positioning', () => {
     assert.ok(src.includes('position: fixed'), 'Should use fixed positioning');
   });

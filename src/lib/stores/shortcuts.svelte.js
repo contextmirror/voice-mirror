@@ -416,15 +416,16 @@ export function setupInAppShortcuts() {
       return;
     }
 
-    // F1 -> Open file search / command palette
-    if (event.key === 'F1') {
+    // F1 or Ctrl+P -> Open file search / command palette
+    if (event.key === 'F1' || (ctrl && event.key === 'p')) {
       event.preventDefault();
       actionHandlers['open-file-search']?.();
       return;
     }
 
-    // Escape -> Close panel/modal
+    // Escape -> Close panel/modal (but let CodeMirror handle it first when editor is focused)
     if (event.key === 'Escape') {
+      if (event.target?.closest('.cm-editor')) return;
       event.preventDefault();
       actionHandlers['close-panel']?.();
       return;
