@@ -84,12 +84,12 @@
 
 <style>
   .project-strip {
-    width: 40px;
+    width: 48px;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 4px;
-    padding: 6px 0;
+    gap: 6px;
+    padding: 8px 0;
     border-right: 1px solid var(--border);
     flex-shrink: 0;
     overflow-y: auto;
@@ -97,13 +97,13 @@
   }
 
   .project-avatar {
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
     border: none;
     color: #fff;
-    font-size: 14px;
-    font-weight: 600;
+    font-size: 15px;
+    font-weight: 700;
     font-family: var(--font-family);
     cursor: pointer;
     display: flex;
@@ -112,7 +112,20 @@
     flex-shrink: 0;
     transition: all var(--duration-fast) var(--ease-out);
     position: relative;
-    border-left: 2px solid transparent;
+  }
+
+  /* Active indicator pill — left edge, outside the button */
+  .project-avatar::before {
+    content: '';
+    position: absolute;
+    left: -6px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 3px;
+    height: 0;
+    border-radius: 2px;
+    background: var(--accent);
+    transition: height var(--duration-fast) var(--ease-out);
   }
 
   .project-avatar:hover {
@@ -120,15 +133,22 @@
     transform: scale(1.05);
   }
 
+  .project-avatar:hover::before {
+    height: 12px;
+  }
+
   .project-avatar.active {
-    border-left: 2px solid var(--accent);
-    border-radius: 8px;
+    border-radius: 10px;
+  }
+
+  .project-avatar.active::before {
+    height: 22px;
   }
 
   .project-add {
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
     border: 1px dashed var(--muted);
     background: transparent;
     color: var(--muted);

@@ -1,6 +1,8 @@
 <script>
   import { overlayStore } from '../../lib/stores/overlay.svelte.js';
   import { navigationStore } from '../../lib/stores/navigation.svelte.js';
+  import { projectStore } from '../../lib/stores/project.svelte.js';
+  import { open } from '@tauri-apps/plugin-dialog';
   import Orb from '../overlay/Orb.svelte';
 
   let appMode = $derived(navigationStore.appMode);
@@ -19,15 +21,95 @@
       console.error('[TitleBar] Compact to orb failed:', err);
     }
   }
+
+  // ---- App Menu ----
+  let appMenuOpen = $state(false);
+
+  function toggleAppMenu(e) {
+    e.stopPropagation();
+    appMenuOpen = !appMenuOpen;
+  }
+
+  function closeAppMenu() {
+    appMenuOpen = false;
+  }
+
+  async function handleOpenProject() {
+    closeAppMenu();
+    const selected = await open({ directory: true });
+    if (selected) {
+      projectStore.addProject(selected);
+      navigationStore.setMode('lens');
+    }
+  }
+
+  async function handleOpenFile() {
+    closeAppMenu();
+    const selected = await open({
+      multiple: false,
+      filters: [
+        { name: 'All Files', extensions: ['*'] },
+        { name: 'Source', extensions: ['js', 'ts', 'svelte', 'rs', 'json', 'css', 'html', 'md', 'py'] },
+      ]
+    });
+    if (selected) {
+      // Opening a file switches to Lens mode and opens it in the editor
+      navigationStore.setMode('lens');
+      window.dispatchEvent(new CustomEvent('lens-open-file', { detail: { path: selected } }));
+    }
+  }
+
+  function handleSettings() {
+    closeAppMenu();
+    navigationStore.setView('settings');
+  }
+
+  function handleAppMenuKeydown(e) {
+    if (e.key === 'Escape') closeAppMenu();
+  }
 </script>
+
+<svelte:document onclick={closeAppMenu} onkeydown={handleAppMenuKeydown} />
 
 <header class="titlebar" data-tauri-drag-region>
   <div class="titlebar-left" data-tauri-drag-region>
-    <svg class="titlebar-logo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <circle cx="12" cy="12" r="10"/>
-      <path d="M8 12a4 4 0 0 1 8 0"/>
-      <circle cx="12" cy="12" r="1"/>
-    </svg>
+    <div class="app-menu-anchor">
+      <button
+        class="app-menu-btn"
+        class:open={appMenuOpen}
+        onclick={toggleAppMenu}
+        aria-label="App menu"
+        aria-expanded={appMenuOpen}
+        aria-haspopup="menu"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/>
+          <path d="M8 12a4 4 0 0 1 8 0"/>
+          <circle cx="12" cy="12" r="1"/>
+        </svg>
+      </button>
+
+      {#if appMenuOpen}
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div class="app-menu-dropdown" role="menu" onclick={(e) => e.stopPropagation()}>
+          <button class="app-menu-item" onclick={handleOpenFile} role="menuitem">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+            <span>Open File</span>
+            <kbd>Ctrl+O</kbd>
+          </button>
+          <button class="app-menu-item" onclick={handleOpenProject} role="menuitem">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+            <span>Open Project</span>
+          </button>
+          <div class="app-menu-separator"></div>
+          <button class="app-menu-item" onclick={handleSettings} role="menuitem">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            <span>Settings</span>
+            <kbd>Ctrl+,</kbd>
+          </button>
+        </div>
+      {/if}
+    </div>
     <div class="mode-toggle" role="radiogroup" aria-label="App mode">
       <button
         class="mode-btn"
@@ -95,11 +177,107 @@
     pointer-events: none; /* Allow drag-through to titlebar */
   }
 
-  .titlebar-logo {
+  /* ========== App Menu Button ========== */
+  .app-menu-anchor {
+    position: relative;
+    pointer-events: auto;
+    -webkit-app-region: no-drag;
+    z-index: 10001;
+  }
+
+  .app-menu-btn {
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: var(--radius-md, 6px);
+    background: transparent;
+    color: var(--accent);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    transition: background var(--duration-fast) var(--ease-out),
+                color var(--duration-fast) var(--ease-out);
+  }
+
+  .app-menu-btn svg {
     width: 20px;
     height: 20px;
-    color: var(--accent);
+  }
+
+  .app-menu-btn:hover,
+  .app-menu-btn.open {
+    background: var(--accent-subtle, rgba(99, 102, 241, 0.15));
+  }
+
+  /* ========== App Menu Dropdown ========== */
+  .app-menu-dropdown {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    min-width: 220px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md, 6px);
+    padding: 4px 0;
+    box-shadow: var(--shadow-md, 0 8px 24px rgba(0, 0, 0, 0.3));
+    z-index: 10002;
+    animation: app-menu-in 0.12s var(--ease-out);
+  }
+
+  @keyframes app-menu-in {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .app-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 8px 14px;
+    background: none;
+    border: none;
+    color: var(--text);
+    font-size: 13px;
+    font-family: var(--font-family);
+    cursor: pointer;
+    text-align: left;
+    white-space: nowrap;
+    transition: background var(--duration-fast) var(--ease-out);
+  }
+
+  .app-menu-item:hover {
+    background: var(--bg-hover);
+  }
+
+  .app-menu-item svg {
+    width: 15px;
+    height: 15px;
     flex-shrink: 0;
+    color: var(--muted);
+  }
+
+  .app-menu-item:hover svg {
+    color: var(--text);
+  }
+
+  .app-menu-item span {
+    flex: 1;
+  }
+
+  .app-menu-item kbd {
+    font-size: 11px;
+    color: var(--muted);
+    font-family: var(--font-mono);
+    opacity: 0.6;
+  }
+
+  .app-menu-separator {
+    height: 1px;
+    background: var(--border);
+    margin: 4px 8px;
   }
 
   .mode-toggle {
