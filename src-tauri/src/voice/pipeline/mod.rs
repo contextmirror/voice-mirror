@@ -712,8 +712,11 @@ async fn audio_processing_loop(shared: Arc<PipelineShared>) {
                 vad.process_frame(chunk);
 
                 // Check for force-stop (PTT release / Toggle stop) OR silence timeout
+                // In toggle mode, only stop on manual press — never on silence
                 let force_stop = shared.force_stop_recording.swap(false, Ordering::SeqCst);
-                if force_stop || vad.silence_exceeded(silence_timeout) {
+                let current_mode = shared.mode.lock().map(|g| *g).unwrap_or(VoiceMode::PushToTalk);
+                let silence_stop = current_mode != VoiceMode::Toggle && vad.silence_exceeded(silence_timeout);
+                if force_stop || silence_stop {
                     tracing::info!(
                         reason = if force_stop { "manual" } else { "silence" },
                         "Stopping recording"
