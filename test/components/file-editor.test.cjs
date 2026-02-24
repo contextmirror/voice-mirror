@@ -13,6 +13,11 @@ const src = fs.readFileSync(
   'utf-8'
 );
 
+const extSrc = fs.readFileSync(
+  path.join(__dirname, '../../src/lib/editor-extensions.js'),
+  'utf-8'
+);
+
 const mdPreviewCss = fs.readFileSync(
   path.join(__dirname, '../../src/styles/markdown-preview.css'),
   'utf-8'
@@ -50,6 +55,40 @@ describe('FileEditor.svelte', () => {
   });
 });
 
+describe('FileEditor.svelte: editor extensions extraction', () => {
+  it('imports buildEditorExtensions from editor-extensions.js', () => {
+    assert.ok(src.includes('buildEditorExtensions'), 'Should import buildEditorExtensions');
+    assert.ok(src.includes('editor-extensions.js'), 'Should import from editor-extensions.js');
+  });
+
+  it('calls buildEditorExtensions with cm, lsp, and options', () => {
+    assert.ok(src.includes('buildEditorExtensions(cm, lsp,'), 'Should call buildEditorExtensions');
+  });
+
+  it('editor-extensions.js exports buildEditorExtensions', () => {
+    assert.ok(extSrc.includes('export function buildEditorExtensions'), 'Should export buildEditorExtensions');
+  });
+
+  it('editor-extensions.js builds basicSetup extension', () => {
+    assert.ok(extSrc.includes('cm.basicSetup'), 'Should include basicSetup');
+  });
+
+  it('editor-extensions.js builds multi-cursor keybindings', () => {
+    assert.ok(extSrc.includes('Ctrl-Alt-ArrowUp'), 'Should have multi-cursor up');
+    assert.ok(extSrc.includes('Ctrl-Alt-ArrowDown'), 'Should have multi-cursor down');
+  });
+
+  it('editor-extensions.js adds LSP keybindings when LSP active', () => {
+    assert.ok(extSrc.includes("'F2'"), 'Should have F2 rename shortcut');
+    assert.ok(extSrc.includes("'Shift-F12'"), 'Should have Shift-F12 references shortcut');
+    assert.ok(extSrc.includes("'Mod-.'"), 'Should have Mod-. code actions shortcut');
+  });
+
+  it('editor-extensions.js adds domEventHandlers', () => {
+    assert.ok(extSrc.includes('domEventHandlers'), 'Should add domEventHandlers');
+  });
+});
+
 describe('FileEditor.svelte: CodeMirror integration', () => {
   it('dynamically imports codemirror', () => {
     assert.ok(
@@ -79,7 +118,7 @@ describe('FileEditor.svelte: CodeMirror integration', () => {
   });
 
   it('has Mod-s keymap for save', () => {
-    assert.ok(src.includes('Mod-s'), 'Should have Mod-s save shortcut');
+    assert.ok(extSrc.includes('Mod-s'), 'Should have Mod-s save shortcut in editor-extensions.js');
   });
 
   it('destroys view on cleanup', () => {
@@ -107,7 +146,7 @@ describe('FileEditor.svelte: save functionality', () => {
 
 describe('FileEditor.svelte: dirty tracking', () => {
   it('marks tab dirty on doc change', () => {
-    assert.ok(src.includes('docChanged'), 'Should detect document changes');
+    assert.ok(extSrc.includes('docChanged'), 'Should detect document changes in editor-extensions.js');
   });
 
   it('pins tab on edit', () => {
@@ -164,13 +203,13 @@ describe('FileEditor.svelte: autocomplete', () => {
 
   it('enables autocomplete in extensions', () => {
     assert.ok(
-      src.includes('cm.autocompletion('),
-      'Should add autocompletion to editor extensions'
+      extSrc.includes('cm.autocompletion('),
+      'Should add autocompletion to editor extensions in editor-extensions.js'
     );
   });
 
   it('activates on typing', () => {
-    assert.ok(src.includes('activateOnTyping: true'), 'Should activate autocomplete on typing');
+    assert.ok(extSrc.includes('activateOnTyping: true'), 'Should activate autocomplete on typing in editor-extensions.js');
   });
 });
 
@@ -227,8 +266,8 @@ describe('FileEditor.svelte: external file support', () => {
 
   it('applies readOnly extension for read-only tabs', () => {
     assert.ok(
-      src.includes('EditorState.readOnly.of(true)'),
-      'Should add readOnly extension when tab is readOnly'
+      extSrc.includes('EditorState.readOnly.of(true)'),
+      'Should add readOnly extension when tab is readOnly in editor-extensions.js'
     );
   });
 

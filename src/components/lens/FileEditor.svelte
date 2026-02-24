@@ -1,7 +1,7 @@
 <script>
   import { onDestroy, tick } from 'svelte';
   import { listen } from '@tauri-apps/api/event';
-  import { readFile, readExternalFile, writeFile, lspRequestDefinition, lspApplyWorkspaceEdit, revealInExplorer, writeUserMessage, aiPtyInput } from '../../lib/api.js';
+  import { readFile, readExternalFile, writeFile, lspRequestDefinition, lspApplyWorkspaceEdit, writeUserMessage, aiPtyInput } from '../../lib/api.js';
   import { tabsStore } from '../../lib/stores/tabs.svelte.js';
   import { projectStore } from '../../lib/stores/project.svelte.js';
   import { configStore } from '../../lib/stores/config.svelte.js';
@@ -117,12 +117,6 @@
     }
   }
 
-  function getLanguageFromPath(path) {
-    const ext = path.split('.').pop()?.toLowerCase() || '';
-    const map = { js: 'javascript', ts: 'typescript', rs: 'rust', py: 'python', svelte: 'svelte', json: 'json', css: 'css', html: 'html', md: 'markdown' };
-    return map[ext] || ext;
-  }
-
   function sendAiMessage(text) {
     chatStore.addMessage('user', text);
     if (aiStatusStore.isApiProvider) {
@@ -132,124 +126,10 @@
     }
   }
 
-  async function handleGoToDefinition() {
+  function handleGoToDefinition() {
     if (!view || !lsp.hasLsp || !currentPath) return;
     const pos = view.state.selection.main.head;
     lsp.handleGoToDefinition(view, pos);
-  }
-
-  async function foldAtCursor() {
-    if (!view) return;
-    const { foldCode } = await import('@codemirror/language');
-    foldCode(view);
-  }
-
-  async function unfoldAtCursor() {
-    if (!view) return;
-    const { unfoldCode } = await import('@codemirror/language');
-    unfoldCode(view);
-  }
-
-  async function foldAllCode() {
-    if (!view) return;
-    const { foldAll } = await import('@codemirror/language');
-    foldAll(view);
-  }
-
-  async function unfoldAllCode() {
-    if (!view) return;
-    const { unfoldAll } = await import('@codemirror/language');
-    unfoldAll(view);
-  }
-
-  function handleMenuAction(action, data) {
-    if (!view) return;
-    switch (action) {
-      // AI Actions
-      case 'ai-fix': {
-        const msg = `Error on line ${data.lineNumber} of \`${data.filePath}\`: "${data.diagnosticMessage}"\n\nFix this error.`;
-        sendAiMessage(msg);
-        break;
-      }
-      case 'ai-explain': {
-        const lang = getLanguageFromPath(data.filePath);
-        const msg = `Looking at \`${data.filePath}\` line ${data.lineNumber}:\n\`\`\`${lang}\n${data.selectedText}\n\`\`\`\nExplain what this code does.`;
-        sendAiMessage(msg);
-        break;
-      }
-      case 'ai-refactor': {
-        const lang = getLanguageFromPath(data.filePath);
-        const msg = `Looking at \`${data.filePath}\` line ${data.lineNumber}:\n\`\`\`${lang}\n${data.selectedText}\n\`\`\`\nRefactor this code to be cleaner and more maintainable.`;
-        sendAiMessage(msg);
-        break;
-      }
-      case 'ai-test': {
-        const lang = getLanguageFromPath(data.filePath);
-        const msg = `Looking at \`${data.filePath}\` line ${data.lineNumber}:\n\`\`\`${lang}\n${data.selectedText}\n\`\`\`\nWrite tests for this code.`;
-        sendAiMessage(msg);
-        break;
-      }
-
-      // LSP Actions
-      case 'goto-definition':
-        handleGoToDefinition();
-        break;
-      case 'find-references':
-        lsp.handleFindReferences(view, currentPath);
-        break;
-      case 'rename-symbol':
-        lsp.handleRenameSymbol(view, currentPath);
-        break;
-      case 'quick-fix': {
-        const allDiags = lsp.cachedDiagnostics.get(currentPath) || [];
-        const pos = view.state.selection.main.head;
-        const cursorDiags = allDiags.filter(d => pos >= d.from && pos <= d.to);
-        lsp.handleCodeActions(view, currentPath, cursorDiags);
-        break;
-      }
-
-      // Clipboard
-      case 'cut': document.execCommand('cut'); break;
-      case 'copy': document.execCommand('copy'); break;
-      case 'paste':
-        navigator.clipboard.readText().then(text => {
-          if (!view) return;
-          const { from, to } = view.state.selection.main;
-          view.dispatch({ changes: { from, to, insert: text } });
-        }).catch(err => console.warn('[editor] Clipboard read denied:', err));
-        break;
-      case 'select-all':
-        view.dispatch({ selection: { anchor: 0, head: view.state.doc.length } });
-        break;
-
-      // Folding
-      case 'fold': foldAtCursor(); break;
-      case 'unfold': unfoldAtCursor(); break;
-      case 'fold-all': foldAllCode(); break;
-      case 'unfold-all': unfoldAllCode(); break;
-
-      // File actions
-      case 'copy-path': {
-        const root = projectStore.activeProject?.path || '';
-        const fullPath = root ? `${root}/${currentPath}` : currentPath;
-        navigator.clipboard.writeText(fullPath.replace(/\//g, '\\'));
-        break;
-      }
-      case 'copy-relative-path':
-        navigator.clipboard.writeText(currentPath);
-        break;
-      case 'copy-markdown': {
-        const lang = getLanguageFromPath(currentPath);
-        const text = view.state.selection.main.empty
-          ? view.state.doc.toString()
-          : view.state.sliceDoc(view.state.selection.main.from, view.state.selection.main.to);
-        navigator.clipboard.writeText(`\`${currentPath}\`\n\`\`\`${lang}\n${text}\n\`\`\``);
-        break;
-      }
-      case 'reveal':
-        revealInExplorer(currentPath, projectStore.activeProject?.path || null);
-        break;
-    }
   }
 
   async function save() {
@@ -716,8 +596,12 @@
   diagnosticMessage={menuContext.diagnosticMessage}
   filePath={currentPath}
   lineNumber={menuContext.lineNumber}
+  {view}
+  {tab}
+  {lsp}
   onClose={() => { editorMenu.visible = false; }}
-  onAction={handleMenuAction}
+  onSendToAi={sendAiMessage}
+  onNavigateDefinition={handleGoToDefinition}
 />
 
 <ReferencesPanel

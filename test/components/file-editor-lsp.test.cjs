@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 
 const src = fs.readFileSync(path.join(__dirname, '../../src/components/lens/FileEditor.svelte'), 'utf-8');
+const extSrc = fs.readFileSync(path.join(__dirname, '../../src/lib/editor-extensions.js'), 'utf-8');
 
 describe('FileEditor LSP integration', () => {
   it('imports createEditorLsp from editor-lsp.svelte.js', () => {
@@ -47,10 +48,10 @@ describe('FileEditor LSP integration', () => {
     assert.ok(src.includes('lsp.saveFile('), 'Should call lsp.saveFile');
   });
   it('calls lsp.completionSource for completion', () => {
-    assert.ok(src.includes('lsp.completionSource('), 'Should call lsp.completionSource');
+    assert.ok(extSrc.includes('lsp.completionSource('), 'Should call lsp.completionSource in editor-extensions.js');
   });
   it('calls lsp.hoverTooltipExtension for hover', () => {
-    assert.ok(src.includes('lsp.hoverTooltipExtension('), 'Should call lsp.hoverTooltipExtension');
+    assert.ok(extSrc.includes('lsp.hoverTooltipExtension('), 'Should call lsp.hoverTooltipExtension in editor-extensions.js');
   });
   it('calls lsp.diagnosticListener for diagnostics', () => {
     assert.ok(src.includes('lsp.diagnosticListener('), 'Should call lsp.diagnosticListener');
@@ -77,20 +78,17 @@ describe('FileEditor LSP integration', () => {
     assert.ok(src.includes('_lspPath'), 'Should set _lspPath on view');
   });
 
-  // Phase 3-5: New feature integration
-  it('handles find-references action', () => {
-    assert.ok(src.includes("'find-references'"), 'Should handle find-references action');
-    assert.ok(src.includes('lsp.handleFindReferences'), 'Should call lsp.handleFindReferences');
+  // Phase 3-5: New feature integration (action dispatch moved to EditorContextMenu / editor-extensions.js)
+  it('handles find-references via EditorContextMenu or editor-extensions', () => {
+    assert.ok(extSrc.includes('lsp.handleFindReferences'), 'Should call lsp.handleFindReferences in editor-extensions.js');
   });
 
-  it('handles rename-symbol action', () => {
-    assert.ok(src.includes("'rename-symbol'"), 'Should handle rename-symbol action');
-    assert.ok(src.includes('lsp.handleRenameSymbol'), 'Should call lsp.handleRenameSymbol');
+  it('handles rename-symbol via EditorContextMenu or editor-extensions', () => {
+    assert.ok(extSrc.includes('lsp.handleRenameSymbol'), 'Should call lsp.handleRenameSymbol in editor-extensions.js');
   });
 
-  it('handles quick-fix action', () => {
-    assert.ok(src.includes("'quick-fix'"), 'Should handle quick-fix action');
-    assert.ok(src.includes('lsp.handleCodeActions'), 'Should call lsp.handleCodeActions');
+  it('handles quick-fix via EditorContextMenu or editor-extensions', () => {
+    assert.ok(extSrc.includes('lsp.handleCodeActions'), 'Should call lsp.handleCodeActions in editor-extensions.js');
   });
 
   it('imports and mounts ReferencesPanel', () => {
