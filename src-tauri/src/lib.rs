@@ -325,6 +325,7 @@ pub fn run() {
             lsp_cmds::lsp_save_file,
             lsp_cmds::lsp_request_completion,
             lsp_cmds::lsp_request_hover,
+            lsp_cmds::lsp_request_signature_help,
             lsp_cmds::lsp_request_definition,
             lsp_cmds::lsp_request_document_symbols,
             lsp_cmds::lsp_request_references,

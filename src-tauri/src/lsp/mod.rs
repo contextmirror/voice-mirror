@@ -250,6 +250,14 @@ impl LspManager {
                     "hover": {
                         "contentFormat": ["plaintext", "markdown"]
                     },
+                    "signatureHelp": {
+                        "signatureInformation": {
+                            "documentationFormat": ["plaintext", "markdown"],
+                            "parameterInformation": {
+                                "labelOffsetSupport": true
+                            }
+                        }
+                    },
                     "definition": {
                         "dynamicRegistration": false
                     },
@@ -597,6 +605,47 @@ impl LspManager {
         };
 
         Ok(serde_json::json!({ "contents": contents }))
+    }
+
+    /// Request signature help at a position.
+    pub async fn request_signature_help(
+        &mut self,
+        uri: &str,
+        lang_id: &str,
+        line: u32,
+        character: u32,
+    ) -> Result<Value, String> {
+        let server = self
+            .servers
+            .get_mut(lang_id)
+            .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
+
+        let params = serde_json::json!({
+            "textDocument": { "uri": uri },
+            "position": { "line": line, "character": character }
+        });
+
+        let rx = client::send_request(
+            &mut server.stdin,
+            &server.pending_requests,
+            "textDocument/signatureHelp",
+            params,
+            &server.next_id,
+        )
+        .await?;
+
+        let response = tokio::time::timeout(std::time::Duration::from_secs(10), rx)
+            .await
+            .map_err(|_| "Signature help request timed out".to_string())?
+            .map_err(|_| "Signature help response channel closed".to_string())?;
+
+        let result = response.get("result").cloned().unwrap_or(Value::Null);
+
+        if result.is_null() {
+            Ok(serde_json::json!({ "signatures": [] }))
+        } else {
+            Ok(result)
+        }
     }
 
     /// Request go-to-definition at a position.
