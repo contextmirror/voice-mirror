@@ -479,6 +479,20 @@ export async function killPortProcess(port) {
   return invoke('kill_port_process', { port });
 }
 
+// ============ GPU / Model Management ============
+
+export async function detectGpu() {
+  return invoke('detect_gpu');
+}
+
+export async function listSttModels() {
+  return invoke('list_stt_models');
+}
+
+export async function deleteSttModel(modelSize) {
+  return invoke('delete_stt_model', { modelSize });
+}
+
 // ============ Files ============
 
 export async function listDirectory(path, root) {

@@ -179,6 +179,9 @@ pub fn run() {
             voice_cmds::configure_dictation_key,
             voice_cmds::ensure_stt_model,
             voice_cmds::restart_voice,
+            voice_cmds::detect_gpu,
+            voice_cmds::list_stt_models,
+            voice_cmds::delete_stt_model,
             voice_cmds::inject_text,
             // AI (real implementations)
             ai_cmds::start_ai,

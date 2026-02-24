@@ -133,6 +133,7 @@ export const STT_REGISTRY = {
   'whisper-local': {
     label: 'Whisper (Local, default)',
     showModelSize: true,
+    showGpu: true,
     modelSizes: [
       { value: 'tiny', label: 'Fast (~77MB)' },
       { value: 'base', label: 'Balanced (~148MB, recommended)' },

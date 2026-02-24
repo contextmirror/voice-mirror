@@ -105,6 +105,9 @@ pub struct VoiceEngineConfig {
     /// STT model size for local whisper (e.g., "tiny", "base", "small").
     pub stt_model_size: String,
 
+    /// Whether to use GPU acceleration for STT inference (CUDA).
+    pub stt_use_gpu: bool,
+
     /// TTS adapter name (e.g., "edge", "kokoro", "openai-tts").
     pub tts_adapter: String,
 
@@ -136,6 +139,7 @@ impl Default for VoiceEngineConfig {
             mode: VoiceMode::PushToTalk,
             stt_adapter: "whisper-local".into(),
             stt_model_size: "base".into(),
+            stt_use_gpu: false,
             tts_adapter: "kokoro".into(),
             tts_voice: "af_bella".into(),
             tts_speed: 1.0,

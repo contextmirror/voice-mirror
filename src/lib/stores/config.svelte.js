@@ -27,6 +27,7 @@ const DEFAULT_CONFIG = {
     sttModel: 'whisper-local',
     sttAdapter: 'whisper-local',
     sttModelSize: 'base',
+    sttUseGpu: false,
     sttApiKey: null,
     sttEndpoint: null,
     sttModelName: null,

@@ -335,6 +335,34 @@ describe('VoiceSettings.svelte', () => {
     assert.ok(src.includes('getVoiceStatus'), 'Should import getVoiceStatus');
   });
 
+  it('imports GPU and model management API functions', () => {
+    assert.ok(src.includes('detectGpu'), 'Should import detectGpu');
+    assert.ok(src.includes('listSttModels'), 'Should import listSttModels');
+    assert.ok(src.includes('deleteSttModel'), 'Should import deleteSttModel');
+  });
+
+  it('has GPU detection state', () => {
+    assert.ok(src.includes('gpuInfo'), 'Should have gpuInfo state');
+    assert.ok(src.includes('sttUseGpu'), 'Should have sttUseGpu state');
+  });
+
+  it('has installed models state and handlers', () => {
+    assert.ok(src.includes('installedModels'), 'Should have installedModels state');
+    assert.ok(src.includes('handleDeleteModel'), 'Should have handleDeleteModel function');
+    assert.ok(src.includes('refreshInstalledModels'), 'Should have refreshInstalledModels function');
+  });
+
+  it('renders GPU toggle conditional on whisper-local', () => {
+    assert.ok(src.includes('GPU Acceleration (CUDA)'), 'Should have GPU toggle label');
+    assert.ok(src.includes('currentSTTAdapter.showGpu'), 'Should check showGpu flag');
+  });
+
+  it('renders Installed Models section', () => {
+    assert.ok(src.includes('Installed Models'), 'Should have Installed Models section');
+    assert.ok(src.includes('model-row'), 'Should have model-row class');
+    assert.ok(src.includes('modelDisplayName'), 'Should use modelDisplayName helper');
+  });
+
   it('imports listen from Tauri event API', () => {
     assert.ok(src.includes("from '@tauri-apps/api/event'"), 'Should import from @tauri-apps/api/event');
     assert.ok(src.includes('listen'), 'Should import listen');
@@ -492,6 +520,10 @@ describe('voice-adapters.js', () => {
     const sttSection = src.split("'whisper-local'")[1]?.split('],')[0] || '';
     const sttMatches = sttSection.match(/value: '/g);
     assert.ok(sttMatches && sttMatches.length >= 5, 'Should have at least 5 STT model sizes');
+  });
+
+  it('has showGpu flag on whisper-local', () => {
+    assert.ok(src.includes('showGpu: true'), 'whisper-local should have showGpu: true');
   });
 });
 

@@ -187,6 +187,7 @@ impl VoicePipeline {
             &config.stt_adapter,
             &data_dir,
             Some(&config.stt_model_size),
+            config.stt_use_gpu,
         ) {
             Ok(engine) => {
                 tracing::info!(adapter = %config.stt_adapter, "STT engine initialized");

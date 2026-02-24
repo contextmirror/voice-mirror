@@ -47,7 +47,7 @@ cpal = "0.15"
 rodio = "0.19"
 
 # STT: whisper-rs (C++ FFI to whisper.cpp)
-whisper-rs = { version = "0.13", optional = true }
+whisper-rs = { version = "0.15", optional = true }
 
 # TTS: ONNX Runtime for Kokoro local inference
 ort = { version = "2.0.0-rc.11", optional = true }
@@ -90,5 +90,6 @@ path = "src/bin/mcp.rs"
 [features]
 default = []
 whisper = ["whisper-rs"]
+cuda = ["whisper-rs/cuda"]
 onnx = ["ort", "zip", "byteorder"]
 native-ml = ["whisper", "onnx"]

@@ -305,6 +305,7 @@ pub fn restart_voice(
         .unwrap_or_default(),
         stt_adapter: app_cfg.voice.stt_adapter.clone(),
         stt_model_size: app_cfg.voice.stt_model_size.clone(),
+        stt_use_gpu: app_cfg.voice.stt_use_gpu,
         tts_adapter: app_cfg.voice.tts_adapter.clone(),
         tts_voice: app_cfg.voice.tts_voice.clone(),
         tts_speed: app_cfg.voice.tts_speed as f32,
@@ -340,6 +341,126 @@ pub fn restart_voice(
             tracing::error!("Failed to restart voice engine: {}", e);
             IpcResponse::err(format!("Restart failed: {}", e))
         }
+    }
+}
+
+/// Detect available GPU for Whisper acceleration.
+///
+/// Runs `nvidia-smi` to check for NVIDIA GPUs and returns GPU name,
+/// VRAM, and driver version. Also reports whether the binary was
+/// compiled with CUDA support.
+#[tauri::command]
+pub fn detect_gpu() -> IpcResponse {
+    let cuda_compiled = cfg!(feature = "cuda");
+
+    match std::process::Command::new("nvidia-smi")
+        .args(["--query-gpu=name,memory.total,driver_version", "--format=csv,noheader"])
+        .output()
+    {
+        Ok(output) if output.status.success() => {
+            let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            // Parse "NVIDIA GeForce RTX 5070 Ti, 16303 MiB, 581.80"
+            let parts: Vec<&str> = text.split(", ").collect();
+            let name = parts.first().unwrap_or(&"Unknown").to_string();
+            let vram_mb = parts
+                .get(1)
+                .and_then(|s| s.replace(" MiB", "").parse::<u64>().ok());
+            let driver = parts.get(2).unwrap_or(&"").to_string();
+
+            tracing::info!(
+                gpu = %name,
+                vram_mb = ?vram_mb,
+                driver = %driver,
+                cuda_compiled = cuda_compiled,
+                "GPU detected"
+            );
+
+            IpcResponse::ok(json!({
+                "available": true,
+                "name": name,
+                "vramMb": vram_mb,
+                "driverVersion": driver,
+                "cudaCompiled": cuda_compiled,
+            }))
+        }
+        _ => {
+            tracing::info!(cuda_compiled = cuda_compiled, "No NVIDIA GPU detected");
+            IpcResponse::ok(json!({
+                "available": false,
+                "cudaCompiled": cuda_compiled,
+            }))
+        }
+    }
+}
+
+/// List installed Whisper STT models on disk.
+///
+/// Scans the models directory for known GGML model files and returns
+/// their size, filename, and model size identifier.
+#[tauri::command]
+pub fn list_stt_models() -> IpcResponse {
+    let data_dir = crate::services::platform::get_data_dir_with_fallback();
+    let models_dir = data_dir.join("models");
+
+    let known_models: &[(&str, &str)] = &[
+        ("tiny", "ggml-tiny.en.bin"),
+        ("base", "ggml-base.en.bin"),
+        ("small", "ggml-small.en.bin"),
+        ("large-v3-turbo", "ggml-large-v3-turbo-q5_0.bin"),
+        ("large-v3", "ggml-large-v3.bin"),
+    ];
+
+    let mut installed = Vec::new();
+    for (size, filename) in known_models {
+        let path = models_dir.join(filename);
+        if path.exists() {
+            let bytes = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+            installed.push(json!({
+                "modelSize": size,
+                "filename": filename,
+                "sizeMb": (bytes as f64 / 1_048_576.0).round(),
+            }));
+        }
+    }
+
+    IpcResponse::ok(json!({ "models": installed }))
+}
+
+/// Delete an installed Whisper STT model from disk.
+///
+/// Refuses to delete a model that is currently in use by the running
+/// voice engine. Returns the deleted model size on success.
+#[tauri::command]
+pub fn delete_stt_model(
+    model_size: String,
+    voice_state: State<'_, VoiceEngineState>,
+) -> IpcResponse {
+    // Safety: refuse to delete if voice engine is running with this model
+    let engine = match voice_state.lock() {
+        Ok(guard) => guard,
+        Err(e) => return IpcResponse::err(format!("Failed to lock voice state: {}", e)),
+    };
+    if engine.is_running() && engine.config().stt_model_size == model_size {
+        return IpcResponse::err(
+            "Cannot delete the active model. Stop the voice engine first.",
+        );
+    }
+    drop(engine); // release lock before file I/O
+
+    let data_dir = crate::services::platform::get_data_dir_with_fallback();
+    let filename = crate::voice::stt::model_filename(&model_size);
+    let model_path = data_dir.join("models").join(&filename);
+
+    if !model_path.exists() {
+        return IpcResponse::err("Model file not found");
+    }
+
+    match std::fs::remove_file(&model_path) {
+        Ok(()) => {
+            tracing::info!(model_size = %model_size, filename = %filename, "STT model deleted");
+            IpcResponse::ok(json!({ "deleted": model_size, "filename": filename }))
+        }
+        Err(e) => IpcResponse::err(format!("Failed to delete model: {}", e)),
     }
 }
 

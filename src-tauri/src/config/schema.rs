@@ -86,6 +86,8 @@ pub struct VoiceConfig {
     #[serde(default)]
     pub stt_model_name: Option<String>,
     #[serde(default)]
+    pub stt_use_gpu: bool,
+    #[serde(default)]
     pub input_device: Option<String>,
     #[serde(default)]
     pub output_device: Option<String>,
@@ -111,6 +113,7 @@ impl Default for VoiceConfig {
             stt_api_key: None,
             stt_endpoint: None,
             stt_model_name: None,
+            stt_use_gpu: false,
             input_device: None,
             output_device: None,
             announce_startup: true,

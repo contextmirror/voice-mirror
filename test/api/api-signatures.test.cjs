@@ -126,6 +126,10 @@ describe('api.js -- critical Tauri command names', () => {
     'lens_close_tab',
     'lens_switch_tab',
     'lens_close_all_tabs',
+    // GPU / Model Management
+    'detect_gpu',
+    'list_stt_models',
+    'delete_stt_model',
     // Dev Server
     'detect_dev_servers',
     'probe_port',
@@ -244,6 +248,10 @@ describe('api.js -- exported async functions', () => {
     'lensCloseTab',
     'lensSwitchTab',
     'lensCloseAllTabs',
+    // GPU / Model Management
+    'detectGpu',
+    'listSttModels',
+    'deleteSttModel',
     // Dev Server
     'detectDevServers',
     'probePort',
@@ -309,7 +317,7 @@ describe('api.js -- exported async functions', () => {
 });
 
 describe('api.js -- section organization', () => {
-  const sections = ['Config', 'Window', 'Voice', 'AI', 'Inbox', 'Chat', 'Tools', 'Shortcuts', 'Performance Stats', 'Config Migration', 'Lens', 'Browser Tabs', 'Dev Server', 'Files'];
+  const sections = ['Config', 'Window', 'Voice', 'AI', 'Inbox', 'Chat', 'Tools', 'Shortcuts', 'Performance Stats', 'Config Migration', 'Lens', 'Browser Tabs', 'Dev Server', 'GPU / Model Management', 'Files'];
 
   for (const section of sections) {
     it(`has "${section}" section comment`, () => {

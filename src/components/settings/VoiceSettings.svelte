@@ -9,7 +9,7 @@
    */
   import { configStore, updateConfig } from '../../lib/stores/config.svelte.js';
   import { toastStore } from '../../lib/stores/toast.svelte.js';
-  import { listAudioDevices, setVoiceMode, registerShortcut, unregisterShortcut, configurePttKey, configureDictationKey, ensureSttModel, restartVoice, getVoiceStatus } from '../../lib/api.js';
+  import { listAudioDevices, setVoiceMode, registerShortcut, unregisterShortcut, configurePttKey, configureDictationKey, ensureSttModel, restartVoice, getVoiceStatus, detectGpu, listSttModels, deleteSttModel } from '../../lib/api.js';
   import { listen } from '@tauri-apps/api/event';
   import { STT_REGISTRY } from '../../lib/voice-adapters.js';
   import KeybindRecorder from './KeybindRecorder.svelte';
@@ -39,6 +39,7 @@
   let ttsModelPath = $state('');
   let sttAdapter = $state('whisper-local');
   let sttModelSize = $state('base');
+  let sttUseGpu = $state(false);
   let sttModelName = $state('');
   let sttApiKey = $state('');
   let sttEndpoint = $state('');
@@ -51,6 +52,9 @@
   let audioOutputDevices = $state([]);
   let saving = $state(false);
   let devicesLoaded = $state(false);
+  let gpuInfo = $state(null);
+  let installedModels = $state([]);
+  let deleting = $state(null);
 
   // ---- Load audio devices on mount ----
 
@@ -66,7 +70,36 @@
     }).catch(err => {
       console.error('[VoiceSettings] Failed to list audio devices:', err);
     });
+
+    // Detect GPU and list installed models
+    detectGpu().then(r => { gpuInfo = r?.data || r; }).catch(() => {});
+    refreshInstalledModels();
   });
+
+  function refreshInstalledModels() {
+    listSttModels().then(r => {
+      const data = r?.data || r;
+      installedModels = data?.models || [];
+    }).catch(() => {});
+  }
+
+  function modelDisplayName(size) {
+    const entry = STT_REGISTRY['whisper-local']?.modelSizes?.find(m => m.value === size);
+    return entry ? entry.label : size;
+  }
+
+  async function handleDeleteModel(modelSize) {
+    deleting = modelSize;
+    try {
+      await deleteSttModel(modelSize);
+      toastStore.addToast({ message: `Model "${modelDisplayName(modelSize)}" deleted`, severity: 'success' });
+      refreshInstalledModels();
+    } catch (err) {
+      toastStore.addToast({ message: `${err}`, severity: 'error' });
+    } finally {
+      deleting = null;
+    }
+  }
 
   // ---- Derived values ----
 
@@ -126,6 +159,7 @@
     ttsModelPath = cfg.voice?.ttsModelPath || '';
     sttAdapter = cfg.voice?.sttAdapter || 'whisper-local';
     sttModelSize = cfg.voice?.sttModelSize || 'base';
+    sttUseGpu = cfg.voice?.sttUseGpu === true;
     sttModelName = cfg.voice?.sttModelName || '';
     sttApiKey = '';
     sttEndpoint = cfg.voice?.sttEndpoint || '';
@@ -143,6 +177,7 @@
       // Capture previous STT config BEFORE updateConfig mutates the store
       const prevModelSize = configStore.value?.voice?.sttModelSize || 'base';
       const prevAdapter = configStore.value?.voice?.sttAdapter || 'whisper-local';
+      const prevUseGpu = configStore.value?.voice?.sttUseGpu === true;
 
       const patch = {
         behavior: {
@@ -169,6 +204,7 @@
           sttModel: sttAdapter,
           sttAdapter,
           sttModelSize,
+          sttUseGpu,
           sttModelName: sttModelName || null,
           sttApiKey: sttApiKey || null,
           sttEndpoint: sttEndpoint || null,
@@ -213,6 +249,7 @@
 
       // Auto-download STT model if changed and using local Whisper
       const sttChanged = sttModelSize !== prevModelSize || sttAdapter !== prevAdapter;
+      const gpuChanged = sttUseGpu !== prevUseGpu;
 
       if (sttChanged && sttAdapter === 'whisper-local') {
         const downloadToastId = toastStore.addToast({
@@ -238,6 +275,7 @@
           unlisten();
           toastStore.dismissToast(downloadToastId);
           toastStore.addToast({ message: 'Model ready', severity: 'success' });
+          refreshInstalledModels();
         } catch (dlErr) {
           unlisten();
           toastStore.dismissToast(downloadToastId);
@@ -251,6 +289,18 @@
             console.warn('[VoiceSettings] Voice restart failed:', err);
           });
           toastStore.addToast({ message: 'Voice engine restarted with new model', severity: 'info' });
+        }
+      } else if (gpuChanged) {
+        // GPU toggle changed without model change — restart to apply
+        const status = await getVoiceStatus().catch(() => null);
+        if (status?.data?.running) {
+          await restartVoice().catch((err) => {
+            console.warn('[VoiceSettings] Voice restart failed:', err);
+          });
+          toastStore.addToast({
+            message: sttUseGpu ? 'GPU acceleration enabled' : 'GPU acceleration disabled',
+            severity: 'info',
+          });
         }
       }
     } catch (err) {
@@ -375,6 +425,53 @@
           onChange={(v) => (sttEndpoint = v)}
         />
       {/if}
+
+      {#if currentSTTAdapter.showGpu}
+        {#if gpuInfo?.available}
+          <div class="gpu-info-banner">
+            <span class="gpu-name">{gpuInfo.name}</span>
+            <span class="gpu-vram">{gpuInfo.vramMb} MB VRAM</span>
+          </div>
+        {/if}
+        <Toggle
+          label="GPU Acceleration (CUDA)"
+          description={gpuInfo?.available
+            ? `Use ${gpuInfo.name} for faster transcription`
+            : 'No compatible NVIDIA GPU detected'}
+          checked={sttUseGpu}
+          onChange={(v) => (sttUseGpu = v)}
+          disabled={!gpuInfo?.available || !gpuInfo?.cudaCompiled}
+        />
+      {/if}
+    </div>
+  </section>
+
+  <!-- Installed Models -->
+  <section class="settings-section">
+    <h3>Installed Models</h3>
+    <div class="settings-group">
+      {#if installedModels.length === 0}
+        <div class="model-row empty">
+          <span class="model-empty">No models downloaded yet</span>
+        </div>
+      {:else}
+        {#each installedModels as model}
+          <div class="model-row">
+            <div class="model-info">
+              <span class="model-name">{modelDisplayName(model.modelSize)}</span>
+              <span class="model-meta">{model.filename} — {model.sizeMb} MB</span>
+            </div>
+            <Button
+              variant="danger"
+              size="small"
+              onClick={() => handleDeleteModel(model.modelSize)}
+              disabled={deleting === model.modelSize}
+            >
+              {deleting === model.modelSize ? 'Deleting...' : 'Delete'}
+            </Button>
+          </div>
+        {/each}
+      {/if}
     </div>
   </section>
 
@@ -456,5 +553,58 @@
     padding: 16px 0;
     border-top: 1px solid var(--border);
     margin-top: 8px;
+  }
+
+  .gpu-info-banner {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px;
+    font-size: 12px;
+    color: var(--accent);
+  }
+
+  .gpu-name {
+    font-weight: 600;
+  }
+
+  .gpu-vram {
+    color: var(--muted);
+  }
+
+  .model-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    gap: 12px;
+  }
+
+  .model-row.empty {
+    justify-content: center;
+  }
+
+  .model-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .model-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text);
+  }
+
+  .model-meta {
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .model-empty {
+    font-size: 12px;
+    color: var(--muted);
+    padding: 4px 0;
   }
 </style>

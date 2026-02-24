@@ -315,11 +315,12 @@ mod whisper_real {
         ///
         /// # Arguments
         /// * `model_path` - Path to the GGML Whisper model file.
+        /// * `use_gpu` - Whether to use GPU acceleration (CUDA). Falls back to CPU if unavailable.
         ///
         /// # Errors
         /// Returns `SttError::ModelNotFound` if the model file doesn't exist.
         /// Returns `SttError::ModelLoadError` if whisper-rs can't load the model.
-        pub fn new(model_path: &Path) -> Result<Self, SttError> {
+        pub fn new(model_path: &Path, use_gpu: bool) -> Result<Self, SttError> {
             if !model_path.exists() {
                 return Err(SttError::ModelNotFound(model_path.to_path_buf()));
             }
@@ -327,7 +328,12 @@ mod whisper_real {
             let model_size = guess_model_size(model_path);
             let n_threads = inference_threads();
 
-            let ctx_params = WhisperContextParameters::default();
+            let mut ctx_params = WhisperContextParameters::default();
+            ctx_params.use_gpu = use_gpu;
+            // Flash attention gives extra speed on GPU (incompatible with DTW, which we don't use)
+            if use_gpu {
+                ctx_params.flash_attn = true;
+            }
             let ctx = WhisperContext::new_with_params(
                 model_path.to_str().unwrap_or_default(),
                 ctx_params,
@@ -338,6 +344,7 @@ mod whisper_real {
                 model_path = %model_path.display(),
                 model_size = %model_size,
                 threads = n_threads,
+                use_gpu = use_gpu,
                 "WhisperStt loaded (real whisper-rs)"
             );
 
@@ -357,10 +364,10 @@ mod whisper_real {
         ///
         /// Uses the model descriptor registry to resolve the correct filename
         /// for each model size (e.g., "large-v3-turbo" -> "ggml-large-v3-turbo-q5_0.bin").
-        pub fn from_model_size(data_dir: &Path, size: &str) -> Result<Self, SttError> {
+        pub fn from_model_size(data_dir: &Path, size: &str, use_gpu: bool) -> Result<Self, SttError> {
             let filename = model_filename(size);
             let model_path = data_dir.join("models").join(filename);
-            Self::new(&model_path)
+            Self::new(&model_path, use_gpu)
         }
     }
 
@@ -423,7 +430,7 @@ mod whisper_real {
             params.set_single_segment(true);
             params.set_no_timestamps(true);
             // Suppress non-speech tokens to reduce hallucination on silence
-            params.set_suppress_non_speech_tokens(true);
+            params.set_suppress_nst(true);
 
             // Run inference
             state.full(params, audio).map_err(|e| {
@@ -431,19 +438,19 @@ mod whisper_real {
             })?;
 
             // Collect transcribed text from all segments
-            let num_segments = state.full_n_segments().map_err(|e| {
-                SttError::TranscriptionError(format!("Failed to get segment count: {}", e))
-            })?;
+            let num_segments = state.full_n_segments();
 
             let mut text = String::new();
             for i in 0..num_segments {
-                if let Ok(seg) = state.full_get_segment_text(i) {
-                    let trimmed: &str = seg.trim();
-                    if !trimmed.is_empty() {
-                        if !text.is_empty() {
-                            text.push(' ');
+                if let Some(seg) = state.get_segment(i) {
+                    if let Ok(seg_text) = seg.to_str() {
+                        let trimmed = seg_text.trim();
+                        if !trimmed.is_empty() {
+                            if !text.is_empty() {
+                                text.push(' ');
+                            }
+                            text.push_str(trimmed);
                         }
-                        text.push_str(trimmed);
                     }
                 }
             }
@@ -519,7 +526,8 @@ mod whisper_stub {
         /// Create a new stub Whisper STT engine.
         ///
         /// Always succeeds regardless of whether the model file exists.
-        pub fn new(model_path: &Path) -> Result<Self, SttError> {
+        /// The `use_gpu` parameter is accepted for API compatibility but ignored in stub mode.
+        pub fn new(model_path: &Path, _use_gpu: bool) -> Result<Self, SttError> {
             let model_size = guess_model_size(model_path);
 
             tracing::info!(
@@ -540,10 +548,10 @@ mod whisper_stub {
         ///
         /// Uses the model descriptor registry to resolve the correct filename
         /// for each model size (e.g., "large-v3-turbo" -> "ggml-large-v3-turbo-q5_0.bin").
-        pub fn from_model_size(data_dir: &Path, size: &str) -> Result<Self, SttError> {
+        pub fn from_model_size(data_dir: &Path, size: &str, use_gpu: bool) -> Result<Self, SttError> {
             let filename = model_filename(size);
             let model_path = data_dir.join("models").join(filename);
-            Self::new(&model_path)
+            Self::new(&model_path, use_gpu)
         }
     }
 
@@ -673,10 +681,12 @@ impl SttAdapter {
 /// * `adapter` - Adapter name: "whisper-local", "openai-cloud", "custom-cloud"
 /// * `data_dir` - Application data directory for model files
 /// * `model_size` - Model size for local whisper (e.g., "tiny", "base", "small")
+/// * `use_gpu` - Whether to use GPU acceleration (CUDA)
 pub fn create_stt_engine(
     adapter: &str,
     data_dir: &Path,
     model_size: Option<&str>,
+    use_gpu: bool,
 ) -> Result<SttAdapter, SttError> {
     // Normalize legacy adapter names
     let adapter = match adapter {
@@ -688,19 +698,19 @@ pub fn create_stt_engine(
     match adapter {
         "whisper-local" => {
             let size = model_size.unwrap_or("base");
-            let engine = WhisperStt::from_model_size(data_dir, size)?;
+            let engine = WhisperStt::from_model_size(data_dir, size, use_gpu)?;
             Ok(SttAdapter::Whisper(engine))
         }
         "openai-cloud" => {
             // TODO: Implement OpenAI cloud STT adapter
             tracing::warn!("OpenAI cloud STT not yet implemented, falling back to whisper stub");
-            let engine = WhisperStt::from_model_size(data_dir, "base")?;
+            let engine = WhisperStt::from_model_size(data_dir, "base", false)?;
             Ok(SttAdapter::Whisper(engine))
         }
         "custom-cloud" => {
             // TODO: Implement custom cloud STT adapter
             tracing::warn!("Custom cloud STT not yet implemented, falling back to whisper stub");
-            let engine = WhisperStt::from_model_size(data_dir, "base")?;
+            let engine = WhisperStt::from_model_size(data_dir, "base", false)?;
             Ok(SttAdapter::Whisper(engine))
         }
         other => Err(SttError::ModelLoadError(format!(
