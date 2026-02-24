@@ -2,7 +2,7 @@
 
 > Internal doc. Tracks what Voice Mirror's Lens workspace has vs what VS Code / Zed / Cursor offer.
 >
-> Last updated: 2026-02-23
+> Last updated: 2026-02-24
 
 ---
 
@@ -27,7 +27,7 @@ What's missing is everything that makes a "real IDE" feel seamless — the gaps 
 | Feature | VS Code | Zed | Voice Mirror | Gap |
 |---------|---------|-----|-------------|-----|
 | Editor (syntax, save) | Full | Full | Full | None |
-| LSP (diagnostics, hover, completion) | Full | Full | Tier 1 done | Tier 2 pending |
+| LSP (diagnostics, hover, completion) | Full (29/29) | Full (26/29) | 10/29 features | See LSP table below |
 | Go-to-definition | Full | Full | Full | None |
 | Find references | Full | Full | Full | None |
 | Rename symbol | Full | Full | Full | None |
@@ -44,6 +44,89 @@ What's missing is everything that makes a "real IDE" feel seamless — the gaps 
 | Minimap | Full | Full | Diff only | Low |
 | Breadcrumbs | Full | Full | None | Low |
 | Find & replace (in file) | Full | Full | Full | None |
+
+---
+
+## LSP Feature Comparison
+
+> Detailed comparison of Language Server Protocol support. Voice Mirror implements core LSP (Tier 1). VS Code and Zed implement nearly everything.
+> Data sourced from reference repos: `E:\Projects\references\VSCode\` and `E:\Projects\references\Zed\`.
+
+| LSP Feature | VS Code | Zed | Cursor | Voice Mirror | Priority |
+|-------------|---------|-----|--------|-------------|----------|
+| **Core (Tier 0 — baseline)** | | | | | |
+| Diagnostics (errors/warnings) | Full | Full | Full | Full | Done |
+| Completions | Full (resolve + snippets) | Full (resolve + snippets) | Full | Basic (no resolve/snippets) | Low |
+| Hover tooltips | Full (markdown, grace period) | Full (markdown, keyboard grace) | Full | Full | Done |
+| Go-to-definition | Full | Full | Full | Full | Done |
+| Document sync (open/change/save/close) | Full | Full | Full | Full (didChange full sync) | Done |
+| **Navigation (Tier 1 — shipped)** | | | | | |
+| Find all references | Full | Full (multi-server) | Full | Full | Done |
+| Rename symbol | Full (prepare + workspace edit) | Full (prepare) | Full | Full (prepare + multi-file) | Done |
+| Code actions / quick fixes | Full (resolve + filtering) | Full (resolve + filtering) | Full | Basic (no resolve) | Low |
+| Document symbols / outline | Full | Full (+ tree-sitter fallback) | Full | Full | Done |
+| Document highlight | Full | Full | Full | None | Low |
+| **Navigation (Tier 2 — not implemented)** | | | | | |
+| Type definition | Full | Full | Full | None | Low |
+| Go-to-declaration | Full | Full | Full | None | Low |
+| Go-to-implementation | Full | Full (multi-server) | Full | None | Low |
+| Call hierarchy (incoming/outgoing) | Full | None | Full | None | Very low |
+| Type hierarchy | Full | None | Full | None | Very low |
+| Workspace symbols (cross-project) | Full | Full (multi-server) | Full | None | Medium |
+| **Inline Assistance** | | | | | |
+| Signature help (parameter hints) | Full (auto on `(`) | Full | Full | None | Medium |
+| Inlay hints (inline types) | Full (resolve on hover) | Full (50-row chunking) | Full | None | Medium |
+| Code lens (inline annotations) | Full | Full (resolve + refresh) | Full | None | Low |
+| **Formatting & Editing** | | | | | |
+| Document formatting | Full | Full | Full | None | Medium |
+| Range formatting | Full | Full | Full | None | Medium |
+| On-type formatting | Full | Full | Full | None | Low |
+| Linked editing (HTML tag pairs) | Full | Full | Full | None | Low |
+| Selection range (smart select) | Full | None | Full | None | Very low |
+| **Visual Enhancements** | | | | | |
+| Semantic tokens (token highlighting) | Full (delta encoding) | Full (delta, augments syntax) | Full | None | Low |
+| Document colors (CSS color picker) | Full | Full | Full | None | Low |
+| Folding ranges (LSP-aware) | Full | Full (kind support) | Full | None | Low |
+| **Infrastructure** | | | | | |
+| Multi-server per file | Full | Full (primary + supplementary) | Full | None | Low |
+| Remote LSP (SSH) | Full | Full (SshLspAdapter) | Full | None | Not planned |
+| Crash recovery (auto-restart) | Full (backoff) | Full | Full | None | Low |
+| Pull diagnostics (refresh) | Full | Full | Full | None | Low |
+
+### Summary
+
+| Category | VS Code | Zed | Cursor | Voice Mirror |
+|----------|---------|-----|--------|-------------|
+| **Features implemented** | 29/29 | 26/29 | 29/29 | 10/29 |
+| **Core editing** | Complete | Complete | Complete | Complete |
+| **Navigation** | Complete | Near-complete | Complete | Tier 1 done |
+| **Inline assistance** | Complete | Complete | Complete | None |
+| **Formatting** | Complete | Complete | Complete | None |
+| **Visual** | Complete | Complete | Complete | None |
+
+### LSP Priorities for Voice Mirror
+
+**Worth doing (high value/effort ratio):**
+1. **Signature help** — Shows parameter info on `(`. Users expect this. Medium effort (new Rust handler + CM tooltip).
+2. **Document formatting** — Format on save / format selection. Users expect this. Medium effort.
+3. **Workspace symbols** — Cross-project symbol search. Feeds into Command Palette expansion.
+4. **Inlay hints** — Inline type annotations. Nice for TS/Rust. Medium effort (chunking optional).
+
+**Nice but not critical:**
+5. Linked editing — HTML tag pair editing. Small scope.
+6. On-type formatting — Auto-indent. Small scope.
+7. Type/declaration/implementation navigation — More "go-to" targets. Small per feature.
+8. Code lens — "N references" above functions. Medium effort.
+
+**Skip for now:**
+- Semantic tokens — marginal visual improvement over syntax highlighting
+- Document colors — niche (CSS-only)
+- Call/type hierarchy — complex UI for rare use cases
+- Multi-server — only matters for CSS-in-JS and similar edge cases
+- Remote LSP — Voice Mirror is a local desktop app
+- Selection range — CodeMirror has built-in smart selection
+
+**Voice Mirror's LSP advantage:** AI handles what LSP can't. "What does this function do?" is answered by the chat terminal, not hover tooltips. "Refactor this module" goes through Claude Code, not LSP code actions. Our LSP needs to cover the basics that users expect from a code editor — the AI handles everything above that.
 
 ---
 
@@ -107,7 +190,7 @@ What's missing is everything that makes a "real IDE" feel seamless — the gaps 
 
 **Status:** Core git workflow implemented. Changes tab shows staged/unstaged groups with stage/unstage/discard actions, commit panel with branch indicator, and push support.
 
-**Backend:** 8 Rust commands (`git_stage`, `git_unstage`, `git_stage_all`, `git_unstage_all`, `git_commit`, `git_discard`, `git_push`, `git_diff_staged`). Modified `get_git_changes` to parse staged vs unstaged status separately + return branch name.
+**Backend:** 7 Rust commands (`git_stage`, `git_unstage`, `git_stage_all`, `git_unstage_all`, `git_commit`, `git_discard`, `git_push`). Modified `get_git_changes` to parse staged vs unstaged status separately + return branch name.
 
 **Frontend:** `GitCommitPanel.svelte` with branch indicator (read-only), commit textarea, Commit and Commit & Push buttons. FileTree Changes tab overhauled with staged/unstaged groups and hover-reveal action buttons.
 
