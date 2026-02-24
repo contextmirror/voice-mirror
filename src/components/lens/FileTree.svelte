@@ -597,9 +597,12 @@
           <button class="changes-group-action" title="Unstage All" onclick={handleUnstageAll}>&minus;</button>
         </div>
         {#each stagedChanges as change}
-          <button
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <div
             class="change-item"
             class:active={change.path === activeDiffPath}
+            role="button"
+            tabindex="0"
             onclick={() => onChangeClick(change)}
             ondblclick={() => onChangeDblClick(change)}
             oncontextmenu={(e) => handleContextMenu(e, change, false, true)}
@@ -615,7 +618,7 @@
             >
               {change.stagedStatus === 'added' ? 'A' : change.stagedStatus === 'deleted' ? 'D' : 'M'}
             </span>
-          </button>
+          </div>
         {/each}
       {/if}
 
@@ -625,9 +628,12 @@
           <button class="changes-group-action" title="Stage All" onclick={handleStageAll}>+</button>
         </div>
         {#each unstagedChanges as change}
-          <button
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <div
             class="change-item"
             class:active={change.path === activeDiffPath}
+            role="button"
+            tabindex="0"
             onclick={() => onChangeClick(change)}
             ondblclick={() => onChangeDblClick(change)}
             oncontextmenu={(e) => handleContextMenu(e, change, false, true)}
@@ -646,7 +652,7 @@
             >
               {change.status === 'added' ? 'A' : change.status === 'deleted' ? 'D' : 'M'}
             </span>
-          </button>
+          </div>
         {/each}
       {/if}
 
