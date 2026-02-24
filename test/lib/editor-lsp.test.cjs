@@ -314,6 +314,20 @@ describe('editor-lsp.svelte.js: new feature return object', () => {
   });
 });
 
+describe('editor-lsp.svelte.js: formatting', () => {
+  it('has formatDocument handler', () => {
+    assert.ok(src.includes('formatDocument'), 'Should have formatDocument handler');
+  });
+
+  it('imports lspRequestFormatting', () => {
+    assert.ok(src.includes('lspRequestFormatting'), 'Should import lspRequestFormatting');
+  });
+
+  it('sorts edits in reverse order for formatting', () => {
+    assert.ok(src.includes('.sort('), 'Should sort formatting edits');
+  });
+});
+
 describe('editor-lsp.svelte.js: diagnostics handling', () => {
   it('uses lspPositionToOffset for diagnostic positions', () => {
     assert.ok(src.includes('lspPositionToOffset'), 'Should use lspPositionToOffset');

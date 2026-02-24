@@ -111,6 +111,10 @@ describe('config.svelte.js -- critical field values', () => {
   it('defaults sidebar.mode to mirror', () => {
     assert.ok(src.includes("mode: 'mirror'"), 'sidebar.mode should default to mirror');
   });
+
+  it('has formatOnSave editor config', () => {
+    assert.ok(src.includes('formatOnSave'), 'Should have formatOnSave in editor config');
+  });
 });
 
 describe('config.svelte.js -- ai.endpoints', () => {

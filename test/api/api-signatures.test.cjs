@@ -139,6 +139,9 @@ describe('api.js -- critical Tauri command names', () => {
     'git_commit',
     'git_discard',
     'git_push',
+    // LSP
+    'lsp_request_formatting',
+    'lsp_request_range_formatting',
   ];
 
   for (const cmd of criticalCommands) {

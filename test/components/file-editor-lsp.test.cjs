@@ -134,4 +134,17 @@ describe('FileEditor LSP integration', () => {
   it('applies pre-existing diagnostics from store on file open', () => {
     assert.ok(src.includes('getRawForFile'), 'Should check store for raw diagnostics when opening file');
   });
+
+  // LSP formatting integration
+  it('has handleFormat function', () => {
+    assert.ok(src.includes('handleFormat'), 'Should have handleFormat function');
+  });
+
+  it('supports formatOnSave in save function', () => {
+    assert.ok(src.includes('formatOnSave'), 'Should support formatOnSave');
+  });
+
+  it('has Shift+Alt+F keybinding for format', () => {
+    assert.ok(extSrc.includes('Shift-Alt-f'), 'Should have Shift-Alt-f keybinding in editor-extensions.js');
+  });
 });
