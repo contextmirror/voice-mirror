@@ -59,7 +59,7 @@ What's missing is everything that makes a "real IDE" feel seamless — the gaps 
 | Completions | Full (resolve + snippets) | Full (resolve + snippets) | Full | Basic (no resolve/snippets) | Low |
 | Hover tooltips | Full (markdown, grace period) | Full (markdown, keyboard grace) | Full | Full | Done |
 | Go-to-definition | Full | Full | Full | Full | Done |
-| Document sync (open/change/save/close) | Full | Full | Full | Full (didChange full sync) | Done |
+| Document sync (open/change/save/close) | Full | Full | Full | Full (full sync, not incremental) | Done |
 | **Navigation (Tier 1 — shipped)** | | | | | |
 | Find all references | Full | Full (multi-server) | Full | Full | Done |
 | Rename symbol | Full (prepare + workspace edit) | Full (prepare) | Full | Full (prepare + multi-file) | Done |
@@ -79,7 +79,7 @@ What's missing is everything that makes a "real IDE" feel seamless — the gaps 
 | Code lens (inline annotations) | Full | Full (resolve + refresh) | Full | None | Low |
 | **Formatting & Editing** | | | | | |
 | Document formatting | Full | Full | Full | Full (Shift+Alt+F + format-on-save) | Done |
-| Range formatting | Full | Full | Full | Backend only (no UI yet) | Low |
+| Range formatting | Full | Full | Full | None (backend ready, no UI) | Low |
 | On-type formatting | Full | Full | Full | None | Low |
 | Linked editing (HTML tag pairs) | Full | Full | Full | None | Low |
 | Selection range (smart select) | Full | None | Full | None | Very low |
@@ -117,6 +117,8 @@ What's missing is everything that makes a "real IDE" feel seamless — the gaps 
 6. On-type formatting — Auto-indent. Small scope.
 7. Type/declaration/implementation navigation — More "go-to" targets. Small per feature.
 8. Code lens — "N references" above functions. Medium effort.
+9. **Incremental document sync** — Currently we send the full file content on every `didChange` (full sync). VS Code/Zed send only the changed characters + position (incremental sync). Negligible for normal files, but adds serialization overhead on very large files (10K+ lines). Requires converting CodeMirror change descriptions into LSP `TextDocumentContentChangeEvent` ranges. Small-medium effort.
+10. **Range formatting** — Format selection (Ctrl+K Ctrl+F). Backend ready (Rust command + API wrapper), just needs a `formatSelection()` frontend method + keybinding. Small effort.
 
 **Skip for now:**
 - Semantic tokens — marginal visual improvement over syntax highlighting
