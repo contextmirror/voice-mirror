@@ -1,5 +1,5 @@
 <script>
-  import { listDirectory, getGitChanges, createFile, createDirectory, renameEntry, revealInExplorer } from '../../lib/api.js';
+  import { listDirectory, getGitChanges, createFile, createDirectory, renameEntry, revealInExplorer, gitStage, gitUnstage, gitStageAll, gitUnstageAll, gitDiscard } from '../../lib/api.js';
   import { listen } from '@tauri-apps/api/event';
   import { chooseIconName } from '../../lib/file-icons.js';
   import { projectStore } from '../../lib/stores/project.svelte.js';
@@ -9,6 +9,7 @@
   import StatusDropdown from './StatusDropdown.svelte';
   import OutlinePanel from './OutlinePanel.svelte';
   import SearchPanel from './SearchPanel.svelte';
+  import GitCommitPanel from './GitCommitPanel.svelte';
   import { searchStore } from '../../lib/stores/search.svelte.js';
 
   let { onFileClick = () => {}, onFileDblClick = () => {}, onChangeClick = () => {}, onChangeDblClick = () => {}, activeFilePath = null, activeDiffPath = null, activeFileHasLsp = false, onSymbolClick = () => {} } = $props();
@@ -20,6 +21,9 @@
   let dirChildren = $state(new Map());
   let loadingDirs = $state(new Set());
   let gitChanges = $state([]);
+  let currentBranch = $state('');
+  let stagedChanges = $derived(gitChanges.filter(c => c.staged));
+  let unstagedChanges = $derived(gitChanges.filter(c => c.unstaged || (!c.staged && !c.unstaged)));
 
   // Context menu state
   let contextMenu = $state({ visible: false, x: 0, y: 0, entry: null, isFolder: false, isChange: false });
@@ -125,16 +129,19 @@
     const root = projectStore.activeProject?.path;
     if (!root) {
       gitChanges = [];
+      currentBranch = '';
       return;
     }
     try {
       const resp = await getGitChanges(root);
-      if (resp && resp.data && Array.isArray(resp.data.changes)) {
-        gitChanges = resp.data.changes;
+      if (resp && resp.data) {
+        gitChanges = Array.isArray(resp.data.changes) ? resp.data.changes : [];
+        currentBranch = resp.data.branch || '';
       }
     } catch (err) {
       console.error('FileTree: failed to load git changes', err);
       gitChanges = [];
+      currentBranch = '';
     }
   }
 
@@ -380,6 +387,44 @@
     }
   }
 
+  // ── Git stage/unstage/discard handlers ──
+
+  async function handleStage(change) {
+    const root = projectStore.activeProject?.path;
+    if (!root) return;
+    try { await gitStage([change.path], root); await loadGitChanges(); }
+    catch (err) { console.error('git stage failed', err); }
+  }
+
+  async function handleUnstage(change) {
+    const root = projectStore.activeProject?.path;
+    if (!root) return;
+    try { await gitUnstage([change.path], root); await loadGitChanges(); }
+    catch (err) { console.error('git unstage failed', err); }
+  }
+
+  async function handleStageAll() {
+    const root = projectStore.activeProject?.path;
+    if (!root) return;
+    try { await gitStageAll(root); await loadGitChanges(); }
+    catch (err) { console.error('git stage all failed', err); }
+  }
+
+  async function handleUnstageAll() {
+    const root = projectStore.activeProject?.path;
+    if (!root) return;
+    try { await gitUnstageAll(root); await loadGitChanges(); }
+    catch (err) { console.error('git unstage all failed', err); }
+  }
+
+  async function handleDiscard(change) {
+    if (!confirm(`Discard changes to ${change.path}? This cannot be undone.`)) return;
+    const root = projectStore.activeProject?.path;
+    if (!root) return;
+    try { await gitDiscard([change.path], root); await loadGitChanges(); }
+    catch (err) { console.error('git discard failed', err); }
+  }
+
   // ── Autofocus action ──
 
   function autofocus(node) {
@@ -539,11 +584,19 @@
   {/if}
 
   {#if activeTab === 'changes'}
+    <GitCommitPanel
+      branch={currentBranch}
+      stagedCount={stagedChanges.length}
+      onCommit={loadGitChanges}
+      root={projectStore.activeProject?.path}
+    />
     <div class="tree-scroll">
-      {#if gitChanges.length === 0}
-        <div class="changes-empty">No changes</div>
-      {:else}
-        {#each gitChanges as change}
+      {#if stagedChanges.length > 0}
+        <div class="changes-group-header">
+          <span>Staged Changes ({stagedChanges.length})</span>
+          <button class="changes-group-action" title="Unstage All" onclick={handleUnstageAll}>&minus;</button>
+        </div>
+        {#each stagedChanges as change}
           <button
             class="change-item"
             class:active={change.path === activeDiffPath}
@@ -553,6 +606,36 @@
           >
             <svg class="tree-icon"><use href="{spriteUrl}#{chooseIconName(change.path, 'file')}" /></svg>
             <span class="change-path">{change.path}</span>
+            <button class="change-action" title="Unstage" onclick={(e) => { e.stopPropagation(); handleUnstage(change); }}>&minus;</button>
+            <span
+              class="change-badge"
+              class:added={change.stagedStatus === 'added'}
+              class:modified={change.stagedStatus === 'modified'}
+              class:deleted={change.stagedStatus === 'deleted'}
+            >
+              {change.stagedStatus === 'added' ? 'A' : change.stagedStatus === 'deleted' ? 'D' : 'M'}
+            </span>
+          </button>
+        {/each}
+      {/if}
+
+      {#if unstagedChanges.length > 0}
+        <div class="changes-group-header">
+          <span>Changes ({unstagedChanges.length})</span>
+          <button class="changes-group-action" title="Stage All" onclick={handleStageAll}>+</button>
+        </div>
+        {#each unstagedChanges as change}
+          <button
+            class="change-item"
+            class:active={change.path === activeDiffPath}
+            onclick={() => onChangeClick(change)}
+            ondblclick={() => onChangeDblClick(change)}
+            oncontextmenu={(e) => handleContextMenu(e, change, false, true)}
+          >
+            <svg class="tree-icon"><use href="{spriteUrl}#{chooseIconName(change.path, 'file')}" /></svg>
+            <span class="change-path">{change.path}</span>
+            <button class="change-action" title="Stage" onclick={(e) => { e.stopPropagation(); handleStage(change); }}>+</button>
+            <button class="change-action discard" title="Discard" onclick={(e) => { e.stopPropagation(); handleDiscard(change); }}>&times;</button>
             <span
               class="change-badge"
               class:added={change.status === 'added'}
@@ -563,6 +646,10 @@
             </span>
           </button>
         {/each}
+      {/if}
+
+      {#if stagedChanges.length === 0 && unstagedChanges.length === 0}
+        <div class="changes-empty">No changes</div>
       {/if}
     </div>
   {/if}
@@ -809,6 +896,68 @@
     text-align: center;
     padding: 24px 12px;
     font-size: 12px;
+  }
+
+  /* ── Git changes group headers + action buttons ── */
+
+  .changes-group-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 8px;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    -webkit-app-region: no-drag;
+  }
+
+  .changes-group-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    border-radius: 3px;
+    font-size: 14px;
+    -webkit-app-region: no-drag;
+  }
+  .changes-group-action:hover {
+    background: var(--bg-elevated);
+    color: var(--text);
+  }
+
+  .change-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    border-radius: 3px;
+    font-size: 11px;
+    opacity: 0;
+    transition: opacity 0.1s;
+    -webkit-app-region: no-drag;
+    flex-shrink: 0;
+  }
+  .change-item:hover .change-action {
+    opacity: 1;
+  }
+  .change-action:hover {
+    background: var(--bg-elevated);
+    color: var(--text);
+  }
+  .change-action.discard:hover {
+    color: var(--danger, #ef4444);
   }
 
   /* ── Project path (collapsible footer) ── */

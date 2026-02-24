@@ -472,6 +472,16 @@ export async function getFileGitContent(path, root) {
   return invoke('get_file_git_content', { path, root: root || null });
 }
 
+export async function gitStage(paths, root) { return invoke('git_stage', { paths, root: root || null }); }
+export async function gitUnstage(paths, root) { return invoke('git_unstage', { paths, root: root || null }); }
+export async function gitStageAll(root) { return invoke('git_stage_all', { root: root || null }); }
+export async function gitUnstageAll(root) { return invoke('git_unstage_all', { root: root || null }); }
+export async function gitCommit(message, root) { return invoke('git_commit', { message, root: root || null }); }
+export async function gitDiscard(paths, root) { return invoke('git_discard', { paths, root: root || null }); }
+export async function gitPush(root) { return invoke('git_push', { root: root || null }); }
+export async function gitDiffStaged(root) { return invoke('git_diff_staged', { root: root || null }); }
+export async function generateCommitMessage(root) { return invoke('generate_commit_message', { root: root || null }); }
+
 /**
  * Create a new file with optional content.
  * Errors if the file already exists. Creates parent directories as needed.
