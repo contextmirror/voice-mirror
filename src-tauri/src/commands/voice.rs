@@ -307,7 +307,7 @@ pub async fn inject_text(text: String) -> Result<(), String> {
 /// Returns immediately if the model is already present on disk.
 #[tauri::command]
 pub async fn ensure_stt_model(app_handle: AppHandle, model_size: String) -> IpcResponse {
-    let data_dir = crate::services::platform::get_data_dir_with_fallback();
+    let data_dir = crate::services::platform::get_data_dir();
     match crate::voice::stt::ensure_model_exists(&data_dir, &model_size, Some(&app_handle)).await {
         Ok(path) => IpcResponse::ok(json!({
             "path": path.display().to_string(),
@@ -431,7 +431,7 @@ pub fn detect_gpu() -> IpcResponse {
 /// their size, filename, and model size identifier.
 #[tauri::command]
 pub fn list_stt_models() -> IpcResponse {
-    let data_dir = crate::services::platform::get_data_dir_with_fallback();
+    let data_dir = crate::services::platform::get_data_dir();
     let models_dir = data_dir.join("models");
 
     let known_models: &[(&str, &str)] = &[
@@ -487,7 +487,7 @@ pub fn delete_stt_model(
     }
     drop(engine); // release lock before file I/O
 
-    let data_dir = crate::services::platform::get_data_dir_with_fallback();
+    let data_dir = crate::services::platform::get_data_dir();
     let filename = crate::voice::stt::model_filename(&model_size);
     let model_path = data_dir.join("models").join(&filename);
     tracing::info!(model_path = %model_path.display(), exists = model_path.exists(), "delete target");

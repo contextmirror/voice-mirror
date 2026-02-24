@@ -35,6 +35,62 @@ use tracing::{info, warn};
 pub type PreloadedTtsState = std::sync::Mutex<Option<Box<dyn voice::tts::TtsEngine>>>;
 
 
+/// Migrate data from the old Electron app directory to the new Tauri directory.
+///
+/// Moves `models/` and `memory/` subdirectories if they exist in the old location
+/// but not in the new one. Errors are logged but never block startup.
+fn migrate_electron_data() {
+    use std::path::PathBuf;
+
+    let old_data_dir = dirs::config_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("voice-mirror-electron")
+        .join("data");
+    let new_data_dir = crate::services::platform::get_data_dir();
+
+    if !old_data_dir.exists() {
+        info!("No Electron data directory found, skipping migration");
+        return;
+    }
+
+    if let Err(e) = std::fs::create_dir_all(&new_data_dir) {
+        warn!("Failed to create new data directory {}: {}", new_data_dir.display(), e);
+        return;
+    }
+
+    let mut migrated = false;
+    for subdir in &["models", "memory"] {
+        let old_path = old_data_dir.join(subdir);
+        let new_path = new_data_dir.join(subdir);
+        if old_path.exists() && !new_path.exists() {
+            match std::fs::rename(&old_path, &new_path) {
+                Ok(()) => {
+                    info!(
+                        "Migrated {} -> {}",
+                        old_path.display(),
+                        new_path.display()
+                    );
+                    migrated = true;
+                }
+                Err(e) => {
+                    warn!(
+                        "Failed to migrate {} -> {}: {}",
+                        old_path.display(),
+                        new_path.display(),
+                        e
+                    );
+                }
+            }
+        }
+    }
+
+    if migrated {
+        info!("Data migration from Electron directory complete");
+    } else {
+        info!("No Electron data to migrate (already migrated or no matching subdirectories)");
+    }
+}
+
 /// Check if a window at (x, y) with given dimensions fits entirely within any monitor.
 fn position_fits_monitor(window: &tauri::WebviewWindow, x: i32, y: i32, w: u32, h: u32) -> bool {
     window.available_monitors().unwrap_or_default().iter().any(|m| {
@@ -275,6 +331,9 @@ pub fn run() {
             dev_server_cmds::kill_port_process,
         ])
         .setup(|app| {
+            // Migrate data from old Electron directory before anything reads it
+            migrate_electron_data();
+
             // Initialize LSP manager state (needs AppHandle)
             app.manage(lsp::LspManagerState::new(app.handle().clone()));
 

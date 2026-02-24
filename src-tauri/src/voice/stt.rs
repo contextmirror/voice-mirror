@@ -809,7 +809,7 @@ mod tests {
         #[test]
         fn test_create_stt_engine_whisper() {
             let data_dir = PathBuf::from("/tmp/voice-mirror-test");
-            let result = create_stt_engine("whisper-local", &data_dir, Some("tiny"));
+            let result = create_stt_engine("whisper-local", &data_dir, Some("tiny"), false);
             assert!(result.is_ok());
         }
 
@@ -832,7 +832,7 @@ mod tests {
         fn test_whisper_stt_real_missing_model() {
             // Real implementation should fail when model file is missing
             let path = PathBuf::from("/tmp/nonexistent/ggml-base.en.bin");
-            let result = WhisperStt::new(&path);
+            let result = WhisperStt::new(&path, false);
             assert!(result.is_err());
         }
 
@@ -844,7 +844,7 @@ mod tests {
             // on a path that doesn't exist (which will error).
             // This test just verifies the error path reports correctly.
             let data_dir = PathBuf::from("/tmp/voice-mirror-test-real");
-            let result = create_stt_engine("whisper-local", &data_dir, Some("tiny"));
+            let result = create_stt_engine("whisper-local", &data_dir, Some("tiny"), false);
             // Should fail because model file doesn't exist
             assert!(result.is_err());
         }
@@ -884,7 +884,7 @@ mod tests {
     #[test]
     fn test_create_stt_engine_unknown() {
         let data_dir = PathBuf::from("/tmp/voice-mirror-test");
-        let result = create_stt_engine("nonexistent-adapter", &data_dir, None);
+        let result = create_stt_engine("nonexistent-adapter", &data_dir, None, false);
         assert!(result.is_err());
     }
 

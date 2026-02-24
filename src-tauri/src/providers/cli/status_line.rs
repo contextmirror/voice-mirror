@@ -7,7 +7,7 @@ use tracing::{info, warn};
 /// Writes the `statusLine` entry to `~/.claude/settings.json` so Claude Code
 /// shows usage bars in the terminal. Also installs `/pulse` and `/setup` slash commands.
 ///
-/// Mirrors the behaviour of `configureStatusLine()` in Electron's `claude-spawner.js`.
+/// Configure the Claude Code status line for Voice Mirror integration.
 pub fn configure_status_line(project_root: &std::path::Path) {
     let script_path = project_root
         .join("vendor")

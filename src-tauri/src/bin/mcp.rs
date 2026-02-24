@@ -63,10 +63,10 @@ async fn main() {
     }
 }
 
-/// Default data directory (matches the Tauri app's convention).
+/// Default data directory (matches the Tauri app's data directory).
 fn default_data_dir() -> PathBuf {
     dirs::config_dir()
         .unwrap_or_else(|| PathBuf::from("."))
-        .join("voice-mirror-electron")
+        .join("voice-mirror")
         .join("data")
 }

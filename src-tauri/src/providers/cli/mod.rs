@@ -97,7 +97,7 @@ pub struct CliConfig {
 }
 
 /// Map of known CLI provider configurations.
-/// Mirrors `CLI_CONFIGS` from the Electron codebase.
+/// CLI tool configurations for supported AI providers.
 pub fn get_cli_config(provider_type: &str) -> Option<CliConfig> {
     match provider_type {
         "claude" => Some(CliConfig {

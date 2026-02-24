@@ -8,7 +8,7 @@
 import { getConfig, setConfig, resetConfig as apiResetConfig } from '../api.js';
 import { deepMerge } from '../utils.js';
 
-/** Default configuration (mirrors Voice Mirror Electron defaults) */
+/** Default application configuration */
 const DEFAULT_CONFIG = {
   wakeWord: {
     enabled: true,

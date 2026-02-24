@@ -181,8 +181,7 @@ impl VoicePipeline {
         // Create ring buffer for audio
         let (producer, consumer) = create_ring_buffer(RING_BUFFER_CAPACITY);
 
-        // Initialize STT engine (with Electron model dir fallback)
-        let data_dir = crate::services::platform::get_data_dir_with_fallback();
+        let data_dir = crate::services::platform::get_data_dir();
         let stt_engine = match stt::create_stt_engine(
             &config.stt_adapter,
             &data_dir,
