@@ -1,16 +1,16 @@
 <script>
   import { listDirectory, getGitChanges, createFile, createDirectory, renameEntry, revealInExplorer, gitStage, gitUnstage, gitStageAll, gitUnstageAll, gitDiscard } from '../../lib/api.js';
   import { listen } from '@tauri-apps/api/event';
-  import { chooseIconName } from '../../lib/file-icons.js';
   import { projectStore } from '../../lib/stores/project.svelte.js';
-  import { lspDiagnosticsStore } from '../../lib/stores/lsp-diagnostics.svelte.js';
-  import spriteUrl from '../../assets/icons/file-icons-sprite.svg';
+  import { searchStore } from '../../lib/stores/search.svelte.js';
+  import FileTreeNode from './FileTreeNode.svelte';
+  import GitChangesPanel from './GitChangesPanel.svelte';
   import FileContextMenu from './FileContextMenu.svelte';
   import StatusDropdown from './StatusDropdown.svelte';
   import OutlinePanel from './OutlinePanel.svelte';
   import SearchPanel from './SearchPanel.svelte';
   import GitCommitPanel from './GitCommitPanel.svelte';
-  import { searchStore } from '../../lib/stores/search.svelte.js';
+  import { lspDiagnosticsStore } from '../../lib/stores/lsp-diagnostics.svelte.js';
 
   let { onFileClick = () => {}, onFileDblClick = () => {}, onChangeClick = () => {}, onChangeDblClick = () => {}, activeFilePath = null, activeDiffPath = null, activeFileHasLsp = false, onSymbolClick = () => {} } = $props();
 
@@ -38,8 +38,6 @@
   let selectedEntry = $state(null);
 
   // Reload when active project changes.
-  // Track activeIndex, entries length, AND the active path so every kind of
-  // project change (switch, add, remove-last) triggers a reload.
   $effect(() => {
     const _idx = projectStore.activeIndex;
     const _len = projectStore.entries.length;
@@ -77,12 +75,10 @@
     const { directories, root: rootChanged } = event.payload;
     const currentRoot = projectStore.activeProject?.path || null;
 
-    // Reload root listing if the root directory itself was affected
     if (rootChanged) {
       await loadRoot();
     }
 
-    // Re-fetch any expanded directories that were affected
     if (directories && directories.length > 0) {
       const updated = new Map(dirChildren);
       let changed = false;
@@ -148,17 +144,14 @@
   async function toggleDir(entry) {
     const path = entry.path;
     if (expandedDirs.has(path)) {
-      // Collapse
       const next = new Set(expandedDirs);
       next.delete(path);
       expandedDirs = next;
     } else {
-      // Expand
       const next = new Set(expandedDirs);
       next.add(path);
       expandedDirs = next;
 
-      // Lazy-load children if not cached
       if (!dirChildren.has(path)) {
         const loading = new Set(loadingDirs);
         loading.add(path);
@@ -220,7 +213,6 @@
   }
 
   function handleEmptyContextMenu(e) {
-    // Only fire if clicking on the scroll container itself (empty space), not a child
     if (e.target === e.currentTarget || e.target.classList.contains('tree-scroll')) {
       e.preventDefault();
       contextMenu = { visible: true, x: e.clientX, y: e.clientY, entry: null, isFolder: false, isChange: false };
@@ -286,14 +278,12 @@
 
   function getParentPath(entry) {
     if (!entry) return '';
-    // If it's a folder, create inside it; if it's a file, create in its parent directory
     if (entry.type === 'directory') return entry.path;
     return entry.path.includes('/') ? entry.path.substring(0, entry.path.lastIndexOf('/')) : '';
   }
 
   function startNewFile(parentEntry) {
     const parentPath = getParentPath(parentEntry);
-    // Ensure the folder is expanded
     if (parentPath && !expandedDirs.has(parentPath) && parentEntry?.type === 'directory') {
       toggleDir(parentEntry);
     }
@@ -429,7 +419,6 @@
 
   function autofocus(node) {
     node.focus();
-    // Select filename without extension for rename
     const dotIdx = node.value.lastIndexOf('.');
     if (dotIdx > 0) {
       node.setSelectionRange(0, dotIdx);
@@ -471,100 +460,6 @@
   {:else if activeTab === 'files'}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div class="tree-scroll" oncontextmenu={handleEmptyContextMenu}>
-      {#snippet treeNode(entries, depth)}
-        {#each entries as entry}
-          {#if entry.type === 'directory'}
-            {@const isExpanded = expandedDirs.has(entry.path)}
-            {#if editingEntry?.path === entry.path}
-              <div class="tree-item folder" style="padding-left: {8 + depth * 16}px">
-                <span class="tree-chevron">{isExpanded ? 'v' : '>'}</span>
-                <input
-                  class="tree-rename-input"
-                  type="text"
-                  bind:value={editingValue}
-                  onkeydown={handleRenameKeydown}
-                  onblur={saveRename}
-                  use:autofocus
-                />
-              </div>
-            {:else}
-              {@const dirDiag = lspDiagnosticsStore.getForDirectory(entry.path)}
-              <button
-                class="tree-item folder"
-                style="padding-left: {8 + depth * 16}px"
-                onclick={() => toggleDir(entry)}
-                oncontextmenu={(e) => handleContextMenu(e, entry, true, false)}
-              >
-                <span class="tree-chevron">{isExpanded ? 'v' : '>'}</span>
-                <svg class="tree-icon"><use href="{spriteUrl}#{chooseIconName(entry.path, 'directory', isExpanded)}" /></svg>
-                <span class="tree-name" class:has-error={dirDiag?.errors > 0} class:has-warning={dirDiag && dirDiag.errors === 0 && dirDiag.warnings > 0}>{entry.name}</span>
-                {#if dirDiag}
-                  {#if dirDiag.errors > 0}
-                    <span class="diag-badge error">{dirDiag.errors}</span>
-                  {/if}
-                  {#if dirDiag.warnings > 0}
-                    <span class="diag-badge warning">{dirDiag.warnings}</span>
-                  {/if}
-                {/if}
-              </button>
-            {/if}
-            {#if isExpanded}
-              {#if creatingIn?.parentPath === entry.path}
-                <div class="tree-item file" style="padding-left: {8 + (depth + 1) * 16 + 18}px">
-                  <input
-                    class="tree-rename-input"
-                    type="text"
-                    placeholder={creatingIn.type === 'file' ? 'filename...' : 'folder name...'}
-                    bind:value={creatingValue}
-                    onkeydown={handleCreateKeydown}
-                    onblur={saveCreate}
-                    use:autofocus
-                  />
-                </div>
-              {/if}
-              {#if loadingDirs.has(entry.path)}
-                <div class="tree-loading" style="padding-left: {8 + (depth + 1) * 16}px">...</div>
-              {:else if dirChildren.has(entry.path)}
-                {@render treeNode(dirChildren.get(entry.path), depth + 1)}
-              {/if}
-            {/if}
-          {:else}
-            {#if editingEntry?.path === entry.path}
-              <div class="tree-item file" style="padding-left: {8 + depth * 16 + 18}px">
-                <input
-                  class="tree-rename-input"
-                  type="text"
-                  bind:value={editingValue}
-                  onkeydown={handleRenameKeydown}
-                  onblur={saveRename}
-                  use:autofocus
-                />
-              </div>
-            {:else}
-              {@const fileDiag = lspDiagnosticsStore.getForFile(entry.path)}
-              <button
-                class="tree-item file"
-                style="padding-left: {8 + depth * 16 + 18}px"
-                onclick={() => handleFileClick(entry)}
-                ondblclick={() => onFileDblClick(entry)}
-                oncontextmenu={(e) => handleContextMenu(e, entry, false, false)}
-              >
-                <svg class="tree-icon"><use href="{spriteUrl}#{chooseIconName(entry.path, 'file')}" /></svg>
-                <span class="tree-name" class:ignored={entry.ignored} class:has-error={fileDiag?.errors > 0} class:has-warning={fileDiag && fileDiag.errors === 0 && fileDiag.warnings > 0}>{entry.name}</span>
-                {#if fileDiag}
-                  {#if fileDiag.errors > 0}
-                    <span class="diag-badge error">{fileDiag.errors}</span>
-                  {/if}
-                  {#if fileDiag.warnings > 0}
-                    <span class="diag-badge warning">{fileDiag.warnings}</span>
-                  {/if}
-                {/if}
-              </button>
-            {/if}
-          {/if}
-        {/each}
-      {/snippet}
-
       {#if creatingIn?.parentPath === ''}
         <div class="tree-item file" style="padding-left: {8 + 18}px">
           <input
@@ -579,7 +474,27 @@
         </div>
       {/if}
 
-      {@render treeNode(rootEntries, 0)}
+      <FileTreeNode
+        entries={rootEntries}
+        depth={0}
+        {expandedDirs}
+        {dirChildren}
+        {loadingDirs}
+        {activeFilePath}
+        {editingEntry}
+        bind:editingValue
+        {creatingIn}
+        bind:creatingValue
+        onToggle={toggleDir}
+        onFileClick={handleFileClick}
+        onFileDblClick={(entry) => onFileDblClick(entry)}
+        onContextMenu={handleContextMenu}
+        onRenameKeydown={handleRenameKeydown}
+        onRenameSave={saveRename}
+        onCreateKeydown={handleCreateKeydown}
+        onCreateSave={saveCreate}
+        {autofocus}
+      />
     </div>
   {/if}
 
@@ -591,74 +506,19 @@
       root={projectStore.activeProject?.path}
     />
     <div class="tree-scroll">
-      {#if stagedChanges.length > 0}
-        <div class="changes-group-header">
-          <span>Staged Changes ({stagedChanges.length})</span>
-          <button class="changes-group-action" title="Unstage All" onclick={handleUnstageAll}>&minus;</button>
-        </div>
-        {#each stagedChanges as change}
-          <!-- svelte-ignore a11y_no_static_element_interactions -->
-          <div
-            class="change-item"
-            class:active={change.path === activeDiffPath}
-            role="button"
-            tabindex="0"
-            onclick={() => onChangeClick(change)}
-            ondblclick={() => onChangeDblClick(change)}
-            oncontextmenu={(e) => handleContextMenu(e, change, false, true)}
-          >
-            <svg class="tree-icon"><use href="{spriteUrl}#{chooseIconName(change.path, 'file')}" /></svg>
-            <span class="change-path">{change.path}</span>
-            <button class="change-action" title="Unstage" onclick={(e) => { e.stopPropagation(); handleUnstage(change); }}>&minus;</button>
-            <span
-              class="change-badge"
-              class:added={change.stagedStatus === 'added'}
-              class:modified={change.stagedStatus === 'modified'}
-              class:deleted={change.stagedStatus === 'deleted'}
-            >
-              {change.stagedStatus === 'added' ? 'A' : change.stagedStatus === 'deleted' ? 'D' : 'M'}
-            </span>
-          </div>
-        {/each}
-      {/if}
-
-      {#if unstagedChanges.length > 0}
-        <div class="changes-group-header">
-          <span>Changes ({unstagedChanges.length})</span>
-          <button class="changes-group-action" title="Stage All" onclick={handleStageAll}>+</button>
-        </div>
-        {#each unstagedChanges as change}
-          <!-- svelte-ignore a11y_no_static_element_interactions -->
-          <div
-            class="change-item"
-            class:active={change.path === activeDiffPath}
-            role="button"
-            tabindex="0"
-            onclick={() => onChangeClick(change)}
-            ondblclick={() => onChangeDblClick(change)}
-            oncontextmenu={(e) => handleContextMenu(e, change, false, true)}
-          >
-            <svg class="tree-icon"><use href="{spriteUrl}#{chooseIconName(change.path, 'file')}" /></svg>
-            <span class="change-path">{change.path}</span>
-            <button class="change-action" title="Stage" onclick={(e) => { e.stopPropagation(); handleStage(change); }}>+</button>
-            {#if change.unstagedStatus !== 'added'}
-              <button class="change-action discard" title="Discard" onclick={(e) => { e.stopPropagation(); handleDiscard(change); }}>&times;</button>
-            {/if}
-            <span
-              class="change-badge"
-              class:added={change.status === 'added'}
-              class:modified={change.status === 'modified'}
-              class:deleted={change.status === 'deleted'}
-            >
-              {change.status === 'added' ? 'A' : change.status === 'deleted' ? 'D' : 'M'}
-            </span>
-          </div>
-        {/each}
-      {/if}
-
-      {#if stagedChanges.length === 0 && unstagedChanges.length === 0}
-        <div class="changes-empty">No changes</div>
-      {/if}
+      <GitChangesPanel
+        {stagedChanges}
+        {unstagedChanges}
+        {activeDiffPath}
+        onStageAll={handleStageAll}
+        onUnstageAll={handleUnstageAll}
+        onStage={handleStage}
+        onUnstage={handleUnstage}
+        onDiscard={handleDiscard}
+        onChangeClick={(change) => onChangeClick(change)}
+        onChangeDblClick={(change) => onChangeDblClick(change)}
+        onContextMenu={handleContextMenu}
+      />
     </div>
   {/if}
 
@@ -792,45 +652,6 @@
     text-align: left;
     -webkit-app-region: no-drag;
   }
-  .tree-item:hover {
-    background: var(--bg-elevated);
-  }
-
-  .tree-chevron {
-    width: 14px;
-    text-align: center;
-    color: var(--muted);
-    font-size: 10px;
-    flex-shrink: 0;
-  }
-
-  .tree-icon {
-    width: 16px;
-    height: 16px;
-    flex-shrink: 0;
-  }
-
-  .tree-name {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .tree-name.ignored {
-    color: var(--muted);
-    opacity: 0.6;
-  }
-
-  .tree-item.file {
-    color: var(--muted);
-  }
-
-  .tree-loading {
-    font-size: 12px;
-    color: var(--muted);
-    font-style: italic;
-    font-family: var(--font-mono);
-    padding: 3px 8px;
-  }
 
   .tree-rename-input {
     flex: 1;
@@ -845,127 +666,11 @@
     outline: none;
   }
 
-  .change-item {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    width: 100%;
-    border: none;
-    background: transparent;
-    padding: 3px 12px;
-    font-size: 12px;
-    font-family: var(--font-mono);
-    color: var(--text);
-    cursor: pointer;
-    text-align: left;
-    -webkit-app-region: no-drag;
-  }
-  .change-item:hover {
-    background: var(--bg-elevated);
-  }
-  .change-item.active {
-    background: color-mix(in srgb, var(--accent) 12%, transparent);
-    color: var(--text-strong, var(--text));
-  }
-
-  .change-badge {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 18px;
-    height: 18px;
-    font-size: 10px;
-    font-weight: 600;
-    border-radius: 3px;
-    flex-shrink: 0;
-    color: var(--bg);
-  }
-  .change-badge.added {
-    background: var(--ok);
-  }
-  .change-badge.modified {
-    background: var(--accent);
-  }
-  .change-badge.deleted {
-    background: var(--danger);
-  }
-
-  .change-path {
-    flex: 1;
-    min-width: 0;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .tree-empty,
-  .changes-empty {
+  .tree-empty {
     color: var(--muted);
     text-align: center;
     padding: 24px 12px;
     font-size: 12px;
-  }
-
-  /* ── Git changes group headers + action buttons ── */
-
-  .changes-group-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 4px 8px;
-    font-size: 10px;
-    font-weight: 600;
-    color: var(--muted);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    -webkit-app-region: no-drag;
-  }
-
-  .changes-group-action {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 18px;
-    height: 18px;
-    border: none;
-    background: transparent;
-    color: var(--muted);
-    cursor: pointer;
-    border-radius: 3px;
-    font-size: 14px;
-    -webkit-app-region: no-drag;
-  }
-  .changes-group-action:hover {
-    background: var(--bg-elevated);
-    color: var(--text);
-  }
-
-  .change-action {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 18px;
-    height: 18px;
-    border: none;
-    background: transparent;
-    color: var(--muted);
-    cursor: pointer;
-    border-radius: 3px;
-    font-size: 11px;
-    opacity: 0;
-    transition: opacity 0.1s;
-    -webkit-app-region: no-drag;
-    flex-shrink: 0;
-  }
-  .change-item:hover .change-action {
-    opacity: 1;
-  }
-  .change-action:hover {
-    background: var(--bg-elevated);
-    color: var(--text);
-  }
-  .change-action.discard:hover {
-    color: var(--danger, #ef4444);
   }
 
   /* ── Project path (collapsible footer) ── */
@@ -1061,39 +766,5 @@
   }
   .project-menu-item:hover svg {
     opacity: 1;
-  }
-
-  /* ── Diagnostic decorations ── */
-
-  .tree-name.has-error {
-    color: var(--danger, #ef4444);
-  }
-
-  .tree-name.has-warning {
-    color: var(--warn, #f59e0b);
-  }
-
-  .diag-badge {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 16px;
-    height: 16px;
-    padding: 0 4px;
-    font-size: 10px;
-    font-weight: 600;
-    border-radius: 8px;
-    flex-shrink: 0;
-    margin-left: auto;
-  }
-
-  .diag-badge.error {
-    background: var(--danger, #ef4444);
-    color: var(--bg, #000);
-  }
-
-  .diag-badge.warning {
-    background: var(--warn, #f59e0b);
-    color: var(--bg, #000);
   }
 </style>

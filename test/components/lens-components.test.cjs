@@ -228,25 +228,8 @@ describe('FileTree.svelte -- Git staging integration', () => {
     assert.ok(ftSrc.includes('<GitCommitPanel'), 'FileTree should render GitCommitPanel');
   });
 
-  it('has changes-group-header class', () => {
-    assert.ok(
-      ftSrc.includes('changes-group-header'),
-      'FileTree should have changes-group-header CSS class'
-    );
-  });
-
-  it('has changes-group-action class', () => {
-    assert.ok(
-      ftSrc.includes('changes-group-action'),
-      'FileTree should have changes-group-action CSS class'
-    );
-  });
-
-  it('has change-action class', () => {
-    assert.ok(
-      ftSrc.includes('change-action'),
-      'FileTree should have change-action CSS class for file action buttons'
-    );
+  it('renders GitChangesPanel in changes tab', () => {
+    assert.ok(ftSrc.includes('<GitChangesPanel'), 'FileTree should render GitChangesPanel');
   });
 
   // Props passed to GitCommitPanel
