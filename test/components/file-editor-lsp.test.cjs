@@ -169,7 +169,7 @@ describe('FileEditor LSP integration', () => {
     assert.ok(extSrc.includes('onSignatureHelp'), 'Should have onSignatureHelp in editor-extensions');
   });
 
-  it('has Ctrl-Shift-, keybinding for signature help', () => {
-    assert.ok(extSrc.includes("Ctrl-Shift-,"), 'Should have Ctrl-Shift-, keybinding');
+  it('has Ctrl-Shift-Space keybinding for signature help', () => {
+    assert.ok(extSrc.includes('Ctrl-Shift-Space'), 'Should have Ctrl-Shift-Space keybinding');
   });
 });

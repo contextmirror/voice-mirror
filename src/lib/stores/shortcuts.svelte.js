@@ -26,7 +26,7 @@ import { overlayStore } from './overlay.svelte.js';
  */
 export const DEFAULT_GLOBAL_SHORTCUTS = {
   'toggle-voice': {
-    keys: 'Ctrl+Shift+Space',
+    keys: 'Ctrl+Shift+;',
     label: 'Toggle voice recording',
     category: 'global',
   },

@@ -68,7 +68,7 @@ describe('shortcuts: exports', () => {
 
 describe('shortcuts: DEFAULT_GLOBAL_SHORTCUTS entries', () => {
   const expectedGlobals = [
-    { id: 'toggle-voice', keys: 'Ctrl+Shift+Space', label: 'Toggle voice recording' },
+    { id: 'toggle-voice', keys: 'Ctrl+Shift+;', label: 'Toggle voice recording' },
     { id: 'toggle-mute', keys: 'Ctrl+Shift+M', label: 'Toggle mute' },
     { id: 'toggle-overlay', keys: 'Ctrl+Shift+O', label: 'Toggle overlay mode' },
     { id: 'toggle-window', keys: 'Ctrl+Shift+H', label: 'Show/hide window' },
