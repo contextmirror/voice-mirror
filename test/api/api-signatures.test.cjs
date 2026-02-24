@@ -283,6 +283,8 @@ describe('api.js -- exported async functions', () => {
     'lspPrepareRename',
     'lspRename',
     'lspApplyWorkspaceEdit',
+    'lspRequestFormatting',
+    'lspRequestRangeFormatting',
   ];
 
   for (const fn of expectedExports) {

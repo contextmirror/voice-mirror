@@ -18,6 +18,7 @@
  * @param {function} options.onDocChanged - Callback for document change updates
  * @param {function} options.onDismissMenu - Callback to dismiss the context menu
  * @param {function} options.onSave - Callback for Mod-s
+ * @param {function} [options.onFormat] - Callback for Shift-Alt-f format document
  * @param {function} options.onContextMenu - Callback for context menu events (event, view)
  * @param {function} [options.onClick] - Callback for Ctrl+Click go-to-definition (event, view)
  * @returns {Array} CodeMirror extensions array
@@ -30,6 +31,7 @@ export function buildEditorExtensions(cm, lsp, options) {
     onDocChanged,
     onDismissMenu,
     onSave,
+    onFormat,
     onContextMenu,
     onClick,
   } = options;
@@ -56,6 +58,7 @@ export function buildEditorExtensions(cm, lsp, options) {
     }),
     cm.keymap.of([
       { key: 'Mod-s', run: () => { onSave(); return true; } },
+      ...(onFormat ? [{ key: 'Shift-Alt-f', run: () => { onFormat(); return true; } }] : []),
       // Multi-cursor: add cursor on line above/below (VS Code / Zed standard)
       { key: 'Ctrl-Alt-ArrowUp', run: (v) => {
         const ranges = v.state.selection.ranges;

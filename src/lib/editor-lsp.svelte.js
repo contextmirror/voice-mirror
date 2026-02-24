@@ -5,7 +5,7 @@
  * event listeners, handlers, and CodeMirror extension factories for the file editor.
  */
 
-import { lspOpenFile, lspCloseFile, lspChangeFile, lspSaveFile, lspRequestCompletion, lspRequestHover, lspRequestDefinition, lspRequestReferences, lspPrepareRename, lspRename, lspApplyWorkspaceEdit, lspRequestCodeActions } from './api.js';
+import { lspOpenFile, lspCloseFile, lspChangeFile, lspSaveFile, lspRequestCompletion, lspRequestHover, lspRequestDefinition, lspRequestReferences, lspPrepareRename, lspRename, lspApplyWorkspaceEdit, lspRequestCodeActions, lspRequestFormatting } from './api.js';
 import { projectStore } from './stores/project.svelte.js';
 import { tabsStore } from './stores/tabs.svelte.js';
 
@@ -203,6 +203,33 @@ export function createEditorLsp() {
     }
   }
 
+  async function formatDocument(view, path, root) {
+    if (!hasLsp) return false;
+    try {
+      const result = await lspRequestFormatting(path, 2, true, root);
+      if (result?.data?.edits?.length > 0) {
+        const doc = view.state.doc;
+        // Sort edits in reverse document order so earlier offsets aren't invalidated
+        const sorted = [...result.data.edits].sort((a, b) => {
+          const lineA = a.range.start.line;
+          const lineB = b.range.start.line;
+          if (lineA !== lineB) return lineB - lineA;
+          return b.range.start.character - a.range.start.character;
+        });
+        const changes = sorted.map(edit => ({
+          from: lspPositionToOffset(doc, edit.range.start),
+          to: lspPositionToOffset(doc, edit.range.end),
+          insert: edit.newText,
+        }));
+        view.dispatch({ changes });
+        return true;
+      }
+    } catch (err) {
+      console.warn('[editor-lsp] Format document failed:', err);
+    }
+    return false;
+  }
+
   async function handleCodeActions(view, currentPath, diagnosticsAtCursor) {
     if (!view || !hasLsp || !currentPath) return;
     const sel = view.state.selection.main;
@@ -365,6 +392,7 @@ export function createEditorLsp() {
     handleRenameSymbol,
     executeRename,
     handleCodeActions,
+    formatDocument,
 
     // CodeMirror extension factories
     completionSource,

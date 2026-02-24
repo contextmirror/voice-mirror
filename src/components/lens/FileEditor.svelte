@@ -84,6 +84,12 @@
     }
   }
 
+  async function handleFormat() {
+    if (!view || !lsp.hasLsp) return;
+    const root = projectStore.activeProject?.path || null;
+    await lsp.formatDocument(view, currentPath, root);
+  }
+
   function handleGoToDefinition() {
     if (!view || !lsp.hasLsp || !currentPath) return;
     const pos = view.state.selection.main.head;
@@ -93,8 +99,18 @@
   async function save() {
     if (!view) return;
     try {
-      const content = view.state.doc.toString();
       const root = projectStore.activeProject?.path || null;
+
+      // Format on save (if enabled)
+      if (configStore.value?.editor?.formatOnSave && lsp.hasLsp) {
+        try {
+          await lsp.formatDocument(view, tab.path, root);
+        } catch (err) {
+          console.warn('[FileEditor] Format on save failed:', err);
+        }
+      }
+
+      const content = view.state.doc.toString();
       await writeFile(tab.path, content, root);
       tabsStore.setDirty(tab.id, false);
       lsp.saveFile(tab.path, content, root);
@@ -211,6 +227,7 @@
           }
         },
         onSave: () => save(),
+        onFormat: lsp.hasLsp ? () => handleFormat() : null,
         onContextMenu: (event, v) => {
           event.preventDefault();
           const pos = v.posAtCoords({ x: event.clientX, y: event.clientY });

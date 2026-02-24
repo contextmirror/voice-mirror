@@ -677,3 +677,11 @@ export async function lspRename(path, line, character, newName, projectRoot) {
 export async function lspApplyWorkspaceEdit(edits, projectRoot) {
   return invoke('lsp_apply_workspace_edit', { edits, projectRoot });
 }
+
+export async function lspRequestFormatting(path, tabSize, insertSpaces, projectRoot) {
+  return invoke('lsp_request_formatting', { path, tabSize, insertSpaces, projectRoot });
+}
+
+export async function lspRequestRangeFormatting(path, rangeStartLine, rangeStartChar, rangeEndLine, rangeEndChar, tabSize, insertSpaces, projectRoot) {
+  return invoke('lsp_request_range_formatting', { path, rangeStartLine, rangeStartChar, rangeEndLine, rangeEndChar, tabSize, insertSpaces, projectRoot });
+}
