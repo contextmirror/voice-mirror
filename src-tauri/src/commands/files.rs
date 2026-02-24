@@ -155,14 +155,28 @@ pub fn get_git_changes(root: Option<String>) -> IpcResponse {
         Ok(o) => o,
         Err(e) => {
             info!("git status failed (git may not be installed): {}", e);
-            return IpcResponse::ok(serde_json::json!({ "changes": [] }));
+            return IpcResponse::ok(serde_json::json!({ "changes": [], "branch": null }));
         }
     };
 
     if !output.status.success() {
         info!("git status returned non-zero (may not be a git repo)");
-        return IpcResponse::ok(serde_json::json!({ "changes": [] }));
+        return IpcResponse::ok(serde_json::json!({ "changes": [], "branch": null }));
     }
+
+    // Get the current branch name
+    let branch = std::process::Command::new("git")
+        .args(["rev-parse", "--abbrev-ref", "HEAD"])
+        .current_dir(&root)
+        .output()
+        .ok()
+        .and_then(|o| {
+            if o.status.success() {
+                Some(String::from_utf8_lossy(&o.stdout).trim().to_string())
+            } else {
+                None
+            }
+        });
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let mut changes: Vec<serde_json::Value> = Vec::new();
@@ -172,21 +186,46 @@ pub fn get_git_changes(root: Option<String>) -> IpcResponse {
             continue;
         }
 
-        let xy = &line[..2];
+        let x = line.as_bytes()[0] as char;
+        let y = line.as_bytes()[1] as char;
         // Git wraps paths with spaces/special chars in double quotes — strip them
         let path_part = line[3..].trim().trim_matches('"');
 
-        let status = match xy {
-            "??" => "added",
-            "A " | "AM" => "added",
-            "D " | " D" => "deleted",
-            "M " | " M" | "MM" => "modified",
-            _ if xy.starts_with('R') => "modified",
-            _ => "modified",
+        let is_untracked = x == '?' && y == '?';
+
+        let staged_status = match x {
+            'M' => Some("modified"),
+            'A' => Some("added"),
+            'D' => Some("deleted"),
+            'R' => Some("renamed"),
+            _ => None,
+        };
+        let unstaged_status = if is_untracked {
+            Some("added")
+        } else {
+            match y {
+                'M' => Some("modified"),
+                'D' => Some("deleted"),
+                _ => None,
+            }
+        };
+
+        let staged = staged_status.is_some();
+        let unstaged = unstaged_status.is_some() || is_untracked;
+
+        // Backward-compat: pick most relevant status
+        let status = if is_untracked {
+            "added"
+        } else if let Some(s) = staged_status {
+            s
+        } else if let Some(s) = unstaged_status {
+            s
+        } else {
+            "modified"
         };
 
         // For renames (R_), extract the new path after " -> "
-        let file_path = if xy.starts_with('R') {
+        let file_path = if x == 'R' {
             path_part
                 .split(" -> ")
                 .last()
@@ -210,6 +249,10 @@ pub fn get_git_changes(root: Option<String>) -> IpcResponse {
                                 changes.push(serde_json::json!({
                                     "path": rel.to_string_lossy().replace('\\', "/"),
                                     "status": "added",
+                                    "staged": false,
+                                    "unstaged": true,
+                                    "stagedStatus": null,
+                                    "unstagedStatus": "added",
                                 }));
                             }
                         }
@@ -223,11 +266,15 @@ pub fn get_git_changes(root: Option<String>) -> IpcResponse {
         changes.push(serde_json::json!({
             "path": file_path,
             "status": status,
+            "staged": staged,
+            "unstaged": unstaged,
+            "stagedStatus": staged_status,
+            "unstagedStatus": unstaged_status,
         }));
     }
 
     info!("get_git_changes: {} changes", changes.len());
-    IpcResponse::ok(serde_json::json!({ "changes": changes }))
+    IpcResponse::ok(serde_json::json!({ "changes": changes, "branch": branch }))
 }
 
 /// Get the project root directory path.
@@ -1224,6 +1271,471 @@ pub fn search_content(
     }))
 }
 
+// ============ Git staging, committing, and push commands ============
+
+/// Normalize backslashes to forward slashes for git paths.
+fn normalize_git_paths(paths: &[String]) -> Vec<String> {
+    paths.iter().map(|p| p.replace('\\', "/")).collect()
+}
+
+/// Resolve project root from optional override or auto-detection.
+fn resolve_root(root: Option<String>) -> Result<PathBuf, IpcResponse> {
+    match root {
+        Some(r) => Ok(PathBuf::from(r)),
+        None => find_project_root().ok_or_else(|| IpcResponse::err("Could not find project root")),
+    }
+}
+
+/// Stage files in the git index.
+///
+/// `paths` are relative to the project root. Errors if paths is empty.
+#[tauri::command]
+pub fn git_stage(paths: Vec<String>, root: Option<String>) -> IpcResponse {
+    if paths.is_empty() {
+        return IpcResponse::err("No paths provided to stage");
+    }
+    let root = match resolve_root(root) {
+        Ok(r) => r,
+        Err(e) => return e,
+    };
+    let normalized = normalize_git_paths(&paths);
+    let mut args = vec!["add".to_string(), "--".to_string()];
+    args.extend(normalized);
+
+    let output = match std::process::Command::new("git")
+        .args(&args)
+        .current_dir(&root)
+        .output()
+    {
+        Ok(o) => o,
+        Err(e) => return IpcResponse::err(format!("Failed to run git add: {}", e)),
+    };
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return IpcResponse::err(format!("git add failed: {}", stderr.trim()));
+    }
+
+    info!("git_stage: staged {} files", paths.len());
+    IpcResponse::ok_empty()
+}
+
+/// Unstage files from the git index.
+///
+/// `paths` are relative to the project root. Errors if paths is empty.
+#[tauri::command]
+pub fn git_unstage(paths: Vec<String>, root: Option<String>) -> IpcResponse {
+    if paths.is_empty() {
+        return IpcResponse::err("No paths provided to unstage");
+    }
+    let root = match resolve_root(root) {
+        Ok(r) => r,
+        Err(e) => return e,
+    };
+    let normalized = normalize_git_paths(&paths);
+    let mut args = vec!["reset".to_string(), "HEAD".to_string(), "--".to_string()];
+    args.extend(normalized);
+
+    let output = match std::process::Command::new("git")
+        .args(&args)
+        .current_dir(&root)
+        .output()
+    {
+        Ok(o) => o,
+        Err(e) => return IpcResponse::err(format!("Failed to run git reset: {}", e)),
+    };
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return IpcResponse::err(format!("git reset failed: {}", stderr.trim()));
+    }
+
+    info!("git_unstage: unstaged {} files", paths.len());
+    IpcResponse::ok_empty()
+}
+
+/// Stage all changes (tracked and untracked).
+#[tauri::command]
+pub fn git_stage_all(root: Option<String>) -> IpcResponse {
+    let root = match resolve_root(root) {
+        Ok(r) => r,
+        Err(e) => return e,
+    };
+
+    let output = match std::process::Command::new("git")
+        .args(["add", "-A"])
+        .current_dir(&root)
+        .output()
+    {
+        Ok(o) => o,
+        Err(e) => return IpcResponse::err(format!("Failed to run git add -A: {}", e)),
+    };
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return IpcResponse::err(format!("git add -A failed: {}", stderr.trim()));
+    }
+
+    info!("git_stage_all: staged all changes");
+    IpcResponse::ok_empty()
+}
+
+/// Unstage all staged changes.
+#[tauri::command]
+pub fn git_unstage_all(root: Option<String>) -> IpcResponse {
+    let root = match resolve_root(root) {
+        Ok(r) => r,
+        Err(e) => return e,
+    };
+
+    let output = match std::process::Command::new("git")
+        .args(["reset", "HEAD"])
+        .current_dir(&root)
+        .output()
+    {
+        Ok(o) => o,
+        Err(e) => return IpcResponse::err(format!("Failed to run git reset HEAD: {}", e)),
+    };
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return IpcResponse::err(format!("git reset HEAD failed: {}", stderr.trim()));
+    }
+
+    info!("git_unstage_all: unstaged all changes");
+    IpcResponse::ok_empty()
+}
+
+/// Commit staged changes with a message.
+///
+/// Returns the short hash of the new commit on success.
+#[tauri::command]
+pub fn git_commit(message: String, root: Option<String>) -> IpcResponse {
+    if message.trim().is_empty() {
+        return IpcResponse::err("Commit message cannot be empty");
+    }
+    let root = match resolve_root(root) {
+        Ok(r) => r,
+        Err(e) => return e,
+    };
+
+    let output = match std::process::Command::new("git")
+        .args(["commit", "-m", &message])
+        .current_dir(&root)
+        .output()
+    {
+        Ok(o) => o,
+        Err(e) => return IpcResponse::err(format!("Failed to run git commit: {}", e)),
+    };
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return IpcResponse::err(format!("git commit failed: {}", stderr.trim()));
+    }
+
+    // Get the short hash of the new commit
+    let hash = std::process::Command::new("git")
+        .args(["rev-parse", "--short", "HEAD"])
+        .current_dir(&root)
+        .output()
+        .ok()
+        .and_then(|o| {
+            if o.status.success() {
+                Some(String::from_utf8_lossy(&o.stdout).trim().to_string())
+            } else {
+                None
+            }
+        })
+        .unwrap_or_default();
+
+    info!("git_commit: committed {}", hash);
+    IpcResponse::ok(serde_json::json!({ "hash": hash }))
+}
+
+/// Discard changes to tracked files (checkout from HEAD).
+///
+/// Only works on tracked files. Errors if paths is empty.
+#[tauri::command]
+pub fn git_discard(paths: Vec<String>, root: Option<String>) -> IpcResponse {
+    if paths.is_empty() {
+        return IpcResponse::err("No paths provided to discard");
+    }
+    let root = match resolve_root(root) {
+        Ok(r) => r,
+        Err(e) => return e,
+    };
+    let normalized = normalize_git_paths(&paths);
+    let mut args = vec!["checkout".to_string(), "--".to_string()];
+    args.extend(normalized);
+
+    let output = match std::process::Command::new("git")
+        .args(&args)
+        .current_dir(&root)
+        .output()
+    {
+        Ok(o) => o,
+        Err(e) => return IpcResponse::err(format!("Failed to run git checkout: {}", e)),
+    };
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return IpcResponse::err(format!("git checkout failed: {}", stderr.trim()));
+    }
+
+    info!("git_discard: discarded {} files", paths.len());
+    IpcResponse::ok_empty()
+}
+
+/// Push commits to the remote.
+#[tauri::command]
+pub fn git_push(root: Option<String>) -> IpcResponse {
+    let root = match resolve_root(root) {
+        Ok(r) => r,
+        Err(e) => return e,
+    };
+
+    let output = match std::process::Command::new("git")
+        .args(["push"])
+        .current_dir(&root)
+        .output()
+    {
+        Ok(o) => o,
+        Err(e) => return IpcResponse::err(format!("Failed to run git push: {}", e)),
+    };
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return IpcResponse::err(format!("git push failed: {}", stderr.trim()));
+    }
+
+    info!("git_push: pushed successfully");
+    IpcResponse::ok_empty()
+}
+
+/// Get the staged diff (git diff --staged).
+///
+/// Returns the diff output capped at 32KB.
+#[tauri::command]
+pub fn git_diff_staged(root: Option<String>) -> IpcResponse {
+    let root = match resolve_root(root) {
+        Ok(r) => r,
+        Err(e) => return e,
+    };
+
+    let output = match std::process::Command::new("git")
+        .args(["diff", "--staged"])
+        .current_dir(&root)
+        .output()
+    {
+        Ok(o) => o,
+        Err(e) => return IpcResponse::err(format!("Failed to run git diff --staged: {}", e)),
+    };
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return IpcResponse::err(format!("git diff --staged failed: {}", stderr.trim()));
+    }
+
+    const MAX_DIFF_SIZE: usize = 32 * 1024;
+    let diff = String::from_utf8_lossy(&output.stdout);
+    let diff = if diff.len() > MAX_DIFF_SIZE {
+        format!("{}...\n[diff truncated at 32KB]", &diff[..MAX_DIFF_SIZE])
+    } else {
+        diff.to_string()
+    };
+
+    IpcResponse::ok(serde_json::json!({ "diff": diff }))
+}
+
+/// Generate a commit message from staged changes using an AI provider.
+///
+/// Reads the staged diff and file list, finds an available AI provider from
+/// config (local first, then cloud), and makes a one-shot API call.
+#[tauri::command]
+pub async fn generate_commit_message(root: Option<String>) -> IpcResponse {
+    let root = match root {
+        Some(r) => PathBuf::from(r),
+        None => match find_project_root() {
+            Some(r) => r,
+            None => return IpcResponse::err("Could not find project root"),
+        },
+    };
+
+    // Get staged diff (cap at 16KB for the prompt)
+    let diff_output = match std::process::Command::new("git")
+        .args(["diff", "--staged"])
+        .current_dir(&root)
+        .output()
+    {
+        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).to_string(),
+        _ => return IpcResponse::err("Failed to get staged diff"),
+    };
+
+    if diff_output.trim().is_empty() {
+        return IpcResponse::err("No staged changes to generate a commit message for");
+    }
+
+    const MAX_PROMPT_DIFF: usize = 16 * 1024;
+    let diff_for_prompt = if diff_output.len() > MAX_PROMPT_DIFF {
+        format!("{}...\n[truncated]", &diff_output[..MAX_PROMPT_DIFF])
+    } else {
+        diff_output
+    };
+
+    // Get staged file list
+    let files_output = std::process::Command::new("git")
+        .args(["diff", "--staged", "--name-status"])
+        .current_dir(&root)
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
+        .unwrap_or_default();
+
+    // Read config to find an available AI provider
+    let config = crate::commands::config::get_config_snapshot();
+    let ai = &config.ai;
+
+    // Find endpoint + model + optional API key
+    // Check local providers first (no key needed), then cloud providers
+    let local_providers = ["ollama", "lmstudio", "jan"];
+    let cloud_providers = ["openai", "gemini", "groq", "grok", "mistral", "openrouter", "deepseek"];
+
+    let mut found_provider: Option<(String, String, Option<String>)> = None; // (endpoint, model, api_key)
+
+    // Try local providers first
+    for provider in &local_providers {
+        if let Some(endpoint) = ai.endpoints.get(*provider) {
+            if !endpoint.is_empty() {
+                let model = default_commit_model(provider);
+                found_provider = Some((endpoint.clone(), model, None));
+                info!("generate_commit_message: using local provider {}", provider);
+                break;
+            }
+        }
+    }
+
+    // Try cloud providers if no local found
+    if found_provider.is_none() {
+        for provider in &cloud_providers {
+            if let Some(Some(key)) = ai.api_keys.get(*provider) {
+                if !key.is_empty() {
+                    let endpoint = ai.endpoints.get(*provider)
+                        .cloned()
+                        .unwrap_or_else(|| default_cloud_endpoint(provider).to_string());
+                    let model = default_commit_model(provider);
+                    found_provider = Some((endpoint, model, Some(key.clone())));
+                    info!("generate_commit_message: using cloud provider {}", provider);
+                    break;
+                }
+            }
+        }
+    }
+
+    let (endpoint, model, api_key) = match found_provider {
+        Some(p) => p,
+        None => return IpcResponse::err(
+            "No AI provider configured. Add an API key or start a local LLM in Settings."
+        ),
+    };
+
+    // Build the prompt
+    let prompt = format!(
+        "Generate a concise git commit message for these changes.\n\
+         Use conventional commit format: type(scope): description\n\
+         Types: feat, fix, refactor, docs, chore, test, style\n\
+         Max 72 characters for the first line.\n\
+         Return ONLY the commit message, nothing else.\n\n\
+         Files changed:\n{}\n\nDiff:\n{}",
+        files_output.trim(),
+        diff_for_prompt.trim()
+    );
+
+    // Build the chat completions URL
+    let url = if endpoint.ends_with("/v1") || endpoint.ends_with("/v1/") {
+        format!("{}/chat/completions", endpoint.trim_end_matches('/'))
+    } else if endpoint.contains("/v1/") {
+        format!("{}/chat/completions", endpoint.trim_end_matches('/'))
+    } else {
+        format!("{}/v1/chat/completions", endpoint.trim_end_matches('/'))
+    };
+
+    let client = reqwest::Client::new();
+    let mut request = client.post(&url)
+        .header("Content-Type", "application/json");
+
+    if let Some(key) = &api_key {
+        request = request.header("Authorization", format!("Bearer {}", key));
+    }
+
+    let body = serde_json::json!({
+        "model": model,
+        "messages": [{ "role": "user", "content": prompt }],
+        "max_tokens": 200,
+        "temperature": 0.3,
+    });
+
+    let response = match request.json(&body).send().await {
+        Ok(r) => r,
+        Err(e) => return IpcResponse::err(format!("AI request failed: {}", e)),
+    };
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        return IpcResponse::err(format!("AI provider returned {}: {}", status, body));
+    }
+
+    let json: serde_json::Value = match response.json().await {
+        Ok(j) => j,
+        Err(e) => return IpcResponse::err(format!("Failed to parse AI response: {}", e)),
+    };
+
+    let message = json["choices"][0]["message"]["content"]
+        .as_str()
+        .unwrap_or("")
+        .trim()
+        .trim_matches('`')
+        .trim()
+        .to_string();
+
+    if message.is_empty() {
+        return IpcResponse::err("AI returned an empty commit message");
+    }
+
+    info!("generate_commit_message: generated '{}'", message);
+    IpcResponse::ok(serde_json::json!({ "message": message }))
+}
+
+/// Default model for commit message generation per provider.
+fn default_commit_model(provider: &str) -> String {
+    match provider {
+        "openai" => "gpt-4o-mini".to_string(),
+        "gemini" => "gemini-2.0-flash".to_string(),
+        "groq" => "llama-3.3-70b-versatile".to_string(),
+        "grok" => "grok-2".to_string(),
+        "mistral" => "mistral-small-latest".to_string(),
+        "openrouter" => "anthropic/claude-3.5-haiku".to_string(),
+        "deepseek" => "deepseek-chat".to_string(),
+        // Local providers: empty string uses whatever is loaded
+        _ => String::new(),
+    }
+}
+
+/// Default cloud endpoint for commit message generation.
+fn default_cloud_endpoint(provider: &str) -> &'static str {
+    match provider {
+        "openai" => "https://api.openai.com/v1",
+        "gemini" => "https://generativelanguage.googleapis.com/v1beta/openai",
+        "groq" => "https://api.groq.com/openai/v1",
+        "grok" => "https://api.x.ai/v1",
+        "mistral" => "https://api.mistral.ai/v1",
+        "openrouter" => "https://openrouter.ai/api/v1",
+        "deepseek" => "https://api.deepseek.com/v1",
+        _ => "http://127.0.0.1:11434",
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1289,5 +1801,65 @@ mod tests {
     fn test_matches_glob_empty() {
         assert!(!matches_glob_list("anything.rs", ""));
         assert!(!matches_glob_list("anything.rs", "  , ,"));
+    }
+
+    // ============ Git command validation tests ============
+
+    #[test]
+    fn test_git_stage_empty_paths_returns_error() {
+        let result = git_stage(vec![], None);
+        assert!(!result.success);
+        assert!(result.error.as_deref().unwrap().contains("No paths provided"));
+    }
+
+    #[test]
+    fn test_git_unstage_empty_paths_returns_error() {
+        let result = git_unstage(vec![], None);
+        assert!(!result.success);
+        assert!(result.error.as_deref().unwrap().contains("No paths provided"));
+    }
+
+    #[test]
+    fn test_git_discard_empty_paths_returns_error() {
+        let result = git_discard(vec![], None);
+        assert!(!result.success);
+        assert!(result.error.as_deref().unwrap().contains("No paths provided"));
+    }
+
+    #[test]
+    fn test_git_commit_empty_message_returns_error() {
+        let result = git_commit("".to_string(), None);
+        assert!(!result.success);
+        assert!(result.error.as_deref().unwrap().contains("empty"));
+    }
+
+    #[test]
+    fn test_git_commit_whitespace_message_returns_error() {
+        let result = git_commit("   ".to_string(), None);
+        assert!(!result.success);
+        assert!(result.error.as_deref().unwrap().contains("empty"));
+    }
+
+    #[test]
+    fn test_normalize_git_paths() {
+        let paths = vec!["src\\lib\\api.js".to_string(), "src/main.rs".to_string()];
+        let normalized = normalize_git_paths(&paths);
+        assert_eq!(normalized, vec!["src/lib/api.js", "src/main.rs"]);
+    }
+
+    #[test]
+    fn test_default_commit_model() {
+        assert_eq!(default_commit_model("openai"), "gpt-4o-mini");
+        assert_eq!(default_commit_model("gemini"), "gemini-2.0-flash");
+        assert_eq!(default_commit_model("groq"), "llama-3.3-70b-versatile");
+        assert_eq!(default_commit_model("ollama"), "");
+        assert_eq!(default_commit_model("unknown"), "");
+    }
+
+    #[test]
+    fn test_default_cloud_endpoint() {
+        assert_eq!(default_cloud_endpoint("openai"), "https://api.openai.com/v1");
+        assert_eq!(default_cloud_endpoint("deepseek"), "https://api.deepseek.com/v1");
+        assert_eq!(default_cloud_endpoint("unknown"), "http://127.0.0.1:11434");
     }
 }
