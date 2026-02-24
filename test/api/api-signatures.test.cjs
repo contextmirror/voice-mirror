@@ -131,6 +131,16 @@ describe('api.js -- critical Tauri command names', () => {
     'reveal_in_explorer',
     'search_files',
     'search_content',
+    // Git
+    'git_stage',
+    'git_unstage',
+    'git_stage_all',
+    'git_unstage_all',
+    'git_commit',
+    'git_discard',
+    'git_push',
+    'git_diff_staged',
+    'generate_commit_message',
   ];
 
   for (const cmd of criticalCommands) {
@@ -247,6 +257,16 @@ describe('api.js -- exported async functions', () => {
     'searchContent',
     'startFileWatching',
     'stopFileWatching',
+    // Git
+    'gitStage',
+    'gitUnstage',
+    'gitStageAll',
+    'gitUnstageAll',
+    'gitCommit',
+    'gitDiscard',
+    'gitPush',
+    'gitDiffStaged',
+    'generateCommitMessage',
     // Shell Terminals
     'shellSpawn',
     'shellInput',

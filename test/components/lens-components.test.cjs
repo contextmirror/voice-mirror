@@ -159,5 +159,111 @@ describe('FileTree.svelte — Search tab integration', () => {
   });
 });
 
+// ============ FileTree: Git Staging ============
+
+describe('FileTree.svelte -- Git staging integration', () => {
+  const ftSrc = readComponent('FileTree.svelte');
+
+  // Imports
+  it('imports gitStage from api', () => {
+    assert.ok(ftSrc.includes('gitStage'), 'FileTree should import gitStage');
+  });
+
+  it('imports gitUnstage from api', () => {
+    assert.ok(ftSrc.includes('gitUnstage'), 'FileTree should import gitUnstage');
+  });
+
+  it('imports gitStageAll from api', () => {
+    assert.ok(ftSrc.includes('gitStageAll'), 'FileTree should import gitStageAll');
+  });
+
+  it('imports gitUnstageAll from api', () => {
+    assert.ok(ftSrc.includes('gitUnstageAll'), 'FileTree should import gitUnstageAll');
+  });
+
+  it('imports gitDiscard from api', () => {
+    assert.ok(ftSrc.includes('gitDiscard'), 'FileTree should import gitDiscard');
+  });
+
+  it('imports GitCommitPanel', () => {
+    assert.ok(ftSrc.includes('GitCommitPanel'), 'FileTree should import GitCommitPanel');
+  });
+
+  // State
+  it('has currentBranch state', () => {
+    assert.ok(ftSrc.includes('currentBranch'), 'FileTree should have currentBranch state');
+  });
+
+  it('has stagedChanges derived', () => {
+    assert.ok(ftSrc.includes('stagedChanges'), 'FileTree should have stagedChanges derived');
+  });
+
+  it('has unstagedChanges derived', () => {
+    assert.ok(ftSrc.includes('unstagedChanges'), 'FileTree should have unstagedChanges derived');
+  });
+
+  // Handler functions
+  it('has handleStage function', () => {
+    assert.ok(ftSrc.includes('handleStage'), 'FileTree should have handleStage function');
+  });
+
+  it('has handleUnstage function', () => {
+    assert.ok(ftSrc.includes('handleUnstage'), 'FileTree should have handleUnstage function');
+  });
+
+  it('has handleStageAll function', () => {
+    assert.ok(ftSrc.includes('handleStageAll'), 'FileTree should have handleStageAll function');
+  });
+
+  it('has handleUnstageAll function', () => {
+    assert.ok(ftSrc.includes('handleUnstageAll'), 'FileTree should have handleUnstageAll function');
+  });
+
+  it('has handleDiscard function', () => {
+    assert.ok(ftSrc.includes('handleDiscard'), 'FileTree should have handleDiscard function');
+  });
+
+  // Rendering
+  it('renders GitCommitPanel in changes tab', () => {
+    assert.ok(ftSrc.includes('<GitCommitPanel'), 'FileTree should render GitCommitPanel');
+  });
+
+  it('has changes-group-header class', () => {
+    assert.ok(
+      ftSrc.includes('changes-group-header'),
+      'FileTree should have changes-group-header CSS class'
+    );
+  });
+
+  it('has changes-group-action class', () => {
+    assert.ok(
+      ftSrc.includes('changes-group-action'),
+      'FileTree should have changes-group-action CSS class'
+    );
+  });
+
+  it('has change-action class', () => {
+    assert.ok(
+      ftSrc.includes('change-action'),
+      'FileTree should have change-action CSS class for file action buttons'
+    );
+  });
+
+  // Props passed to GitCommitPanel
+  it('passes branch prop to GitCommitPanel', () => {
+    assert.ok(
+      ftSrc.includes('branch=') || ftSrc.includes('branch={'),
+      'FileTree should pass branch prop to GitCommitPanel'
+    );
+  });
+
+  it('passes stagedCount prop to GitCommitPanel', () => {
+    assert.ok(
+      ftSrc.includes('stagedCount'),
+      'FileTree should pass stagedCount prop to GitCommitPanel'
+    );
+  });
+});
+
 // ============ LensPreview ============
 // Detailed LensPreview tests are in lens-preview.test.cjs
