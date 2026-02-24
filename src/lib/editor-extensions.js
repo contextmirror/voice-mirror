@@ -19,6 +19,7 @@
  * @param {function} options.onDismissMenu - Callback to dismiss the context menu
  * @param {function} options.onSave - Callback for Mod-s
  * @param {function} [options.onFormat] - Callback for Shift-Alt-f format document
+ * @param {object} [options.onSignatureHelp] - Signature help callbacks { onDocChanged(update), onSelectionChanged(update) }
  * @param {function} options.onContextMenu - Callback for context menu events (event, view)
  * @param {function} [options.onClick] - Callback for Ctrl+Click go-to-definition (event, view)
  * @returns {Array} CodeMirror extensions array
@@ -32,6 +33,7 @@ export function buildEditorExtensions(cm, lsp, options) {
     onDismissMenu,
     onSave,
     onFormat,
+    onSignatureHelp,
     onContextMenu,
     onClick,
   } = options;
@@ -54,6 +56,14 @@ export function buildEditorExtensions(cm, lsp, options) {
       }
       if (update.docChanged) {
         onDocChanged(update);
+        // Signature help trigger detection
+        if (onSignatureHelp) {
+          onSignatureHelp.onDocChanged(update);
+        }
+      }
+      // Dismiss signature help when cursor moves without doc change
+      if (onSignatureHelp && !update.docChanged && update.selectionSet) {
+        onSignatureHelp.onSelectionChanged(update);
       }
     }),
     cm.keymap.of([
@@ -92,6 +102,7 @@ export function buildEditorExtensions(cm, lsp, options) {
       { key: 'F2', run: (v) => { lsp.handleRenameSymbol(v, filePath); return true; } },
       { key: 'Shift-F12', run: (v) => { lsp.handleFindReferences(v, filePath); return true; } },
       { key: 'Mod-.', run: (v) => { lsp.handleCodeActions(v, filePath); return true; } },
+      { key: 'Ctrl-Shift-Space', run: (v) => { lsp.requestSignatureHelp(v, filePath, null); return true; } },
     ]));
   }
 

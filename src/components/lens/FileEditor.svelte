@@ -11,6 +11,7 @@
   import ReferencesPanel from './ReferencesPanel.svelte';
   import CodeActionsMenu from './CodeActionsMenu.svelte';
   import RenameInput from './RenameInput.svelte';
+  import SignatureHelp from './SignatureHelp.svelte';
   import { open } from '@tauri-apps/plugin-shell';
   import { voiceMirrorEditorTheme } from '../../lib/editor-theme.js';
   import { renderMarkdown } from '../../lib/markdown.js';
@@ -47,6 +48,10 @@
     diagnosticMessage: '',
     lineNumber: 0,
   });
+
+  // Signature help positioning
+  let sigHelpCoords = $state({ x: 0, y: 0 });
+  let sigHelpDebounce = null;
 
   // LSP helper (extracted to editor-lsp.svelte.js)
   const lsp = createEditorLsp();
@@ -228,6 +233,44 @@
         },
         onSave: () => save(),
         onFormat: lsp.hasLsp ? () => handleFormat() : null,
+        onSignatureHelp: lsp.hasLsp ? {
+          onDocChanged(update) {
+            const pos = update.state.selection.main.head;
+            if (pos === 0) return;
+            const lastChar = update.state.doc.sliceString(pos - 1, pos);
+
+            if (lastChar === '(' || lastChar === ',') {
+              clearTimeout(sigHelpDebounce);
+              sigHelpDebounce = setTimeout(async () => {
+                await lsp.requestSignatureHelp(update.view, currentPath, lastChar);
+                if (lsp.showSignatureHelp && update.view) {
+                  const coords = update.view.coordsAtPos(update.view.state.selection.main.head);
+                  if (coords) sigHelpCoords = { x: coords.left, y: coords.top };
+                }
+              }, 80);
+            } else if (lastChar === ')') {
+              clearTimeout(sigHelpDebounce);
+              lsp.dismissSignatureHelp();
+            } else if (lsp.showSignatureHelp) {
+              clearTimeout(sigHelpDebounce);
+              sigHelpDebounce = setTimeout(async () => {
+                await lsp.requestSignatureHelp(update.view, currentPath, null);
+                if (lsp.showSignatureHelp && update.view) {
+                  const coords = update.view.coordsAtPos(update.view.state.selection.main.head);
+                  if (coords) sigHelpCoords = { x: coords.left, y: coords.top };
+                }
+              }, 150);
+            }
+          },
+          onSelectionChanged(update) {
+            if (lsp.showSignatureHelp) {
+              const pos = update.state.selection.main.head;
+              if (pos < lsp.signatureHelpPos) {
+                lsp.dismissSignatureHelp();
+              }
+            }
+          },
+        } : null,
         onContextMenu: (event, v) => {
           event.preventDefault();
           const pos = v.posAtCoords({ x: event.clientX, y: event.clientY });
@@ -620,6 +663,14 @@
   currentName={lsp.renamePlaceholder}
   onConfirm={(newName) => { lsp.executeRename(view, currentPath, newName); }}
   onCancel={() => { lsp.setShowRename(false); }}
+/>
+
+<SignatureHelp
+  visible={lsp.showSignatureHelp}
+  data={lsp.signatureHelpData}
+  cursorX={sigHelpCoords.x}
+  cursorY={sigHelpCoords.y}
+  onDismiss={() => lsp.dismissSignatureHelp()}
 />
 
 <style>

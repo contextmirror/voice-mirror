@@ -646,6 +646,10 @@ export async function lspRequestHover(path, line, character, projectRoot) {
   return invoke('lsp_request_hover', { path, line, character, projectRoot });
 }
 
+export async function lspRequestSignatureHelp(path, line, character, projectRoot) {
+  return invoke('lsp_request_signature_help', { path, line, character, projectRoot });
+}
+
 export async function lspRequestDefinition(path, line, character, projectRoot) {
   return invoke('lsp_request_definition', { path, line, character, projectRoot });
 }

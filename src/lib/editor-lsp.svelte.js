@@ -5,7 +5,7 @@
  * event listeners, handlers, and CodeMirror extension factories for the file editor.
  */
 
-import { lspOpenFile, lspCloseFile, lspChangeFile, lspSaveFile, lspRequestCompletion, lspRequestHover, lspRequestDefinition, lspRequestReferences, lspPrepareRename, lspRename, lspApplyWorkspaceEdit, lspRequestCodeActions, lspRequestFormatting } from './api.js';
+import { lspOpenFile, lspCloseFile, lspChangeFile, lspSaveFile, lspRequestCompletion, lspRequestHover, lspRequestDefinition, lspRequestReferences, lspPrepareRename, lspRename, lspApplyWorkspaceEdit, lspRequestCodeActions, lspRequestFormatting, lspRequestSignatureHelp } from './api.js';
 import { projectStore } from './stores/project.svelte.js';
 import { tabsStore } from './stores/tabs.svelte.js';
 
@@ -81,6 +81,11 @@ export function createEditorLsp() {
   let showCodeActions = $state(false);
   let codeActions = $state([]);
   let codeActionsPosition = $state({ x: 0, y: 0 });
+
+  // Signature help state
+  let showSignatureHelp = $state(false);
+  let signatureHelpData = $state(null);
+  let signatureHelpPos = $state(0);
 
   let lspDebounceTimer = null;
 
@@ -257,6 +262,35 @@ export function createEditorLsp() {
     } catch {}
   }
 
+  async function requestSignatureHelp(view, currentPath, triggerChar) {
+    if (!view || !hasLsp || !currentPath) return;
+    const pos = view.state.selection.main.head;
+    const lineInfo = view.state.doc.lineAt(pos);
+    const line = lineInfo.number - 1;
+    const character = pos - lineInfo.from;
+    const root = projectStore.activeProject?.path || null;
+
+    try {
+      const result = await lspRequestSignatureHelp(currentPath, line, character, root);
+      if (result?.data?.signatures?.length) {
+        signatureHelpData = result.data;
+        signatureHelpPos = pos;
+        showSignatureHelp = true;
+      } else {
+        showSignatureHelp = false;
+        signatureHelpData = null;
+      }
+    } catch {
+      showSignatureHelp = false;
+      signatureHelpData = null;
+    }
+  }
+
+  function dismissSignatureHelp() {
+    showSignatureHelp = false;
+    signatureHelpData = null;
+  }
+
   // ── CodeMirror extension factories ──
 
   function completionSource(currentPath) {
@@ -359,6 +393,7 @@ export function createEditorLsp() {
     clearTimeout(lspDebounceTimer);
     lspVersion = 0;
     hasLsp = false;
+    dismissSignatureHelp();
   }
 
   function destroy() {
@@ -378,12 +413,16 @@ export function createEditorLsp() {
     get showCodeActions() { return showCodeActions; },
     get codeActions() { return codeActions; },
     get codeActionsPosition() { return codeActionsPosition; },
+    get showSignatureHelp() { return showSignatureHelp; },
+    get signatureHelpData() { return signatureHelpData; },
+    get signatureHelpPos() { return signatureHelpPos; },
 
     // Setters
     setHasLsp(val) { hasLsp = val; },
     setShowReferences(val) { showReferences = val; },
     setShowRename(val) { showRename = val; },
     setShowCodeActions(val) { showCodeActions = val; },
+    setShowSignatureHelp(val) { showSignatureHelp = val; if (!val) signatureHelpData = null; },
 
     // Handlers
     openFile,
@@ -395,6 +434,8 @@ export function createEditorLsp() {
     handleRenameSymbol,
     executeRename,
     handleCodeActions,
+    requestSignatureHelp,
+    dismissSignatureHelp,
     formatDocument,
 
     // CodeMirror extension factories
