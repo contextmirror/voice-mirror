@@ -333,55 +333,19 @@ describe('DiffViewer.svelte: word wrap toggle', () => {
 });
 
 describe('DiffViewer.svelte: loadLanguage', () => {
-  it('has loadLanguage function', () => {
-    assert.ok(src.includes('function loadLanguage'), 'Should have loadLanguage function');
+  it('has loadLanguage via shared codemirror-languages.js', () => {
+    assert.ok(src.includes('loadLanguage'), 'Should have loadLanguage reference');
+    assert.ok(
+      src.includes("import { loadLanguageExtension } from '../../lib/codemirror-languages.js'"),
+      'Should import loadLanguageExtension from codemirror-languages.js'
+    );
   });
 
-  it('supports JavaScript (js/jsx/mjs/cjs)', () => {
-    assert.ok(src.includes("'js'"), 'Should handle js extension');
-    assert.ok(src.includes("'jsx'"), 'Should handle jsx extension');
-    assert.ok(src.includes("'mjs'"), 'Should handle mjs extension');
-    assert.ok(src.includes("'cjs'"), 'Should handle cjs extension');
-  });
-
-  it('supports TypeScript (ts/tsx)', () => {
-    assert.ok(src.includes("'ts'"), 'Should handle ts extension');
-    assert.ok(src.includes("'tsx'"), 'Should handle tsx extension');
-    assert.ok(src.includes('typescript: true'), 'Should enable typescript mode');
-  });
-
-  it('supports Rust', () => {
-    assert.ok(src.includes("'rs'"), 'Should handle rs extension');
-    assert.ok(src.includes('@codemirror/lang-rust'), 'Should import rust language');
-  });
-
-  it('supports CSS/SCSS', () => {
-    assert.ok(src.includes("'css'"), 'Should handle css extension');
-    assert.ok(src.includes("'scss'"), 'Should handle scss extension');
-    assert.ok(src.includes('@codemirror/lang-css'), 'Should import css language');
-  });
-
-  it('supports HTML/Svelte', () => {
-    assert.ok(src.includes("'html'"), 'Should handle html extension');
-    assert.ok(src.includes("'svelte'"), 'Should handle svelte extension');
-    assert.ok(src.includes('@codemirror/lang-html'), 'Should import html language');
-  });
-
-  it('supports JSON', () => {
-    assert.ok(src.includes("'json'"), 'Should handle json extension');
-    assert.ok(src.includes('@codemirror/lang-json'), 'Should import json language');
-  });
-
-  it('supports Markdown', () => {
-    assert.ok(src.includes("'md'"), 'Should handle md extension');
-    assert.ok(src.includes("'markdown'"), 'Should handle markdown extension');
-    assert.ok(src.includes('@codemirror/lang-markdown'), 'Should import markdown language');
-  });
-
-  it('supports Python', () => {
-    assert.ok(src.includes("'py'"), 'Should handle py extension');
-    assert.ok(src.includes("'python'"), 'Should handle python extension');
-    assert.ok(src.includes('@codemirror/lang-python'), 'Should import python language');
+  it('delegates language loading to shared module', () => {
+    assert.ok(
+      src.includes('loadLanguageExtension'),
+      'Should use loadLanguageExtension from shared module'
+    );
   });
 });
 

@@ -309,7 +309,6 @@ pub fn run() {
             files_cmds::git_commit,
             files_cmds::git_discard,
             files_cmds::git_push,
-            files_cmds::git_diff_staged,
             // Shell terminals
             shell_cmds::shell_spawn,
             shell_cmds::shell_input,

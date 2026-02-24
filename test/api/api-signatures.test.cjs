@@ -139,7 +139,6 @@ describe('api.js -- critical Tauri command names', () => {
     'git_commit',
     'git_discard',
     'git_push',
-    'git_diff_staged',
   ];
 
   for (const cmd of criticalCommands) {
@@ -264,7 +263,6 @@ describe('api.js -- exported async functions', () => {
     'gitCommit',
     'gitDiscard',
     'gitPush',
-    'gitDiffStaged',
     // Shell Terminals
     'shellSpawn',
     'shellInput',

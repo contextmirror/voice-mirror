@@ -6,6 +6,7 @@
   import { voiceMirrorEditorTheme } from '../../lib/editor-theme.js';
   import DiffToolbar from './DiffToolbar.svelte';
   import DiffMinimap from './DiffMinimap.svelte';
+  import { loadLanguageExtension } from '../../lib/codemirror-languages.js';
 
   let { tab } = $props();
 
@@ -139,50 +140,7 @@
 
   // ── Language support ──
 
-  async function loadLanguage(filePath) {
-    const ext = filePath?.split('.').pop()?.toLowerCase() || '';
-    try {
-      switch (ext) {
-        case 'js': case 'jsx': case 'mjs': case 'cjs': {
-          const { javascript } = await import('@codemirror/lang-javascript');
-          return javascript();
-        }
-        case 'ts': case 'tsx': {
-          const { javascript } = await import('@codemirror/lang-javascript');
-          return javascript({ typescript: true });
-        }
-        case 'rs': {
-          const { rust } = await import('@codemirror/lang-rust');
-          return rust();
-        }
-        case 'css': case 'scss': {
-          const { css } = await import('@codemirror/lang-css');
-          return css();
-        }
-        case 'html': case 'svelte': {
-          const { html } = await import('@codemirror/lang-html');
-          return html();
-        }
-        case 'json': {
-          const { json } = await import('@codemirror/lang-json');
-          return json();
-        }
-        case 'md': case 'markdown': {
-          const { markdown } = await import('@codemirror/lang-markdown');
-          return markdown();
-        }
-        case 'py': case 'python': {
-          const { python } = await import('@codemirror/lang-python');
-          return python();
-        }
-        default:
-          return [];
-      }
-    } catch (err) {
-      console.warn('[DiffViewer] Language load failed for', ext, err);
-      return [];
-    }
-  }
+  const loadLanguage = loadLanguageExtension;
 
   // ── Stats counting ──
 

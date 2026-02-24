@@ -24,6 +24,7 @@ pub(crate) fn normalize_git_paths(paths: &[String]) -> Vec<String> {
 }
 
 /// Truncate a string at a safe UTF-8 character boundary.
+#[allow(dead_code)]
 pub(crate) fn truncate_utf8(s: &str, max_bytes: usize) -> &str {
     if s.len() <= max_bytes {
         return s;

@@ -1,5 +1,5 @@
 use super::super::IpcResponse;
-use super::{resolve_root, normalize_git_paths, truncate_utf8};
+use super::{resolve_root, normalize_git_paths};
 use crate::util::find_project_root;
 use std::path::PathBuf;
 use tracing::info;
@@ -431,41 +431,6 @@ pub fn git_push(root: Option<String>) -> IpcResponse {
     IpcResponse::ok_empty()
 }
 
-/// Get the staged diff (git diff --staged).
-///
-/// Returns the diff output capped at 32KB.
-#[tauri::command]
-pub fn git_diff_staged(root: Option<String>) -> IpcResponse {
-    let root = match resolve_root(root) {
-        Ok(r) => r,
-        Err(e) => return e,
-    };
-
-    let output = match std::process::Command::new("git")
-        .args(["diff", "--staged"])
-        .current_dir(&root)
-        .output()
-    {
-        Ok(o) => o,
-        Err(e) => return IpcResponse::err(format!("Failed to run git diff --staged: {}", e)),
-    };
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return IpcResponse::err(format!("git diff --staged failed: {}", stderr.trim()));
-    }
-
-    const MAX_DIFF_SIZE: usize = 32 * 1024;
-    let diff = String::from_utf8_lossy(&output.stdout);
-    let diff = if diff.len() > MAX_DIFF_SIZE {
-        format!("{}...\n[diff truncated at 32KB]", truncate_utf8(&diff, MAX_DIFF_SIZE))
-    } else {
-        diff.to_string()
-    };
-
-    IpcResponse::ok(serde_json::json!({ "diff": diff }))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -512,18 +477,4 @@ mod tests {
         assert_eq!(normalized, vec!["src/lib/api.js", "src/main.rs"]);
     }
 
-    #[test]
-    fn test_truncate_utf8_ascii() {
-        let s = "hello world";
-        assert_eq!(truncate_utf8(s, 5), "hello");
-        assert_eq!(truncate_utf8(s, 100), s);
-    }
-
-    #[test]
-    fn test_truncate_utf8_multibyte() {
-        // Each emoji is 4 bytes
-        let s = "ab\u{1F600}cd"; // "ab😀cd" — 8 bytes total
-        assert_eq!(truncate_utf8(s, 3), "ab"); // 3 is mid-emoji, snap back to 2
-        assert_eq!(truncate_utf8(s, 6), "ab\u{1F600}"); // 6 = after emoji (2+4)
-    }
 }

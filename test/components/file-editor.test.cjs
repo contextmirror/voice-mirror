@@ -155,40 +155,19 @@ describe('FileEditor.svelte: dirty tracking', () => {
 });
 
 describe('FileEditor.svelte: language support', () => {
-  it('has language loading function', () => {
-    assert.ok(src.includes('loadLanguage'), 'Should have loadLanguage function');
+  it('has loadLanguage via shared codemirror-languages.js', () => {
+    assert.ok(src.includes('loadLanguage'), 'Should have loadLanguage reference');
+    assert.ok(
+      src.includes("import { loadLanguageExtension } from '../../lib/codemirror-languages.js'"),
+      'Should import loadLanguageExtension from codemirror-languages.js'
+    );
   });
 
-  it('supports JavaScript', () => {
-    assert.ok(src.includes('@codemirror/lang-javascript'), 'Should support JS');
-  });
-
-  it('supports TypeScript', () => {
-    assert.ok(src.includes('typescript: true'), 'Should support TS');
-  });
-
-  it('supports Rust', () => {
-    assert.ok(src.includes('@codemirror/lang-rust'), 'Should support Rust');
-  });
-
-  it('supports CSS', () => {
-    assert.ok(src.includes('@codemirror/lang-css'), 'Should support CSS');
-  });
-
-  it('supports HTML', () => {
-    assert.ok(src.includes('@codemirror/lang-html'), 'Should support HTML');
-  });
-
-  it('supports JSON', () => {
-    assert.ok(src.includes('@codemirror/lang-json'), 'Should support JSON');
-  });
-
-  it('supports Markdown', () => {
-    assert.ok(src.includes('@codemirror/lang-markdown'), 'Should support Markdown');
-  });
-
-  it('supports Python', () => {
-    assert.ok(src.includes('@codemirror/lang-python'), 'Should support Python');
+  it('delegates language loading to shared module', () => {
+    assert.ok(
+      src.includes('loadLanguageExtension'),
+      'Should use loadLanguageExtension from shared module'
+    );
   });
 });
 

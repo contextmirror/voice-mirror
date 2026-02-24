@@ -1,7 +1,7 @@
 /**
  * api-git.test.cjs -- Source-inspection tests for git API wrappers in api.js
  *
- * Validates all 8 git-related functions: exports, invoke names, and parameters.
+ * Validates all 7 git-related functions: exports, invoke names, and parameters.
  * Based on the plan spec -- does not read implementation code.
  */
 const { describe, it } = require('node:test');
@@ -64,13 +64,6 @@ describe('api.js -- git function exports', () => {
     );
   });
 
-  it('exports gitDiffStaged function', () => {
-    assert.ok(
-      src.includes('export async function gitDiffStaged('),
-      'Should export async function gitDiffStaged()'
-    );
-  });
-
 });
 
 // ============ Invoke names (must match Rust snake_case) ============
@@ -122,13 +115,6 @@ describe('api.js -- git invoke command names', () => {
     assert.ok(
       src.includes("invoke('git_push'"),
       "gitPush should invoke 'git_push'"
-    );
-  });
-
-  it('gitDiffStaged invokes git_diff_staged', () => {
-    assert.ok(
-      src.includes("invoke('git_diff_staged'"),
-      "gitDiffStaged should invoke 'git_diff_staged'"
     );
   });
 
@@ -188,13 +174,6 @@ describe('api.js -- git function parameters', () => {
     assert.ok(
       src.includes('gitPush(root') || src.includes('gitPush('),
       'gitPush should accept root parameter'
-    );
-  });
-
-  it('gitDiffStaged accepts root parameter', () => {
-    assert.ok(
-      src.includes('gitDiffStaged(root') || src.includes('gitDiffStaged('),
-      'gitDiffStaged should accept root parameter'
     );
   });
 
