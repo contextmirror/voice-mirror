@@ -299,7 +299,7 @@
     -webkit-app-region: no-drag;
   }
   .manage-btn:hover {
-    background: var(--bg-elevated);
+    background: var(--bg-hover);
   }
 
   /* ── Server action buttons ── */

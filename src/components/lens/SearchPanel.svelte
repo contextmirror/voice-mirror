@@ -206,7 +206,7 @@
   }
   .search-toggle:hover {
     color: var(--text);
-    background: var(--bg-elevated);
+    background: var(--bg-hover);
   }
   .search-toggle.active {
     color: var(--accent);
@@ -270,7 +270,7 @@
     -webkit-app-region: no-drag;
   }
   .search-file-header:hover {
-    background: var(--bg-elevated);
+    background: var(--bg-hover);
   }
 
   .search-chevron {
@@ -322,7 +322,7 @@
     overflow: hidden;
   }
   .search-match:hover {
-    background: var(--bg-elevated);
+    background: var(--bg-hover);
     color: var(--text);
   }
 

@@ -182,7 +182,7 @@ describe('FileTreeNode.svelte', () => {
 
   it('has hover styling for tree items', () => {
     assert.ok(src.includes('.tree-item:hover'), 'Should style tree item hover');
-    assert.ok(src.includes('var(--bg-elevated)'), 'Should use elevated bg on hover');
+    assert.ok(src.includes('var(--bg-hover)'), 'Should use --bg-hover on hover');
   });
 
   it('uses CSS variables for theming', () => {

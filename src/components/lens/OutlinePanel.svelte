@@ -142,7 +142,7 @@
   }
 
   .outline-item:hover {
-    background: var(--bg-elevated);
+    background: var(--bg-hover);
   }
 
   .symbol-icon {

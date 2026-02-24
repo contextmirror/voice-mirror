@@ -103,7 +103,7 @@
     -webkit-app-region: no-drag;
   }
   .change-item:hover {
-    background: var(--bg-elevated);
+    background: var(--bg-hover);
   }
   .change-item.active {
     background: color-mix(in srgb, var(--accent) 12%, transparent);
@@ -177,7 +177,7 @@
     -webkit-app-region: no-drag;
   }
   .changes-group-action:hover {
-    background: var(--bg-elevated);
+    background: var(--bg-hover);
     color: var(--text);
   }
 
@@ -202,7 +202,7 @@
     opacity: 1;
   }
   .change-action:hover {
-    background: var(--bg-elevated);
+    background: var(--bg-hover);
     color: var(--text);
   }
   .change-action.discard:hover {
