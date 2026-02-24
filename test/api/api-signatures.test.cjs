@@ -243,6 +243,7 @@ describe('api.js -- exported async functions', () => {
     'deleteEntry',
     'revealInExplorer',
     'searchFiles',
+    'searchContent',
     'startFileWatching',
     'stopFileWatching',
     // Shell Terminals

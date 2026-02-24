@@ -532,6 +532,31 @@ export async function searchFiles(root) {
   return invoke('search_files', { root: root || null });
 }
 
+/**
+ * Search file contents across the project using regex.
+ * Results are grouped by file with line number, column range, and text.
+ * @param {string} query - Search query (plain text or regex).
+ * @param {Object} [options] - Search options.
+ * @param {string} [options.root] - Project root override.
+ * @param {boolean} [options.caseSensitive] - Case-sensitive search.
+ * @param {boolean} [options.isRegex] - Treat query as regex.
+ * @param {boolean} [options.wholeWord] - Match whole words only.
+ * @param {string} [options.includePattern] - Comma-separated include globs.
+ * @param {string} [options.excludePattern] - Comma-separated exclude globs.
+ * @returns {Promise<{success: boolean, data?: {matches: Array, totalMatches: number, truncated: boolean}, error?: string}>}
+ */
+export async function searchContent(query, options = {}) {
+  return invoke('search_content', {
+    query,
+    root: options.root || null,
+    caseSensitive: options.caseSensitive || null,
+    isRegex: options.isRegex || null,
+    wholeWord: options.wholeWord || null,
+    includePattern: options.includePattern || null,
+    excludePattern: options.excludePattern || null,
+  });
+}
+
 export async function startFileWatching(projectRoot) {
   return invoke('start_file_watching', { projectRoot });
 }

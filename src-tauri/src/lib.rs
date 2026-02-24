@@ -301,6 +301,7 @@ pub fn run() {
             files_cmds::delete_entry,
             files_cmds::reveal_in_explorer,
             files_cmds::search_files,
+            files_cmds::search_content,
             // Shell terminals
             shell_cmds::shell_spawn,
             shell_cmds::shell_input,
