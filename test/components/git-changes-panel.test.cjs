@@ -156,7 +156,7 @@ describe('GitChangesPanel.svelte', () => {
   it('uses CSS variables for theming', () => {
     assert.ok(src.includes('var(--text)'), 'Should use --text variable');
     assert.ok(src.includes('var(--muted)'), 'Should use --muted variable');
-    assert.ok(src.includes('var(--bg-hover)'), 'Should use --bg-hover for hover states');
+    assert.ok(src.includes('var(--accent)'), 'Should use accent-tinted hover');
   });
 
   it('uses monospace font', () => {

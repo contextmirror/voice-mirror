@@ -142,7 +142,7 @@
   }
 
   .outline-item:hover {
-    background: var(--bg-hover);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
   }
 
   .symbol-icon {
