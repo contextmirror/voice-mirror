@@ -85,11 +85,11 @@
   }
 
   .lsp-dot.running {
-    background: var(--ok, #22c55e);
+    background: var(--ok);
   }
 
   .lsp-dot.error {
-    background: var(--danger, #ef4444);
+    background: var(--danger);
   }
 
   .lsp-server-info {

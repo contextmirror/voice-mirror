@@ -62,8 +62,8 @@
   .rename-input input {
     padding: 4px 8px;
     font-size: 13px;
-    font-family: var(--font-mono, monospace);
-    background: var(--bg-elevated, #1e1e1e);
+    font-family: var(--font-mono);
+    background: var(--bg-elevated);
     color: var(--text);
     border: 2px solid var(--accent);
     border-radius: 4px;

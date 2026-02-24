@@ -109,7 +109,7 @@
     width: 14px;
     height: 14px;
     border-radius: 50%;
-    background: white;
+    background: var(--text-strong);
     position: absolute;
     top: 2px;
     left: 2px;

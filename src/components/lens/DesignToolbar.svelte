@@ -153,7 +153,7 @@
     gap: 4px;
     padding: 6px 8px;
     background: var(--bg-elevated);
-    border-bottom: 1px solid var(--muted);
+    border-bottom: 1px solid var(--border);
     -webkit-app-region: no-drag;
     z-index: 10001;
   }
@@ -266,7 +266,7 @@
   }
 
   .size-slider::-webkit-slider-thumb:hover {
-    background: color-mix(in srgb, var(--accent) 85%, white);
+    background: color-mix(in srgb, var(--accent) 85%, var(--text-strong));
   }
 
   .size-label {
