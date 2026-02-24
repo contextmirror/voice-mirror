@@ -496,8 +496,8 @@ mod tests {
         let resp = handle_tools_list(json!(1), &state);
         let result = resp.result.unwrap();
         let tools = result["tools"].as_array().unwrap();
-        // Default: core (4)
-        assert_eq!(tools.len(), 4);
+        // Default: core (4) + capture (2) = 6 always-loaded tools
+        assert_eq!(tools.len(), 6);
     }
 
     #[test]
@@ -512,17 +512,19 @@ mod tests {
     fn test_enabled_groups_loads_tools_at_startup() {
         // BUG-005 Fix 1: ENABLED_GROUPS should pre-load tool groups
         let mut registry = ToolRegistry::new();
-        // Default: only core (4 tools)
-        assert_eq!(registry.list_tools().len(), 4);
+        // Default: always-loaded groups = core (4) + capture (2) = 6
+        assert_eq!(registry.list_tools().len(), 6);
 
         // Apply enabled groups (simulating ENABLED_GROUPS env var)
+        // always_loaded groups (core, capture) are always included
         registry.apply_enabled_groups("core,memory");
         let tools = registry.list_tools();
 
-        // Should now have core (4) + memory (6) = 10
-        assert_eq!(tools.len(), 10);
+        // Should have core (4) + memory (6) + capture (2) = 12
+        assert_eq!(tools.len(), 12);
         let tool_names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
         assert!(tool_names.contains(&"memory_search"));
+        assert!(tool_names.contains(&"capture_window"));
     }
 
     #[test]
@@ -540,8 +542,8 @@ mod tests {
         let resp = handle_tools_list(json!(1), &state);
         let result = resp.result.unwrap();
         let tools = result["tools"].as_array().unwrap();
-        // core (4) + browser (16) = 20
-        assert!(tools.len() > 4, "Should have more than default 4 tools");
+        // core (4) + capture (2) + browser (16) = 22
+        assert!(tools.len() > 6, "Should have more than default 6 tools");
         let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
         assert!(names.contains(&"browser_start"));
     }

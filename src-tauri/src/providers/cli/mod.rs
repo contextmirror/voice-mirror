@@ -306,7 +306,7 @@ impl Provider for CliProvider {
                     profile.groups.join(",")
                 } else {
                     // Fallback to default voice-assistant profile
-                    "core,meta,screen,memory,browser".to_string()
+                    "core,meta,screen,memory,browser,capture".to_string()
                 }
             };
 

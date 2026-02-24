@@ -765,7 +765,7 @@ mod tests {
         #[test]
         fn test_whisper_stt_stub_creation() {
             let path = PathBuf::from("/tmp/models/ggml-base.en.bin");
-            let engine = WhisperStt::new(&path);
+            let engine = WhisperStt::new(&path, false);
             assert!(engine.is_ok());
 
             let engine = engine.unwrap();
@@ -776,7 +776,7 @@ mod tests {
         #[test]
         fn test_whisper_stt_stub_transcribe() {
             let path = PathBuf::from("/tmp/models/ggml-base.en.bin");
-            let engine = WhisperStt::new(&path).unwrap();
+            let engine = WhisperStt::new(&path, false).unwrap();
 
             // Generate 1 second of fake audio
             let audio = vec![0.1f32; 16000];
@@ -788,7 +788,7 @@ mod tests {
         #[test]
         fn test_whisper_stt_empty_audio() {
             let path = PathBuf::from("/tmp/models/ggml-base.en.bin");
-            let engine = WhisperStt::new(&path).unwrap();
+            let engine = WhisperStt::new(&path, false).unwrap();
 
             let result = engine.transcribe(&[]);
             assert!(result.is_ok());
@@ -798,7 +798,7 @@ mod tests {
         #[test]
         fn test_whisper_stt_short_audio() {
             let path = PathBuf::from("/tmp/models/ggml-base.en.bin");
-            let engine = WhisperStt::new(&path).unwrap();
+            let engine = WhisperStt::new(&path, false).unwrap();
 
             // Audio too short (< 100ms)
             let audio = vec![0.1f32; 100];
@@ -816,7 +816,7 @@ mod tests {
         #[test]
         fn test_stt_adapter_dispatch() {
             let data_dir = PathBuf::from("/tmp/voice-mirror-test");
-            let adapter = create_stt_engine("whisper-local", &data_dir, Some("base")).unwrap();
+            let adapter = create_stt_engine("whisper-local", &data_dir, Some("base"), false).unwrap();
             assert!(adapter.is_ready());
             assert!(adapter.name().contains("stub"));
         }

@@ -132,8 +132,15 @@ impl ToolRegistry {
     }
 
     /// Apply a tool profile (restrict which groups can be loaded).
+    /// Always includes `always_loaded` groups regardless of the profile.
     pub fn apply_profile(&mut self, profile: &ToolProfile) {
-        let allowed: HashSet<String> = profile.groups.iter().cloned().collect();
+        let mut allowed: HashSet<String> = profile.groups.iter().cloned().collect();
+        // Always include always_loaded groups (e.g., core, capture)
+        for (name, group) in &self.groups {
+            if group.always_loaded {
+                allowed.insert(name.clone());
+            }
+        }
         self.loaded = allowed.clone();
         self.allowed = Some(allowed);
         info!(
@@ -143,6 +150,7 @@ impl ToolRegistry {
     }
 
     /// Apply an enabled-groups string (comma-separated).
+    /// Always includes `always_loaded` groups regardless of the input string.
     pub fn apply_enabled_groups(&mut self, groups_str: &str) {
         let names: Vec<String> = groups_str
             .split(',')
@@ -154,7 +162,13 @@ impl ToolRegistry {
             return;
         }
 
-        let allowed: HashSet<String> = names.iter().cloned().collect();
+        let mut allowed: HashSet<String> = names.iter().cloned().collect();
+        // Always include always_loaded groups (e.g., core, capture)
+        for (name, group) in &self.groups {
+            if group.always_loaded {
+                allowed.insert(name.clone());
+            }
+        }
         self.loaded = allowed.clone();
         self.allowed = Some(allowed);
         info!(
@@ -733,8 +747,10 @@ mod tests {
     #[test]
     fn test_registry_new() {
         let reg = ToolRegistry::new();
-        // Core should be loaded by default
+        // Core should be loaded by default (always_loaded)
         assert!(reg.is_tool_loaded("voice_send"));
+        // Capture should be loaded by default (always_loaded)
+        assert!(reg.is_tool_loaded("capture_window"));
         // Memory should not be loaded by default
         assert!(!reg.is_tool_loaded("memory_search"));
     }
@@ -762,9 +778,12 @@ mod tests {
     }
 
     #[test]
-    fn test_cannot_unload_core() {
+    fn test_cannot_unload_always_loaded() {
         let mut reg = ToolRegistry::new();
         let result = reg.unload_group("core");
+        assert!(result.is_err());
+        // capture is also always_loaded
+        let result = reg.unload_group("capture");
         assert!(result.is_err());
     }
 
@@ -793,6 +812,8 @@ mod tests {
         });
         assert!(reg.is_tool_loaded("memory_search"));
         assert!(!reg.is_tool_loaded("browser_start"));
+        // always_loaded groups survive profile changes
+        assert!(reg.is_tool_loaded("capture_window"));
     }
 
     #[test]
