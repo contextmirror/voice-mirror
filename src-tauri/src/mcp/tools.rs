@@ -112,9 +112,13 @@ impl ToolRegistry {
         .map(|s| s.to_string())
         .collect();
 
-        // Default: load core
+        // Load all always_loaded groups at startup
         let mut loaded = HashSet::new();
-        loaded.insert("core".into());
+        for (name, group) in &groups {
+            if group.always_loaded {
+                loaded.insert(name.clone());
+            }
+        }
 
         Self {
             groups,
@@ -739,8 +743,8 @@ mod tests {
     fn test_list_tools_default() {
         let reg = ToolRegistry::new();
         let tools = reg.list_tools();
-        // Should have core (4) tools
-        assert_eq!(tools.len(), 4);
+        // Should have core (4) + capture (2) = 6 always-loaded tools
+        assert_eq!(tools.len(), 6);
     }
 
     #[test]
