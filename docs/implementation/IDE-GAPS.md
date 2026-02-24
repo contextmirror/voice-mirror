@@ -27,7 +27,7 @@ What's missing is everything that makes a "real IDE" feel seamless — the gaps 
 | Feature | VS Code | Zed | Voice Mirror | Gap |
 |---------|---------|-----|-------------|-----|
 | Editor (syntax, save) | Full | Full | Full | None |
-| LSP (diagnostics, hover, completion) | Full (29/29) | Full (26/29) | 11/29 features | See LSP table below |
+| LSP (diagnostics, hover, completion) | Full (29/29) | Full (26/29) | 12/29 features | See LSP table below |
 | Go-to-definition | Full | Full | Full | None |
 | Find references | Full | Full | Full | None |
 | Rename symbol | Full | Full | Full | None |
@@ -74,7 +74,7 @@ What's missing is everything that makes a "real IDE" feel seamless — the gaps 
 | Type hierarchy | Full | None | Full | None | Very low |
 | Workspace symbols (cross-project) | Full | Full (multi-server) | Full | None | Medium |
 | **Inline Assistance** | | | | | |
-| Signature help (parameter hints) | Full (auto on `(`) | Full | Full | None | Medium |
+| Signature help (parameter hints) | Full (auto on `(`) | Full | Full | Full (auto on `(` `,` + Ctrl+Shift+Space) | Done |
 | Inlay hints (inline types) | Full (resolve on hover) | Full (50-row chunking) | Full | None | Medium |
 | Code lens (inline annotations) | Full | Full (resolve + refresh) | Full | None | Low |
 | **Formatting & Editing** | | | | | |
@@ -97,17 +97,17 @@ What's missing is everything that makes a "real IDE" feel seamless — the gaps 
 
 | Category | VS Code | Zed | Cursor | Voice Mirror |
 |----------|---------|-----|--------|-------------|
-| **Features implemented** | 29/29 | 26/29 | 29/29 | 11/29 |
+| **Features implemented** | 29/29 | 26/29 | 29/29 | 12/29 |
 | **Core editing** | Complete | Complete | Complete | Complete |
 | **Navigation** | Complete | Near-complete | Complete | Tier 1 done |
-| **Inline assistance** | Complete | Complete | Complete | None |
+| **Inline assistance** | Complete | Complete | Complete | Signature help done |
 | **Formatting** | Complete | Complete | Complete | Document formatting done |
 | **Visual** | Complete | Complete | Complete | None |
 
 ### LSP Priorities for Voice Mirror
 
 **Worth doing (high value/effort ratio):**
-1. **Signature help** — Shows parameter info on `(`. Users expect this. Medium effort (new Rust handler + CM tooltip).
+1. ~~**Signature help** — Shows parameter info on `(`. Users expect this. Medium effort (new Rust handler + CM tooltip).~~ ✓ Done (auto on `(` `,` + Ctrl+Shift+Space)
 2. ~~**Document formatting** — Format on save / format selection. Users expect this. Medium effort.~~ ✓ Done (Shift+Alt+F + format-on-save)
 3. **Workspace symbols** — Cross-project symbol search. Feeds into Command Palette expansion.
 4. **Inlay hints** — Inline type annotations. Nice for TS/Rust. Medium effort (chunking optional).
@@ -331,4 +331,4 @@ The gap list above looks daunting, but Voice Mirror doesn't need to close every 
 4. **MCP tool ecosystem** — browser control, n8n workflows, memory system
 5. **AI-native terminal** — Claude Code is embedded, not a bolt-on extension
 
-The strategy: close the top gaps so Lens is **comfortable enough** for real coding, then double down on the voice+AI features no one else has. Done: ~~find/replace~~ ✓, ~~multi-cursor~~ ✓, ~~global search~~ ✓, ~~git stage+commit~~ ✓, ~~document formatting~~ ✓. Remaining: split editor, command palette expansion.
+The strategy: close the top gaps so Lens is **comfortable enough** for real coding, then double down on the voice+AI features no one else has. Done: ~~find/replace~~ ✓, ~~multi-cursor~~ ✓, ~~global search~~ ✓, ~~git stage+commit~~ ✓, ~~document formatting~~ ✓, ~~signature help~~ ✓. Remaining: split editor, command palette expansion.
