@@ -381,15 +381,20 @@ pub fn restart_voice(
 /// Runs `nvidia-smi` to check for NVIDIA GPUs and returns GPU name,
 /// VRAM, and driver version. Also reports whether the binary was
 /// compiled with CUDA support.
+///
+/// Falls back to `wmic` on Windows to detect AMD/Intel GPUs when
+/// nvidia-smi is not available. Non-NVIDIA GPUs are reported but
+/// marked as not CUDA-capable.
 #[tauri::command]
 pub fn detect_gpu() -> IpcResponse {
     let cuda_compiled = cfg!(feature = "cuda");
 
-    match std::process::Command::new("nvidia-smi")
+    // Try NVIDIA first via nvidia-smi
+    if let Ok(output) = std::process::Command::new("nvidia-smi")
         .args(["--query-gpu=name,memory.total,driver_version", "--format=csv,noheader"])
         .output()
     {
-        Ok(output) if output.status.success() => {
+        if output.status.success() {
             let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
             // Parse "NVIDIA GeForce RTX 5070 Ti, 16303 MiB, 581.80"
             let parts: Vec<&str> = text.split(", ").collect();
@@ -404,25 +409,112 @@ pub fn detect_gpu() -> IpcResponse {
                 vram_mb = ?vram_mb,
                 driver = %driver,
                 cuda_compiled = cuda_compiled,
-                "GPU detected"
+                "NVIDIA GPU detected"
             );
 
-            IpcResponse::ok(json!({
+            return IpcResponse::ok(json!({
                 "available": true,
+                "vendor": "nvidia",
                 "name": name,
                 "vramMb": vram_mb,
                 "driverVersion": driver,
                 "cudaCompiled": cuda_compiled,
-            }))
-        }
-        _ => {
-            tracing::info!(cuda_compiled = cuda_compiled, "No NVIDIA GPU detected");
-            IpcResponse::ok(json!({
-                "available": false,
-                "cudaCompiled": cuda_compiled,
-            }))
+            }));
         }
     }
+
+    // Fallback: detect non-NVIDIA GPUs via wmic (Windows) or lspci (Linux)
+    let fallback_gpu = detect_gpu_fallback();
+    if let Some((name, vendor)) = fallback_gpu {
+        tracing::info!(
+            gpu = %name,
+            vendor = %vendor,
+            "Non-NVIDIA GPU detected (CUDA not available)"
+        );
+        return IpcResponse::ok(json!({
+            "available": true,
+            "vendor": vendor,
+            "name": name,
+            "vramMb": null,
+            "driverVersion": null,
+            "cudaCompiled": cuda_compiled,
+        }));
+    }
+
+    tracing::info!(cuda_compiled = cuda_compiled, "No GPU detected");
+    IpcResponse::ok(json!({
+        "available": false,
+        "cudaCompiled": cuda_compiled,
+    }))
+}
+
+/// Detect non-NVIDIA GPUs via platform tools.
+/// Returns (name, vendor) if a discrete GPU is found.
+fn detect_gpu_fallback() -> Option<(String, String)> {
+    #[cfg(target_os = "windows")]
+    {
+        // wmic lists all video controllers including integrated graphics.
+        // We filter for discrete GPUs (AMD Radeon, Intel Arc) over generic
+        // "Microsoft Basic" or "Intel UHD" integrated adapters.
+        if let Ok(output) = std::process::Command::new("wmic")
+            .args(["path", "win32_VideoController", "get", "name"])
+            .output()
+        {
+            if output.status.success() {
+                let text = String::from_utf8_lossy(&output.stdout);
+                for line in text.lines() {
+                    let name = line.trim();
+                    if name.is_empty() || name == "Name" {
+                        continue;
+                    }
+                    let lower = name.to_lowercase();
+                    if lower.contains("radeon") && !lower.contains("integrated") {
+                        return Some((name.to_string(), "amd".to_string()));
+                    }
+                    if lower.contains("intel") && lower.contains("arc") {
+                        return Some((name.to_string(), "intel".to_string()));
+                    }
+                }
+                // Second pass: pick any non-generic adapter
+                for line in text.lines() {
+                    let name = line.trim();
+                    if name.is_empty() || name == "Name" {
+                        continue;
+                    }
+                    let lower = name.to_lowercase();
+                    if lower.contains("radeon") || lower.contains("arc") || lower.contains("geforce") {
+                        let vendor = if lower.contains("radeon") { "amd" }
+                            else if lower.contains("intel") { "intel" }
+                            else { "nvidia" };
+                        return Some((name.to_string(), vendor.to_string()));
+                    }
+                }
+            }
+        }
+    }
+    #[cfg(target_os = "linux")]
+    {
+        // lspci to detect GPU on Linux
+        if let Ok(output) = std::process::Command::new("lspci").output() {
+            if output.status.success() {
+                let text = String::from_utf8_lossy(&output.stdout);
+                for line in text.lines() {
+                    let lower = line.to_lowercase();
+                    if lower.contains("vga") || lower.contains("3d controller") {
+                        if lower.contains("amd") || lower.contains("radeon") {
+                            let name = line.split(": ").nth(1).unwrap_or(line).trim();
+                            return Some((name.to_string(), "amd".to_string()));
+                        }
+                        if lower.contains("intel") && lower.contains("arc") {
+                            let name = line.split(": ").nth(1).unwrap_or(line).trim();
+                            return Some((name.to_string(), "intel".to_string()));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    None
 }
 
 /// List installed Whisper STT models on disk.

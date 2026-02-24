@@ -434,17 +434,26 @@
         {#if gpuInfo?.available}
           <div class="gpu-info-banner">
             <span class="gpu-name">{gpuInfo.name}</span>
-            <span class="gpu-vram">{gpuInfo.vramMb} MB VRAM</span>
+            {#if gpuInfo.vramMb}
+              <span class="gpu-vram">{gpuInfo.vramMb} MB VRAM</span>
+            {/if}
+          </div>
+        {/if}
+        {#if gpuInfo?.available && gpuInfo?.vendor !== 'nvidia'}
+          <div class="gpu-warning">
+            {gpuInfo.name} detected — CUDA acceleration requires an NVIDIA GPU
           </div>
         {/if}
         <Toggle
           label="GPU Acceleration (CUDA)"
-          description={gpuInfo?.available
+          description={gpuInfo?.available && gpuInfo?.vendor === 'nvidia'
             ? `Use ${gpuInfo.name} for faster transcription`
-            : 'No compatible NVIDIA GPU detected'}
+            : gpuInfo?.available
+              ? 'CUDA requires an NVIDIA GPU'
+              : 'No GPU detected'}
           checked={sttUseGpu}
           onChange={(v) => (sttUseGpu = v)}
-          disabled={!gpuInfo?.available || !gpuInfo?.cudaCompiled}
+          disabled={!gpuInfo?.available || !gpuInfo?.cudaCompiled || gpuInfo?.vendor !== 'nvidia'}
         />
       {/if}
     </div>
@@ -574,6 +583,12 @@
 
   .gpu-vram {
     color: var(--muted);
+  }
+
+  .gpu-warning {
+    padding: 8px 12px;
+    font-size: 12px;
+    color: var(--warn);
   }
 
   .model-row {
