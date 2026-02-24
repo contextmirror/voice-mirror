@@ -112,18 +112,19 @@
     flex-shrink: 0;
     transition: all var(--duration-fast) var(--ease-out);
     position: relative;
+    margin-left: 2px;
   }
 
-  /* Active indicator pill — left edge, outside the button */
+  /* Active indicator pill — left edge of the strip */
   .project-avatar::before {
     content: '';
     position: absolute;
-    left: -6px;
+    left: -5px;
     top: 50%;
     transform: translateY(-50%);
     width: 3px;
     height: 0;
-    border-radius: 2px;
+    border-radius: 0 2px 2px 0;
     background: var(--accent);
     transition: height var(--duration-fast) var(--ease-out);
   }
@@ -148,6 +149,7 @@
   .project-add {
     width: 36px;
     height: 36px;
+    margin-left: 2px;
     border-radius: 10px;
     border: 1px dashed var(--muted);
     background: transparent;
