@@ -131,7 +131,16 @@
     dragOverIndex = -1;
 
     try {
-      const data = JSON.parse(e.dataTransfer.getData('text/plain'));
+      const raw = e.dataTransfer.getData('text/plain');
+      const data = JSON.parse(raw);
+
+      // File dropped from file tree → open in this group
+      if (data?.type === 'file-tree' && data.entry?.path) {
+        tabsStore.openFile(data.entry, groupId);
+        window.dispatchEvent(new CustomEvent('file-tree-drag-end'));
+        return;
+      }
+
       if (!data?.tabId) return;
 
       if (data.sourceGroupId === groupId) {
@@ -152,7 +161,7 @@
 </script>
 
 <div class="group-tab-bar" class:focused={isFocused}>
-  <!-- Browser: permanent fixed tab on far left -->
+  <!-- Browser: permanent fixed tab on far left (rendered in first group only) -->
   {#if onBrowserClick}
     <button class="browser-tab" class:active={showBrowser} onclick={onBrowserClick}>
       <svg class="tab-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

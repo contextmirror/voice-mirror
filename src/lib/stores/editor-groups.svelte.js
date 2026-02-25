@@ -226,6 +226,20 @@ function createEditorGroupsStore() {
         parent.ratio = Math.max(0.1, Math.min(0.9, ratio));
       }
     },
+
+    /**
+     * Swap the two children of the branch containing the given groupId.
+     * Used for "split left" / "split top" where the new content should appear first.
+     * @param {number} groupId - A groupId whose parent branch children should be swapped
+     */
+    swapChildren(groupId) {
+      const parent = findParentBranch(gridRoot, groupId);
+      if (parent && parent.children.length === 2) {
+        const temp = parent.children[0];
+        parent.children[0] = parent.children[1];
+        parent.children[1] = temp;
+      }
+    },
   };
 }
 

@@ -35,8 +35,22 @@
   let chatRatio = $state(0.18);       // chat vs center+right
   let previewRatio = $state(0.78);    // preview vs file tree
 
-  // Browser is a fixed UI element, not a tab
+  // Browser is a fixed UI element, not a tab — follows the first (leftmost) group
   let showBrowser = $state(false);
+  let firstGroupId = $derived(editorGroupsStore.allGroupIds[0]);
+
+  // Track file-tree drag state to suppress stop-sign cursor across the workspace
+  let fileTreeDragging = $state(false);
+  $effect(() => {
+    const onStart = () => { fileTreeDragging = true; };
+    const onEnd = () => { fileTreeDragging = false; };
+    window.addEventListener('file-tree-drag-start', onStart);
+    window.addEventListener('file-tree-drag-end', onEnd);
+    return () => {
+      window.removeEventListener('file-tree-drag-start', onStart);
+      window.removeEventListener('file-tree-drag-end', onEnd);
+    };
+  });
 
   // Derive active file info for FileTree highlighting
   let focusedGroupId = $derived(editorGroupsStore.focusedGroupId);
@@ -131,7 +145,7 @@
 
 {#snippet renderNode(node)}
   {#if node.type === 'leaf'}
-    <EditorPane groupId={node.groupId} showBrowser={node.groupId === 1 ? showBrowser : false} onBrowserClick={node.groupId === 1 ? () => { showBrowser = !showBrowser; } : null} />
+    <EditorPane groupId={node.groupId} showBrowser={node.groupId === firstGroupId ? showBrowser : false} onBrowserClick={node.groupId === firstGroupId ? () => { showBrowser = !showBrowser; } : null} />
   {:else}
     <SplitPanel direction={node.direction} bind:ratio={node.ratio} minA={150} minB={150}>
       {#snippet panelA()}
@@ -146,7 +160,7 @@
 
 
 
-<div class="lens-workspace">
+<div class="lens-workspace" ondragover={(e) => { if (fileTreeDragging) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; } }}>
   <div class="workspace-content">
     <!-- Vertical split: main panels (top) | terminal (bottom) -->
     <SplitPanel direction="vertical" bind:ratio={verticalRatio} minA={200} minB={80} collapseB={!layoutStore.showTerminal}>

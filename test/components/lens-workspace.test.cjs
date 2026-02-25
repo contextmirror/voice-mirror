@@ -246,10 +246,10 @@ describe('LensWorkspace.svelte', () => {
     assert.ok(src.includes('showBrowser'), 'Should have showBrowser local state');
   });
 
-  it('passes browser props to GroupTabBar', () => {
+  it('passes browser props to first group dynamically', () => {
     assert.ok(
-      src.includes('onBrowserClick') && src.includes('showBrowser'),
-      'Should pass browser toggle props to GroupTabBar'
+      src.includes('firstGroupId') && src.includes('onBrowserClick') && src.includes('showBrowser'),
+      'Should pass browser toggle props to the first (leftmost) group dynamically'
     );
   });
 

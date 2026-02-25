@@ -25,6 +25,26 @@
     onCreateSave = () => {},
     autofocus = () => {},
   } = $props();
+
+  function handleFileDragStart(e, entry) {
+    const data = { type: 'file-tree', entry: { name: entry.name, path: entry.path } };
+    e.dataTransfer.effectAllowed = 'all';
+    e.dataTransfer.setData('application/x-voice-mirror-file', JSON.stringify(data));
+    e.dataTransfer.setData('text/plain', JSON.stringify(data));
+
+    const ghost = document.createElement('div');
+    ghost.textContent = entry.name;
+    ghost.style.cssText = 'position:fixed;top:-100px;left:-100px;padding:4px 10px;background:var(--bg-elevated,#14161c);color:var(--text,#e4e4e7);font-size:12px;font-family:var(--font-mono,monospace);border:1px solid var(--accent,#56b4e9);border-radius:4px;white-space:nowrap;pointer-events:none;z-index:99999;opacity:0.9;';
+    document.body.appendChild(ghost);
+    e.dataTransfer.setDragImage(ghost, 0, 0);
+    requestAnimationFrame(() => document.body.removeChild(ghost));
+
+    window.dispatchEvent(new CustomEvent('file-tree-drag-start', { detail: data }));
+  }
+
+  function handleFileDragEnd() {
+    window.dispatchEvent(new CustomEvent('file-tree-drag-end'));
+  }
 </script>
 
 {#each entries as entry}
@@ -120,9 +140,12 @@
       <button
         class="tree-item file"
         style="padding-left: {8 + depth * 16 + 18}px"
+        draggable="true"
         onclick={() => onFileClick(entry)}
         ondblclick={() => onFileDblClick(entry)}
         oncontextmenu={(e) => onContextMenu(e, entry, false, false)}
+        ondragstart={(e) => handleFileDragStart(e, entry)}
+        ondragend={handleFileDragEnd}
       >
         <svg class="tree-icon"><use href="{spriteUrl}#{chooseIconName(entry.path, 'file')}" /></svg>
         <span class="tree-name" class:ignored={entry.ignored} class:has-error={fileDiag?.errors > 0} class:has-warning={fileDiag && fileDiag.errors === 0 && fileDiag.warnings > 0}>{entry.name}</span>

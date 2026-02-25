@@ -23,7 +23,8 @@
         "transparent": true,
         "shadow": false,
         "center": true,
-        "visible": false
+        "visible": false,
+        "dragDropEnabled": false
       }
     ],
     "withGlobalTauri": true,
