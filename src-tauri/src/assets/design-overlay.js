@@ -674,9 +674,14 @@
         sendBtn.addEventListener('click', function (e) {
             e.preventDefault();
             e.stopPropagation();
+            // Clean up UI but KEEP _selectedElement — the host reads it
+            // asynchronously via ExecuteScript after the lens-shortcut fires
+            _removeSelectTooltip();
+            _removeSelectActionBar();
+            _redrawAll();
+            _selectMode = false;
             // Notify Tauri host via lens-shortcut scheme (fire-and-forget)
             new Image().src = 'lens-shortcut://element-selected';
-            _cancelSelect();
         });
 
         var cancelBtn = document.createElement('button');
@@ -1140,7 +1145,9 @@
         },
 
         getSelectedElement: function () {
-            return _selectedElement;
+            var data = _selectedElement;
+            _selectedElement = null;  // Read-once: clear after retrieval
+            return data;
         }
     };
 })();

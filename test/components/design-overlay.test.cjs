@@ -592,9 +592,10 @@ describe('design-overlay.js: getSelectedElement API', () => {
     assert.ok(src.includes('getSelectedElement: function ()'), 'Should expose getSelectedElement');
   });
 
-  it('returns _selectedElement', () => {
+  it('returns selected element data and clears it (read-once)', () => {
     const fn = src.substring(src.indexOf('getSelectedElement: function'));
-    assert.ok(fn.includes('return _selectedElement'), 'Should return _selectedElement');
+    assert.ok(fn.includes('_selectedElement'), 'Should reference _selectedElement');
+    assert.ok(fn.includes('_selectedElement = null'), 'Should clear after read (read-once pattern)');
   });
 });
 
