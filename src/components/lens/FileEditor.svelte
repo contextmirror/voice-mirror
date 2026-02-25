@@ -489,12 +489,21 @@
         view.focus();
       } catch {}
     }
+
+    // Command events dispatched by the command registry
+    const handleCommandSave = () => save();
+    const handleCommandFormat = () => handleFormat();
+
     // Also listen to unscoped event for backwards compatibility
     window.addEventListener(eventName, handleGotoPosition);
     window.addEventListener('lens-goto-position', handleGotoPosition);
+    window.addEventListener('command:save', handleCommandSave);
+    window.addEventListener('command:format', handleCommandFormat);
     return () => {
       window.removeEventListener(eventName, handleGotoPosition);
       window.removeEventListener('lens-goto-position', handleGotoPosition);
+      window.removeEventListener('command:save', handleCommandSave);
+      window.removeEventListener('command:format', handleCommandFormat);
     };
   });
 

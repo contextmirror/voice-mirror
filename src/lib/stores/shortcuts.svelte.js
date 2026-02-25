@@ -132,6 +132,21 @@ export const IN_APP_SHORTCUTS = {
     label: 'Toggle maximize editor group',
     category: 'in-app',
   },
+  'go-to-file': {
+    keys: 'Ctrl+P',
+    label: 'Go to file',
+    category: 'in-app',
+  },
+  'go-to-line': {
+    keys: 'Ctrl+G',
+    label: 'Go to line',
+    category: 'in-app',
+  },
+  'go-to-symbol': {
+    keys: 'Ctrl+Shift+O',
+    label: 'Go to symbol in editor',
+    category: 'in-app',
+  },
 };
 
 // ============ Action Handlers ============
@@ -473,6 +488,27 @@ export function setupInAppShortcuts() {
     if (ctrl && event.shiftKey && event.key === 'F') {
       event.preventDefault();
       actionHandlers['open-text-search']?.();
+      return;
+    }
+
+    // Ctrl+P -> Go to file (before input guard so it works from anywhere)
+    if (ctrl && event.key === 'p' && !event.shiftKey) {
+      event.preventDefault();
+      actionHandlers['go-to-file']?.();
+      return;
+    }
+
+    // Ctrl+G -> Go to line
+    if (ctrl && event.key === 'g') {
+      event.preventDefault();
+      actionHandlers['go-to-line']?.();
+      return;
+    }
+
+    // Ctrl+Shift+O -> Go to symbol (in-app takes priority over global toggle-overlay)
+    if (ctrl && event.shiftKey && event.key === 'O') {
+      event.preventDefault();
+      actionHandlers['go-to-symbol']?.();
       return;
     }
 

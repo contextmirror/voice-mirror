@@ -95,8 +95,9 @@
   // ---- Stats dashboard visibility ----
   let statsVisible = $state(false);
 
-  // ---- Command palette visibility ----
+  // ---- Command palette visibility + mode ----
   let commandPaletteVisible = $state(false);
+  let commandPaletteMode = $state('files');
 
   // ---- Voice activation handlers (shared by keyboard shortcuts + mouse buttons) ----
 
@@ -176,7 +177,10 @@
       setActionHandler('toggle-voice', handleVoicePress);
       setReleaseHandler('toggle-voice', handleVoiceRelease);
       setActionHandler('stats-dashboard', () => { statsVisible = !statsVisible; });
-      setActionHandler('open-file-search', () => { commandPaletteVisible = true; });
+      setActionHandler('open-file-search', () => { commandPaletteMode = 'commands'; commandPaletteVisible = true; });
+      setActionHandler('go-to-file', () => { commandPaletteMode = 'files'; commandPaletteVisible = true; });
+      setActionHandler('go-to-line', () => { commandPaletteMode = 'goto-line'; commandPaletteVisible = true; });
+      setActionHandler('go-to-symbol', () => { commandPaletteMode = 'goto-symbol'; commandPaletteVisible = true; });
       setActionHandler('open-text-search', () => {
         navigationStore.setMode('lens');
         if (!layoutStore.showFileTree) layoutStore.toggleFileTree();
@@ -210,7 +214,7 @@
     let unlistenFn;
     listen('lens-shortcut', (event) => {
       const key = event.payload?.key;
-      if (key === 'F1') { commandPaletteVisible = true; }
+      if (key === 'F1') { commandPaletteMode = 'commands'; commandPaletteVisible = true; }
       else if (key === ',') { navigationStore.setView('settings'); }
     }).then(fn => { unlistenFn = fn; });
     return () => { unlistenFn?.(); };
@@ -377,7 +381,7 @@
         </div>
         <div class="titlebar-search-trigger">
           <!-- svelte-ignore a11y_no_static_element_interactions -->
-          <div class="titlebar-search-box" onclick={() => { commandPaletteVisible = true; }}>
+          <div class="titlebar-search-box" onclick={() => { commandPaletteMode = 'files'; commandPaletteVisible = true; }}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <span>Search Voice Mirror</span>
             <kbd>F1</kbd>
@@ -452,7 +456,7 @@
 {/if}
 
 <StatsBar bind:visible={statsVisible} />
-<CommandPalette bind:visible={commandPaletteVisible} onClose={() => { commandPaletteVisible = false; }} />
+<CommandPalette bind:visible={commandPaletteVisible} initialMode={commandPaletteMode} onClose={() => { commandPaletteVisible = false; }} />
 <ToastContainer />
 
 <style>
