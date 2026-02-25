@@ -519,7 +519,8 @@
   .dropdown-header {
     display: flex;
     align-items: center;
-    padding: 6px 12px;
+    height: 36px;
+    padding: 0 12px;
     border-bottom: 1px solid var(--border);
     background: var(--bg);
     gap: 4px;

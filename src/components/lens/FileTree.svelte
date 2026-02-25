@@ -606,7 +606,9 @@
 
   .files-header {
     display: flex;
+    align-items: center;
     gap: 0;
+    height: 36px;
     padding: 0 8px;
     border-bottom: 1px solid var(--border);
     flex-shrink: 0;
