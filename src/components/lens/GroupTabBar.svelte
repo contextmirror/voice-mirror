@@ -1,6 +1,8 @@
 <script>
   import { tabsStore } from '../../lib/stores/tabs.svelte.js';
   import { editorGroupsStore } from '../../lib/stores/editor-groups.svelte.js';
+  import { projectStore } from '../../lib/stores/project.svelte.js';
+  import { renameEntry } from '../../lib/api.js';
   import TabContextMenu from './TabContextMenu.svelte';
 
   let { groupId = 1, onBrowserClick = null, showBrowser = false } = $props();
@@ -8,6 +10,8 @@
   let tabMenu = $state({ visible: false, x: 0, y: 0, tab: null });
   let splitMenu = $state({ visible: false, x: 0, y: 0 });
   let dragOverIndex = $state(-1);
+  let renamingTabId = $state(null);
+  let renameValue = $state('');
 
   let groupTabs = $derived(tabsStore.getTabsForGroup ? tabsStore.getTabsForGroup(groupId) : tabsStore.tabs.filter(t => (t.groupId || 1) === groupId));
   let activeTabId = $derived(editorGroupsStore.groups.get(groupId)?.activeTabId);
@@ -24,22 +28,6 @@
     editorGroupsStore.setFocusedGroup(groupId);
     // Clicking a file tab should dismiss the browser overlay
     if (onBrowserClick && showBrowser) onBrowserClick();
-  }
-
-  async function handleAddFile() {
-    try {
-      const { open } = await import('@tauri-apps/plugin-dialog');
-      const selected = await open({ multiple: true, title: 'Open File' });
-      if (!selected) return;
-      const files = Array.isArray(selected) ? selected : [selected];
-      for (const filePath of files) {
-        const name = filePath.split(/[/\\]/).pop() || filePath;
-        tabsStore.openFile({ name, path: filePath }, groupId);
-        tabsStore.pinTab(filePath);
-      }
-    } catch (err) {
-      console.error('[GroupTabBar] File picker failed:', err);
-    }
   }
 
   function doSplit(direction) {
@@ -62,6 +50,41 @@
 
   function closeSplitMenu() {
     splitMenu = { visible: false, x: 0, y: 0 };
+  }
+
+  function startRename(tab) {
+    renamingTabId = tab.id;
+    renameValue = tab.title;
+  }
+
+  async function commitRename(tab) {
+    const newName = renameValue.trim();
+    renamingTabId = null;
+    if (!newName || newName === tab.title) return;
+
+    const isUntitled = tab.path?.startsWith('untitled:');
+    if (isUntitled) {
+      // For untitled files, just update the title
+      tabsStore.updateTitle(tab.id, newName);
+    } else {
+      // For real files, rename on disk
+      const root = projectStore.activeProject?.path || null;
+      const dir = tab.path.substring(0, tab.path.lastIndexOf('/') + 1) || tab.path.substring(0, tab.path.lastIndexOf('\\') + 1);
+      const newPath = dir + newName;
+      try {
+        await renameEntry(tab.path, newPath, root);
+        // Update tab path and title
+        tabsStore.updateTitle(tab.id, newName);
+        // Note: The tab's ID is path-based, so we'd need to reopen.
+        // For now, update title visually. File watcher will catch the rest.
+      } catch (err) {
+        console.error('[GroupTabBar] Rename failed:', err);
+      }
+    }
+  }
+
+  function cancelRename() {
+    renamingTabId = null;
   }
 
   function handleCloseSplit() {
@@ -171,7 +194,24 @@
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
           {/if}
         </svg>
-        <span class="tab-title">{tab.title}</span>
+        {#if renamingTabId === tab.id}
+          <!-- svelte-ignore a11y_autofocus -->
+          <input
+            class="tab-rename-input"
+            type="text"
+            bind:value={renameValue}
+            autofocus
+            onclick={(e) => e.stopPropagation()}
+            onkeydown={(e) => {
+              if (e.key === 'Enter') commitRename(tab);
+              else if (e.key === 'Escape') cancelRename();
+              e.stopPropagation();
+            }}
+            onblur={() => commitRename(tab)}
+          />
+        {:else}
+          <span class="tab-title">{tab.title}</span>
+        {/if}
         {#if tab.readOnly}
           <svg class="tab-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10" aria-label="Read-only">
             <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
@@ -205,19 +245,16 @@
       </div>
     {/each}
 
-    <!-- Drop zone at end of tab list -->
+    <!-- Drop zone / empty area: double-click creates untitled file -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
-      class="tab-drop-end"
+      class="tab-empty-area"
       class:drag-over-left={dragOverIndex === groupTabs.length}
       ondragover={(e) => handleDragOver(e, groupTabs.length)}
       ondragleave={handleDragLeave}
       ondrop={(e) => handleDrop(e, groupTabs.length)}
+      ondblclick={() => tabsStore.createUntitled(groupId)}
     ></div>
-
-    <button class="tab-add" onclick={handleAddFile} aria-label="Open file" title="Open file">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-    </button>
   </div>
 
   <!-- Right-side action buttons (VS Code style) -->
@@ -245,6 +282,7 @@
   tab={tabMenu.tab}
   visible={tabMenu.visible}
   onClose={() => { tabMenu.visible = false; }}
+  onRename={(tab) => startRename(tab)}
 />
 
 <!-- Split editor context menu -->
@@ -428,7 +466,7 @@
 
   /* Drag indicator: thin vertical line on left edge */
   .tab.drag-over-left::before,
-  .tab-drop-end.drag-over-left::before {
+  .tab-empty-area.drag-over-left::before {
     content: '';
     position: absolute;
     left: -1px;
@@ -440,11 +478,12 @@
     z-index: 1;
   }
 
-  .tab-drop-end {
+  .tab-empty-area {
     position: relative;
-    width: 4px;
-    height: 26px;
-    flex-shrink: 0;
+    flex: 1;
+    min-width: 20px;
+    height: 100%;
+    cursor: default;
   }
 
   .tab-icon {
@@ -507,25 +546,17 @@
     color: var(--danger);
   }
 
-  .tab-add {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 24px;
-    height: 24px;
-    border: none;
-    border-radius: 6px;
-    background: transparent;
-    color: var(--muted);
-    cursor: pointer;
-    flex-shrink: 0;
-    margin-left: 2px;
-    transition: background 0.12s ease, color 0.12s ease;
-  }
-
-  .tab-add:hover {
-    background: color-mix(in srgb, var(--text) 8%, transparent);
-    color: var(--text);
+  .tab-rename-input {
+    width: 100px;
+    height: 18px;
+    padding: 0 4px;
+    border: 1px solid var(--accent);
+    border-radius: 3px;
+    background: var(--bg);
+    color: var(--text-strong);
+    font-size: 12px;
+    font-family: var(--font-family);
+    outline: none;
   }
 
   .tab-lock {

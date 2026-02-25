@@ -103,6 +103,13 @@
 
   async function save() {
     if (!view) return;
+
+    // Untitled files can't be saved without a real path
+    if (tab.path?.startsWith('untitled:')) {
+      console.warn('[FileEditor] Cannot save untitled file — use Save As');
+      return;
+    }
+
     try {
       const root = projectStore.activeProject?.path || null;
 
@@ -170,35 +177,43 @@
     // Check if this is an external (read-only) file
     const isExternal = tab?.external || false;
     const isReadOnly = tab?.readOnly || false;
+    const isUntitled = filePath.startsWith('untitled:');
 
     try {
       const cm = await loadCM();
-      const root = projectStore.activeProject?.path || null;
-      const result = isExternal
-        ? await readExternalFile(filePath)
-        : await readFile(filePath, root);
-      const data = result?.data || result;
 
-      // Check if tab changed while loading
-      if (filePath !== currentPath) return;
+      let data;
+      if (isUntitled) {
+        // Untitled files start with empty content, no disk read
+        data = { content: '' };
+      } else {
+        const root = projectStore.activeProject?.path || null;
+        const result = isExternal
+          ? await readExternalFile(filePath)
+          : await readFile(filePath, root);
+        data = result?.data || result;
 
-      if (!result?.success || result?.error) {
-        error = result?.error || 'Failed to read file';
-        loading = false;
-        return;
-      }
+        // Check if tab changed while loading
+        if (filePath !== currentPath) return;
 
-      if (data?.binary) {
-        isBinary = true;
-        fileSize = data.size || 0;
-        loading = false;
-        return;
-      }
+        if (!result?.success || result?.error) {
+          error = result?.error || 'Failed to read file';
+          loading = false;
+          return;
+        }
 
-      if (data?.content == null) {
-        error = 'Failed to read file';
-        loading = false;
-        return;
+        if (data?.binary) {
+          isBinary = true;
+          fileSize = data.size || 0;
+          loading = false;
+          return;
+        }
+
+        if (data?.content == null) {
+          error = 'Failed to read file';
+          loading = false;
+          return;
+        }
       }
 
       // Store content for markdown preview

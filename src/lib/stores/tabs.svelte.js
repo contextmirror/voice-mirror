@@ -13,6 +13,7 @@ function createTabsStore() {
   let tabs = $state([]);
   // activeTabId tracks the active tab in group 1 for backwards compatibility
   let activeTabId = $state(null);
+  let untitledCounter = 0;
 
   return {
     get tabs() { return tabs; },
@@ -81,6 +82,35 @@ function createTabsStore() {
       activeTabId = tabId;
       editorGroupsStore.setActiveTabForGroup(groupId, tabId);
       editorGroupsStore.setFocusedGroup(groupId);
+    },
+
+    /**
+     * Create a new untitled file tab (like VS Code's Ctrl+N).
+     * @param {number} [targetGroupId] - Group to open in (defaults to focused group)
+     * @returns {string} The new tab's ID
+     */
+    createUntitled(targetGroupId) {
+      const groupId = targetGroupId ?? editorGroupsStore.focusedGroupId;
+      untitledCounter += 1;
+      const name = `Untitled-${untitledCounter}`;
+      const path = `untitled:${untitledCounter}`;
+      const tabId = groupId === 1 ? path : `${path}:g${groupId}`;
+
+      const newTab = {
+        id: tabId,
+        type: 'file',
+        title: name,
+        path,
+        groupId,
+        preview: false, // Untitled files are always pinned
+        dirty: false,
+      };
+
+      tabs.push(newTab);
+      activeTabId = tabId;
+      editorGroupsStore.setActiveTabForGroup(groupId, tabId);
+      editorGroupsStore.setFocusedGroup(groupId);
+      return tabId;
     },
 
     /**

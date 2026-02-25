@@ -17,6 +17,7 @@
     tab = null,
     visible = false,
     onClose = () => {},
+    onRename = () => {},
   } = $props();
 
   let menuEl = $state(null);
@@ -105,6 +106,11 @@
     }
   }
 
+  function handleRename() {
+    close();
+    if (tab) onRename(tab);
+  }
+
   // ── Split-editor actions ──
 
   function handleSplitRight() {
@@ -159,6 +165,12 @@
     </button>
     <button class="context-item" onclick={handleCloseAll} role="menuitem">
       Close All
+    </button>
+
+    <div class="context-separator"></div>
+    <button class="context-item" onclick={handleRename} role="menuitem">
+      Rename
+      <span class="context-shortcut">F2</span>
     </button>
 
     <div class="context-separator"></div>
