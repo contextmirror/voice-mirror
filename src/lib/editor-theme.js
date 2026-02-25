@@ -94,6 +94,18 @@ const editorTheme = EditorView.theme({
       color: 'var(--cm-foreground)',
     },
   },
+  // ── Minimap ──
+  '.cm-minimap': {
+    backgroundColor: 'var(--cm-background)',
+  },
+  '.cm-minimap-container': {
+    borderLeft: '1px solid var(--cm-gutter-bg, var(--border))',
+  },
+  '.cm-minimap .cm-minimap-overlay': {
+    background: 'var(--cm-selection)',
+    borderTop: '1px solid var(--cm-accent, var(--accent))',
+    borderBottom: '1px solid var(--cm-accent, var(--accent))',
+  },
 }, { dark: true });
 
 // ── Syntax highlighting ──

@@ -4,6 +4,7 @@
  * Pure function module (no Svelte runes, no store imports). All dependencies
  * are passed in via parameters so FileEditor.svelte retains control of state.
  */
+import { showMinimap } from '@replit/codemirror-minimap';
 
 /**
  * Build the full CodeMirror extensions array for the file editor.
@@ -94,6 +95,21 @@ export function buildEditorExtensions(cm, lsp, options) {
       }},
     ]),
   ];
+
+  // Minimap — VS Code-style code overview on the right
+  extensions.push(
+    showMinimap.compute(['doc'], () => {
+      return {
+        create: () => {
+          const dom = document.createElement('div');
+          dom.className = 'cm-minimap-container';
+          return { dom };
+        },
+        displayText: 'blocks',
+        showOverlay: 'always',
+      };
+    })
+  );
 
   // Add hover tooltip and LSP keybindings
   if (lsp.hasLsp) {

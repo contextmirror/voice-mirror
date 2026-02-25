@@ -89,6 +89,29 @@ describe('FileEditor.svelte: editor extensions extraction', () => {
   });
 });
 
+describe('editor-extensions.js: CodeMirror minimap', () => {
+  it('imports showMinimap from @replit/codemirror-minimap', () => {
+    assert.ok(extSrc.includes("import { showMinimap }"), 'Should import showMinimap');
+    assert.ok(extSrc.includes('@replit/codemirror-minimap'), 'Should import from @replit/codemirror-minimap');
+  });
+
+  it('adds showMinimap.compute to extensions', () => {
+    assert.ok(extSrc.includes('showMinimap.compute'), 'Should call showMinimap.compute');
+  });
+
+  it('uses blocks display mode', () => {
+    assert.ok(extSrc.includes("displayText: 'blocks'"), 'Should use blocks display text');
+  });
+
+  it('shows overlay always', () => {
+    assert.ok(extSrc.includes("showOverlay: 'always'"), 'Should show overlay always');
+  });
+
+  it('creates container with cm-minimap-container class', () => {
+    assert.ok(extSrc.includes('cm-minimap-container'), 'Should create container with minimap class');
+  });
+});
+
 describe('FileEditor.svelte: CodeMirror integration', () => {
   it('dynamically imports codemirror', () => {
     assert.ok(
