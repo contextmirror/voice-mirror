@@ -24,14 +24,21 @@
 
   // ---- App Menu ----
   let appMenuOpen = $state(false);
+  let activeMenuId = $state(null);
+  let submenuLeft = $state(0);
+
+  /** Refs for menu bar buttons (for submenu positioning) */
+  let menuBtnEls = $state({});
 
   function toggleAppMenu(e) {
     e.stopPropagation();
     appMenuOpen = !appMenuOpen;
+    if (!appMenuOpen) activeMenuId = null;
   }
 
   function closeAppMenu() {
     appMenuOpen = false;
+    activeMenuId = null;
   }
 
   async function handleOpenProject() {
@@ -53,7 +60,6 @@
       ]
     });
     if (selected) {
-      // Opening a file switches to Lens mode and opens it in the editor
       navigationStore.setMode('lens');
       window.dispatchEvent(new CustomEvent('lens-open-file', { detail: { path: selected } }));
     }
@@ -66,6 +72,102 @@
 
   function handleAppMenuKeydown(e) {
     if (e.key === 'Escape') closeAppMenu();
+  }
+
+  // ---- Menu Bar ----
+
+  const menuBarItems = [
+    { id: 'file', label: 'File' },
+    { id: 'edit', label: 'Edit' },
+    { id: 'selection', label: 'Selection' },
+    { id: 'view', label: 'View' },
+    { id: 'go', label: 'Go' },
+    { id: 'run', label: 'Run' },
+    { id: 'terminal', label: 'Terminal' },
+    { id: 'help', label: 'Help' },
+  ];
+
+  const menuDefinitions = {
+    file: [
+      { label: 'Open File', kbd: 'Ctrl+O', action: handleOpenFile },
+      { label: 'Open Project', action: handleOpenProject },
+      { separator: true },
+      { label: 'Settings', kbd: 'Ctrl+,', action: handleSettings },
+    ],
+    edit: [
+      { label: 'Undo', kbd: 'Ctrl+Z' },
+      { label: 'Redo', kbd: 'Ctrl+Shift+Z' },
+      { separator: true },
+      { label: 'Cut', kbd: 'Ctrl+X' },
+      { label: 'Copy', kbd: 'Ctrl+C' },
+      { label: 'Paste', kbd: 'Ctrl+V' },
+      { separator: true },
+      { label: 'Find', kbd: 'Ctrl+F' },
+    ],
+    selection: [
+      { label: 'Select All', kbd: 'Ctrl+A' },
+      { label: 'Expand Selection' },
+      { label: 'Shrink Selection' },
+    ],
+    view: [
+      { label: 'Command Palette', kbd: 'Ctrl+P' },
+      { separator: true },
+      { label: 'Sidebar' },
+      { label: 'Terminal' },
+      { label: 'File Tree' },
+    ],
+    go: [
+      { label: 'Go to File', kbd: 'Ctrl+P' },
+      { label: 'Go to Symbol' },
+      { label: 'Go to Line', kbd: 'Ctrl+G' },
+    ],
+    run: [
+      { label: 'Start' },
+      { label: 'Stop' },
+      { label: 'Restart' },
+    ],
+    terminal: [
+      { label: 'New Terminal' },
+      { label: 'Split Terminal' },
+      { separator: true },
+      { label: 'Clear Terminal' },
+    ],
+    help: [
+      { label: 'Documentation' },
+      { label: 'Keyboard Shortcuts' },
+      { separator: true },
+      { label: 'About Voice Mirror' },
+    ],
+  };
+
+  function toggleSubmenu(id) {
+    if (activeMenuId === id) {
+      activeMenuId = null;
+    } else {
+      activeMenuId = id;
+      updateSubmenuPosition(id);
+    }
+  }
+
+  function handleMenuHover(id) {
+    if (activeMenuId) {
+      activeMenuId = id;
+      updateSubmenuPosition(id);
+    }
+  }
+
+  function updateSubmenuPosition(id) {
+    const el = menuBtnEls[id];
+    if (el) {
+      const rect = el.getBoundingClientRect();
+      submenuLeft = rect.left;
+    }
+  }
+
+  function handleSubmenuAction(item) {
+    if (item.action) {
+      item.action();
+    }
   }
 </script>
 
@@ -88,29 +190,26 @@
           <circle cx="12" cy="12" r="1"/>
         </svg>
       </button>
-
-      {#if appMenuOpen}
-        <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div class="app-menu-dropdown" role="menu" onclick={(e) => e.stopPropagation()}>
-          <button class="app-menu-item" onclick={handleOpenFile} role="menuitem">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
-            <span>Open File</span>
-            <kbd>Ctrl+O</kbd>
-          </button>
-          <button class="app-menu-item" onclick={handleOpenProject} role="menuitem">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-            <span>Open Project</span>
-          </button>
-          <div class="app-menu-separator"></div>
-          <button class="app-menu-item" onclick={handleSettings} role="menuitem">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-            <span>Settings</span>
-            <kbd>Ctrl+,</kbd>
-          </button>
-        </div>
-      {/if}
     </div>
-    <div class="mode-toggle" role="radiogroup" aria-label="App mode">
+
+    {#if appMenuOpen}
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <nav class="menu-bar" onclick={(e) => e.stopPropagation()}>
+        {#each menuBarItems as item}
+          <button
+            class="menu-bar-item"
+            class:active={activeMenuId === item.id}
+            bind:this={menuBtnEls[item.id]}
+            onclick={() => toggleSubmenu(item.id)}
+            onmouseenter={() => handleMenuHover(item.id)}
+          >
+            {item.label}
+          </button>
+        {/each}
+      </nav>
+    {/if}
+
+    <div class="mode-toggle" class:menu-open={appMenuOpen} role="radiogroup" aria-label="App mode">
       <button
         class="mode-btn"
         class:active={appMode === 'mirror'}
@@ -154,6 +253,29 @@
   </div>
 </header>
 
+<!-- Submenu dropdown (positioned absolutely under active menu bar item) -->
+{#if appMenuOpen && activeMenuId && menuDefinitions[activeMenuId]}
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="submenu-dropdown" style="left: {submenuLeft}px;" role="menu" onclick={(e) => e.stopPropagation()}>
+    {#each menuDefinitions[activeMenuId] as item}
+      {#if item.separator}
+        <div class="app-menu-separator"></div>
+      {:else}
+        <button
+          class="submenu-item"
+          class:disabled={!item.action}
+          onclick={() => handleSubmenuAction(item)}
+          disabled={!item.action}
+          role="menuitem"
+        >
+          <span>{item.label}</span>
+          {#if item.kbd}<kbd>{item.kbd}</kbd>{/if}
+        </button>
+      {/if}
+    {/each}
+  </div>
+{/if}
+
 <style>
   /* ========== Title Bar ========== */
   .titlebar {
@@ -167,14 +289,13 @@
     background: var(--chrome, var(--bg-elevated));
     border-bottom: 1px solid var(--border);
     user-select: none;
-    /* data-tauri-drag-region handles the actual drag */
   }
 
   .titlebar-left {
     display: flex;
     align-items: center;
     gap: 10px;
-    pointer-events: none; /* Allow drag-through to titlebar */
+    pointer-events: none;
   }
 
   /* ========== App Menu Button ========== */
@@ -211,75 +332,43 @@
     background: var(--accent-subtle, rgba(99, 102, 241, 0.15));
   }
 
-  /* ========== App Menu Dropdown ========== */
-  .app-menu-dropdown {
-    position: absolute;
-    top: calc(100% + 6px);
-    left: 0;
-    min-width: 220px;
-    background: var(--bg-elevated);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-md, 6px);
-    padding: 4px 0;
-    box-shadow: var(--shadow-md, 0 8px 24px rgba(0, 0, 0, 0.3));
-    z-index: 10002;
-    animation: app-menu-in 0.12s var(--ease-out);
-  }
-
-  @keyframes app-menu-in {
-    from { opacity: 0; transform: translateY(-4px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-
-  .app-menu-item {
+  /* ========== Horizontal Menu Bar ========== */
+  .menu-bar {
     display: flex;
     align-items: center;
-    gap: 10px;
-    width: 100%;
-    padding: 8px 14px;
+    gap: 0;
+    pointer-events: auto;
+    -webkit-app-region: no-drag;
+    z-index: 10001;
+    animation: menu-bar-in 0.15s var(--ease-out);
+  }
+
+  @keyframes menu-bar-in {
+    from { opacity: 0; transform: translateX(-8px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  .menu-bar-item {
+    padding: 4px 8px;
     background: none;
     border: none;
-    color: var(--text);
-    font-size: 13px;
+    color: var(--muted);
+    font-size: 12px;
     font-family: var(--font-family);
     cursor: pointer;
-    text-align: left;
+    border-radius: var(--radius-sm);
+    transition: background var(--duration-fast) var(--ease-out),
+                color var(--duration-fast) var(--ease-out);
     white-space: nowrap;
-    transition: background var(--duration-fast) var(--ease-out);
   }
 
-  .app-menu-item:hover {
+  .menu-bar-item:hover,
+  .menu-bar-item.active {
     background: var(--bg-hover);
-  }
-
-  .app-menu-item svg {
-    width: 15px;
-    height: 15px;
-    flex-shrink: 0;
-    color: var(--muted);
-  }
-
-  .app-menu-item:hover svg {
     color: var(--text);
   }
 
-  .app-menu-item span {
-    flex: 1;
-  }
-
-  .app-menu-item kbd {
-    font-size: 11px;
-    color: var(--muted);
-    font-family: var(--font-mono);
-    opacity: 0.6;
-  }
-
-  .app-menu-separator {
-    height: 1px;
-    background: var(--border);
-    margin: 4px 8px;
-  }
-
+  /* ========== Mode Toggle ========== */
   .mode-toggle {
     display: flex;
     align-items: center;
@@ -290,6 +379,11 @@
     pointer-events: auto;
     -webkit-app-region: no-drag;
     z-index: 10001;
+    transition: margin-left var(--duration-normal, 200ms) var(--ease-out);
+  }
+
+  .mode-toggle.menu-open {
+    margin-left: 4px;
   }
 
   .mode-btn {
@@ -326,6 +420,69 @@
     gap: 16px;
     pointer-events: auto;
     -webkit-app-region: no-drag;
+  }
+
+  /* ========== Submenu Dropdown ========== */
+  .submenu-dropdown {
+    position: fixed;
+    top: 40px;
+    min-width: 200px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md, 6px);
+    padding: 4px 0;
+    box-shadow: var(--shadow-md, 0 8px 24px rgba(0, 0, 0, 0.3));
+    z-index: 10002;
+    animation: submenu-in 0.1s var(--ease-out);
+    -webkit-app-region: no-drag;
+  }
+
+  @keyframes submenu-in {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .submenu-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 6px 14px;
+    background: none;
+    border: none;
+    color: var(--text);
+    font-size: 13px;
+    font-family: var(--font-family);
+    cursor: pointer;
+    text-align: left;
+    white-space: nowrap;
+    transition: background var(--duration-fast) var(--ease-out);
+  }
+
+  .submenu-item:hover:not(.disabled) {
+    background: var(--bg-hover);
+  }
+
+  .submenu-item.disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+
+  .submenu-item span {
+    flex: 1;
+  }
+
+  .submenu-item kbd {
+    font-size: 11px;
+    color: var(--muted);
+    font-family: var(--font-mono);
+    opacity: 0.6;
+  }
+
+  .app-menu-separator {
+    height: 1px;
+    background: var(--border);
+    margin: 4px 8px;
   }
 
   /* ========== Window Control Buttons ========== */
@@ -368,19 +525,16 @@
     color: var(--accent);
   }
 
-  /* Spacer before native controls */
   .native-controls-spacer {
     width: 4px;
   }
 
-  /* Container for decorum-injected native buttons */
   .decorum-controls {
     display: flex;
     flex-direction: row;
     -webkit-app-region: no-drag;
   }
 
-  /* Style the native decorum buttons to match our titlebar height and theme */
   :global(button.decorum-tb-btn),
   :global(button#decorum-tb-minimize),
   :global(button#decorum-tb-maximize),
@@ -406,18 +560,17 @@
     background: var(--danger, #ef4444) !important;
   }
 
-  /* Ensure decorum SVG icons inherit the button color */
   :global(button.decorum-tb-btn svg) {
     color: inherit !important;
     fill: currentColor !important;
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .win-btn {
+    .win-btn, .mode-btn, .menu-bar-item, .mode-toggle {
       transition: none;
     }
-    .mode-btn {
-      transition: none;
+    .menu-bar, .submenu-dropdown {
+      animation: none;
     }
   }
 </style>
