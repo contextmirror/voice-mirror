@@ -181,13 +181,13 @@
 
     try {
       const cm = await loadCM();
+      const root = projectStore.activeProject?.path || null;
 
       let data;
       if (isUntitled) {
         // Untitled files start with empty content, no disk read
         data = { content: '' };
       } else {
-        const root = projectStore.activeProject?.path || null;
         const result = isExternal
           ? await readExternalFile(filePath)
           : await readFile(filePath, root);
