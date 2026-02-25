@@ -616,13 +616,17 @@
   }
 
   .files-tab {
-    padding: 6px 10px;
+    padding: 0 10px;
     font-size: 12px;
     border: none;
     background: transparent;
     color: var(--muted);
     cursor: pointer;
     border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    height: 100%;
+    display: flex;
+    align-items: center;
     -webkit-app-region: no-drag;
   }
   .files-tab.active {
