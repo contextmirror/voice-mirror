@@ -28,6 +28,10 @@ describe('layout.svelte.js', () => {
     assert.ok(src.includes('showFileTree = $state('), 'Should have showFileTree state');
   });
 
+  it('has setShowChat method for programmatic control', () => {
+    assert.ok(src.includes('setShowChat(v)'), 'Should have setShowChat');
+  });
+
   it('has toggleChat method', () => {
     assert.ok(src.includes('toggleChat()'), 'Should have toggleChat');
   });

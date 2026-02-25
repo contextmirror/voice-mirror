@@ -668,28 +668,8 @@
             'font-family:sans-serif'
         ].join(';');
 
-        var sendBtn = document.createElement('button');
-        sendBtn.textContent = 'Send to Chat';
-        sendBtn.style.cssText = btnStyle + ';background:#4a9eff;color:#fff;';
-        sendBtn.addEventListener('click', function (e) {
-            e.preventDefault();
-            e.stopPropagation();
-            // Clean up UI but KEEP _selectedElement — the host reads it
-            // asynchronously via ExecuteScript after the lens-shortcut fires
-            _removeSelectTooltip();
-            _removeSelectActionBar();
-            _redrawAll();
-            _selectMode = false;
-            // Notify Tauri host via lens-shortcut scheme (fire-and-forget)
-            // Windows WebView2 requires https://{scheme}.localhost/ format
-            var base = navigator.platform.indexOf('Win') !== -1
-                ? 'https://lens-shortcut.localhost/'
-                : 'lens-shortcut://localhost/';
-            new Image().src = base + 'element-selected?t=' + Date.now();
-        });
-
         var cancelBtn = document.createElement('button');
-        cancelBtn.textContent = 'Cancel';
+        cancelBtn.textContent = 'Deselect';
         cancelBtn.style.cssText = btnStyle + ';background:#555;color:#fff;';
         cancelBtn.addEventListener('click', function (e) {
             e.preventDefault();
@@ -697,7 +677,6 @@
             _cancelSelect();
         });
 
-        bar.appendChild(sendBtn);
         bar.appendChild(cancelBtn);
 
         // Stop events from reaching canvas

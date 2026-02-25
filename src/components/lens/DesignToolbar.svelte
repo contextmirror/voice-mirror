@@ -86,15 +86,19 @@
 
   /** Handle "Send to Chat" for a selected element — crop screenshot + format context. */
   async function handleElementSend() {
+    console.log('[DesignToolbar] handleElementSend called');
     try {
       const elemResult = await designGetElement();
+      console.log('[DesignToolbar] designGetElement result:', elemResult);
       if (!elemResult?.success || !elemResult?.data) {
         console.warn('[DesignToolbar] No element selected:', elemResult?.error);
         return;
       }
       const elem = elemResult.data;
+      console.log('[DesignToolbar] Element data:', elem.tagName, elem.selector);
 
       const screenshotResult = await lensCapturePreview();
+      console.log('[DesignToolbar] Screenshot result:', screenshotResult?.success, screenshotResult?.data?.dataUrl?.length);
       if (!screenshotResult?.success || !screenshotResult?.data?.dataUrl) {
         console.warn('[DesignToolbar] Screenshot failed:', screenshotResult?.error);
         return;
@@ -104,13 +108,15 @@
         screenshotResult.data.dataUrl,
         elem.bounds
       );
+      console.log('[DesignToolbar] Cropped screenshot length:', croppedDataUrl?.length);
 
       const styleLines = Object.entries(elem.styles || {})
         .map(([k, v]) => `  ${k}: ${v};`)
         .join('\n');
 
+      const classes = typeof elem.classes === 'string' ? elem.classes : '';
       const contextText = [
-        `Selected element: ${elem.tagName}${elem.id ? '#' + elem.id : ''}${typeof elem.classes === 'string' && elem.classes ? '.' + elem.classes.split(' ').join('.') : ''}`,
+        `Selected element: ${elem.tagName}${elem.id ? '#' + elem.id : ''}${classes ? '.' + classes.split(' ').join('.') : ''}`,
         `Selector: ${elem.selector}`,
         `Size: ${elem.bounds.width} x ${elem.bounds.height}px`,
         elem.text ? `Text: "${elem.text}"` : null,
@@ -122,11 +128,13 @@
         styleLines
       ].filter(Boolean).join('\n');
 
+      console.log('[DesignToolbar] Calling onElementSend with context length:', contextText.length);
       onElementSend({
         imageDataUrl: croppedDataUrl,
         contextText: contextText,
         name: `Element: ${elem.selector.split(' > ').pop()}`
       });
+      console.log('[DesignToolbar] onElementSend completed');
     } catch (err) {
       console.error('[DesignToolbar] Element send failed:', err);
     }

@@ -71,36 +71,24 @@ describe('Select Element — End-to-End Wiring', () => {
       assert.ok(toolbarSrc.includes('import') && toolbarSrc.includes('designGetElement'));
     });
 
-    it('LensWorkspace imports and calls designGetElement', () => {
-      assert.ok(workspaceSrc.includes('designGetElement'));
-      assert.ok(workspaceSrc.includes('import') && workspaceSrc.includes('designGetElement'));
-    });
   });
 
-  describe('Data Flow: Overlay Action Bar -> Lens Shortcut -> Chat', () => {
-    it('design overlay fires lens-shortcut://element-selected via Image src', () => {
-      assert.ok(designOverlaySrc.includes('element-selected'));
-      assert.ok(designOverlaySrc.includes('lens-shortcut'));
-      assert.ok(designOverlaySrc.includes('new Image().src'));
-    });
-
-    it('lib.rs handles element-selected in lens-shortcut scheme', () => {
-      assert.ok(libRsSrc.includes('"element-selected"'));
-      assert.ok(libRsSrc.includes('lens-element-selected'));
-    });
-
-    it('lib.rs emits lens-element-selected Tauri event', () => {
-      assert.ok(libRsSrc.includes('emit("lens-element-selected"'));
-    });
-
-    it('LensWorkspace listens for lens-element-selected event', () => {
-      assert.ok(workspaceSrc.includes('lens-element-selected'));
-      assert.ok(workspaceSrc.includes("listen('lens-element-selected'"));
-    });
-
-    it('LensWorkspace has handleElementSend that adds attachments', () => {
+  describe('Data Flow: Toolbar Send -> Chat Auto-Send', () => {
+    it('LensWorkspace has handleElementSend that auto-sends to chat', () => {
       assert.ok(workspaceSrc.includes('function handleElementSend'));
-      assert.ok(workspaceSrc.includes('attachmentsStore.add'));
+      assert.ok(workspaceSrc.includes('chatStore.addMessage'));
+    });
+
+    it('LensWorkspace ensures chat panel is visible on element send', () => {
+      assert.ok(workspaceSrc.includes('layoutStore.setShowChat(true)'));
+    });
+
+    it('LensWorkspace routes message to AI provider via onSend', () => {
+      assert.ok(workspaceSrc.includes('onSend(contextText'));
+    });
+
+    it('LensWorkspace imports chatStore for auto-send', () => {
+      assert.ok(workspaceSrc.includes("import { chatStore }"));
     });
   });
 
@@ -180,19 +168,17 @@ describe('Select Element — End-to-End Wiring', () => {
       assert.ok(toolbarSrc.includes('devicePixelRatio'));
     });
 
-    it('LensWorkspace has cropElementScreenshot with DPR support', () => {
-      assert.ok(workspaceSrc.includes('cropElementScreenshot'));
-      assert.ok(workspaceSrc.includes('devicePixelRatio'));
+    it('DesignToolbar has cropScreenshot with DPR support', () => {
+      assert.ok(toolbarSrc.includes('cropScreenshot'));
+      assert.ok(toolbarSrc.includes('devicePixelRatio'));
     });
 
-    it('both crop functions use canvas drawImage for cropping', () => {
+    it('DesignToolbar crop function uses canvas drawImage', () => {
       assert.ok(toolbarSrc.includes('drawImage'));
-      assert.ok(workspaceSrc.includes('drawImage'));
     });
 
-    it('both crop functions output image/png data URLs', () => {
+    it('DesignToolbar crop function outputs image/png data URL', () => {
       assert.ok(toolbarSrc.includes("toDataURL('image/png')"));
-      assert.ok(workspaceSrc.includes("toDataURL('image/png')"));
     });
   });
 
@@ -213,10 +199,9 @@ describe('Select Element — End-to-End Wiring', () => {
       assert.ok(designOverlaySrc.includes('data-vm-tooltip'));
     });
 
-    it('has action bar with Send to Chat and Cancel buttons', () => {
+    it('has action bar with Deselect button', () => {
       assert.ok(designOverlaySrc.includes('data-vm-actionbar'));
-      assert.ok(designOverlaySrc.includes('Send to Chat'));
-      assert.ok(designOverlaySrc.includes('Cancel'));
+      assert.ok(designOverlaySrc.includes('Deselect'));
     });
 
     it('draws highlight using _drawElementHighlight', () => {
@@ -231,26 +216,20 @@ describe('Select Element — End-to-End Wiring', () => {
       assert.ok(workspaceSrc.includes("path: 'element-capture'"));
     });
 
-    it('workspace adds text context attachment', () => {
-      assert.ok(workspaceSrc.includes("type: 'text/plain'"));
-      assert.ok(workspaceSrc.includes("path: 'element-context'"));
+    it('workspace auto-sends message to chat with context text', () => {
+      assert.ok(workspaceSrc.includes('chatStore.addMessage'));
+      assert.ok(workspaceSrc.includes('onSend(contextText'));
     });
 
-    it('context includes selector, size, HTML, and styles', () => {
-      // Both the toolbar path and workspace path format context with these fields
+    it('toolbar formats context with selector, HTML, and styles', () => {
       assert.ok(toolbarSrc.includes('elem.selector'));
       assert.ok(toolbarSrc.includes('elem.html'));
       assert.ok(toolbarSrc.includes('elem.styles'));
-      assert.ok(workspaceSrc.includes('elem.selector'));
-      assert.ok(workspaceSrc.includes('elem.html'));
-      assert.ok(workspaceSrc.includes('elem.styles'));
     });
 
-    it('context includes element bounds dimensions', () => {
+    it('toolbar includes element bounds dimensions in context', () => {
       assert.ok(toolbarSrc.includes('elem.bounds.width'));
       assert.ok(toolbarSrc.includes('elem.bounds.height'));
-      assert.ok(workspaceSrc.includes('elem.bounds.width'));
-      assert.ok(workspaceSrc.includes('elem.bounds.height'));
     });
   });
 

@@ -269,29 +269,14 @@ describe('design-overlay.js: _showSelectActionBar', () => {
     assert.ok(src.includes("data-vm-actionbar"), 'Should set data-vm-actionbar');
   });
 
-  it('has Send to Chat button', () => {
-    assert.ok(src.includes("'Send to Chat'"), 'Should have Send to Chat button');
+  it('has Deselect button', () => {
+    assert.ok(src.includes("'Deselect'"), 'Should have Deselect button');
   });
 
-  it('has Cancel button', () => {
-    assert.ok(src.includes("'Cancel'"), 'Should have Cancel button');
-  });
-
-  it('sends element-selected via lens-shortcut on Send to Chat', () => {
-    assert.ok(
-      src.includes('lens-shortcut.localhost') && src.includes('element-selected'),
-      'Should fire lens-shortcut with platform-correct URL'
-    );
-  });
-
-  it('uses new Image().src for fire-and-forget notification', () => {
-    assert.ok(src.includes('new Image().src'), 'Should use Image src trick for URI scheme');
-  });
-
-  it('calls _cancelSelect on Cancel', () => {
-    // The cancel button handler calls _cancelSelect
+  it('calls _cancelSelect on Deselect', () => {
+    // The deselect button handler calls _cancelSelect
     const actionBarFn = src.substring(src.indexOf('function _showSelectActionBar'));
-    assert.ok(actionBarFn.includes('_cancelSelect()'), 'Cancel should call _cancelSelect');
+    assert.ok(actionBarFn.includes('_cancelSelect()'), 'Deselect should call _cancelSelect');
   });
 
   it('stops mouse events from reaching canvas', () => {

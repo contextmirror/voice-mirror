@@ -18,8 +18,9 @@
   import { layoutStore } from '../../lib/stores/layout.svelte.js';
   import { lensStore } from '../../lib/stores/lens.svelte.js';
   import { browserTabsStore } from '../../lib/stores/browser-tabs.svelte.js';
-  import { lensSetVisible, startFileWatching, stopFileWatching, lensCapturePreview, designGetElement } from '../../lib/api.js';
+  import { lensSetVisible, startFileWatching, stopFileWatching, lensCapturePreview } from '../../lib/api.js';
   import { attachmentsStore } from '../../lib/stores/attachments.svelte.js';
+  import { chatStore } from '../../lib/stores/chat.svelte.js';
   import { projectStore } from '../../lib/stores/project.svelte.js';
   import { lspDiagnosticsStore } from '../../lib/stores/lsp-diagnostics.svelte.js';
   import { LSP_EXTENSIONS } from '../../lib/editor-lsp.svelte.js';
@@ -162,118 +163,27 @@
     lensStore.setDesignMode(false);
   }
 
-  /** Handle element selection from design toolbar — add cropped screenshot + context to chat. */
+  /** Handle element selection from design toolbar — send element screenshot + context to chat. */
   function handleElementSend({ imageDataUrl, contextText, name }) {
-    // Add cropped element screenshot as image attachment
-    attachmentsStore.add({
+    // Build the image attachment
+    const imageAttachment = {
       path: 'element-capture',
       dataUrl: imageDataUrl,
       type: 'image/png',
       name: name || 'Selected Element',
-    });
+    };
 
-    // Add context text as a text attachment
-    attachmentsStore.add({
-      path: 'element-context',
-      dataUrl: null,
-      type: 'text/plain',
-      name: 'Element Context',
-      text: contextText,
-    });
+    // Auto-send a user message with the image attachment and context as body text
+    chatStore.addMessage('user', contextText, { attachments: [imageAttachment] });
+
+    // Ensure chat panel is visible so the user sees the message
+    layoutStore.setShowChat(true);
+
+    // Route the message to the AI provider
+    onSend(contextText, [imageAttachment]);
 
     lensStore.setDesignMode(false);
   }
-
-  /** Crop a data URL image to element bounds using canvas. */
-  async function cropElementScreenshot(dataUrl, bounds) {
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.onload = () => {
-        const dpr = window.devicePixelRatio || 1;
-        const sx = Math.round(bounds.x * dpr);
-        const sy = Math.round(bounds.y * dpr);
-        const sw = Math.round(bounds.width * dpr);
-        const sh = Math.round(bounds.height * dpr);
-
-        const cx = Math.max(0, Math.min(sx, img.width));
-        const cy = Math.max(0, Math.min(sy, img.height));
-        const cw = Math.min(sw, img.width - cx);
-        const ch = Math.min(sh, img.height - cy);
-
-        if (cw <= 0 || ch <= 0) {
-          resolve(dataUrl);
-          return;
-        }
-
-        const canvas = document.createElement('canvas');
-        canvas.width = cw;
-        canvas.height = ch;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, cx, cy, cw, ch, 0, 0, cw, ch);
-        resolve(canvas.toDataURL('image/png'));
-      };
-      img.onerror = () => resolve(dataUrl);
-      img.src = dataUrl;
-    });
-  }
-
-  // Listen for element-selected events from the design overlay (via lens-shortcut)
-  $effect(() => {
-    let unlisten;
-    listen('lens-element-selected', async () => {
-      if (!lensStore.designMode) return;
-      try {
-        // Get serialized element data from the overlay
-        const elemResult = await designGetElement();
-        if (!elemResult?.success || !elemResult?.data) {
-          console.warn('[LensWorkspace] No element selected:', elemResult?.error);
-          return;
-        }
-        const elem = elemResult.data;
-
-        // Capture full page screenshot
-        const screenshotResult = await lensCapturePreview();
-        if (!screenshotResult?.success || !screenshotResult?.data?.dataUrl) {
-          console.warn('[LensWorkspace] Screenshot failed:', screenshotResult?.error);
-          return;
-        }
-
-        // Crop screenshot to element bounds
-        const croppedDataUrl = await cropElementScreenshot(
-          screenshotResult.data.dataUrl,
-          elem.bounds
-        );
-
-        // Format context text
-        const styleLines = Object.entries(elem.styles || {})
-          .map(([k, v]) => `  ${k}: ${v};`)
-          .join('\n');
-
-        const contextText = [
-          `Selected element: ${elem.tagName}${elem.id ? '#' + elem.id : ''}${typeof elem.classes === 'string' && elem.classes ? '.' + elem.classes.split(' ').join('.') : ''}`,
-          `Selector: ${elem.selector}`,
-          `Size: ${elem.bounds.width} x ${elem.bounds.height}px`,
-          elem.text ? `Text: "${elem.text}"` : null,
-          '',
-          'HTML:',
-          elem.html,
-          '',
-          'Computed styles:',
-          styleLines
-        ].filter(Boolean).join('\n');
-
-        handleElementSend({
-          imageDataUrl: croppedDataUrl,
-          contextText,
-          name: `Element: ${elem.selector.split(' > ').pop()}`
-        });
-      } catch (err) {
-        console.error('[LensWorkspace] Element select event error:', err);
-      }
-    }).then(fn => { unlisten = fn; });
-
-    return () => { if (unlisten) unlisten(); };
-  });
 
   // Start/stop LSP diagnostics store listener on project switch
   $effect(() => {
