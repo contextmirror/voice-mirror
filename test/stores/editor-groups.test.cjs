@@ -195,3 +195,19 @@ describe('editor-groups.svelte.js: tree utilities', () => {
     );
   });
 });
+
+// ============ Group locking ============
+
+describe('editor-groups.svelte.js: group locking', () => {
+  it('has toggleGroupLock method', () => {
+    assert.ok(src.includes('toggleGroupLock'), 'Should have toggleGroupLock method');
+  });
+
+  it('toggleGroupLock toggles the locked property', () => {
+    assert.ok(src.includes('!group.locked'), 'Should toggle locked state');
+  });
+
+  it('uses Map.set for reactivity when toggling lock', () => {
+    assert.ok(src.includes('locked: !group.locked'), 'Should spread with toggled locked');
+  });
+});

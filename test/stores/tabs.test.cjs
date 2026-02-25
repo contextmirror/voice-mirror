@@ -80,7 +80,7 @@ describe('tabs.svelte.js: methods', () => {
 
 describe('tabs.svelte.js: preview tab logic', () => {
   it('creates preview tabs on openFile', () => {
-    assert.ok(src.includes('preview: true'), 'Should create tabs with preview: true');
+    assert.ok(src.includes('preview: previewEnabled'), 'Should create tabs with preview based on previewEnabled setting');
   });
 
   it('replaces existing preview tab', () => {
@@ -92,6 +92,25 @@ describe('tabs.svelte.js: preview tab logic', () => {
 
   it('pinTab sets preview to false', () => {
     assert.ok(src.includes('preview = false') || src.includes('preview: false'), 'Should unset preview on pin');
+  });
+
+  it('has previewEnabled state', () => {
+    assert.ok(src.includes('previewEnabled'), 'Should have previewEnabled state');
+    assert.ok(src.includes('get previewEnabled()'), 'Should expose previewEnabled getter');
+  });
+
+  it('has togglePreviewMode method', () => {
+    assert.ok(src.includes('togglePreviewMode'), 'Should have togglePreviewMode method');
+  });
+
+  it('togglePreviewMode pins existing preview tabs when disabling', () => {
+    assert.ok(src.includes('!previewEnabled'), 'Should check previewEnabled state');
+    assert.ok(src.includes('tab.preview = false'), 'Should pin preview tabs when disabling');
+  });
+
+  it('respects previewEnabled when opening files', () => {
+    // When disabled, previewIdx search is skipped
+    assert.ok(src.includes('previewEnabled ? tabs.findIndex'), 'Should skip preview replacement when disabled');
   });
 });
 

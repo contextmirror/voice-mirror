@@ -2,6 +2,7 @@
   import { tabsStore } from '../../lib/stores/tabs.svelte.js';
   import { editorGroupsStore } from '../../lib/stores/editor-groups.svelte.js';
   import { projectStore } from '../../lib/stores/project.svelte.js';
+  import { getActionHandler } from '../../lib/stores/shortcuts.svelte.js';
   import { renameEntry } from '../../lib/api.js';
   import TabContextMenu from './TabContextMenu.svelte';
 
@@ -9,6 +10,7 @@
 
   let tabMenu = $state({ visible: false, x: 0, y: 0, tab: null });
   let splitMenu = $state({ visible: false, x: 0, y: 0 });
+  let moreMenu = $state({ visible: false, x: 0, y: 0 });
   let dragOverIndex = $state(-1);
   let renamingTabId = $state(null);
   let renameValue = $state('');
@@ -95,6 +97,49 @@
       if (ids.length >= 2) editorGroupsStore.closeGroup(ids[1]);
     }
   }
+
+  // ── More actions menu ──
+
+  function handleMoreMenu(e) {
+    e.stopPropagation();
+    const rect = e.currentTarget.getBoundingClientRect();
+    moreMenu = { visible: true, x: rect.right - 200, y: rect.bottom + 4 };
+  }
+
+  function closeMoreMenu() {
+    moreMenu = { visible: false, x: 0, y: 0 };
+  }
+
+  function handleShowOpenedEditors() {
+    closeMoreMenu();
+    const handler = getActionHandler('go-to-file');
+    if (handler) handler();
+  }
+
+  function handleCloseAll() {
+    closeMoreMenu();
+    for (const tab of [...groupTabs]) tabsStore.closeTab(tab.id);
+  }
+
+  function handleCloseSaved() {
+    closeMoreMenu();
+    for (const tab of [...groupTabs]) {
+      if (!tab.dirty) tabsStore.closeTab(tab.id);
+    }
+  }
+
+  function handleTogglePreview() {
+    closeMoreMenu();
+    tabsStore.togglePreviewMode?.();
+  }
+
+  function handleLockGroup() {
+    closeMoreMenu();
+    editorGroupsStore.toggleGroupLock?.(groupId);
+  }
+
+  let isGroupLocked = $derived(editorGroupsStore.groups.get(groupId)?.locked || false);
+  let previewEnabled = $derived(tabsStore.previewEnabled ?? true);
 
   function getTabIcon(tab) {
     if (tab.type === 'diff') return 'diff';
@@ -275,13 +320,11 @@
       </svg>
     </button>
 
-    {#if groupTabs.length > 1}
-      <button class="action-btn action-btn-danger" onclick={() => {
-        for (const tab of [...groupTabs]) tabsStore.closeTab(tab.id);
-      }} aria-label="Close all tabs" title="Close all tabs">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
-      </button>
-    {/if}
+    <button class="action-btn" onclick={handleMoreMenu} aria-label="More actions" title="More actions...">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+        <circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/>
+      </svg>
+    </button>
   </div>
 </div>
 
@@ -322,6 +365,57 @@
         <span>Close Split</span>
       </button>
     {/if}
+  </div>
+{/if}
+
+<!-- More actions menu -->
+{#if moreMenu.visible}
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <div class="split-menu-backdrop" onclick={closeMoreMenu} oncontextmenu={(e) => { e.preventDefault(); closeMoreMenu(); }}></div>
+  <div class="split-menu" style="left: {moreMenu.x}px; top: {moreMenu.y}px;">
+    <button class="split-menu-item" onclick={handleShowOpenedEditors}>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+      </svg>
+      <span>Show Opened Editors</span>
+    </button>
+    <div class="split-menu-divider"></div>
+    <button class="split-menu-item" onclick={handleCloseAll}>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M18 6L6 18M6 6l12 12"/>
+      </svg>
+      <span>Close All</span>
+      <span class="split-menu-shortcut">Ctrl+K W</span>
+    </button>
+    <button class="split-menu-item" onclick={handleCloseSaved}>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M18 6L6 18M6 6l12 12"/>
+      </svg>
+      <span>Close Saved</span>
+      <span class="split-menu-shortcut">Ctrl+K U</span>
+    </button>
+    <div class="split-menu-divider"></div>
+    <button class="split-menu-item" onclick={handleTogglePreview}>
+      {#if previewEnabled}
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+      {:else}
+        <span class="menu-icon-spacer"></span>
+      {/if}
+      <span>Enable Preview Editors</span>
+    </button>
+    <button class="split-menu-item" onclick={handleLockGroup}>
+      {#if isGroupLocked}
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+      {:else}
+        <span class="menu-icon-spacer"></span>
+      {/if}
+      <span>Lock Group</span>
+    </button>
   </div>
 {/if}
 
@@ -658,5 +752,12 @@
     height: 1px;
     background: var(--border);
     margin: 4px 6px;
+  }
+
+  .menu-icon-spacer {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
   }
 </style>

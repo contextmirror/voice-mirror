@@ -417,6 +417,18 @@ function createEditorGroupsStore() {
     },
 
     get maximizedGroupId() { return maximizedGroupId; },
+
+    /**
+     * Toggle the locked state of an editor group.
+     * Locked groups prevent new tabs from opening in them.
+     * @param {number} groupId
+     */
+    toggleGroupLock(groupId) {
+      const group = groups.get(groupId);
+      if (group) {
+        groups.set(groupId, { ...group, locked: !group.locked });
+      }
+    },
   };
 }
 

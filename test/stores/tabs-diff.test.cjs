@@ -39,11 +39,11 @@ describe('tabs.svelte.js: openDiff method', () => {
   });
 
   it('creates preview tabs for diffs', () => {
-    // openDiff creates preview tabs just like openFile
+    // openDiff creates preview tabs based on previewEnabled setting
     const openDiffStart = src.indexOf('openDiff(');
     const openDiffEnd = src.indexOf('},', openDiffStart);
     const openDiffBody = src.slice(openDiffStart, openDiffEnd);
-    assert.ok(openDiffBody.includes('preview: true'), 'Should create diff tabs with preview: true');
+    assert.ok(openDiffBody.includes('preview: previewEnabled'), 'Should create diff tabs with preview based on previewEnabled');
   });
 
   it('extracts filename from path for title', () => {

@@ -14,11 +14,13 @@ function createTabsStore() {
   // activeTabId tracks the active tab in group 1 for backwards compatibility
   let activeTabId = $state(null);
   let untitledCounter = 0;
+  let previewEnabled = $state(true);
 
   return {
     get tabs() { return tabs; },
     get activeTabId() { return activeTabId; },
     get activeTab() { return tabs.find(t => t.id === activeTabId) || null; },
+    get previewEnabled() { return previewEnabled; },
 
     /**
      * Get all tabs belonging to a specific group.
@@ -58,8 +60,8 @@ function createTabsStore() {
         return;
       }
 
-      // Replace existing preview tab in the target group if there is one
-      const previewIdx = tabs.findIndex(t => t.preview && t.groupId === groupId);
+      // Replace existing preview tab in the target group if preview mode is on
+      const previewIdx = previewEnabled ? tabs.findIndex(t => t.preview && t.groupId === groupId) : -1;
       // Use path as ID for group 1 (backwards compat), namespaced for other groups
       const tabId = groupId === 1 ? entry.path : `${entry.path}:g${groupId}`;
       const newTab = {
@@ -68,7 +70,7 @@ function createTabsStore() {
         title: entry.name,
         path: entry.path,
         groupId,
-        preview: true,
+        preview: previewEnabled,
         dirty: false,
         readOnly: entry.readOnly || false,
         external: entry.external || false,
@@ -145,8 +147,8 @@ function createTabsStore() {
       // Extract filename for title
       const name = change.path.split(/[/\\]/).pop() || change.path;
 
-      // Replace existing preview tab in the target group
-      const previewIdx = tabs.findIndex(t => t.preview && t.groupId === groupId);
+      // Replace existing preview tab in the target group if preview mode is on
+      const previewIdx = previewEnabled ? tabs.findIndex(t => t.preview && t.groupId === groupId) : -1;
       const tabId = groupId === 1 ? baseDiffId : `${baseDiffId}:g${groupId}`;
       const newTab = {
         id: tabId,
@@ -155,7 +157,7 @@ function createTabsStore() {
         path: change.path,
         groupId,
         status: change.status,
-        preview: true,
+        preview: previewEnabled,
         dirty: false,
         diffStats: null,
       };
@@ -405,6 +407,19 @@ function createTabsStore() {
         editorGroupsStore.setActiveTabForGroup(groupId, id);
         if (groupId === editorGroupsStore.focusedGroupId) {
           activeTabId = id;
+        }
+      }
+    },
+
+    /**
+     * Toggle preview mode. When disabled, all new tabs open as pinned (permanent).
+     */
+    togglePreviewMode() {
+      previewEnabled = !previewEnabled;
+      // When disabling preview mode, pin all existing preview tabs
+      if (!previewEnabled) {
+        for (const tab of tabs) {
+          if (tab.preview) tab.preview = false;
         }
       }
     },
