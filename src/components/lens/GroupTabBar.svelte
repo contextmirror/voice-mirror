@@ -6,6 +6,7 @@
   let { groupId = 1, onBrowserClick = null, showBrowser = false } = $props();
 
   let tabMenu = $state({ visible: false, x: 0, y: 0, tab: null });
+  let splitMenu = $state({ visible: false, x: 0, y: 0 });
   let dragOverIndex = $state(-1);
 
   let groupTabs = $derived(tabsStore.getTabsForGroup ? tabsStore.getTabsForGroup(groupId) : tabsStore.tabs.filter(t => (t.groupId || 1) === groupId));
@@ -41,21 +42,34 @@
     }
   }
 
+  function doSplit(direction) {
+    const activeTab = activeTabId ? tabsStore.tabs.find(t => t.id === activeTabId) : null;
+    const newGroupId = editorGroupsStore.splitGroup(groupId, direction);
+    if (activeTab) {
+      tabsStore.openFile({ name: activeTab.title, path: activeTab.path }, newGroupId);
+    }
+  }
+
   function handleSplitEditor() {
-    if (editorGroupsStore.hasSplit) {
-      // Close the focused group (if not group 1, close focused; otherwise close the other)
-      if (editorGroupsStore.focusedGroupId !== 1) {
-        editorGroupsStore.closeGroup(editorGroupsStore.focusedGroupId);
-      } else {
-        const ids = editorGroupsStore.allGroupIds;
-        if (ids.length >= 2) editorGroupsStore.closeGroup(ids[1]);
-      }
+    // Default left-click: split right (horizontal)
+    doSplit('horizontal');
+  }
+
+  function handleSplitContextMenu(e) {
+    e.preventDefault();
+    splitMenu = { visible: true, x: e.clientX, y: e.clientY };
+  }
+
+  function closeSplitMenu() {
+    splitMenu = { visible: false, x: 0, y: 0 };
+  }
+
+  function handleCloseSplit() {
+    if (editorGroupsStore.focusedGroupId !== 1) {
+      editorGroupsStore.closeGroup(editorGroupsStore.focusedGroupId);
     } else {
-      const activeTab = activeTabId ? tabsStore.tabs.find(t => t.id === activeTabId) : null;
-      const newGroupId = editorGroupsStore.splitGroup(groupId, 'horizontal');
-      if (activeTab) {
-        tabsStore.openFile({ name: activeTab.title, path: activeTab.path }, newGroupId);
-      }
+      const ids = editorGroupsStore.allGroupIds;
+      if (ids.length >= 2) editorGroupsStore.closeGroup(ids[1]);
     }
   }
 
@@ -208,16 +222,11 @@
 
   <!-- Right-side action buttons (VS Code style) -->
   <div class="editor-actions">
-    <button class="action-btn" class:active={hasSplit} onclick={handleSplitEditor} aria-label={hasSplit ? 'Close split' : 'Split editor right'} title={hasSplit ? 'Close split (Ctrl+\\)' : 'Split editor right (Ctrl+\\)'}>
-      {#if hasSplit}
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="3" y="3" width="18" height="18" rx="2"/>
-        </svg>
-      {:else}
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/>
-        </svg>
-      {/if}
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <button class="action-btn" class:active={hasSplit} onclick={handleSplitEditor} oncontextmenu={handleSplitContextMenu} aria-label="Split editor right" title="Split editor right (Ctrl+\) — right-click for more">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/>
+      </svg>
     </button>
 
     {#if groupTabs.length > 1}
@@ -237,6 +246,37 @@
   visible={tabMenu.visible}
   onClose={() => { tabMenu.visible = false; }}
 />
+
+<!-- Split editor context menu -->
+{#if splitMenu.visible}
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <div class="split-menu-backdrop" onclick={closeSplitMenu} oncontextmenu={(e) => { e.preventDefault(); closeSplitMenu(); }}></div>
+  <div class="split-menu" style="left: {splitMenu.x}px; top: {splitMenu.y}px;">
+    <button class="split-menu-item" onclick={() => { doSplit('horizontal'); closeSplitMenu(); }}>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/>
+      </svg>
+      <span>Split Right</span>
+      <span class="split-menu-shortcut">Ctrl+\</span>
+    </button>
+    <button class="split-menu-item" onclick={() => { doSplit('vertical'); closeSplitMenu(); }}>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="12" x2="21" y2="12"/>
+      </svg>
+      <span>Split Down</span>
+    </button>
+    {#if hasSplit}
+      <div class="split-menu-divider"></div>
+      <button class="split-menu-item split-menu-item-danger" onclick={() => { handleCloseSplit(); closeSplitMenu(); }}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="18" height="18" rx="2"/>
+        </svg>
+        <span>Close Split</span>
+      </button>
+    {/if}
+  </div>
+{/if}
 
 <style>
   .group-tab-bar {
@@ -521,4 +561,62 @@
 
   .tab-diff-stats-add { color: var(--ok); }
   .tab-diff-stats-del { color: var(--danger); }
+
+  /* ── Split context menu ── */
+  .split-menu-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+  }
+
+  .split-menu {
+    position: fixed;
+    z-index: 10001;
+    min-width: 180px;
+    background: var(--bg-elevated, var(--bg));
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 4px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    font-family: var(--font-family);
+    font-size: 12px;
+  }
+
+  .split-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 6px 10px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text);
+    cursor: pointer;
+    font-size: 12px;
+    font-family: var(--font-family);
+    text-align: left;
+    transition: background 0.1s ease;
+  }
+
+  .split-menu-item:hover {
+    background: color-mix(in srgb, var(--text) 10%, transparent);
+  }
+
+  .split-menu-item-danger:hover {
+    background: color-mix(in srgb, var(--danger) 15%, transparent);
+    color: var(--danger);
+  }
+
+  .split-menu-shortcut {
+    margin-left: auto;
+    color: var(--muted);
+    font-size: 11px;
+  }
+
+  .split-menu-divider {
+    height: 1px;
+    background: var(--border);
+    margin: 4px 6px;
+  }
 </style>
