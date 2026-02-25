@@ -2,7 +2,7 @@
 
 > Internal doc. Tracks what Voice Mirror's Lens workspace has vs what VS Code / Zed / Cursor offer.
 >
-> Last updated: 2026-02-24
+> Last updated: 2026-02-25
 
 ---
 
@@ -35,7 +35,7 @@ What's missing is everything that makes a "real IDE" feel seamless — the gaps 
 | Document outline | Full | Full | Full | None |
 | Git status + diff | Full | Full | Stage/Commit/Push + AI | Minor gaps |
 | Global text search | Full | Full | Full | None |
-| Split editor | Full | Full | None | High |
+| Split editor | Full (40+ commands) | Full | Core + drag-to-split | See split table below |
 | Multi-cursor | Full | Full | Full | None |
 | Debug adapter (DAP) | Full | Partial | None | Low priority |
 | Extensions/plugins | Massive | Growing | None | Not planned |
@@ -156,21 +156,109 @@ What's missing is everything that makes a "real IDE" feel seamless — the gaps 
 
 ---
 
-### 3. Split Editor (Side-by-Side Files) — HIGH
+### 3. Split Editor — CORE DONE ✓ (gaps remain)
 
-**What real IDEs have:** Drag a tab to the side to split the editor area. View two files simultaneously. Essential for comparing implementations, writing tests alongside code, or referencing an interface while implementing it.
+**Status:** Core split editor system is fully implemented with a recursive binary tree layout. Users can split, resize, drag tabs between groups, and drag files from the tree to create splits. Missing VS Code's advanced features (group locking, arrangement presets, split-in-group, etc.).
 
-**What we have:** Single editor view. Only one tab's content is visible at a time. The layout is a fixed 3-panel split (Chat | Editor/Preview | FileTree) with terminal below.
+#### Split Editor Feature Comparison
 
-**Why it matters:** Comparing two files requires flipping between tabs, which breaks flow. Writing a test file while looking at the implementation is a core workflow.
+| Feature | VS Code | Zed | Voice Mirror | Status |
+|---------|---------|-----|-------------|--------|
+| **Basic Splitting** | | | | |
+| Split right (horizontal) | Ctrl+\\ | Ctrl+\\ | Ctrl+\\ | Done |
+| Split down (vertical) | Cmd+K Cmd+\\ | — | Right-click menu | Done |
+| Split left / up | Commands | — | Drag-to-split zones | Done |
+| Arbitrary nesting (3+ groups) | Full (recursive grid) | Full | Full (binary tree) | Done |
+| Close group | Full | Full | Full (auto-collapses tree) | Done |
+| **Drag & Drop** | | | | |
+| Drag tab between groups | Full | Full | Full | Done |
+| Drag tab to split (4 edges + center) | Full (configurable thresholds) | Full | Full (22% edge threshold) | Done |
+| Drag file from tree to split | Full | Full | Full (5 zones: center/L/R/T/B) | Done |
+| Visual drop zone overlay | Blue highlight regions | Highlight regions | Dashed accent overlay | Done |
+| Ghost drag image | Tab preview | Tab preview | Filename pill | Done |
+| Copy editor on drag (modifier key) | Ctrl/Cmd modifier | — | None | Gap |
+| Drag editor to new window | Full | — | None | Not planned |
+| **Panel Resizing** | | | | |
+| Drag resize between groups | Full | Full | Full (SplitPanel + ratio) | Done |
+| Even widths (reset sizes) | Full (command) | Full | None | Gap |
+| Maximize group (toggle) | Cmd+K Cmd+M | — | None | Gap |
+| Expand active group | Full | — | None | Gap |
+| Min/max size constraints | Full (per-group) | Full | 10%-90% ratio clamp | Done |
+| **Focus Navigation** | | | | |
+| Focus group 1 / 2 | Ctrl+1/2/3/.../8 | Ctrl+1/2 | Ctrl+1 / Ctrl+2 | Partial (2 only) |
+| Focus left/right/up/down | Cmd+K Cmd+Arrow | — | None | Gap |
+| Cycle focus (next/prev group) | Full | Full | None | Gap |
+| Focus without wrapping | Full | — | None | Gap |
+| **Move/Copy Editor** | | | | |
+| Move editor to left/right/up/down | Full (commands) | Full | Drag only | Partial |
+| Move editor to first/last group | Full | — | None | Gap |
+| Move editor to specific group (by index) | Full | — | None | Gap |
+| Copy editor to another group | Full | — | None | Gap |
+| **Group Management** | | | | |
+| Join two groups (merge) | Full | — | None | Gap |
+| Join all groups | Full | — | reset() collapses all | Partial |
+| Lock group (prevent editor placement) | Full | — | None | Gap |
+| Move entire group | Full | — | None | Gap |
+| Copy entire group | Full | — | None | Gap |
+| **Split In Group** | | | | |
+| Side-by-side within single group | Cmd+K Cmd+Shift+\\ | — | None | Gap |
+| Toggle split-in-group layout | Full | — | None | Gap |
+| Focus primary/secondary side | Full | — | None | Gap |
+| **Layout Presets** | | | | |
+| 2x2 grid preset | Full (layoutEditorGroups) | — | Manual nesting only | Gap |
+| Apply custom layout | Full (public API) | — | None | Gap |
+| Get/serialize current layout | Full | — | None | Gap |
+| Persist layout across sessions | Full | Full | None | Gap |
+| **Context Menu** | | | | |
+| Split Right / Down from tab menu | Full | Full | Full (Split Right, Split Down) | Done |
+| Open to the Side | Full (Ctrl+Enter) | Full | Full (Ctrl+Enter) | Done |
+| Close Others / Close to Right | Full | Full | Full | Done |
+| Move to Group (submenu) | Full | — | None | Gap |
 
-**What's needed:**
-- Editor area needs to support 1-2 editor panes (horizontal or vertical split)
-- Tab drag-to-split gesture or a "Split Right" command
-- Each pane maintains its own active tab
-- `SplitPanel.svelte` already exists and could be reused
+#### Summary
 
-**Estimated scope:** Large — requires rethinking the editor area layout in LensWorkspace.svelte and managing two independent editor instances with their own tab bars.
+| Category | VS Code | Zed | Voice Mirror |
+|----------|---------|-----|-------------|
+| **Basic splitting** | 40+ commands | ~15 commands | 6 commands |
+| **Drag & drop** | Full (copy, cross-window) | Full | Full (same-window) |
+| **Resize** | Full (maximize, even, expand) | Full | Basic (drag only) |
+| **Focus nav** | 12+ shortcuts | ~4 shortcuts | 2 shortcuts |
+| **Editor move/copy** | 8+ directional commands | ~4 | Drag only |
+| **Group management** | Full (join, lock, move) | Basic | Basic (close only) |
+| **Layout presets** | Full (API + persistence) | Persistence | None |
+
+#### What We Have (working today)
+
+1. **Recursive binary tree** — `editor-groups.svelte.js` manages `GridLeaf`/`GridBranch` nodes. Unlimited nesting depth.
+2. **Split directions** — Horizontal (right/left) and vertical (down/up). `splitGroup()`, `swapChildren()`, `closeGroup()`.
+3. **Drag-to-split from file tree** — 5 zones (center, left, right, top, bottom) with `DropZoneOverlay.svelte`. 22% edge threshold.
+4. **Tab drag between groups** — `moveTab()` in tabs store. Cross-group moves auto-close empty groups.
+5. **Resizable panels** — `SplitPanel.svelte` with `bind:ratio`. Clamped 10%-90%.
+6. **Focus shortcuts** — Ctrl+1 (group 1), Ctrl+2 (group 2). Click-to-focus with accent border indicator.
+7. **Context menu** — Split Right, Split Down, Open to the Side, Close Split (right-click on tab or split button).
+8. **Preview vs pinned tabs** — Single-click = preview (auto-replaced), double-click = pinned.
+9. **Auto-cleanup** — Closing last tab in a group closes the group. `closeGroup()` collapses the branch.
+
+#### What's Missing (worth adding)
+
+**High value:**
+1. **Focus directional** — Ctrl+K Ctrl+Arrow to move between groups. Currently only Ctrl+1/2.
+2. **Even widths** — Reset all groups to equal size. Simple: walk tree, set all ratios to 0.5.
+3. **Maximize group** — Toggle active group to fill entire editor area. Needs grid-level expand/collapse.
+4. **Move editor commands** — Keyboard-driven "Move editor to right/left/up/down group". Currently drag-only.
+5. **Persist layout** — Save grid tree + ratios to config. Restore on next session.
+
+**Nice to have:**
+6. **Layout presets** — "2 columns", "2x2 grid", "3 columns" via command palette.
+7. **Join groups** — Merge two groups' tabs into one.
+8. **Ctrl+3...8** — Focus more than 2 groups by number.
+9. **Copy editor** — Open same file in two groups (currently only move).
+
+**Skip:**
+- Lock group — niche feature, rarely used
+- Split in group — VS Code-only feature, minimal adoption
+- Drag to new window — Voice Mirror is single-window by design
+- Layout serialization API — no extension system needs it
 
 ---
 
@@ -311,7 +399,7 @@ Voice Mirror's extension story is: "Add an MCP server" — not "install a VS Cod
 | ~~1~~ | ~~Multi-cursor~~ | ~~High~~ | ~~Small~~ | ~~Done. Ctrl+D, Ctrl+Shift+L, Ctrl+Alt+Up/Down.~~ ✓ |
 | ~~2~~ | ~~Global text search~~ | ~~Critical~~ | ~~Medium~~ | ~~Done. Ctrl+Shift+F, Rust regex backend, SearchPanel in FileTree.~~ ✓ |
 | 3 | Command palette expansion | Medium | Medium | Discovery mechanism for all features. |
-| 4 | Split editor | High | Large | Key workflow for test+implementation. |
+| ~~4~~ | ~~Split editor~~ | ~~High~~ | ~~Large~~ | ~~Core done. Binary tree grid, drag-to-split, tab drag between groups.~~ ✓ |
 | ~~5~~ | ~~Git stage + commit~~ | ~~Medium~~ | ~~Medium~~ | ~~Done. Stage/unstage, commit, push, AI commit messages.~~ ✓ |
 | 6 | Terminal search | Low | Small | Nice-to-have for scrollback. |
 | 7 | Breadcrumbs | Low | Small | File path context in editor. |
@@ -331,4 +419,4 @@ The gap list above looks daunting, but Voice Mirror doesn't need to close every 
 4. **MCP tool ecosystem** — browser control, n8n workflows, memory system
 5. **AI-native terminal** — Claude Code is embedded, not a bolt-on extension
 
-The strategy: close the top gaps so Lens is **comfortable enough** for real coding, then double down on the voice+AI features no one else has. Done: ~~find/replace~~ ✓, ~~multi-cursor~~ ✓, ~~global search~~ ✓, ~~git stage+commit~~ ✓, ~~document formatting~~ ✓, ~~signature help~~ ✓. Remaining: split editor, command palette expansion.
+The strategy: close the top gaps so Lens is **comfortable enough** for real coding, then double down on the voice+AI features no one else has. Done: ~~find/replace~~ ✓, ~~multi-cursor~~ ✓, ~~global search~~ ✓, ~~git stage+commit~~ ✓, ~~document formatting~~ ✓, ~~signature help~~ ✓, ~~split editor~~ ✓. Remaining: split editor polish (focus nav, maximize, persist layout), command palette expansion.

@@ -82,16 +82,14 @@
       const newId = editorGroupsStore.splitGroup(groupId, 'horizontal');
       tabsStore.openFile(entry, newId);
     } else if (zone === 'left') {
-      const newId = editorGroupsStore.splitGroup(groupId, 'horizontal');
+      const newId = editorGroupsStore.splitGroup(groupId, 'horizontal', 'before');
       tabsStore.openFile(entry, newId);
-      editorGroupsStore.swapChildren(groupId);
     } else if (zone === 'bottom') {
       const newId = editorGroupsStore.splitGroup(groupId, 'vertical');
       tabsStore.openFile(entry, newId);
     } else if (zone === 'top') {
-      const newId = editorGroupsStore.splitGroup(groupId, 'vertical');
+      const newId = editorGroupsStore.splitGroup(groupId, 'vertical', 'before');
       tabsStore.openFile(entry, newId);
-      editorGroupsStore.swapChildren(groupId);
     }
 
     window.dispatchEvent(new CustomEvent('file-tree-drag-end'));

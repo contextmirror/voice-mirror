@@ -83,6 +83,80 @@ export function countLeaves(node) {
   return countLeaves(node.children[0]) + countLeaves(node.children[1]);
 }
 
+/**
+ * Recursively reset all branch ratios to 0.5.
+ * @param {object} node
+ */
+function resetRatios(node) {
+  if (node.type === 'branch') {
+    node.ratio = 0.5;
+    resetRatios(node.children[0]);
+    resetRatios(node.children[1]);
+  }
+}
+
+/**
+ * Find the neighboring groupId in a given direction within the tree.
+ * Uses the tree structure to determine spatial relationships:
+ *   - horizontal branches: children[0] is left, children[1] is right
+ *   - vertical branches: children[0] is top, children[1] is bottom
+ *
+ * @param {object} root - Grid root node
+ * @param {number} groupId - Starting groupId
+ * @param {'left'|'right'|'up'|'down'} direction
+ * @returns {number|null}
+ */
+function findNeighborInTree(root, groupId, direction) {
+  // Build path from root to the leaf
+  const path = [];
+  function buildPath(node, target) {
+    if (node.type === 'leaf') return node.groupId === target;
+    if (buildPath(node.children[0], target)) {
+      path.push({ node, childIdx: 0 });
+      return true;
+    }
+    if (buildPath(node.children[1], target)) {
+      path.push({ node, childIdx: 1 });
+      return true;
+    }
+    return false;
+  }
+  if (!buildPath(root, groupId)) return null;
+
+  // Walk up the path to find an ancestor where we can cross over
+  const isHorizontal = direction === 'left' || direction === 'right';
+  const wantChild = (direction === 'right' || direction === 'down') ? 1 : 0;
+
+  for (const { node, childIdx } of path) {
+    const branchDir = node.direction;
+    const matchesAxis = (isHorizontal && branchDir === 'horizontal') ||
+                        (!isHorizontal && branchDir === 'vertical');
+    if (matchesAxis && childIdx !== wantChild) {
+      // Cross over to the other child and pick the nearest leaf
+      const nearestSide = wantChild === 1 ? 0 : 1; // pick closest edge
+      return getEdgeLeaf(node.children[wantChild], branchDir, nearestSide);
+    }
+  }
+  return null;
+}
+
+/**
+ * Get the leaf at an edge of a subtree.
+ * @param {object} node
+ * @param {'horizontal'|'vertical'} axis - The axis we're navigating along
+ * @param {number} side - 0 for left/top edge, 1 for right/bottom edge
+ * @returns {number}
+ */
+function getEdgeLeaf(node, axis, side) {
+  if (node.type === 'leaf') return node.groupId;
+  // If this branch is on the same axis, pick the edge child
+  if (node.direction === axis) {
+    return getEdgeLeaf(node.children[side], axis, side);
+  }
+  // Different axis — pick first child (arbitrary, both are equally "near")
+  return getEdgeLeaf(node.children[0], axis, side);
+}
+
 // ============ Store ============
 
 import { SvelteMap } from 'svelte/reactivity';
@@ -92,6 +166,7 @@ function createEditorGroupsStore() {
   let groups = new SvelteMap([[1, { activeTabId: null }]]);
   let focusedGroupId = $state(1);
   let nextGroupId = $state(2);
+  let maximizedGroupId = $state(null);
 
   return {
     get gridRoot() { return gridRoot; },
@@ -106,19 +181,23 @@ function createEditorGroupsStore() {
      * Split a group into two panes.
      * @param {number} groupId - The group to split
      * @param {'horizontal'|'vertical'} direction - Split direction
+     * @param {'after'|'before'} position - Place new pane after (right/bottom) or before (left/top)
      * @returns {number} The new group's ID
      */
-    splitGroup(groupId, direction = 'horizontal') {
+    splitGroup(groupId, direction = 'horizontal', position = 'after') {
       const newId = nextGroupId;
       nextGroupId += 1;
 
       const oldLeaf = { type: 'leaf', groupId };
       const newLeaf = { type: 'leaf', groupId: newId };
+      const children = position === 'before'
+        ? [newLeaf, oldLeaf]
+        : [oldLeaf, newLeaf];
       const branch = {
         type: 'branch',
         direction,
         ratio: 0.5,
-        children: [oldLeaf, newLeaf],
+        children,
       };
 
       const newRoot = replaceLeaf(gridRoot, groupId, branch);
@@ -127,6 +206,51 @@ function createEditorGroupsStore() {
       }
 
       groups.set(newId, { activeTabId: null });
+
+      // Clear maximize so the new split is visible
+      maximizedGroupId = null;
+
+      return newId;
+    },
+
+    /**
+     * Split at the ancestor level, wrapping a parent subtree in a new branch.
+     * Used for full-width/height splits (e.g., dragging to bottom between two side-by-side panes).
+     *
+     * Walks up from the leaf and finds the first ancestor branch whose direction
+     * differs from the requested split direction (or the root). Wraps that subtree
+     * in a new branch, creating a full-spanning pane.
+     *
+     * @param {number} groupId - A leaf groupId to anchor the search
+     * @param {'horizontal'|'vertical'} direction - Split direction
+     * @param {'after'|'before'} position - Place new pane after (right/bottom) or before (left/top)
+     * @returns {number} The new group's ID
+     */
+    splitAncestor(groupId, direction, position = 'after') {
+      // If no split exists, just split the leaf
+      if (gridRoot.type === 'leaf') {
+        return this.splitGroup(groupId, direction, position);
+      }
+
+      const newId = nextGroupId;
+      nextGroupId += 1;
+      const newLeaf = { type: 'leaf', groupId: newId };
+
+      // Wrap the entire root in a new branch
+      const children = position === 'before'
+        ? [newLeaf, gridRoot]
+        : [gridRoot, newLeaf];
+
+      gridRoot = {
+        type: 'branch',
+        direction,
+        ratio: 0.5,
+        children,
+      };
+
+      groups.set(newId, { activeTabId: null });
+      maximizedGroupId = null;
+
       return newId;
     },
 
@@ -167,6 +291,11 @@ function createEditorGroupsStore() {
       // Update focused group if it was the closed one
       if (focusedGroupId === groupId) {
         focusedGroupId = siblingGroupId;
+      }
+
+      // Clear maximize if the maximized group was closed or only one group remains
+      if (maximizedGroupId === groupId || gridRoot.type === 'leaf') {
+        maximizedGroupId = null;
       }
 
       return siblingGroupId;
@@ -213,6 +342,7 @@ function createEditorGroupsStore() {
       groups = new SvelteMap([[1, { activeTabId: null }]]);
       focusedGroupId = 1;
       nextGroupId = 2;
+      maximizedGroupId = null;
     },
 
     /**
@@ -240,6 +370,53 @@ function createEditorGroupsStore() {
         parent.children[1] = temp;
       }
     },
+
+    /**
+     * Reset all branch ratios to 0.5 (even widths/heights).
+     */
+    evenSizes() {
+      resetRatios(gridRoot);
+    },
+
+    /**
+     * Find the neighboring group in a given direction relative to the focused group.
+     * @param {number} groupId - The starting group
+     * @param {'left'|'right'|'up'|'down'} direction - Direction to look
+     * @returns {number|null} The neighbor groupId, or null if none
+     */
+    findNeighbor(groupId, direction) {
+      return findNeighborInTree(gridRoot, groupId, direction);
+    },
+
+    /**
+     * Focus the neighboring group in a given direction.
+     * @param {'left'|'right'|'up'|'down'} direction
+     * @returns {boolean} True if focus moved
+     */
+    focusDirection(direction) {
+      const neighbor = findNeighborInTree(gridRoot, focusedGroupId, direction);
+      if (neighbor !== null) {
+        focusedGroupId = neighbor;
+        return true;
+      }
+      return false;
+    },
+
+    /**
+     * Toggle maximize for the focused group.
+     * When maximized, only the focused group is visible.
+     * Call again to restore the full grid.
+     */
+    toggleMaximize() {
+      if (maximizedGroupId !== null) {
+        // Restore
+        maximizedGroupId = null;
+      } else if (gridRoot.type === 'branch') {
+        maximizedGroupId = focusedGroupId;
+      }
+    },
+
+    get maximizedGroupId() { return maximizedGroupId; },
   };
 }
 

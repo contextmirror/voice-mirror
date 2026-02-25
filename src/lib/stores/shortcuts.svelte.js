@@ -102,6 +102,36 @@ export const IN_APP_SHORTCUTS = {
     label: 'Focus second editor group',
     category: 'in-app',
   },
+  'focus-group-left': {
+    keys: 'Ctrl+K Ctrl+Left',
+    label: 'Focus editor group to the left',
+    category: 'in-app',
+  },
+  'focus-group-right': {
+    keys: 'Ctrl+K Ctrl+Right',
+    label: 'Focus editor group to the right',
+    category: 'in-app',
+  },
+  'focus-group-up': {
+    keys: 'Ctrl+K Ctrl+Up',
+    label: 'Focus editor group above',
+    category: 'in-app',
+  },
+  'focus-group-down': {
+    keys: 'Ctrl+K Ctrl+Down',
+    label: 'Focus editor group below',
+    category: 'in-app',
+  },
+  'even-editor-sizes': {
+    keys: 'Ctrl+K Ctrl+=',
+    label: 'Reset editor groups to equal sizes',
+    category: 'in-app',
+  },
+  'maximize-editor-group': {
+    keys: 'Ctrl+K Ctrl+M',
+    label: 'Toggle maximize editor group',
+    category: 'in-app',
+  },
 };
 
 // ============ Action Handlers ============
@@ -393,8 +423,51 @@ export function getActionHandler(id) {
  * This should be called once from App.svelte's $effect.
  */
 export function setupInAppShortcuts() {
+  // Chord state: Ctrl+K starts a chord, next Ctrl+key completes it
+  let chordPending = false;
+  let chordTimer = null;
+
+  function clearChord() {
+    chordPending = false;
+    if (chordTimer) { clearTimeout(chordTimer); chordTimer = null; }
+  }
+
   function handleKeydown(event) {
     const ctrl = event.ctrlKey || event.metaKey;
+
+    // ── Chord handling: Ctrl+K was pressed, waiting for second key ──
+    if (chordPending && ctrl) {
+      const key = event.key;
+      let handled = false;
+
+      if (key === 'ArrowLeft')  { actionHandlers['focus-group-left']?.();  handled = true; }
+      if (key === 'ArrowRight') { actionHandlers['focus-group-right']?.(); handled = true; }
+      if (key === 'ArrowUp')    { actionHandlers['focus-group-up']?.();    handled = true; }
+      if (key === 'ArrowDown')  { actionHandlers['focus-group-down']?.();  handled = true; }
+      if (key === '=')          { actionHandlers['even-editor-sizes']?.(); handled = true; }
+      if (key === 'm' || key === 'M') { actionHandlers['maximize-editor-group']?.(); handled = true; }
+
+      clearChord();
+      if (handled) {
+        event.preventDefault();
+        return;
+      }
+      // Not a recognized chord — fall through to normal handling
+    }
+
+    // Ctrl+K starts a chord sequence (500ms timeout)
+    if (ctrl && event.key === 'k') {
+      if (event.target?.closest('.cm-editor')) return;
+      event.preventDefault();
+      chordPending = true;
+      chordTimer = setTimeout(clearChord, 500);
+      return;
+    }
+
+    // Non-chord key pressed — cancel any pending chord
+    if (chordPending && !ctrl) {
+      clearChord();
+    }
 
     // Ctrl+Shift+F -> Search in files (works from any context including inputs)
     if (ctrl && event.shiftKey && event.key === 'F') {
@@ -475,5 +548,6 @@ export function setupInAppShortcuts() {
 
   return () => {
     window.removeEventListener('keydown', handleKeydown);
+    clearChord();
   };
 }

@@ -41,9 +41,12 @@
 
   // Track file-tree drag state to suppress stop-sign cursor across the workspace
   let fileTreeDragging = $state(false);
+  // Workspace-level ancestor drop zone (full-width top/bottom overlays)
+  let ancestorDropZone = $state(null);
+
   $effect(() => {
     const onStart = () => { fileTreeDragging = true; };
-    const onEnd = () => { fileTreeDragging = false; };
+    const onEnd = () => { fileTreeDragging = false; ancestorDropZone = null; };
     window.addEventListener('file-tree-drag-start', onStart);
     window.addEventListener('file-tree-drag-end', onEnd);
     return () => {
@@ -51,6 +54,64 @@
       window.removeEventListener('file-tree-drag-end', onEnd);
     };
   });
+
+  /** Handle seam dragover — detect top/bottom half and show ancestor overlay */
+  function handleSeamDragOver(e, seamDirection) {
+    if (!fileTreeDragging) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'copy';
+
+    // For a horizontal seam (between left/right panes), detect top vs bottom half
+    if (seamDirection === 'horizontal') {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const y = (e.clientY - rect.top) / rect.height;
+      ancestorDropZone = y > 0.5 ? 'bottom' : 'top';
+    } else {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const x = (e.clientX - rect.left) / rect.width;
+      ancestorDropZone = x > 0.5 ? 'right' : 'left';
+    }
+  }
+
+  function handleSeamDragLeave(e) {
+    if (!e.currentTarget.contains(e.relatedTarget)) {
+      ancestorDropZone = null;
+    }
+  }
+
+  /** Handle drop on seam — create full-width/height ancestor split */
+  function handleSeamDrop(e) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    let raw = e.dataTransfer.getData('application/x-voice-mirror-file');
+    if (!raw) raw = e.dataTransfer.getData('text/plain');
+    if (!raw) return;
+
+    let data;
+    try { data = JSON.parse(raw); } catch { return; }
+    if (data?.type !== 'file-tree' || !data.entry?.path) return;
+
+    const zone = ancestorDropZone;
+    ancestorDropZone = null;
+
+    if (zone === 'bottom') {
+      const newId = editorGroupsStore.splitAncestor(editorGroupsStore.focusedGroupId, 'vertical');
+      tabsStore.openFile(data.entry, newId);
+    } else if (zone === 'top') {
+      const newId = editorGroupsStore.splitAncestor(editorGroupsStore.focusedGroupId, 'vertical', 'before');
+      tabsStore.openFile(data.entry, newId);
+    } else if (zone === 'right') {
+      const newId = editorGroupsStore.splitAncestor(editorGroupsStore.focusedGroupId, 'horizontal');
+      tabsStore.openFile(data.entry, newId);
+    } else if (zone === 'left') {
+      const newId = editorGroupsStore.splitAncestor(editorGroupsStore.focusedGroupId, 'horizontal', 'before');
+      tabsStore.openFile(data.entry, newId);
+    }
+
+    window.dispatchEvent(new CustomEvent('file-tree-drag-end'));
+  }
 
   // Derive active file info for FileTree highlighting
   let focusedGroupId = $derived(editorGroupsStore.focusedGroupId);
@@ -140,6 +201,18 @@
       const ids = editorGroupsStore.allGroupIds;
       if (ids.length >= 2) editorGroupsStore.setFocusedGroup(ids[1]);
     });
+
+    // Directional focus (Ctrl+K Ctrl+Arrow)
+    setActionHandler('focus-group-left', () => editorGroupsStore.focusDirection('left'));
+    setActionHandler('focus-group-right', () => editorGroupsStore.focusDirection('right'));
+    setActionHandler('focus-group-up', () => editorGroupsStore.focusDirection('up'));
+    setActionHandler('focus-group-down', () => editorGroupsStore.focusDirection('down'));
+
+    // Even sizes (Ctrl+K Ctrl+=)
+    setActionHandler('even-editor-sizes', () => editorGroupsStore.evenSizes());
+
+    // Maximize group (Ctrl+K Ctrl+M)
+    setActionHandler('maximize-editor-group', () => editorGroupsStore.toggleMaximize());
   });
 </script>
 
@@ -147,14 +220,32 @@
   {#if node.type === 'leaf'}
     <EditorPane groupId={node.groupId} showBrowser={node.groupId === firstGroupId ? showBrowser : false} onBrowserClick={node.groupId === firstGroupId ? () => { showBrowser = !showBrowser; } : null} />
   {:else}
-    <SplitPanel direction={node.direction} bind:ratio={node.ratio} minA={150} minB={150}>
-      {#snippet panelA()}
-        {@render renderNode(node.children[0])}
-      {/snippet}
-      {#snippet panelB()}
-        {@render renderNode(node.children[1])}
-      {/snippet}
-    </SplitPanel>
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="grid-branch" class:horizontal={node.direction === 'horizontal'} class:vertical={node.direction === 'vertical'}>
+      <SplitPanel direction={node.direction} bind:ratio={node.ratio} minA={150} minB={150}>
+        {#snippet panelA()}
+          {@render renderNode(node.children[0])}
+        {/snippet}
+        {#snippet panelB()}
+          {@render renderNode(node.children[1])}
+        {/snippet}
+      </SplitPanel>
+      <!-- Seam drop zone: invisible overlay on the divider, active during file-tree drags -->
+      {#if fileTreeDragging}
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div
+          class="seam-drop-zone"
+          class:horizontal={node.direction === 'horizontal'}
+          class:vertical={node.direction === 'vertical'}
+          style={node.direction === 'horizontal'
+            ? `left: calc(${node.ratio * 100}% - 20px); width: 40px; top: 0; bottom: 0;`
+            : `top: calc(${node.ratio * 100}% - 20px); height: 40px; left: 0; right: 0;`}
+          ondragover={(e) => handleSeamDragOver(e, node.direction)}
+          ondragleave={handleSeamDragLeave}
+          ondrop={handleSeamDrop}
+        ></div>
+      {/if}
+    </div>
   {/if}
 {/snippet}
 
@@ -179,7 +270,17 @@
                 <div class="preview-area">
                   <!-- Editor Grid: always visible so GroupTabBar stays accessible -->
                   <div class="editor-grid">
-                    {@render renderNode(editorGroupsStore.gridRoot)}
+                    {#if editorGroupsStore.maximizedGroupId !== null}
+                      <EditorPane groupId={editorGroupsStore.maximizedGroupId} showBrowser={editorGroupsStore.maximizedGroupId === firstGroupId ? showBrowser : false} onBrowserClick={editorGroupsStore.maximizedGroupId === firstGroupId ? () => { showBrowser = !showBrowser; } : null} />
+                    {:else}
+                      {@render renderNode(editorGroupsStore.gridRoot)}
+                    {/if}
+                    <!-- Workspace-level drop zone overlay for full-width ancestor splits -->
+                    {#if ancestorDropZone}
+                      <div class="ancestor-drop-overlay">
+                        <div class="ancestor-zone" class:top={ancestorDropZone === 'top'} class:bottom={ancestorDropZone === 'bottom'} class:left={ancestorDropZone === 'left'} class:right={ancestorDropZone === 'right'}></div>
+                      </div>
+                    {/if}
                   </div>
 
                   <!-- Browser layer: overlays editor content when visible (tab bar stays above) -->
@@ -259,6 +360,70 @@
     display: flex;
     flex: 1;
     overflow: hidden;
+    position: relative;
+  }
+
+  /* Workspace-level drop zone overlay for full-width ancestor splits */
+  .ancestor-drop-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 10000;
+    pointer-events: none;
+  }
+
+  .ancestor-zone {
+    position: absolute;
+    left: 8px;
+    right: 8px;
+    height: calc(50% - 12px);
+    background: color-mix(in srgb, var(--accent) 20%, transparent);
+    border: 2px dashed var(--accent);
+    border-radius: 4px;
+    opacity: 1;
+    transition: opacity 70ms ease-out;
+  }
+
+  .ancestor-zone.bottom {
+    bottom: 8px;
+  }
+
+  .ancestor-zone.top {
+    top: 8px;
+  }
+
+  .ancestor-zone.left {
+    top: 8px;
+    bottom: 8px;
+    left: 8px;
+    right: auto;
+    height: auto;
+    width: calc(50% - 12px);
+  }
+
+  .ancestor-zone.right {
+    top: 8px;
+    bottom: 8px;
+    right: 8px;
+    left: auto;
+    height: auto;
+    width: calc(50% - 12px);
+  }
+
+  /* Grid branch wrapper — needed for seam drop zone positioning */
+  .grid-branch {
+    display: flex;
+    flex: 1;
+    position: relative;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  /* Seam drop zone: invisible overlay on the SplitPanel divider */
+  .seam-drop-zone {
+    position: absolute;
+    z-index: 9999;
+    pointer-events: auto;
   }
 
   /* Browser layer: overlays editor content below the tab bars */
