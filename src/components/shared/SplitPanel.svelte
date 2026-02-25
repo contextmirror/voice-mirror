@@ -128,27 +128,30 @@
   }
 
   .handle-line {
-    background: var(--accent);
-    border-radius: 1px;
+    background: var(--border);
+    border-radius: 2px;
     opacity: 0;
     transition: opacity var(--duration-fast) var(--ease-out);
   }
   .horizontal > .split-handle .handle-line {
     width: 2px;
-    height: 100%;
+    height: 32px;
   }
   .vertical > .split-handle .handle-line {
     height: 2px;
-    width: 100%;
+    width: 32px;
   }
-  .split-handle:hover .handle-line {
-    opacity: 0.8;
+  .split-handle:hover .handle-line,
+  .dragging .split-handle .handle-line {
+    opacity: 0.3;
   }
   .dragging .split-handle .handle-line {
-    opacity: 1;
+    opacity: 0.5;
+    background: var(--accent);
   }
   .split-handle:focus-visible .handle-line {
-    opacity: 0.8;
+    opacity: 0.5;
+    background: var(--accent);
   }
 
   @media (prefers-reduced-motion: reduce) {
