@@ -18,6 +18,13 @@
     var shiftHeld = false;
     var textInput = null;
 
+    // --- Select mode state ---
+    var _selectMode = false;
+    var _hoveredEl = null;
+    var _selectedElement = null;
+    var _selectTooltip = null;
+    var _selectActionBar = null;
+
     // --- Listeners (stored for cleanup) ---
     var _onMouseDown = null;
     var _onMouseMove = null;
@@ -478,10 +485,388 @@
     }
 
     // =========================================================================
+    // Element select mode (DevTools-style element picker)
+    // =========================================================================
+
+    /**
+     * Build a minimal unique CSS selector path from element up to nearest
+     * ancestor with an id, or body. Uses tag.class and :nth-child for
+     * disambiguation when siblings share the same tag.
+     */
+    function _buildSelector(el) {
+        var parts = [];
+        var cur = el;
+        while (cur && cur !== document.body && cur !== document.documentElement) {
+            var seg = cur.tagName.toLowerCase();
+            if (cur.id) {
+                seg = seg + '#' + cur.id;
+                parts.unshift(seg);
+                break;
+            }
+            if (cur.className && typeof cur.className === 'string') {
+                var classes = cur.className.trim().split(/\s+/);
+                for (var i = 0; i < classes.length; i++) {
+                    if (classes[i]) seg += '.' + classes[i];
+                }
+            }
+            // Disambiguate among siblings with the same tag
+            var parent = cur.parentElement;
+            if (parent) {
+                var siblings = parent.children;
+                var sameTag = 0;
+                var idx = 0;
+                for (var j = 0; j < siblings.length; j++) {
+                    if (siblings[j].tagName === cur.tagName) {
+                        sameTag++;
+                        if (siblings[j] === cur) idx = sameTag;
+                    }
+                }
+                if (sameTag > 1) {
+                    seg += ':nth-child(' + (Array.prototype.indexOf.call(parent.children, cur) + 1) + ')';
+                }
+            }
+            parts.unshift(seg);
+            cur = cur.parentElement;
+        }
+        if (parts.length === 0) return el.tagName.toLowerCase();
+        return parts.join(' > ');
+    }
+
+    /**
+     * Draw DevTools-style highlight boxes on the canvas for margin, padding,
+     * and content areas of the given element.
+     */
+    function _drawElementHighlight(el) {
+        if (!ctx || !canvas) return;
+        _redrawAll();
+
+        var rect = el.getBoundingClientRect();
+        var style = window.getComputedStyle(el);
+
+        var mt = parseFloat(style.marginTop) || 0;
+        var mr = parseFloat(style.marginRight) || 0;
+        var mb = parseFloat(style.marginBottom) || 0;
+        var ml = parseFloat(style.marginLeft) || 0;
+
+        var pt = parseFloat(style.paddingTop) || 0;
+        var pr = parseFloat(style.paddingRight) || 0;
+        var pb = parseFloat(style.paddingBottom) || 0;
+        var pl = parseFloat(style.paddingLeft) || 0;
+
+        var bt = parseFloat(style.borderTopWidth) || 0;
+        var br2 = parseFloat(style.borderRightWidth) || 0;
+        var bb = parseFloat(style.borderBottomWidth) || 0;
+        var bl = parseFloat(style.borderLeftWidth) || 0;
+
+        // Margin box (orange)
+        ctx.fillStyle = 'rgba(246, 178, 107, 0.3)';
+        ctx.fillRect(
+            rect.left - ml,
+            rect.top - mt,
+            rect.width + ml + mr,
+            rect.height + mt + mb
+        );
+
+        // Padding box (green) — border-box minus border
+        ctx.fillStyle = 'rgba(147, 196, 125, 0.4)';
+        ctx.fillRect(
+            rect.left + bl,
+            rect.top + bt,
+            rect.width - bl - br2,
+            rect.height - bt - bb
+        );
+
+        // Content box (blue) — inside padding
+        ctx.fillStyle = 'rgba(111, 168, 220, 0.4)';
+        ctx.fillRect(
+            rect.left + bl + pl,
+            rect.top + bt + pt,
+            rect.width - bl - br2 - pl - pr,
+            rect.height - bt - bb - pt - pb
+        );
+
+        // Blue border outline around element bounds
+        ctx.strokeStyle = 'rgba(111, 168, 220, 1)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(rect.left, rect.top, rect.width, rect.height);
+    }
+
+    /**
+     * Show a floating tooltip above (or below) the hovered element displaying
+     * tag#id.class | width x height.
+     */
+    function _showSelectTooltip(el) {
+        _removeSelectTooltip();
+
+        var rect = el.getBoundingClientRect();
+        var tag = el.tagName.toLowerCase();
+        var label = tag;
+        if (el.id) label += '#' + el.id;
+        if (el.className && typeof el.className === 'string') {
+            var classes = el.className.trim().split(/\s+/);
+            for (var i = 0; i < classes.length; i++) {
+                if (classes[i]) label += '.' + classes[i];
+            }
+        }
+        label += ' | ' + Math.round(rect.width) + ' x ' + Math.round(rect.height);
+
+        var tip = document.createElement('div');
+        tip.setAttribute('data-vm-tooltip', '1');
+        tip.textContent = label;
+        tip.style.cssText = [
+            'position:fixed',
+            'z-index:1000001',
+            'pointer-events:none',
+            'background:rgba(0,0,0,0.85)',
+            'color:#fff',
+            'font-size:11px',
+            'font-family:monospace',
+            'padding:3px 8px',
+            'border-radius:3px',
+            'white-space:nowrap',
+            'max-width:400px',
+            'overflow:hidden',
+            'text-overflow:ellipsis'
+        ].join(';');
+
+        // Position above element, or below if too close to top
+        var tipH = 22;
+        var topPos = rect.top - tipH - 4;
+        if (topPos < 4) topPos = rect.bottom + 4;
+        tip.style.left = Math.max(0, rect.left) + 'px';
+        tip.style.top = topPos + 'px';
+
+        document.body.appendChild(tip);
+        _selectTooltip = tip;
+    }
+
+    /**
+     * Show floating action bar below the selected element with
+     * "Send to Chat" and "Cancel" buttons.
+     */
+    function _showSelectActionBar(el) {
+        _removeSelectActionBar();
+
+        var rect = el.getBoundingClientRect();
+
+        var bar = document.createElement('div');
+        bar.setAttribute('data-vm-actionbar', '1');
+        bar.style.cssText = [
+            'position:fixed',
+            'z-index:1000001',
+            'display:flex',
+            'gap:6px',
+            'padding:4px 8px',
+            'background:rgba(0,0,0,0.9)',
+            'border-radius:4px',
+            'font-family:sans-serif',
+            'font-size:12px'
+        ].join(';');
+
+        var btnStyle = [
+            'border:none',
+            'border-radius:3px',
+            'padding:4px 12px',
+            'cursor:pointer',
+            'font-size:12px',
+            'font-family:sans-serif'
+        ].join(';');
+
+        var sendBtn = document.createElement('button');
+        sendBtn.textContent = 'Send to Chat';
+        sendBtn.style.cssText = btnStyle + ';background:#4a9eff;color:#fff;';
+        sendBtn.addEventListener('click', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            // Notify Tauri host via lens-shortcut scheme (fire-and-forget)
+            new Image().src = 'lens-shortcut://element-selected';
+            _cancelSelect();
+        });
+
+        var cancelBtn = document.createElement('button');
+        cancelBtn.textContent = 'Cancel';
+        cancelBtn.style.cssText = btnStyle + ';background:#555;color:#fff;';
+        cancelBtn.addEventListener('click', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            _cancelSelect();
+        });
+
+        bar.appendChild(sendBtn);
+        bar.appendChild(cancelBtn);
+
+        // Stop events from reaching canvas
+        bar.addEventListener('mousedown', function (e) { e.stopPropagation(); });
+        bar.addEventListener('mousemove', function (e) { e.stopPropagation(); });
+        bar.addEventListener('mouseup', function (e) { e.stopPropagation(); });
+
+        // Position below element, or above if too close to bottom
+        var barH = 34;
+        var topPos = rect.bottom + 4;
+        if (topPos + barH > window.innerHeight) topPos = rect.top - barH - 4;
+        bar.style.left = Math.max(0, rect.left) + 'px';
+        bar.style.top = topPos + 'px';
+
+        document.body.appendChild(bar);
+        _selectActionBar = bar;
+    }
+
+    /**
+     * Serialize a DOM element into a structured object for the host.
+     */
+    function _serializeElement(el) {
+        var selector = _buildSelector(el);
+        var rect = el.getBoundingClientRect();
+        var style = window.getComputedStyle(el);
+
+        // Strip script and style tags from outerHTML
+        var clone = el.cloneNode(true);
+        var scripts = clone.querySelectorAll('script, style');
+        for (var i = 0; i < scripts.length; i++) {
+            scripts[i].parentNode.removeChild(scripts[i]);
+        }
+        var html = clone.outerHTML || '';
+        if (html.length > 2000) html = html.substring(0, 2000);
+
+        var text = (el.textContent || '').trim();
+        if (text.length > 200) text = text.substring(0, 200);
+
+        var styleProps = [
+            'display', 'position', 'width', 'height', 'padding', 'margin',
+            'gap', 'flex-direction', 'align-items', 'justify-content',
+            'color', 'background', 'background-color', 'border', 'border-radius',
+            'box-shadow', 'opacity', 'font-family', 'font-size', 'font-weight',
+            'line-height', 'letter-spacing'
+        ];
+        var styles = {};
+        for (var j = 0; j < styleProps.length; j++) {
+            var val = style.getPropertyValue(styleProps[j]);
+            if (val) styles[styleProps[j]] = val;
+        }
+
+        return {
+            selector: selector,
+            tagName: el.tagName.toLowerCase(),
+            id: el.id || '',
+            classes: el.className && typeof el.className === 'string' ? el.className.trim().split(/\s+/).filter(function (c) { return c; }) : [],
+            bounds: {
+                x: Math.round(rect.left),
+                y: Math.round(rect.top),
+                width: Math.round(rect.width),
+                height: Math.round(rect.height)
+            },
+            html: html,
+            text: text,
+            styles: styles
+        };
+    }
+
+    // --- Select mode mouse / keyboard handlers ---
+
+    function _handleSelectMouseMove(e) {
+        if (!_selectMode || _selectedElement) return;
+
+        // Temporarily disable canvas pointer-events so elementFromPoint
+        // can hit the actual page elements beneath the overlay
+        if (canvas) canvas.style.pointerEvents = 'none';
+        var el = document.elementFromPoint(e.clientX, e.clientY);
+        if (canvas) canvas.style.pointerEvents = 'auto';
+
+        // Skip our own overlay elements
+        if (!el || el === document.body || el === document.documentElement) {
+            _hoveredEl = null;
+            _removeSelectTooltip();
+            _redrawAll();
+            return;
+        }
+        if (el.hasAttribute('data-vm-tooltip') ||
+            el.hasAttribute('data-vm-actionbar') ||
+            el.hasAttribute('data-vm-text') ||
+            el.id === 'vm-design-canvas') {
+            return;
+        }
+        // Also skip if element is a child of our overlay elements
+        var parent = el.parentElement;
+        while (parent) {
+            if (parent.hasAttribute('data-vm-actionbar') ||
+                parent.hasAttribute('data-vm-tooltip') ||
+                parent.hasAttribute('data-vm-text')) {
+                return;
+            }
+            parent = parent.parentElement;
+        }
+
+        _hoveredEl = el;
+        _drawElementHighlight(el);
+        _showSelectTooltip(el);
+    }
+
+    function _handleSelectMouseDown(e) {
+        if (!_selectMode) return;
+        e.preventDefault();
+        e.stopPropagation();
+
+        // If already selected, clicking again deselects
+        if (_selectedElement) {
+            _cancelSelect();
+            return;
+        }
+
+        if (!_hoveredEl) return;
+
+        _selectedElement = _serializeElement(_hoveredEl);
+        _drawElementHighlight(_hoveredEl);
+        _removeSelectTooltip();
+        _showSelectActionBar(_hoveredEl);
+    }
+
+    function _handleSelectKeyDown(e) {
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            if (_selectedElement) {
+                _cancelSelect();
+            } else {
+                _exitSelectMode();
+            }
+        }
+    }
+
+    // --- Select mode cleanup helpers ---
+
+    function _removeSelectTooltip() {
+        if (_selectTooltip && _selectTooltip.parentNode) {
+            _selectTooltip.parentNode.removeChild(_selectTooltip);
+        }
+        _selectTooltip = null;
+    }
+
+    function _removeSelectActionBar() {
+        if (_selectActionBar && _selectActionBar.parentNode) {
+            _selectActionBar.parentNode.removeChild(_selectActionBar);
+        }
+        _selectActionBar = null;
+    }
+
+    function _cancelSelect() {
+        _selectedElement = null;
+        _hoveredEl = null;
+        _removeSelectTooltip();
+        _removeSelectActionBar();
+        _redrawAll();
+    }
+
+    function _exitSelectMode() {
+        _selectMode = false;
+        _cancelSelect();
+        if (canvas) canvas.style.cursor = _getCursor(currentTool);
+    }
+
+    // =========================================================================
     // Event handlers
     // =========================================================================
 
     function _handleMouseDown(e) {
+        if (_selectMode) { _handleSelectMouseDown(e); return; }
         if (e.button !== 0) return;
         e.preventDefault();
         e.stopPropagation();
@@ -517,6 +902,7 @@
     }
 
     function _handleMouseMove(e) {
+        if (_selectMode) { _handleSelectMouseMove(e); return; }
         if (!drawing || !currentStroke) return;
         e.preventDefault();
         e.stopPropagation();
@@ -538,6 +924,7 @@
     }
 
     function _handleMouseUp(e) {
+        if (_selectMode) return;
         if (!drawing || !currentStroke) return;
         e.preventDefault();
         e.stopPropagation();
@@ -569,6 +956,9 @@
     }
 
     function _handleKeyDown(e) {
+        // Select mode handles its own keys
+        if (_selectMode) { _handleSelectKeyDown(e); return; }
+
         // Don't intercept when typing in text input
         if (textInput) {
             var ta = textInput._textarea || textInput;
@@ -621,6 +1011,7 @@
 
     function _getCursor(tool) {
         if (tool === 'text') return 'text';
+        if (tool === 'select') return 'crosshair';
         return 'crosshair';
     }
 
@@ -674,6 +1065,7 @@
         },
 
         disable: function () {
+            _exitSelectMode();
             _removeTextInput();
 
             if (canvas) {
@@ -697,11 +1089,18 @@
         },
 
         setTool: function (name) {
-            var valid = ['pen', 'line', 'arrow', 'rect', 'circle', 'text', 'marker', 'pixelate'];
+            var valid = ['pen', 'line', 'arrow', 'rect', 'circle', 'text', 'marker', 'pixelate', 'select'];
             if (valid.indexOf(name) === -1) return;
+            // Exit select mode when switching to a different tool
+            if (_selectMode && name !== 'select') {
+                _exitSelectMode();
+            }
             currentTool = name;
-            if (canvas) {
-                canvas.style.cursor = _getCursor(name);
+            if (name === 'select') {
+                _selectMode = true;
+                if (canvas) canvas.style.cursor = 'crosshair';
+            } else {
+                if (canvas) canvas.style.cursor = _getCursor(name);
             }
         },
 
@@ -739,6 +1138,10 @@
         toDataURL: function () {
             if (!canvas) return '';
             return canvas.toDataURL('image/png');
+        },
+
+        getSelectedElement: function () {
+            return _selectedElement;
         }
     };
 })();
