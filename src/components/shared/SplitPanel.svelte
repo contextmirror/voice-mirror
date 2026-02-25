@@ -110,7 +110,7 @@
     flex-shrink: 0;
     z-index: 500;
     display: flex;
-    align-items: center;
+    align-items: stretch;
     justify-content: center;
     -webkit-app-region: no-drag;
   }
@@ -125,6 +125,8 @@
     cursor: row-resize;
     padding: 4px 0;
     margin: -4px 0;
+    align-items: center;
+    justify-content: stretch;
   }
 
   .handle-line {
@@ -135,11 +137,9 @@
   }
   .horizontal > .split-handle .handle-line {
     width: 2px;
-    height: 100%;
   }
   .vertical > .split-handle .handle-line {
     height: 2px;
-    width: 100%;
   }
   .split-handle:hover .handle-line {
     opacity: 0.8;
