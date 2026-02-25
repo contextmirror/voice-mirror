@@ -131,7 +131,7 @@
 
 {#snippet renderNode(node)}
   {#if node.type === 'leaf'}
-    <EditorPane groupId={node.groupId} {showBrowser} onBrowserClick={() => { showBrowser = !showBrowser; }} />
+    <EditorPane groupId={node.groupId} showBrowser={node.groupId === 1 ? showBrowser : false} onBrowserClick={node.groupId === 1 ? () => { showBrowser = !showBrowser; } : null} />
   {:else}
     <SplitPanel direction={node.direction} bind:ratio={node.ratio} minA={150} minB={150}>
       {#snippet panelA()}
