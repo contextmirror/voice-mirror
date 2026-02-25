@@ -112,9 +112,8 @@
     if (!tab) return;
     const sourceGroup = tab.groupId || 1;
     const newGroupId = editorGroupsStore.splitGroup(sourceGroup, 'horizontal');
-    if (tabsStore.moveTab) {
-      tabsStore.moveTab(tab.id, newGroupId);
-    }
+    // Duplicate the file into the new group (like VS Code Ctrl+\)
+    tabsStore.openFile({ name: tab.title, path: tab.path, readOnly: tab.readOnly, external: tab.external }, newGroupId);
   }
 
   function handleSplitDown() {
@@ -122,9 +121,8 @@
     if (!tab) return;
     const sourceGroup = tab.groupId || 1;
     const newGroupId = editorGroupsStore.splitGroup(sourceGroup, 'vertical');
-    if (tabsStore.moveTab) {
-      tabsStore.moveTab(tab.id, newGroupId);
-    }
+    // Duplicate the file into the new group (like VS Code Ctrl+\)
+    tabsStore.openFile({ name: tab.title, path: tab.path, readOnly: tab.readOnly, external: tab.external }, newGroupId);
   }
 
   function handleOpenToSide() {

@@ -48,19 +48,21 @@ function createTabsStore() {
     openFile(entry, targetGroupId) {
       const groupId = targetGroupId ?? editorGroupsStore.focusedGroupId;
 
-      // If file is already open in any group, just focus it
-      const existing = tabs.find(t => t.path === entry.path);
-      if (existing) {
-        activeTabId = existing.id;
-        editorGroupsStore.setActiveTabForGroup(existing.groupId, existing.id);
-        editorGroupsStore.setFocusedGroup(existing.groupId);
+      // If file is already open in the target group, just focus it
+      const existingInGroup = tabs.find(t => t.path === entry.path && t.groupId === groupId);
+      if (existingInGroup) {
+        activeTabId = existingInGroup.id;
+        editorGroupsStore.setActiveTabForGroup(groupId, existingInGroup.id);
+        editorGroupsStore.setFocusedGroup(groupId);
         return;
       }
 
       // Replace existing preview tab in the target group if there is one
       const previewIdx = tabs.findIndex(t => t.preview && t.groupId === groupId);
+      // Use path as ID for group 1 (backwards compat), namespaced for other groups
+      const tabId = groupId === 1 ? entry.path : `${entry.path}:g${groupId}`;
       const newTab = {
-        id: entry.path,
+        id: tabId,
         type: 'file',
         title: entry.name,
         path: entry.path,
@@ -76,8 +78,8 @@ function createTabsStore() {
       } else {
         tabs.push(newTab);
       }
-      activeTabId = newTab.id;
-      editorGroupsStore.setActiveTabForGroup(groupId, newTab.id);
+      activeTabId = tabId;
+      editorGroupsStore.setActiveTabForGroup(groupId, tabId);
       editorGroupsStore.setFocusedGroup(groupId);
     },
 
@@ -99,14 +101,14 @@ function createTabsStore() {
      */
     openDiff(change, targetGroupId) {
       const groupId = targetGroupId ?? editorGroupsStore.focusedGroupId;
-      const diffId = `diff:${change.path}`;
+      const baseDiffId = `diff:${change.path}`;
 
-      // If diff is already open, just focus it
-      const existing = tabs.find(t => t.id === diffId);
-      if (existing) {
-        activeTabId = existing.id;
-        editorGroupsStore.setActiveTabForGroup(existing.groupId, existing.id);
-        editorGroupsStore.setFocusedGroup(existing.groupId);
+      // If diff is already open in the target group, just focus it
+      const existingInGroup = tabs.find(t => t.path === change.path && t.type === 'diff' && t.groupId === groupId);
+      if (existingInGroup) {
+        activeTabId = existingInGroup.id;
+        editorGroupsStore.setActiveTabForGroup(groupId, existingInGroup.id);
+        editorGroupsStore.setFocusedGroup(groupId);
         return;
       }
 
@@ -115,8 +117,9 @@ function createTabsStore() {
 
       // Replace existing preview tab in the target group
       const previewIdx = tabs.findIndex(t => t.preview && t.groupId === groupId);
+      const tabId = groupId === 1 ? baseDiffId : `${baseDiffId}:g${groupId}`;
       const newTab = {
-        id: diffId,
+        id: tabId,
         type: 'diff',
         title: name,
         path: change.path,
@@ -132,8 +135,8 @@ function createTabsStore() {
       } else {
         tabs.push(newTab);
       }
-      activeTabId = newTab.id;
-      editorGroupsStore.setActiveTabForGroup(groupId, newTab.id);
+      activeTabId = tabId;
+      editorGroupsStore.setActiveTabForGroup(groupId, tabId);
       editorGroupsStore.setFocusedGroup(groupId);
     },
 
@@ -141,7 +144,11 @@ function createTabsStore() {
      * Pin a preview tab (make it permanent).
      */
     pinTab(id) {
-      const tab = tabs.find(t => t.id === id);
+      // Try exact ID match first, then fall back to path match in focused group
+      let tab = tabs.find(t => t.id === id);
+      if (!tab) {
+        tab = tabs.find(t => t.path === id && t.groupId === editorGroupsStore.focusedGroupId);
+      }
       if (tab) {
         tab.preview = false;
       }

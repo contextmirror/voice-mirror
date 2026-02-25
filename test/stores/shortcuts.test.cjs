@@ -245,10 +245,10 @@ describe('shortcuts: setupInAppShortcuts', () => {
     );
   });
 
-  it('handles Ctrl+P for open-file-search (standard IDE keybinding)', () => {
+  it('handles Ctrl+Shift+P for open-file-search (avoids browser print dialog)', () => {
     assert.ok(
-      src.includes("event.key === 'p'") || src.includes("key === 'p'"),
-      'Should handle Ctrl+P for quick file open'
+      src.includes("event.key === 'P'") || src.includes("key === 'P'"),
+      'Should handle Ctrl+Shift+P for quick file open'
     );
   });
 
