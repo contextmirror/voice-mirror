@@ -278,8 +278,10 @@
     const project = projectStore.activeProject;
     loadingSymbols = true;
     try {
-      const result = await lspRequestDocumentSymbols(tab.path, project?.path);
-      const data = result?.data || result || [];
+      const root = project?.path || null;
+      if (!root) { symbols = []; loadingSymbols = false; return; }
+      const result = await lspRequestDocumentSymbols(tab.path, root);
+      const data = result?.data?.symbols || [];
       symbols = Array.isArray(data) ? data : [];
     } catch (err) {
       console.warn('[CommandPalette] Failed to fetch symbols:', err);
