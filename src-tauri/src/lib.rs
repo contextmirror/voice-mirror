@@ -157,6 +157,9 @@ pub fn run() {
                     "lens-url-changed",
                     serde_json::json!({ "url": decoded_url }),
                 );
+            } else if key == "element-selected" {
+                info!("[lens-shortcut] Element selected in design overlay");
+                let _ = ctx.app_handle().emit("lens-element-selected", serde_json::json!({}));
             } else if !key.is_empty() {
                 info!("[lens-shortcut] Forwarding shortcut key: {}", key);
                 let _ = ctx.app_handle().emit("lens-shortcut", serde_json::json!({ "key": key }));
@@ -343,6 +346,7 @@ pub fn run() {
             dev_server_cmds::kill_port_process,
             // Design canvas overlay
             design_cmds::design_command,
+            design_cmds::design_get_element,
         ])
         .setup(|app| {
             // Migrate data from old Electron directory before anything reads it

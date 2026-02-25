@@ -2,6 +2,7 @@ use super::IpcResponse;
 use crate::util::escape_js_string;
 use tauri::{AppHandle, Manager};
 use tracing::info;
+use serde_json::Value;
 
 /// Design overlay JS module, embedded at compile time.
 const DESIGN_JS: &str = include_str!("../assets/design-overlay.js");
@@ -80,5 +81,64 @@ pub fn design_command(
     match webview.eval(&js) {
         Ok(()) => IpcResponse::ok_empty(),
         Err(e) => IpcResponse::err(format!("Failed to execute design JS: {}", e)),
+    }
+}
+
+/// Get the selected element data from the design overlay.
+/// Uses ExecuteScript (with return value) to read window.vmDesign.getSelectedElement().
+#[tauri::command]
+pub async fn design_get_element(
+    app: AppHandle,
+    state: tauri::State<'_, super::lens::LensState>,
+) -> Result<IpcResponse, String> {
+    let label = {
+        let active_id = state
+            .active_tab_id
+            .lock()
+            .map_err(|e| format!("Lock error: {}", e))?;
+        let active_id = match active_id.as_ref() {
+            Some(id) => id.clone(),
+            None => return Ok(IpcResponse::err("No active browser tab")),
+        };
+        let tabs = state
+            .tabs
+            .lock()
+            .map_err(|e| format!("Lock error: {}", e))?;
+        match tabs.get(&active_id) {
+            Some(t) => t.webview_label.clone(),
+            None => return Ok(IpcResponse::err("Active tab not found")),
+        }
+    };
+
+    let webview = app
+        .get_webview(&label)
+        .ok_or_else(|| "WebView not found".to_string())?;
+
+    let js = "JSON.stringify(window.vmDesign ? window.vmDesign.getSelectedElement() : null)";
+
+    match crate::services::browser_bridge::evaluate_js_with_result(
+        &app,
+        &webview,
+        js,
+        std::time::Duration::from_secs(5),
+    )
+    .await
+    {
+        Ok(data) => {
+            if data.is_null() {
+                Ok(IpcResponse::err("No element selected"))
+            } else {
+                // data is a JSON string from JSON.stringify — parse the inner value
+                match data.as_str() {
+                    Some(json_str) => match serde_json::from_str::<Value>(json_str) {
+                        Ok(Value::Null) => Ok(IpcResponse::err("No element selected")),
+                        Ok(parsed) => Ok(IpcResponse::ok(parsed)),
+                        Err(_) => Ok(IpcResponse::ok(data)),
+                    },
+                    None => Ok(IpcResponse::ok(data)),
+                }
+            }
+        }
+        Err(e) => Ok(IpcResponse::err(format!("ExecuteScript failed: {}", e))),
     }
 }

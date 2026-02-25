@@ -116,6 +116,8 @@ describe('api.js -- critical Tauri command names', () => {
     'detect_gpu',
     'list_stt_models',
     'delete_stt_model',
+    // Design Overlay
+    'design_get_element',
     // Dev Server
     'detect_dev_servers',
     'probe_port',
@@ -230,6 +232,7 @@ describe('api.js -- exported async functions', () => {
     'lensClearCache',
     // Design Overlay
     'designCommand',
+    'designGetElement',
     // Browser Tabs
     'lensCreateTab',
     'lensCloseTab',

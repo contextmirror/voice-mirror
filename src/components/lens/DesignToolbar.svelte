@@ -1,7 +1,7 @@
 <script>
-  import { designCommand } from '../../lib/api.js';
+  import { designCommand, designGetElement, lensCapturePreview } from '../../lib/api.js';
 
-  let { onSend = () => {}, onClose = () => {} } = $props();
+  let { onSend = () => {}, onClose = () => {}, onElementSend = () => {} } = $props();
 
   let activeTool = $state('pen');
   let activeColor = $state('#ff0000');
@@ -9,6 +9,7 @@
   let sizeLabel = $derived(activeTool === 'text' ? `Font: ${activeSize * 4 + 8}px` : `Size: ${activeSize}`);
 
   const tools = [
+    { id: 'select', label: 'Select Element', icon: '' },
     { id: 'pen', label: 'Pen', icon: 'M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25z' },
     { id: 'line', label: 'Line', icon: 'M4 20L20 4' },
     { id: 'arrow', label: 'Arrow', icon: 'M5 19L19 5M19 5v6M19 5h-6' },
@@ -49,6 +50,87 @@
   async function undo() { await designCommand('undo', {}); }
   async function redo() { await designCommand('redo', {}); }
   async function clear() { await designCommand('clear', {}); }
+
+  /** Crop a data URL image to the given bounds using canvas. */
+  async function cropScreenshot(dataUrl, bounds) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        const dpr = window.devicePixelRatio || 1;
+        const sx = Math.round(bounds.x * dpr);
+        const sy = Math.round(bounds.y * dpr);
+        const sw = Math.round(bounds.width * dpr);
+        const sh = Math.round(bounds.height * dpr);
+
+        const cx = Math.max(0, Math.min(sx, img.width));
+        const cy = Math.max(0, Math.min(sy, img.height));
+        const cw = Math.min(sw, img.width - cx);
+        const ch = Math.min(sh, img.height - cy);
+
+        if (cw <= 0 || ch <= 0) {
+          resolve(dataUrl);
+          return;
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = cw;
+        canvas.height = ch;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, cx, cy, cw, ch, 0, 0, cw, ch);
+        resolve(canvas.toDataURL('image/png'));
+      };
+      img.onerror = () => resolve(dataUrl);
+      img.src = dataUrl;
+    });
+  }
+
+  /** Handle "Send to Chat" for a selected element — crop screenshot + format context. */
+  async function handleElementSend() {
+    try {
+      const elemResult = await designGetElement();
+      if (!elemResult?.success || !elemResult?.data) {
+        console.warn('[DesignToolbar] No element selected:', elemResult?.error);
+        return;
+      }
+      const elem = elemResult.data;
+
+      const screenshotResult = await lensCapturePreview();
+      if (!screenshotResult?.success || !screenshotResult?.data?.dataUrl) {
+        console.warn('[DesignToolbar] Screenshot failed:', screenshotResult?.error);
+        return;
+      }
+
+      const croppedDataUrl = await cropScreenshot(
+        screenshotResult.data.dataUrl,
+        elem.bounds
+      );
+
+      const styleLines = Object.entries(elem.styles || {})
+        .map(([k, v]) => `  ${k}: ${v};`)
+        .join('\n');
+
+      const contextText = [
+        `Selected element: ${elem.tagName}${elem.id ? '#' + elem.id : ''}${elem.classes ? '.' + elem.classes.split(' ').join('.') : ''}`,
+        `Selector: ${elem.selector}`,
+        `Size: ${elem.bounds.width} x ${elem.bounds.height}px`,
+        elem.text ? `Text: "${elem.text}"` : null,
+        '',
+        'HTML:',
+        elem.html,
+        '',
+        'Computed styles:',
+        styleLines
+      ].filter(Boolean).join('\n');
+
+      onElementSend({
+        imageDataUrl: croppedDataUrl,
+        contextText: contextText,
+        name: `Element: ${elem.selector.split(' > ').pop()}`
+      });
+    } catch (err) {
+      console.error('[DesignToolbar] Element send failed:', err);
+    }
+  }
 </script>
 
 <div class="design-toolbar">
@@ -62,7 +144,12 @@
         title={tool.label}
         aria-label={tool.label}
       >
-        {#if tool.id === 'circle'}
+        {#if tool.id === 'select'}
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2"/>
+            <path d="M8 12h.01M12 12h.01M16 12h.01"/>
+          </svg>
+        {:else if tool.id === 'circle'}
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
             <circle cx="12" cy="12" r="9"/>
           </svg>
@@ -81,67 +168,69 @@
     {/each}
   </div>
 
-  <div class="separator"></div>
+  {#if activeTool !== 'select'}
+    <div class="separator"></div>
 
-  <!-- Color swatches -->
-  <div class="color-group">
-    {#each colors as color}
-      <button
-        class="color-swatch"
-        class:active={activeColor === color}
-        style="background: {color};"
-        onclick={() => selectColor(color)}
-        title={color}
-        aria-label="Color {color}"
-      ></button>
-    {/each}
-  </div>
+    <!-- Color swatches -->
+    <div class="color-group">
+      {#each colors as color}
+        <button
+          class="color-swatch"
+          class:active={activeColor === color}
+          style="background: {color};"
+          onclick={() => selectColor(color)}
+          title={color}
+          aria-label="Color {color}"
+        ></button>
+      {/each}
+    </div>
 
-  <div class="separator"></div>
+    <div class="separator"></div>
 
-  <!-- Size control -->
-  <div class="size-group">
-    <div
-      class="size-preview"
-      style="width: {Math.max(activeSize, 2)}px; height: {Math.max(activeSize, 2)}px; background: {activeColor};"
-    ></div>
-    <input
-      type="range"
-      class="size-slider"
-      min="1"
-      max="20"
-      value={activeSize}
-      oninput={handleSizeInput}
-      title={sizeLabel}
-    />
-    <span class="size-label">{sizeLabel}</span>
-  </div>
+    <!-- Size control -->
+    <div class="size-group">
+      <div
+        class="size-preview"
+        style="width: {Math.max(activeSize, 2)}px; height: {Math.max(activeSize, 2)}px; background: {activeColor};"
+      ></div>
+      <input
+        type="range"
+        class="size-slider"
+        min="1"
+        max="20"
+        value={activeSize}
+        oninput={handleSizeInput}
+        title={sizeLabel}
+      />
+      <span class="size-label">{sizeLabel}</span>
+    </div>
 
-  <div class="separator"></div>
+    <div class="separator"></div>
 
-  <!-- Undo / Redo / Clear -->
-  <div class="action-group">
-    <button class="tool-btn" onclick={undo} title="Undo" aria-label="Undo">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-        <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
-      </svg>
-    </button>
-    <button class="tool-btn" onclick={redo} title="Redo" aria-label="Redo">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-        <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
-      </svg>
-    </button>
-    <button class="tool-btn" onclick={clear} title="Clear all" aria-label="Clear all annotations">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-        <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-      </svg>
-    </button>
-  </div>
+    <!-- Undo / Redo / Clear -->
+    <div class="action-group">
+      <button class="tool-btn" onclick={undo} title="Undo" aria-label="Undo">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
+        </svg>
+      </button>
+      <button class="tool-btn" onclick={redo} title="Redo" aria-label="Redo">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+        </svg>
+      </button>
+      <button class="tool-btn" onclick={clear} title="Clear all" aria-label="Clear all annotations">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+        </svg>
+      </button>
+    </div>
+  {/if}
 
   <div class="spacer"></div>
 
   <!-- Send to Claude -->
-  <button class="send-btn" onclick={onSend} title="Send annotated screenshot to chat">
+  <button class="send-btn" onclick={activeTool === 'select' ? handleElementSend : onSend} title={activeTool === 'select' ? 'Send selected element to chat' : 'Send annotated screenshot to chat'}>
     Send to Chat
   </button>
 </div>

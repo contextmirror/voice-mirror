@@ -161,7 +161,7 @@ async fn capture_screenshot_png(
 ///
 /// The JS expression is evaluated as-is. `ExecuteScript` returns the result
 /// as a JSON-serialized string (the last expression value).
-async fn evaluate_js_with_result(
+pub async fn evaluate_js_with_result(
     _app: &AppHandle,
     webview: &tauri::Webview,
     js_expression: &str,

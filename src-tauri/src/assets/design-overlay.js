@@ -514,12 +514,8 @@
             if (parent) {
                 var siblings = parent.children;
                 var sameTag = 0;
-                var idx = 0;
                 for (var j = 0; j < siblings.length; j++) {
-                    if (siblings[j].tagName === cur.tagName) {
-                        sameTag++;
-                        if (siblings[j] === cur) idx = sameTag;
-                    }
+                    if (siblings[j].tagName === cur.tagName) sameTag++;
                 }
                 if (sameTag > 1) {
                     seg += ':nth-child(' + (Array.prototype.indexOf.call(parent.children, cur) + 1) + ')';
@@ -795,6 +791,9 @@
             }
             parent = parent.parentElement;
         }
+
+        // Same element — skip redundant redraws
+        if (el === _hoveredEl) return;
 
         _hoveredEl = el;
         _drawElementHighlight(el);

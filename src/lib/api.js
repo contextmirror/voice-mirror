@@ -377,6 +377,11 @@ export async function designCommand(action, args = {}) {
   return invoke('design_command', { action, args });
 }
 
+/** Get the selected element data from the design overlay. */
+export async function designGetElement() {
+  return invoke('design_get_element');
+}
+
 // ============ Browser Tabs ============
 
 export async function lensCreateTab(tabId, url, x, y, width, height) {
