@@ -595,12 +595,12 @@
   .terminal-tab-bar {
     display: flex;
     align-items: center;
-    gap: 1px;
-    padding: 0 6px;
-    height: 34px;
-    min-height: 34px;
-    background: var(--bg-elevated);
-    border-bottom: 1px solid var(--border, rgba(255,255,255,0.06));
+    gap: 2px;
+    padding: 0 8px;
+    height: 36px;
+    min-height: 36px;
+    background: var(--bg);
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 40%, transparent);
     user-select: none;
   }
 
@@ -618,39 +618,31 @@
   .terminal-tab {
     display: flex;
     align-items: center;
-    gap: 5px;
-    padding: 0 10px;
-    height: 28px;
-    background: none;
+    gap: 6px;
+    padding: 0 12px;
+    height: 26px;
+    background: transparent;
     border: none;
-    border-radius: 4px 4px 0 0;
+    border-radius: 6px;
     color: var(--muted);
     font-size: 12px;
     font-family: var(--font-family);
     cursor: pointer;
     white-space: nowrap;
+    flex-shrink: 0;
     position: relative;
-    transition: color 0.15s, background 0.15s;
+    transition: background 0.15s ease, color 0.15s ease;
   }
 
   .terminal-tab:hover {
     color: var(--text);
-    background: rgba(255,255,255,0.04);
+    background: color-mix(in srgb, var(--text) 8%, transparent);
   }
 
   .terminal-tab.active {
-    color: var(--text);
-    background: var(--bg);
-  }
-
-  .terminal-tab.active::after {
-    content: '';
-    position: absolute;
-    bottom: -1px;
-    left: 0;
-    right: 0;
-    height: 1px;
-    background: var(--accent);
+    color: var(--text-strong);
+    background: color-mix(in srgb, var(--text) 12%, transparent);
+    font-weight: 500;
   }
 
   .terminal-tab.exited {
@@ -694,15 +686,17 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: none;
+    width: 16px;
+    height: 16px;
+    background: transparent;
     border: none;
     color: var(--muted);
     cursor: pointer;
-    padding: 1px;
-    border-radius: 3px;
+    padding: 0;
+    border-radius: 4px;
     margin-left: 2px;
     opacity: 0;
-    transition: opacity 0.15s, color 0.15s, background 0.15s;
+    transition: opacity 0.1s, color 0.15s, background 0.15s;
   }
 
   .terminal-tab:hover .tab-close {
@@ -710,27 +704,29 @@
   }
 
   .tab-close:hover {
-    color: var(--text);
-    background: rgba(255,255,255,0.1);
+    background: color-mix(in srgb, var(--danger) 20%, transparent);
+    color: var(--danger);
   }
 
   .tab-add {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: none;
+    width: 24px;
+    height: 24px;
     border: none;
+    border-radius: 6px;
+    background: transparent;
     color: var(--muted);
     cursor: pointer;
-    padding: 4px;
-    border-radius: 4px;
+    flex-shrink: 0;
     margin-left: 2px;
-    transition: color 0.15s, background 0.15s;
+    transition: background 0.12s ease, color 0.12s ease;
   }
 
   .tab-add:hover {
+    background: color-mix(in srgb, var(--text) 8%, transparent);
     color: var(--text);
-    background: rgba(255,255,255,0.06);
   }
 
   /* ── Toolbar actions (right side) ── */
@@ -745,18 +741,18 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: none;
+    background: transparent;
     border: none;
     color: var(--muted);
     cursor: pointer;
     padding: 3px 5px;
     border-radius: 4px;
-    transition: color 0.15s, background 0.15s;
+    transition: color 0.15s ease, background 0.15s ease;
   }
 
   .toolbar-btn:hover {
     color: var(--text);
-    background: rgba(255,255,255,0.06);
+    background: color-mix(in srgb, var(--text) 8%, transparent);
   }
 
   .toolbar-btn:focus-visible {
