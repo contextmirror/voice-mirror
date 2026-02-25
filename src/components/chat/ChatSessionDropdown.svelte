@@ -1,4 +1,5 @@
 <script>
+  import { tick } from 'svelte';
   import { projectStore } from '../../lib/stores/project.svelte.js';
   import { chatStore } from '../../lib/stores/chat.svelte.js';
   import { navigationStore } from '../../lib/stores/navigation.svelte.js';
@@ -230,6 +231,9 @@
     if (id === chatStore.activeChatId) return;
 
     try {
+      // Suppress fly transitions during session switch
+      chatStore.setSwitching(true);
+
       // Save current session before switching
       if (chatStore.activeChatId && chatStore.messages.length > 0) {
         await saveActiveSession();
@@ -237,21 +241,34 @@
 
       const result = await chatLoad(id);
       const chat = result?.success !== false ? (result?.data || result) : null;
-      if (!chat) return;
-
-      chatStore.setActiveChatId(chat.id);
-      chatStore.clearMessages();
-      lastSavedMessageCount = 0;
-
-      if (chat.messages && chat.messages.length > 0) {
-        for (const msg of chat.messages) {
-          chatStore.addMessage(msg.role, msg.content || msg.text, msg.metadata || {});
-        }
-        lastSavedMessageCount = chat.messages.length;
+      if (!chat) {
+        chatStore.setSwitching(false);
+        return;
       }
 
+      // Build all messages at once to avoid flash of old content
+      const loaded = (chat.messages || []).map((msg) => ({
+        id: msg.id || uid(),
+        role: msg.role,
+        text: msg.content || msg.text,
+        timestamp: msg.timestamp || Date.now(),
+        streaming: false,
+        toolCalls: msg.metadata?.toolCalls || [],
+        attachments: msg.metadata?.attachments || [],
+        metadata: msg.metadata || {},
+      }));
+
+      // Set messages BEFORE activeChatId so DOM updates atomically
+      chatStore.setMessages(loaded);
+      chatStore.setActiveChatId(chat.id);
+      lastSavedMessageCount = loaded.length;
+
       reloadSessions();
+
+      // Re-enable transitions after DOM has settled
+      tick().then(() => { chatStore.setSwitching(false); });
     } catch (err) {
+      chatStore.setSwitching(false);
       console.error('[ChatSessionDropdown] Failed to load session:', err);
     }
   }

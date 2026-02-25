@@ -22,12 +22,15 @@ function createChatStore() {
   let messages = $state([]);
   let isStreaming = $state(false);
   let activeChatId = $state(null);
+  let isSwitching = $state(false);
 
   return {
     get messages() { return messages; },
     get isStreaming() { return isStreaming; },
     get activeChatId() { return activeChatId; },
+    get isSwitching() { return isSwitching; },
     setActiveChatId(id) { activeChatId = id; },
+    setSwitching(v) { isSwitching = v; },
 
     /**
      * Add a complete message.
@@ -120,6 +123,16 @@ function createChatStore() {
      */
     clearMessages() {
       messages = [];
+      isStreaming = false;
+    },
+
+    /**
+     * Replace all messages atomically (single re-render).
+     * Use this when switching sessions to avoid flash of old messages.
+     * @param {Array} newMessages
+     */
+    setMessages(newMessages) {
+      messages = newMessages;
       isStreaming = false;
     },
 

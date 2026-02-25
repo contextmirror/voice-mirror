@@ -199,8 +199,22 @@
     showScreenshotPicker = false;
   }
 
-  // Track previous message count to detect new messages
+  // Track previous message count and chat ID to detect new messages vs session switches
   let prevMessageCount = 0;
+  let prevChatId = null;
+
+  // Reset scroll instantly on session switch
+  $effect(() => {
+    const id = chatStore.activeChatId;
+    if (id !== prevChatId) {
+      prevChatId = id;
+      if (scrollContainer) {
+        scrollContainer.scrollTop = 0;
+        userScrolledUp = false;
+      }
+      prevMessageCount = chatStore.messages.length;
+    }
+  });
 
   // Auto-scroll when new messages are added (length changes)
   $effect(() => {
@@ -294,6 +308,7 @@
     padding: 12px 8px;
     position: relative;
   }
+
 
   .messages-container {
     display: flex;

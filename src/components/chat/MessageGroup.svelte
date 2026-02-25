@@ -8,8 +8,11 @@
   import { fly } from 'svelte/transition';
   import { formatTime } from '../../lib/utils.js';
   import { configStore } from '../../lib/stores/config.svelte.js';
+  import { chatStore } from '../../lib/stores/chat.svelte.js';
   import { resolveAvatar } from '../../lib/avatar-presets.js';
   import ChatBubble from './ChatBubble.svelte';
+
+  let isSwitching = $derived(chatStore.isSwitching);
 
   let { group } = $props();
 
@@ -33,7 +36,7 @@
   class="message-group"
   class:user={isUser}
   class:assistant={!isUser}
-  transition:fly={{ y: 20, duration: 200 }}
+  in:fly={{ y: isSwitching ? 0 : 20, duration: isSwitching ? 0 : 200 }}
 >
   <div class="message-avatar" class:user-avatar={isUser} class:assistant-avatar={!isUser}>
     {#if avatar.type === 'image'}
