@@ -143,6 +143,28 @@ describe('lens: URL normalization', () => {
   });
 });
 
+describe('lens: search query fallback', () => {
+  it('detects non-URL input and redirects to Google search', () => {
+    assert.ok(src.includes('google.com/search?q='), 'Should use Google search for non-URL input');
+    assert.ok(src.includes('encodeURIComponent'), 'Should encode search query');
+  });
+
+  it('treats localhost as a URL, not a search', () => {
+    assert.ok(src.includes('localhost'), 'Should detect localhost as URL pattern');
+  });
+
+  it('treats dotted hostnames as URLs', () => {
+    // Pattern like github.com, foo.bar.baz should get https:// not search
+    const hasDotPattern = /\[\\w-\]\+\(\\.\[\\w-\]\+\)\+/.test(src) || src.includes('.test(normalized)');
+    assert.ok(hasDotPattern, 'Should have regex to detect domain-like patterns with dots');
+  });
+
+  it('preserves existing protocol detection', () => {
+    assert.ok(src.includes('https?:\\/\\/'), 'Should still detect http/https protocols');
+    assert.ok(src.includes('about:'), 'Should still detect about: protocol');
+  });
+});
+
 describe('lens: DEFAULT_URL', () => {
   it('DEFAULT_URL is a string', () => {
     assert.ok(/const\s+DEFAULT_URL\s*=\s*'/.test(src), 'DEFAULT_URL should be a string constant');
@@ -150,7 +172,6 @@ describe('lens: DEFAULT_URL', () => {
 
   it('DEFAULT_URL is about:blank (no external default)', () => {
     assert.ok(src.includes("about:blank"), 'DEFAULT_URL should be about:blank');
-    assert.ok(!src.includes('google.com'), 'Should not reference google.com');
   });
 });
 

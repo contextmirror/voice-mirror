@@ -68,8 +68,14 @@ function createLensStore() {
     async navigate(rawUrl) {
       let normalized = rawUrl.trim();
       if (!normalized) return;
-      if (!/^(https?:\/\/|about:)/i.test(normalized)) {
+      if (/^(https?:\/\/|about:)/i.test(normalized)) {
+        // Already has protocol — use as-is
+      } else if (/^localhost(:\d+)?/.test(normalized) || /^[\w-]+(\.[\w-]+)+/.test(normalized)) {
+        // Looks like a URL (localhost or has dots like github.com) — prepend https
         normalized = 'https://' + normalized;
+      } else {
+        // Not a URL — treat as a Google search query
+        normalized = 'https://www.google.com/search?q=' + encodeURIComponent(normalized);
       }
       url = normalized;
       inputUrl = normalized;
