@@ -241,10 +241,10 @@ describe('LensWorkspace.svelte', () => {
     assert.ok(src.includes('showBrowser'), 'Should have showBrowser local state');
   });
 
-  it('has global-strip with browser button', () => {
+  it('passes browser props to GroupTabBar', () => {
     assert.ok(
-      src.includes('global-strip') || src.includes('browser-btn'),
-      'Should have global strip with browser button'
+      src.includes('onBrowserClick') && src.includes('showBrowser'),
+      'Should pass browser toggle props to GroupTabBar'
     );
   });
 

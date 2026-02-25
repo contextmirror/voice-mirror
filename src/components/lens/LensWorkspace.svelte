@@ -147,21 +147,18 @@
 {/snippet}
 
 {#snippet editorPane(groupId)}
-  {@const groupActiveTabId = editorGroupsStore.groups.get(groupId)?.activeTabId}
-  {@const groupActiveTab = tabsStore.tabs.find(t => t.id === groupActiveTabId)}
-
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="editor-pane"
        class:focused={editorGroupsStore.focusedGroupId === groupId}
        onclick={() => editorGroupsStore.setFocusedGroup(groupId)}>
 
-    <GroupTabBar {groupId} />
+    <GroupTabBar {groupId} onBrowserClick={() => { showBrowser = !showBrowser; }} {showBrowser} />
 
-    {#if groupActiveTab?.type === 'file'}
-      <FileEditor tab={groupActiveTab} {groupId} />
-    {:else if groupActiveTab?.type === 'diff'}
-      <DiffViewer tab={groupActiveTab} />
+    {#if tabsStore.getActiveTabForGroup(groupId)?.type === 'file'}
+      <FileEditor tab={tabsStore.getActiveTabForGroup(groupId)} {groupId} />
+    {:else if tabsStore.getActiveTabForGroup(groupId)?.type === 'diff'}
+      <DiffViewer tab={tabsStore.getActiveTabForGroup(groupId)} />
     {:else}
       <div class="empty-pane">
         <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="32" height="32">
@@ -191,17 +188,6 @@
             <SplitPanel direction="horizontal" bind:ratio={previewRatio} minA={300} minB={140} collapseB={!layoutStore.showFileTree}>
               {#snippet panelA()}
                 <div class="preview-area">
-                  <!-- Global Browser Strip -->
-                  <div class="global-strip">
-                    <button class="browser-btn" class:active={showBrowser}
-                            onclick={() => { showBrowser = !showBrowser; }}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
-                      </svg>
-                      <span>Browser</span>
-                    </button>
-                  </div>
-
                   <!-- Browser layer: always mounted, shown/hidden via CSS -->
                   <div class="preview-layer" class:visible={showBrowser}>
                     <BrowserTabBar onNewTab={() => lensPreviewRef?.createNewTab()} />
@@ -278,36 +264,6 @@
     overflow: hidden;
     position: relative;
   }
-
-  /* Global strip: browser toggle button */
-  .global-strip {
-    display: flex;
-    align-items: center;
-    height: 32px;
-    background: var(--bg);
-    border-bottom: 1px solid color-mix(in srgb, var(--border) 40%, transparent);
-    padding: 0 4px;
-    -webkit-app-region: no-drag;
-    flex-shrink: 0;
-  }
-
-  .browser-btn {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 10px;
-    background: transparent;
-    border: none;
-    color: var(--muted);
-    font-size: 12px;
-    cursor: pointer;
-    border-radius: 4px;
-    font-family: var(--font-family);
-    -webkit-app-region: no-drag;
-    transition: background 0.12s ease, color 0.12s ease;
-  }
-  .browser-btn:hover { background: var(--bg-elevated); }
-  .browser-btn.active { color: var(--text); background: var(--bg-elevated); }
 
   /* Browser layer: always mounted, shown/hidden via CSS */
   .preview-layer {

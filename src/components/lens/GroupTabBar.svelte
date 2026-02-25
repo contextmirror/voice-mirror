@@ -3,7 +3,7 @@
   import { editorGroupsStore } from '../../lib/stores/editor-groups.svelte.js';
   import TabContextMenu from './TabContextMenu.svelte';
 
-  let { groupId = 1 } = $props();
+  let { groupId = 1, onBrowserClick = null, showBrowser = false } = $props();
 
   let tabMenu = $state({ visible: false, x: 0, y: 0, tab: null });
   let dragOverIndex = $state(-1);
@@ -94,6 +94,15 @@
 </script>
 
 <div class="group-tab-bar" class:focused={isFocused}>
+  {#if onBrowserClick}
+    <button class="browser-btn" class:active={showBrowser} onclick={onBrowserClick}>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+      </svg>
+      <span>Browser</span>
+    </button>
+    <div class="tab-separator"></div>
+  {/if}
   {#each groupTabs as tab, i (tab.id)}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
@@ -205,6 +214,35 @@
 
   .group-tab-bar.focused {
     border-bottom: 1px solid var(--accent);
+  }
+
+  .browser-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    height: 26px;
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    color: var(--muted);
+    font-size: 12px;
+    cursor: pointer;
+    font-family: var(--font-family);
+    -webkit-app-region: no-drag;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: background 0.12s ease, color 0.12s ease;
+  }
+  .browser-btn:hover { background: color-mix(in srgb, var(--text) 8%, transparent); color: var(--text); }
+  .browser-btn.active { color: var(--text-strong); background: color-mix(in srgb, var(--text) 12%, transparent); font-weight: 500; }
+
+  .tab-separator {
+    width: 1px;
+    height: 16px;
+    background: var(--border);
+    flex-shrink: 0;
+    margin: 0 2px;
   }
 
   .group-tab-bar::-webkit-scrollbar {
