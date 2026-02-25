@@ -8,6 +8,11 @@ const src = fs.readFileSync(
   'utf-8'
 );
 
+const editorPaneSrc = fs.readFileSync(
+  path.join(__dirname, '../../src/components/lens/EditorPane.svelte'),
+  'utf-8'
+);
+
 describe('LensWorkspace.svelte', () => {
   // Imports
   it('imports SplitPanel', () => {
@@ -69,10 +74,10 @@ describe('LensWorkspace.svelte', () => {
     assert.ok(src.includes('tabsStore'), 'Should import tabsStore');
   });
   it('renders GroupTabBar component', () => {
-    assert.ok(src.includes('<GroupTabBar'), 'Should render GroupTabBar');
+    assert.ok(editorPaneSrc.includes('<GroupTabBar'), 'Should render GroupTabBar in EditorPane');
   });
   it('renders FileEditor conditionally', () => {
-    assert.ok(src.includes('<FileEditor'), 'Should render FileEditor');
+    assert.ok(editorPaneSrc.includes('<FileEditor'), 'Should render FileEditor in EditorPane');
   });
   it('uses CSS visibility for browser layer (no destroy/recreate)', () => {
     assert.ok(src.includes('preview-layer'), 'Should have preview-layer wrapper');
@@ -82,8 +87,8 @@ describe('LensWorkspace.svelte', () => {
     );
   });
   it('renders DiffViewer for diff tabs', () => {
-    assert.ok(src.includes('<DiffViewer'), 'Should render DiffViewer');
-    assert.ok(src.includes('isDiff'), 'Should check for diff tab type');
+    assert.ok(editorPaneSrc.includes('<DiffViewer'), 'Should render DiffViewer in EditorPane');
+    assert.ok(editorPaneSrc.includes('diff'), 'Should check for diff tab type');
   });
   it('passes onChangeClick to FileTree', () => {
     assert.ok(src.includes('onChangeClick'), 'Should wire onChangeClick to FileTree');
@@ -223,17 +228,17 @@ describe('LensWorkspace.svelte', () => {
     assert.ok(src.includes('SplitPanel'), 'Branch nodes should use SplitPanel');
   });
 
-  it('has editorPane snippet', () => {
+  it('uses EditorPane component', () => {
     assert.ok(
-      src.includes('editorPane') || src.includes('{#snippet editorPane'),
-      'Should have editorPane snippet'
+      src.includes('EditorPane') || src.includes('import EditorPane'),
+      'Should use EditorPane component'
     );
   });
 
-  it('editorPane accepts groupId parameter', () => {
+  it('EditorPane accepts groupId parameter', () => {
     assert.ok(
-      src.includes('editorPane(') && src.includes('groupId'),
-      'editorPane should accept groupId parameter'
+      editorPaneSrc.includes('groupId') && editorPaneSrc.includes('$props'),
+      'EditorPane should accept groupId prop'
     );
   });
 
@@ -252,10 +257,10 @@ describe('LensWorkspace.svelte', () => {
     assert.ok(src.includes('editor-grid'), 'Should have editor-grid container');
   });
 
-  it('editor-grid hidden when browser showing', () => {
+  it('pane-content hidden when browser showing', () => {
     assert.ok(
-      src.includes('class:hidden={showBrowser}') || src.includes('showBrowser'),
-      'editor-grid should be hidden when browser is showing'
+      editorPaneSrc.includes('class:hidden={showBrowser}'),
+      'pane-content should be hidden when browser is showing'
     );
   });
 

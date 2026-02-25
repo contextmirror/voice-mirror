@@ -8,6 +8,7 @@
   import GroupTabBar from './GroupTabBar.svelte';
   import FileEditor from './FileEditor.svelte';
   import DiffViewer from './DiffViewer.svelte';
+  import EditorPane from './EditorPane.svelte';
   import SplitPanel from '../shared/SplitPanel.svelte';
   import ChatPanel from '../chat/ChatPanel.svelte';
   import TerminalTabs from '../terminal/TerminalTabs.svelte';
@@ -39,11 +40,8 @@
 
   // Derive active file info for FileTree highlighting
   let focusedGroupId = $derived(editorGroupsStore.focusedGroupId);
-  let activeTab = $derived(
-    tabsStore.getActiveTabForGroup
-      ? tabsStore.tabs.find(t => t.id === (editorGroupsStore.groups.get(focusedGroupId)?.activeTabId))
-      : tabsStore.activeTab
-  );
+  let focusedActiveTabId = $derived(editorGroupsStore.groups.get(focusedGroupId)?.activeTabId);
+  let activeTab = $derived(focusedActiveTabId ? tabsStore.tabs.find(t => t.id === focusedActiveTabId) : null);
   let isFile = $derived(activeTab?.type === 'file');
   let isDiff = $derived(activeTab?.type === 'diff');
   let activeExt = $derived(activeTab?.path?.split('.').pop()?.toLowerCase());
@@ -133,7 +131,7 @@
 
 {#snippet renderNode(node)}
   {#if node.type === 'leaf'}
-    {@render editorPane(node.groupId)}
+    <EditorPane groupId={node.groupId} {showBrowser} onBrowserClick={() => { showBrowser = !showBrowser; }} />
   {:else}
     <SplitPanel direction={node.direction} bind:ratio={node.ratio} minA={150} minB={150}>
       {#snippet panelA()}
@@ -146,30 +144,7 @@
   {/if}
 {/snippet}
 
-{#snippet editorPane(groupId)}
-  <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="editor-pane"
-       class:focused={editorGroupsStore.focusedGroupId === groupId}
-       onclick={() => editorGroupsStore.setFocusedGroup(groupId)}>
 
-    <GroupTabBar {groupId} onBrowserClick={() => { showBrowser = !showBrowser; }} {showBrowser} />
-
-    {#if tabsStore.getActiveTabForGroup(groupId)?.type === 'file'}
-      <FileEditor tab={tabsStore.getActiveTabForGroup(groupId)} {groupId} />
-    {:else if tabsStore.getActiveTabForGroup(groupId)?.type === 'diff'}
-      <DiffViewer tab={tabsStore.getActiveTabForGroup(groupId)} />
-    {:else}
-      <div class="empty-pane">
-        <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="32" height="32">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-          <polyline points="14 2 14 8 20 8"/>
-        </svg>
-        <span class="empty-text">Open a file to start editing</span>
-      </div>
-    {/if}
-  </div>
-{/snippet}
 
 <div class="lens-workspace">
   <div class="workspace-content">
@@ -188,7 +163,12 @@
             <SplitPanel direction="horizontal" bind:ratio={previewRatio} minA={300} minB={140} collapseB={!layoutStore.showFileTree}>
               {#snippet panelA()}
                 <div class="preview-area">
-                  <!-- Browser layer: always mounted, shown/hidden via CSS -->
+                  <!-- Editor Grid: always visible so GroupTabBar stays accessible -->
+                  <div class="editor-grid">
+                    {@render renderNode(editorGroupsStore.gridRoot)}
+                  </div>
+
+                  <!-- Browser layer: overlays editor content when visible (tab bar stays above) -->
                   <div class="preview-layer" class:visible={showBrowser}>
                     <BrowserTabBar onNewTab={() => lensPreviewRef?.createNewTab()} />
                     <LensToolbar />
@@ -199,11 +179,6 @@
                       />
                     {/if}
                     <LensPreview bind:this={lensPreviewRef} />
-                  </div>
-
-                  <!-- Editor Grid (hidden when browser is showing) -->
-                  <div class="editor-grid" class:hidden={showBrowser}>
-                    {@render renderNode(editorGroupsStore.gridRoot)}
                   </div>
                 </div>
               {/snippet}
@@ -265,58 +240,30 @@
     position: relative;
   }
 
-  /* Browser layer: always mounted, shown/hidden via CSS */
+  /* Editor grid: recursive SplitPanel tree — always visible for GroupTabBar */
+  .editor-grid {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* Browser layer: overlays editor content below the tab bars */
   .preview-layer {
     display: none;
     flex-direction: column;
-    flex: 1;
-    min-height: 0;
+    position: absolute;
+    top: 36px;  /* below GroupTabBar height */
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 10;
   }
 
   .preview-layer.visible {
     display: flex;
   }
 
-  /* Editor grid: recursive SplitPanel tree */
-  .editor-grid {
-    display: flex;
-    flex: 1;
-    overflow: hidden;
-  }
-  .editor-grid.hidden {
-    display: none;
-  }
-
-  /* Editor pane: per-group container */
-  .editor-pane {
-    display: flex;
-    flex-direction: column;
-    flex: 1;
-    overflow: hidden;
-    min-width: 0;
-    min-height: 0;
-  }
-
-  .editor-pane.focused {
-    /* Focus is shown via the GroupTabBar accent border */
-  }
-
-  .empty-pane {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    flex: 1;
-    color: var(--muted);
-    gap: 8px;
-  }
-  .empty-pane .empty-icon {
-    opacity: 0.5;
-  }
-  .empty-pane .empty-text {
-    font-size: 13px;
-    font-family: var(--font-family);
-  }
+  /* Editor pane styles are in EditorPane.svelte */
 
   /* -- Chat Panel -- */
 

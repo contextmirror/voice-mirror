@@ -85,9 +85,11 @@ export function countLeaves(node) {
 
 // ============ Store ============
 
+import { SvelteMap } from 'svelte/reactivity';
+
 function createEditorGroupsStore() {
   let gridRoot = $state({ type: 'leaf', groupId: 1 });
-  let groups = $state(new Map([[1, { activeTabId: null }]]));
+  let groups = new SvelteMap([[1, { activeTabId: null }]]);
   let focusedGroupId = $state(1);
   let nextGroupId = $state(2);
 
@@ -208,7 +210,7 @@ function createEditorGroupsStore() {
      */
     reset() {
       gridRoot = { type: 'leaf', groupId: 1 };
-      groups = new Map([[1, { activeTabId: null }]]);
+      groups = new SvelteMap([[1, { activeTabId: null }]]);
       focusedGroupId = 1;
       nextGroupId = 2;
     },

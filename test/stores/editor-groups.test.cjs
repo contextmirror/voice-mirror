@@ -25,9 +25,9 @@ describe('editor-groups.svelte.js: module structure', () => {
     assert.ok(src.includes('gridRoot'), 'Should have gridRoot state');
   });
 
-  it('uses $state for groups (Map)', () => {
+  it('uses SvelteMap for groups (reactive Map)', () => {
     assert.ok(src.includes('groups'), 'Should have groups state');
-    assert.ok(src.includes('new Map('), 'Should initialize groups as a Map');
+    assert.ok(src.includes('SvelteMap('), 'Should initialize groups as a SvelteMap');
   });
 
   it('uses $state for focusedGroupId', () => {
@@ -51,7 +51,7 @@ describe('editor-groups.svelte.js: grid tree model', () => {
 
   it('initial groups Map has group 1', () => {
     assert.ok(
-      src.includes('[1,') || src.includes('[1 ,') || src.includes('new Map([[1'),
+      src.includes('[1,') || src.includes('[1 ,') || src.includes('SvelteMap([[1'),
       'Should have group 1 in initial Map'
     );
   });
