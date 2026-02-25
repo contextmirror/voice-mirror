@@ -277,10 +277,10 @@ describe('design-overlay.js: _showSelectActionBar', () => {
     assert.ok(src.includes("'Cancel'"), 'Should have Cancel button');
   });
 
-  it('sends lens-shortcut://element-selected on Send to Chat', () => {
+  it('sends element-selected via lens-shortcut on Send to Chat', () => {
     assert.ok(
-      src.includes("'lens-shortcut://element-selected'"),
-      'Should fire lens-shortcut URI scheme'
+      src.includes('lens-shortcut.localhost') && src.includes('element-selected'),
+      'Should fire lens-shortcut with platform-correct URL'
     );
   });
 

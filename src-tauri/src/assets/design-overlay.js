@@ -681,7 +681,11 @@
             _redrawAll();
             _selectMode = false;
             // Notify Tauri host via lens-shortcut scheme (fire-and-forget)
-            new Image().src = 'lens-shortcut://element-selected';
+            // Windows WebView2 requires https://{scheme}.localhost/ format
+            var base = navigator.platform.indexOf('Win') !== -1
+                ? 'https://lens-shortcut.localhost/'
+                : 'lens-shortcut://localhost/';
+            new Image().src = base + 'element-selected?t=' + Date.now();
         });
 
         var cancelBtn = document.createElement('button');
