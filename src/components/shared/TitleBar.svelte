@@ -184,10 +184,17 @@
         aria-expanded={appMenuOpen}
         aria-haspopup="menu"
       >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="10"/>
-          <path d="M8 12a4 4 0 0 1 8 0"/>
-          <circle cx="12" cy="12" r="1"/>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <!-- Broadcast waves left -->
+          <path d="M4.5 8.5a8.5 8.5 0 0 0 0 7"/>
+          <path d="M6.5 9.8a5.5 5.5 0 0 0 0 4.4"/>
+          <path d="M8.3 10.8a3 3 0 0 0 0 2.4"/>
+          <!-- V shape -->
+          <path d="M10 7l2 10 2-10" stroke-width="2.2"/>
+          <!-- Broadcast waves right -->
+          <path d="M15.7 10.8a3 3 0 0 1 0 2.4"/>
+          <path d="M17.5 9.8a5.5 5.5 0 0 1 0 4.4"/>
+          <path d="M19.5 8.5a8.5 8.5 0 0 1 0 7"/>
         </svg>
       </button>
     </div>
