@@ -28,8 +28,8 @@ describe('Sidebar.svelte', () => {
     assert.ok(src.includes("import { voiceStore }"), 'Should import voiceStore');
   });
 
-  it('imports ChatList component', () => {
-    assert.ok(src.includes("import ChatList from './ChatList.svelte'"), 'Should import ChatList');
+  it('does not import ChatList (moved to ChatSessionDropdown)', () => {
+    assert.ok(!src.includes("import ChatList"), 'ChatList should be removed from Sidebar');
   });
 
   it('has Chat navigation item', () => {
@@ -112,9 +112,8 @@ describe('Sidebar.svelte', () => {
     assert.ok(src.includes('voice-dot'), 'Should have voice dot indicator');
   });
 
-  it('renders ChatList when on chat view', () => {
-    assert.ok(src.includes('<ChatList'), 'Should render ChatList');
-    assert.ok(src.includes("activeView === 'chat'"), 'Should show ChatList only on chat view');
+  it('does not render ChatList (moved to ChatSessionDropdown)', () => {
+    assert.ok(!src.includes('<ChatList'), 'ChatList should not be rendered in Sidebar');
   });
 
   it('has sidebar footer section', () => {
@@ -258,8 +257,8 @@ describe('sidebar: lens mode project switcher', () => {
     assert.ok(src.includes('ProjectStrip'), 'Should import ProjectStrip');
   });
 
-  it('imports SessionPanel component', () => {
-    assert.ok(src.includes('SessionPanel'), 'Should import SessionPanel');
+  it('does not import SessionPanel (moved to ChatSessionDropdown)', () => {
+    assert.ok(!src.includes('SessionPanel'), 'SessionPanel should be removed from Sidebar');
   });
 
   it('has lens-sidebar CSS class', () => {
@@ -273,14 +272,10 @@ describe('sidebar: lens mode project switcher', () => {
     );
   });
 
-  it('conditionally renders SessionPanel when not collapsed in lens mode', () => {
+  it('does not render SessionPanel (moved to ChatSessionDropdown)', () => {
     assert.ok(
-      src.includes('<SessionPanel') || src.includes('SessionPanel'),
-      'Should render SessionPanel component'
-    );
-    assert.ok(
-      src.includes('!collapsed') || src.includes('collapsed'),
-      'Should conditionally show based on collapsed state'
+      !src.includes('<SessionPanel'),
+      'SessionPanel should not be rendered in Sidebar'
     );
   });
 });

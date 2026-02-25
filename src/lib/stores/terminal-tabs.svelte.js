@@ -12,7 +12,7 @@ import { shellSpawn, shellKill } from '../api.js';
 function createTerminalTabsStore() {
   // AI tab is always present, cannot be closed
   let tabs = $state([
-    { id: 'ai', type: 'ai', title: 'Agent', shellId: null, running: true }
+    { id: 'ai', type: 'ai', title: 'Voice Agent', shellId: null, running: true }
   ]);
   let activeTabId = $state('ai');
   let hiddenTabs = $state([]);

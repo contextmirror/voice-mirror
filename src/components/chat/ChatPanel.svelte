@@ -16,6 +16,7 @@
   import MessageGroup from './MessageGroup.svelte';
   import ChatInput from './ChatInput.svelte';
   import ScreenshotPicker from './ScreenshotPicker.svelte';
+  import ChatSessionDropdown from './ChatSessionDropdown.svelte';
 
   let {
     onSend = () => {},
@@ -232,6 +233,7 @@
 </script>
 
 <div class="chat-panel">
+  <ChatSessionDropdown />
   <div class="chat-scroll-area" bind:this={scrollContainer} onscroll={handleScroll}>
     {#if hasMessages}
       <div class="messages-container">

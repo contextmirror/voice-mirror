@@ -3,9 +3,7 @@
   import { voiceStore } from '../../lib/stores/voice.svelte.js';
   import { configStore } from '../../lib/stores/config.svelte.js';
   import { setConfig } from '../../lib/api.js';
-  import ChatList from './ChatList.svelte';
   import ProjectStrip from './ProjectStrip.svelte';
-  import SessionPanel from './SessionPanel.svelte';
 
   const collapsed = $derived(navigationStore.sidebarCollapsed);
   const activeView = $derived(navigationStore.activeView);
@@ -49,13 +47,6 @@
 
 <aside class="sidebar" class:collapsed={collapsed}>
   {#if appMode === 'mirror'}
-    <!-- Chat List (only visible when on chat view and expanded) -->
-    {#if activeView === 'chat' && !collapsed}
-      <div class="sidebar-chat-section">
-        <ChatList />
-      </div>
-    {/if}
-
     <!-- Navigation Tabs -->
     <nav class="sidebar-nav">
       {#each tabs as tab}
@@ -80,9 +71,6 @@
   {:else}
     <div class="lens-sidebar">
       <ProjectStrip />
-      {#if !collapsed}
-        <SessionPanel />
-      {/if}
     </div>
   {/if}
 
@@ -195,15 +183,6 @@
     flex: 1;
     overflow: hidden;
     min-height: 0;
-  }
-
-  /* ========== Chat List Section ========== */
-  .sidebar-chat-section {
-    border-bottom: 1px solid var(--border);
-    max-height: 220px;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
   }
 
   /* ========== Navigation ========== */
