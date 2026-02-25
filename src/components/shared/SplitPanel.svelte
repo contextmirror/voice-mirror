@@ -128,30 +128,27 @@
   }
 
   .handle-line {
-    background: var(--border);
-    border-radius: 2px;
+    background: var(--accent);
+    border-radius: 1px;
     opacity: 0;
     transition: opacity var(--duration-fast) var(--ease-out);
   }
   .horizontal > .split-handle .handle-line {
     width: 2px;
-    height: 32px;
+    height: 100%;
   }
   .vertical > .split-handle .handle-line {
     height: 2px;
-    width: 32px;
+    width: 100%;
   }
-  .split-handle:hover .handle-line,
-  .dragging .split-handle .handle-line {
-    opacity: 0.3;
+  .split-handle:hover .handle-line {
+    opacity: 0.8;
   }
   .dragging .split-handle .handle-line {
-    opacity: 0.5;
-    background: var(--accent);
+    opacity: 1;
   }
   .split-handle:focus-visible .handle-line {
-    opacity: 0.5;
-    background: var(--accent);
+    opacity: 0.8;
   }
 
   @media (prefers-reduced-motion: reduce) {
