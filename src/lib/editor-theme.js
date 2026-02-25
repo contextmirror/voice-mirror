@@ -21,6 +21,9 @@ const editorTheme = EditorView.theme({
     color: 'var(--cm-foreground)',
     backgroundColor: 'var(--cm-background)',
   },
+  '.cm-scroller': {
+    scrollBehavior: 'auto',
+  },
   '.cm-content': {
     caretColor: 'var(--cm-cursor)',
     fontFamily: 'var(--font-mono)',
