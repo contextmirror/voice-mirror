@@ -1145,9 +1145,7 @@
         },
 
         getSelectedElement: function () {
-            var data = _selectedElement;
-            _selectedElement = null;  // Read-once: clear after retrieval
-            return data;
+            return _selectedElement;
         }
     };
 })();

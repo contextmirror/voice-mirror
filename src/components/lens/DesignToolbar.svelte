@@ -110,7 +110,7 @@
         .join('\n');
 
       const contextText = [
-        `Selected element: ${elem.tagName}${elem.id ? '#' + elem.id : ''}${elem.classes ? '.' + elem.classes.split(' ').join('.') : ''}`,
+        `Selected element: ${elem.tagName}${elem.id ? '#' + elem.id : ''}${typeof elem.classes === 'string' && elem.classes ? '.' + elem.classes.split(' ').join('.') : ''}`,
         `Selector: ${elem.selector}`,
         `Size: ${elem.bounds.width} x ${elem.bounds.height}px`,
         elem.text ? `Text: "${elem.text}"` : null,
