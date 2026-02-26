@@ -1,5 +1,8 @@
 use std::collections::VecDeque;
 use std::fmt;
+use std::fs::{self, File, OpenOptions};
+use std::io::{self, BufRead, BufReader as StdBufReader, Write as IoWrite};
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::RwLock;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -342,6 +345,237 @@ impl OutputStore {
 }
 
 // ---------------------------------------------------------------------------
+// LogFileWriter (JSONL file sink)
+// ---------------------------------------------------------------------------
+
+/// Maximum JSONL lines per channel file before truncation.
+const MAX_FILE_ENTRIES: usize = 2000;
+
+/// After truncation, keep this many entries (75% of max to avoid churn).
+const TRUNCATE_KEEP: usize = 1500;
+
+/// Writes log entries as JSONL to per-channel files in a directory.
+///
+/// Each channel gets its own file: `{dir}/{channel}.jsonl`
+/// (e.g., `app.jsonl`, `cli.jsonl`, `voice.jsonl`, etc.)
+///
+/// This is used as a pipe-free fallback: the Tauri app writes these files,
+/// and external MCP binaries can read them when they can't connect via
+/// named pipe.
+pub struct LogFileWriter {
+    dir: PathBuf,
+}
+
+impl LogFileWriter {
+    /// Create a new writer, ensuring the target directory exists.
+    pub fn new(dir: PathBuf) -> io::Result<Self> {
+        fs::create_dir_all(&dir)?;
+        Ok(Self { dir })
+    }
+
+    /// Path to the JSONL file for a given channel.
+    fn channel_path(&self, channel: Channel) -> PathBuf {
+        self.dir.join(format!("{}.jsonl", channel.as_str()))
+    }
+
+    /// Append a log entry as a single JSON line. Errors are silently ignored
+    /// because logging infrastructure must never crash the app.
+    pub fn append(&self, entry: &LogEntry) {
+        let line = match serde_json::to_string(entry) {
+            Ok(s) => s,
+            Err(_) => return,
+        };
+
+        let path = self.channel_path(entry.channel);
+        let mut file = match OpenOptions::new().create(true).append(true).open(&path) {
+            Ok(f) => f,
+            Err(_) => return,
+        };
+
+        // Write line + newline, then flush
+        let _ = writeln!(file, "{}", line);
+        let _ = file.flush();
+    }
+
+    /// If the channel file exceeds `MAX_FILE_ENTRIES` lines, truncate it to
+    /// keep only the most recent `TRUNCATE_KEEP` lines.
+    pub fn maybe_truncate(&self, channel: Channel) {
+        let path = self.channel_path(channel);
+
+        // Read all lines
+        let file = match File::open(&path) {
+            Ok(f) => f,
+            Err(_) => return,
+        };
+        let lines: Vec<String> = StdBufReader::new(file)
+            .lines()
+            .filter_map(|l| l.ok())
+            .collect();
+
+        if lines.len() <= MAX_FILE_ENTRIES {
+            return;
+        }
+
+        // Keep the most recent TRUNCATE_KEEP lines
+        let keep = &lines[lines.len() - TRUNCATE_KEEP..];
+
+        // Write to a temp file, then rename (atomic on most OSes)
+        let tmp_path = path.with_extension("jsonl.tmp");
+        let write_result = (|| -> io::Result<()> {
+            let mut tmp = File::create(&tmp_path)?;
+            for line in keep {
+                writeln!(tmp, "{}", line)?;
+            }
+            tmp.flush()?;
+            Ok(())
+        })();
+
+        if write_result.is_ok() {
+            let _ = fs::rename(&tmp_path, &path);
+        } else {
+            let _ = fs::remove_file(&tmp_path);
+        }
+    }
+
+    /// Read and filter entries from a channel's JSONL file.
+    ///
+    /// This is a **static** method — it does not require an instance. The MCP
+    /// handler calls this directly with the log directory path.
+    ///
+    /// Returns `(matching_entries, total_lines_in_file)`.
+    pub fn read_channel(
+        dir: &Path,
+        channel: Channel,
+        min_level: Option<&str>,
+        last: Option<usize>,
+        search: Option<&str>,
+    ) -> (Vec<LogEntry>, usize) {
+        let path = dir.join(format!("{}.jsonl", channel.as_str()));
+        let file = match File::open(&path) {
+            Ok(f) => f,
+            Err(_) => return (Vec::new(), 0),
+        };
+
+        let min_pri = min_level.map(level_priority).unwrap_or(0);
+        let mut total: usize = 0;
+        let mut filtered: Vec<LogEntry> = Vec::new();
+
+        for line in StdBufReader::new(file).lines() {
+            let line = match line {
+                Ok(l) => l,
+                Err(_) => continue,
+            };
+            if line.trim().is_empty() {
+                continue;
+            }
+            total += 1;
+
+            let entry: LogEntry = match serde_json::from_str(&line) {
+                Ok(e) => e,
+                Err(_) => continue,
+            };
+
+            // Level filter
+            if level_priority(&entry.level) < min_pri {
+                continue;
+            }
+
+            // Text search filter (case-insensitive)
+            if let Some(s) = search {
+                if !entry
+                    .message
+                    .to_ascii_lowercase()
+                    .contains(&s.to_ascii_lowercase())
+                {
+                    continue;
+                }
+            }
+
+            filtered.push(entry);
+        }
+
+        // Apply `last` (tail) limit
+        let result = if let Some(n) = last {
+            if n >= filtered.len() {
+                filtered
+            } else {
+                filtered[filtered.len() - n..].to_vec()
+            }
+        } else {
+            filtered
+        };
+
+        (result, total)
+    }
+
+    /// Read summary information for all channels from their JSONL files.
+    ///
+    /// This is a **static** method — it does not require an instance.
+    pub fn read_summary(dir: &Path) -> Vec<ChannelSummary> {
+        Channel::ALL
+            .iter()
+            .map(|&ch| {
+                let path = dir.join(format!("{}.jsonl", ch.as_str()));
+                let file = match File::open(&path) {
+                    Ok(f) => f,
+                    Err(_) => {
+                        return ChannelSummary {
+                            channel: ch,
+                            total: 0,
+                            error: 0,
+                            warn: 0,
+                            info: 0,
+                            debug: 0,
+                            trace: 0,
+                        }
+                    }
+                };
+
+                let mut total = 0usize;
+                let mut error = 0usize;
+                let mut warn = 0usize;
+                let mut info = 0usize;
+                let mut debug = 0usize;
+                let mut trace = 0usize;
+
+                for line in StdBufReader::new(file).lines() {
+                    let line = match line {
+                        Ok(l) => l,
+                        Err(_) => continue,
+                    };
+                    if line.trim().is_empty() {
+                        continue;
+                    }
+                    total += 1;
+
+                    // Parse just enough to get the level
+                    if let Ok(entry) = serde_json::from_str::<LogEntry>(&line) {
+                        match entry.level.as_str() {
+                            "ERROR" => error += 1,
+                            "WARN" => warn += 1,
+                            "INFO" => info += 1,
+                            "DEBUG" => debug += 1,
+                            "TRACE" => trace += 1,
+                            _ => {}
+                        }
+                    }
+                }
+
+                ChannelSummary {
+                    channel: ch,
+                    total,
+                    error,
+                    warn,
+                    info,
+                    debug,
+                    trace,
+                }
+            })
+            .collect()
+    }
+}
+
+// ---------------------------------------------------------------------------
 // MessageVisitor (tracing field extractor)
 // ---------------------------------------------------------------------------
 
@@ -390,14 +624,23 @@ impl Visit for MessageVisitor {
 // OutputLayer (tracing_subscriber::Layer)
 // ---------------------------------------------------------------------------
 
-/// A `tracing_subscriber::Layer` that captures events into the `OutputStore`.
+/// A `tracing_subscriber::Layer` that captures events into the `OutputStore`
+/// and optionally persists them to JSONL files on disk.
 pub struct OutputLayer {
     store: std::sync::Arc<OutputStore>,
+    file_writer: Option<LogFileWriter>,
+    write_count: AtomicU64,
 }
 
 impl OutputLayer {
     pub fn new(store: std::sync::Arc<OutputStore>) -> Self {
-        Self { store }
+        let logs_dir = super::platform::get_log_dir().join("current");
+        let file_writer = LogFileWriter::new(logs_dir).ok();
+        Self {
+            store,
+            file_writer,
+            write_count: AtomicU64::new(0),
+        }
     }
 }
 
@@ -425,13 +668,25 @@ impl<S: Subscriber> Layer<S> for OutputLayer {
             .unwrap_or_default()
             .as_millis() as u64;
 
-        self.store.push(LogEntry {
+        let entry = LogEntry {
             id: NEXT_ENTRY_ID.fetch_add(1, Ordering::Relaxed),
             timestamp,
             level: level.to_string(),
             channel,
             message,
-        });
+        };
+
+        // Write to JSONL file (before push, which consumes via clone internally)
+        if let Some(ref writer) = self.file_writer {
+            writer.append(&entry);
+            let count = self.write_count.fetch_add(1, Ordering::Relaxed);
+            // Truncate check every 100 writes to avoid excessive filesystem ops
+            if count % 100 == 0 {
+                writer.maybe_truncate(channel);
+            }
+        }
+
+        self.store.push(entry);
     }
 }
 
@@ -674,5 +929,166 @@ mod tests {
             message: "pipe broken".to_string(),
         };
         assert_eq!(entry2.format_line(), "01:02:03 [ERROR] pipe broken");
+    }
+
+    // -----------------------------------------------------------------------
+    // LogFileWriter tests
+    // -----------------------------------------------------------------------
+
+    fn make_entry(id: u64, level: &str, channel: Channel, msg: &str) -> LogEntry {
+        LogEntry {
+            id,
+            timestamp: id * 1000,
+            level: level.to_string(),
+            channel,
+            message: msg.to_string(),
+        }
+    }
+
+    #[test]
+    fn test_file_writer_append_and_read() {
+        let dir = std::env::temp_dir().join(format!("vm_test_fw_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+
+        let writer = LogFileWriter::new(dir.clone()).unwrap();
+
+        writer.append(&make_entry(1, "INFO", Channel::App, "hello"));
+        writer.append(&make_entry(2, "ERROR", Channel::App, "boom"));
+        writer.append(&make_entry(3, "DEBUG", Channel::App, "tick"));
+
+        let (entries, total) = LogFileWriter::read_channel(&dir, Channel::App, None, None, None);
+        assert_eq!(total, 3);
+        assert_eq!(entries.len(), 3);
+        assert_eq!(entries[0].message, "hello");
+        assert_eq!(entries[2].message, "tick");
+
+        // Level filter: ERROR only
+        let (entries, _) =
+            LogFileWriter::read_channel(&dir, Channel::App, Some("error"), None, None);
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].level, "ERROR");
+
+        // Search filter
+        let (entries, _) =
+            LogFileWriter::read_channel(&dir, Channel::App, None, None, Some("ello"));
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].message, "hello");
+
+        // Last (tail) filter
+        let (entries, _) =
+            LogFileWriter::read_channel(&dir, Channel::App, None, Some(2), None);
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].message, "boom");
+        assert_eq!(entries[1].message, "tick");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_file_writer_read_missing_channel() {
+        let dir = std::env::temp_dir().join(format!("vm_test_fw_miss_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let _ = fs::create_dir_all(&dir);
+
+        // Reading a channel that has no file should return empty
+        let (entries, total) = LogFileWriter::read_channel(&dir, Channel::Voice, None, None, None);
+        assert_eq!(total, 0);
+        assert!(entries.is_empty());
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_file_writer_summary() {
+        let dir = std::env::temp_dir().join(format!("vm_test_fw_sum_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+
+        let writer = LogFileWriter::new(dir.clone()).unwrap();
+
+        writer.append(&make_entry(1, "ERROR", Channel::App, "e1"));
+        writer.append(&make_entry(2, "WARN", Channel::App, "w1"));
+        writer.append(&make_entry(3, "INFO", Channel::Cli, "i1"));
+        writer.append(&make_entry(4, "DEBUG", Channel::Cli, "d1"));
+
+        let summaries = LogFileWriter::read_summary(&dir);
+        assert_eq!(summaries.len(), 5);
+
+        let app = &summaries[0];
+        assert_eq!(app.channel, Channel::App);
+        assert_eq!(app.total, 2);
+        assert_eq!(app.error, 1);
+        assert_eq!(app.warn, 1);
+
+        let cli = &summaries[1];
+        assert_eq!(cli.channel, Channel::Cli);
+        assert_eq!(cli.total, 2);
+        assert_eq!(cli.info, 1);
+        assert_eq!(cli.debug, 1);
+
+        // Channels with no file should show zero
+        let voice = &summaries[2];
+        assert_eq!(voice.channel, Channel::Voice);
+        assert_eq!(voice.total, 0);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_file_writer_truncation() {
+        let dir = std::env::temp_dir().join(format!("vm_test_fw_trunc_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+
+        let writer = LogFileWriter::new(dir.clone()).unwrap();
+
+        // Write more than MAX_FILE_ENTRIES lines
+        for i in 0..(MAX_FILE_ENTRIES + 200) {
+            writer.append(&make_entry(
+                i as u64,
+                "INFO",
+                Channel::App,
+                &format!("line {}", i),
+            ));
+        }
+
+        // Before truncation, file has MAX_FILE_ENTRIES + 200 lines
+        let (_, total_before) =
+            LogFileWriter::read_channel(&dir, Channel::App, None, None, None);
+        assert_eq!(total_before, MAX_FILE_ENTRIES + 200);
+
+        // Trigger truncation
+        writer.maybe_truncate(Channel::App);
+
+        // After truncation, should have TRUNCATE_KEEP lines
+        let (entries, total_after) =
+            LogFileWriter::read_channel(&dir, Channel::App, None, None, None);
+        assert_eq!(total_after, TRUNCATE_KEEP);
+        assert_eq!(entries.len(), TRUNCATE_KEEP);
+
+        // The kept entries should be the most recent ones
+        let first_kept_id = (MAX_FILE_ENTRIES + 200) - TRUNCATE_KEEP;
+        assert_eq!(entries[0].message, format!("line {}", first_kept_id));
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_file_writer_no_truncation_under_limit() {
+        let dir = std::env::temp_dir().join(format!("vm_test_fw_notrunc_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+
+        let writer = LogFileWriter::new(dir.clone()).unwrap();
+
+        // Write exactly MAX_FILE_ENTRIES lines (at the limit, not over)
+        for i in 0..MAX_FILE_ENTRIES {
+            writer.append(&make_entry(i as u64, "INFO", Channel::App, &format!("l{}", i)));
+        }
+
+        writer.maybe_truncate(Channel::App);
+
+        // Should NOT truncate — still at the limit
+        let (_, total) = LogFileWriter::read_channel(&dir, Channel::App, None, None, None);
+        assert_eq!(total, MAX_FILE_ENTRIES);
+
+        let _ = fs::remove_dir_all(&dir);
     }
 }
