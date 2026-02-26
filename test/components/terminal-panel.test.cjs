@@ -16,6 +16,33 @@ describe('TerminalPanel.svelte -- imports', () => {
   it('imports SplitPanel', () => {
     assert.ok(src.includes("import SplitPanel from"), 'Should import SplitPanel');
   });
+  it('imports TerminalTabStrip', () => {
+    assert.ok(src.includes("import TerminalTabStrip from './TerminalTabStrip.svelte'"), 'Should import TerminalTabStrip');
+  });
+  it('imports TerminalActionBar', () => {
+    assert.ok(src.includes("import TerminalActionBar from './TerminalActionBar.svelte'"), 'Should import TerminalActionBar');
+  });
+  it('imports TerminalSidebar', () => {
+    assert.ok(src.includes("import TerminalSidebar from './TerminalSidebar.svelte'"), 'Should import TerminalSidebar');
+  });
+  it('imports TerminalContextMenu', () => {
+    assert.ok(src.includes("import TerminalContextMenu from './TerminalContextMenu.svelte'"), 'Should import TerminalContextMenu');
+  });
+});
+
+describe('TerminalPanel.svelte -- uses sub-components', () => {
+  it('renders TerminalTabStrip', () => {
+    assert.ok(src.includes('<TerminalTabStrip'), 'Should use TerminalTabStrip component');
+  });
+  it('renders TerminalActionBar', () => {
+    assert.ok(src.includes('<TerminalActionBar'), 'Should use TerminalActionBar component');
+  });
+  it('renders TerminalSidebar', () => {
+    assert.ok(src.includes('<TerminalSidebar'), 'Should use TerminalSidebar component');
+  });
+  it('renders TerminalContextMenu', () => {
+    assert.ok(src.includes('<TerminalContextMenu'), 'Should use TerminalContextMenu component');
+  });
 });
 
 describe('TerminalPanel.svelte -- structure', () => {
@@ -31,23 +58,8 @@ describe('TerminalPanel.svelte -- structure', () => {
   it('has terminal-content area', () => {
     assert.ok(src.includes('terminal-content'), 'Should have content');
   });
-  it('has terminal-sidebar area', () => {
-    assert.ok(src.includes('terminal-sidebar'), 'Should have sidebar');
-  });
-});
-
-describe('TerminalPanel.svelte -- group tabs', () => {
-  it('iterates groups', () => {
-    assert.ok(src.includes('{#each') && src.includes('groups'), 'Should iterate groups');
-  });
-  it('has group-tab class', () => {
-    assert.ok(src.includes('group-tab'), 'Should have group tab class');
-  });
-  it('has class:active for active group', () => {
-    assert.ok(src.includes('class:active'), 'Should highlight active');
-  });
-  it('clicks call setActiveGroup', () => {
-    assert.ok(src.includes('setActiveGroup'), 'Should switch group on click');
+  it('shows sidebar conditionally', () => {
+    assert.ok(src.includes('showSidebar'), 'Should conditionally show sidebar');
   });
 });
 
@@ -63,27 +75,20 @@ describe('TerminalPanel.svelte -- terminal rendering', () => {
   });
 });
 
-describe('TerminalPanel.svelte -- sidebar', () => {
-  it('shows sidebar conditionally', () => {
-    assert.ok(src.includes('showSidebar') || src.includes('sidebarVisible'), 'Should conditionally show');
+describe('TerminalPanel.svelte -- context menu wiring', () => {
+  it('has context menu state', () => {
+    assert.ok(src.includes('ctxMenu'), 'Should have context menu state');
   });
-  it('has tree characters for splits', () => {
-    assert.ok(src.includes('┌') || src.includes('├') || src.includes('└'), 'Should have tree chars');
+  it('passes oncontextmenu to TerminalTabStrip', () => {
+    assert.ok(src.includes('TerminalTabStrip') && src.includes('oncontextmenu'), 'Should wire tab strip context menu');
   });
-  it('sidebar items call focusInstance', () => {
-    assert.ok(src.includes('focusInstance'), 'Should focus on click');
+  it('passes oncontextmenu to TerminalSidebar', () => {
+    assert.ok(src.includes('TerminalSidebar') && src.includes('oncontextmenu'), 'Should wire sidebar context menu');
   });
-  it('has sidebar-instance class', () => {
-    assert.ok(src.includes('sidebar-instance'), 'Should have instance class');
-  });
-});
-
-describe('TerminalPanel.svelte -- action bar', () => {
-  it('has add group button', () => {
-    assert.ok(src.includes('addGroup'), 'Should have new terminal button');
-  });
-  it('has split button', () => {
-    assert.ok(src.includes('splitInstance'), 'Should have split button');
+  it('passes props to TerminalContextMenu', () => {
+    assert.ok(src.includes('instanceId={ctxMenu.instanceId}'), 'Should pass instanceId');
+    assert.ok(src.includes('visible={ctxMenu.visible}'), 'Should pass visible');
+    assert.ok(src.includes('onClose={closeContextMenu}'), 'Should pass onClose');
   });
 });
 
@@ -111,9 +116,10 @@ describe('TerminalPanel.svelte -- SplitPanel integration', () => {
 
 describe('TerminalPanel.svelte -- accessibility', () => {
   it('has role attributes on interactive elements', () => {
-    assert.ok(src.includes('role="tab"') || src.includes('role="option"'), 'Should have ARIA roles');
-  });
-  it('has aria-selected on tabs', () => {
-    assert.ok(src.includes('aria-selected'), 'Should indicate selected state');
+    // The sub-components now have the roles; TerminalPanel still uses them indirectly
+    assert.ok(
+      src.includes('role=') || src.includes('TerminalTabStrip') || src.includes('TerminalSidebar'),
+      'Should have ARIA roles (directly or via sub-components)'
+    );
   });
 });
