@@ -20,7 +20,9 @@ use commands::window as window_cmds;
 use commands::files as files_cmds;
 use commands::lens as lens_cmds;
 use commands::shell as shell_cmds;
+use commands::dev_server as dev_server_cmds;
 use commands::lsp as lsp_cmds;
+use commands::design as design_cmds;
 
 use providers::manager::AiManager;
 use providers::ProviderEvent;
@@ -33,6 +35,62 @@ use tracing::{info, warn};
 /// task so the voice pipeline can use it immediately without cold-start delay.
 pub type PreloadedTtsState = std::sync::Mutex<Option<Box<dyn voice::tts::TtsEngine>>>;
 
+
+/// Migrate data from the old Electron app directory to the new Tauri directory.
+///
+/// Moves `models/` and `memory/` subdirectories if they exist in the old location
+/// but not in the new one. Errors are logged but never block startup.
+fn migrate_electron_data() {
+    use std::path::PathBuf;
+
+    let old_data_dir = dirs::config_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("voice-mirror-electron")
+        .join("data");
+    let new_data_dir = crate::services::platform::get_data_dir();
+
+    if !old_data_dir.exists() {
+        info!("No Electron data directory found, skipping migration");
+        return;
+    }
+
+    if let Err(e) = std::fs::create_dir_all(&new_data_dir) {
+        warn!("Failed to create new data directory {}: {}", new_data_dir.display(), e);
+        return;
+    }
+
+    let mut migrated = false;
+    for subdir in &["models", "memory"] {
+        let old_path = old_data_dir.join(subdir);
+        let new_path = new_data_dir.join(subdir);
+        if old_path.exists() && !new_path.exists() {
+            match std::fs::rename(&old_path, &new_path) {
+                Ok(()) => {
+                    info!(
+                        "Migrated {} -> {}",
+                        old_path.display(),
+                        new_path.display()
+                    );
+                    migrated = true;
+                }
+                Err(e) => {
+                    warn!(
+                        "Failed to migrate {} -> {}: {}",
+                        old_path.display(),
+                        new_path.display(),
+                        e
+                    );
+                }
+            }
+        }
+    }
+
+    if migrated {
+        info!("Data migration from Electron directory complete");
+    } else {
+        info!("No Electron data to migrate (already migrated or no matching subdirectories)");
+    }
+}
 
 /// Check if a window at (x, y) with given dimensions fits entirely within any monitor.
 fn position_fits_monitor(window: &tauri::WebviewWindow, x: i32, y: i32, w: u32, h: u32) -> bool {
@@ -67,8 +125,8 @@ pub fn run() {
         // Rust intercepts it here and emits a Tauri event the frontend listens to.
         .register_uri_scheme_protocol("lens-shortcut", |ctx, request| {
             let uri = request.uri().to_string();
-            // URL format — Windows: https://lens-shortcut.localhost/{key}?t=...
-            //               macOS/Linux: lens-shortcut://localhost/{key}?t=...
+            // URL format — Windows: https://lens-shortcut.localhost/{key}?query...
+            //               macOS/Linux: lens-shortcut://localhost/{key}?query...
             let path = uri
                 .split("localhost")
                 .nth(1)
@@ -81,7 +139,25 @@ pub fn run() {
                 .unwrap_or("")
                 .trim_matches('/');
 
-            if !key.is_empty() {
+            if key == "hard-refresh" {
+                info!("[lens-shortcut] Hard refresh requested");
+                let _ = ctx.app_handle().emit("lens-hard-refresh", serde_json::json!({}));
+            } else if key == "url-changed" {
+                // Back/forward navigation reports the new URL via query param
+                let query = path.split('?').nth(1).unwrap_or("");
+                let url_param = query
+                    .split('&')
+                    .find_map(|pair| pair.strip_prefix("url="))
+                    .unwrap_or("");
+                let decoded_url = percent_encoding::percent_decode_str(url_param)
+                    .decode_utf8_lossy()
+                    .to_string();
+                info!("[lens-shortcut] URL changed: {}", decoded_url);
+                let _ = ctx.app_handle().emit(
+                    "lens-url-changed",
+                    serde_json::json!({ "url": decoded_url }),
+                );
+            } else if !key.is_empty() {
                 info!("[lens-shortcut] Forwarding shortcut key: {}", key);
                 let _ = ctx.app_handle().emit("lens-shortcut", serde_json::json!({ "key": key }));
             }
@@ -111,7 +187,8 @@ pub fn run() {
         .manage(std::sync::Mutex::new(sysinfo::System::new()) as window_cmds::PerfMonitorState)
         .manage(std::sync::Mutex::new(None::<Box<dyn voice::tts::TtsEngine>>) as PreloadedTtsState)
         .manage(lens_cmds::LensState {
-            webview_label: std::sync::Mutex::new(None),
+            tabs: std::sync::Mutex::new(std::collections::HashMap::new()),
+            active_tab_id: std::sync::Mutex::new(None),
             bounds: std::sync::Mutex::new(None),
         })
         .manage(services::file_watcher::FileWatcherState {
@@ -157,6 +234,11 @@ pub fn run() {
             voice_cmds::ptt_release,
             voice_cmds::configure_ptt_key,
             voice_cmds::configure_dictation_key,
+            voice_cmds::ensure_stt_model,
+            voice_cmds::restart_voice,
+            voice_cmds::detect_gpu,
+            voice_cmds::list_stt_models,
+            voice_cmds::delete_stt_model,
             voice_cmds::inject_text,
             // AI (real implementations)
             ai_cmds::start_ai,
@@ -192,6 +274,10 @@ pub fn run() {
             window_cmds::get_process_stats,
             // Lens (embedded browser)
             lens_cmds::lens_create_webview,
+            lens_cmds::lens_create_tab,
+            lens_cmds::lens_close_tab,
+            lens_cmds::lens_switch_tab,
+            lens_cmds::lens_close_all_tabs,
             lens_cmds::lens_navigate,
             lens_cmds::lens_go_back,
             lens_cmds::lens_go_forward,
@@ -199,6 +285,8 @@ pub fn run() {
             lens_cmds::lens_resize_webview,
             lens_cmds::lens_close_webview,
             lens_cmds::lens_set_visible,
+            lens_cmds::lens_hard_refresh,
+            lens_cmds::lens_clear_cache,
             // File tree
             files_cmds::list_directory,
             files_cmds::get_git_changes,
@@ -213,6 +301,14 @@ pub fn run() {
             files_cmds::delete_entry,
             files_cmds::reveal_in_explorer,
             files_cmds::search_files,
+            files_cmds::search_content,
+            files_cmds::git_stage,
+            files_cmds::git_unstage,
+            files_cmds::git_stage_all,
+            files_cmds::git_unstage_all,
+            files_cmds::git_commit,
+            files_cmds::git_discard,
+            files_cmds::git_push,
             // Shell terminals
             shell_cmds::shell_spawn,
             shell_cmds::shell_input,
@@ -229,11 +325,30 @@ pub fn run() {
             lsp_cmds::lsp_save_file,
             lsp_cmds::lsp_request_completion,
             lsp_cmds::lsp_request_hover,
+            lsp_cmds::lsp_request_signature_help,
             lsp_cmds::lsp_request_definition,
+            lsp_cmds::lsp_request_document_symbols,
+            lsp_cmds::lsp_request_references,
+            lsp_cmds::lsp_request_code_actions,
+            lsp_cmds::lsp_prepare_rename,
+            lsp_cmds::lsp_rename,
+            lsp_cmds::lsp_request_formatting,
+            lsp_cmds::lsp_request_range_formatting,
+            lsp_cmds::lsp_apply_workspace_edit,
             lsp_cmds::lsp_get_status,
             lsp_cmds::lsp_shutdown,
+            // Dev server detection + management
+            dev_server_cmds::detect_dev_servers,
+            dev_server_cmds::probe_port,
+            dev_server_cmds::kill_port_process,
+            // Design canvas overlay
+            design_cmds::design_command,
+            design_cmds::design_get_element,
         ])
         .setup(|app| {
+            // Migrate data from old Electron directory before anything reads it
+            migrate_electron_data();
+
             // Initialize LSP manager state (needs AppHandle)
             app.manage(lsp::LspManagerState::new(app.handle().clone()));
 

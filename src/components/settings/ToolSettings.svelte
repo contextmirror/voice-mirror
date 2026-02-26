@@ -22,31 +22,10 @@
       alwaysLoaded: true,
     },
     {
-      id: 'meta',
-      name: 'Meta',
-      description: 'Tool management (load, unload, list groups)',
-      toolCount: 3,
-      alwaysLoaded: true,
-    },
-    {
-      id: 'screen',
-      name: 'Screen',
-      description: 'Screen capture and vision analysis',
-      toolCount: 1,
-      alwaysLoaded: false,
-    },
-    {
       id: 'memory',
       name: 'Memory',
       description: 'Persistent memory system (search, store, recall, forget)',
       toolCount: 6,
-      alwaysLoaded: false,
-    },
-    {
-      id: 'voice-clone',
-      name: 'Voice Clone',
-      description: 'Voice cloning for TTS customization',
-      toolCount: 3,
       alwaysLoaded: false,
     },
     {
@@ -65,42 +44,36 @@
     },
   ];
 
-  // Note: facade groups (memory-facade, n8n-facade, browser-facade) and diagnostic
-  // are internal — selected automatically via tool profiles, not shown in the UI.
 
   // ---- Default profiles ----
 
   const DEFAULT_PROFILES = {
     'voice-assistant': {
       label: 'Voice Assistant',
-      groups: ['core', 'meta', 'screen', 'memory', 'browser'],
-    },
-    'voice-assistant-lite': {
-      label: 'Voice Assistant (Lite)',
-      groups: ['core', 'meta', 'screen', 'memory-facade', 'browser-facade'],
+      groups: ['core', 'memory', 'browser'],
     },
     'n8n-workflows': {
       label: 'n8n Workflows',
-      groups: ['core', 'meta', 'n8n'],
+      groups: ['core','n8n'],
     },
     'web-browser': {
       label: 'Web Browser',
-      groups: ['core', 'meta', 'screen', 'browser'],
+      groups: ['core', 'browser'],
     },
     'full-toolbox': {
       label: 'Full Toolbox',
-      groups: ['core', 'meta', 'screen', 'memory', 'voice-clone', 'browser', 'n8n'],
+      groups: ['core', 'memory', 'browser', 'n8n'],
     },
     'minimal': {
       label: 'Minimal',
-      groups: ['core', 'meta'],
+      groups: ['core'],
     },
   };
 
   // ---- Local state ----
 
   let activeProfile = $state('voice-assistant');
-  let enabledGroups = $state(new Set(['core', 'meta', 'screen', 'memory', 'browser']));
+  let enabledGroups = $state(new Set(['core', 'memory', 'browser']));
   let saving = $state(false);
 
   // ---- Derived values ----

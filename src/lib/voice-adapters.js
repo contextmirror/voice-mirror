@@ -133,10 +133,13 @@ export const STT_REGISTRY = {
   'whisper-local': {
     label: 'Whisper (Local, default)',
     showModelSize: true,
+    showGpu: true,
     modelSizes: [
-      { value: 'tiny', label: 'tiny.en (~77MB, fastest)' },
-      { value: 'base', label: 'base.en (~148MB, recommended)' },
-      { value: 'small', label: 'small.en (~488MB, most accurate)' },
+      { value: 'tiny', label: 'Fast (~77MB)' },
+      { value: 'base', label: 'Balanced (~148MB, recommended)' },
+      { value: 'small', label: 'Accurate (~488MB)' },
+      { value: 'large-v3-turbo', label: 'Turbo (~574MB, best value)' },
+      { value: 'large-v3', label: 'Large v3 (~3.1GB, max accuracy)' },
     ],
     showModelName: false,
     showApiKey: false,
@@ -183,7 +186,7 @@ export const VKEY_NAMES = {
 export const MOUSE_BUTTON_NAMES = { 3: 'Mouse Middle', 4: 'Mouse Back', 5: 'Mouse Forward' };
 
 // Legacy names (for old configs that haven't been re-saved yet)
-export const LEGACY_MOUSE_NAMES = {
+const LEGACY_MOUSE_NAMES = {
   MouseButton3: 'Mouse Middle',
   MouseButton4: 'Mouse Back',
   MouseButton5: 'Mouse Forward',
@@ -215,13 +218,13 @@ export function formatKeybind(keybind) {
 }
 
 /** Get the voice options for a TTS adapter. */
-export function getVoicesForAdapter(adapterId) {
+function getVoicesForAdapter(adapterId) {
   const adapter = ADAPTER_REGISTRY[adapterId];
   return adapter ? adapter.voices : [];
 }
 
 /** Get the model size options for an STT adapter. */
-export function getModelsForAdapter(adapterId) {
+function getModelsForAdapter(adapterId) {
   const adapter = STT_REGISTRY[adapterId];
   return adapter?.modelSizes || [];
 }

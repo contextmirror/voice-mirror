@@ -112,10 +112,13 @@ impl ToolRegistry {
         .map(|s| s.to_string())
         .collect();
 
-        // Default: load core + meta
+        // Load all always_loaded groups at startup
         let mut loaded = HashSet::new();
-        loaded.insert("core".into());
-        loaded.insert("meta".into());
+        for (name, group) in &groups {
+            if group.always_loaded {
+                loaded.insert(name.clone());
+            }
+        }
 
         Self {
             groups,
@@ -129,8 +132,15 @@ impl ToolRegistry {
     }
 
     /// Apply a tool profile (restrict which groups can be loaded).
+    /// Always includes `always_loaded` groups regardless of the profile.
     pub fn apply_profile(&mut self, profile: &ToolProfile) {
-        let allowed: HashSet<String> = profile.groups.iter().cloned().collect();
+        let mut allowed: HashSet<String> = profile.groups.iter().cloned().collect();
+        // Always include always_loaded groups (e.g., core, capture)
+        for (name, group) in &self.groups {
+            if group.always_loaded {
+                allowed.insert(name.clone());
+            }
+        }
         self.loaded = allowed.clone();
         self.allowed = Some(allowed);
         info!(
@@ -140,6 +150,7 @@ impl ToolRegistry {
     }
 
     /// Apply an enabled-groups string (comma-separated).
+    /// Always includes `always_loaded` groups regardless of the input string.
     pub fn apply_enabled_groups(&mut self, groups_str: &str) {
         let names: Vec<String> = groups_str
             .split(',')
@@ -151,7 +162,13 @@ impl ToolRegistry {
             return;
         }
 
-        let allowed: HashSet<String> = names.iter().cloned().collect();
+        let mut allowed: HashSet<String> = names.iter().cloned().collect();
+        // Always include always_loaded groups (e.g., core, capture)
+        for (name, group) in &self.groups {
+            if group.always_loaded {
+                allowed.insert(name.clone());
+            }
+        }
         self.loaded = allowed.clone();
         self.allowed = Some(allowed);
         info!(
@@ -512,73 +529,6 @@ fn build_all_groups() -> HashMap<String, ToolGroupDef> {
         },
     );
 
-    // ---- Meta ----
-    groups.insert(
-        "meta".into(),
-        ToolGroupDef {
-            name: "meta".into(),
-            description: "Tool management (load, unload, list groups)".into(),
-            always_loaded: true,
-            keywords: vec![],
-            dependencies: vec![],
-            tools: vec![
-                ToolDef {
-                    name: "load_tools".into(),
-                    description: "Load a tool group to make its tools available. Call list_tool_groups first to see what groups exist. Groups: screen, memory, voice-clone, browser.".into(),
-                    input_schema: json!({
-                        "type": "object",
-                        "properties": {
-                            "group": { "type": "string", "description": "Tool group to load (e.g. \"browser\", \"memory\", \"screen\", \"voice-clone\")" }
-                        },
-                        "required": ["group"]
-                    }),
-                },
-                ToolDef {
-                    name: "unload_tools".into(),
-                    description: "Unload a tool group to reduce context. Cannot unload core or meta groups.".into(),
-                    input_schema: json!({
-                        "type": "object",
-                        "properties": {
-                            "group": { "type": "string", "description": "Tool group to unload" }
-                        },
-                        "required": ["group"]
-                    }),
-                },
-                ToolDef {
-                    name: "list_tool_groups".into(),
-                    description: "List all available tool groups and their loaded status.".into(),
-                    input_schema: json!({ "type": "object", "properties": {} }),
-                },
-            ],
-        },
-    );
-
-    // ---- Screen ----
-    groups.insert(
-        "screen".into(),
-        ToolGroupDef {
-            name: "screen".into(),
-            description: "Screen capture and vision analysis".into(),
-            always_loaded: false,
-            keywords: vec![
-                "screen".into(), "screenshot".into(), "look at".into(),
-                "what do you see".into(), "my display".into(), "monitor".into(),
-                "what's on".into(), "show me".into(),
-            ],
-            dependencies: vec![],
-            tools: vec![ToolDef {
-                name: "capture_screen".into(),
-                description: "Capture a screenshot of the user's screen for visual analysis.".into(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "display": { "description": "Display index (default: 0). Response includes displays_available count so you can request other monitors." }
-                    }
-                }),
-            }],
-        },
-    );
-
     // ---- Memory ----
     groups.insert(
         "memory".into(),
@@ -665,47 +615,6 @@ fn build_all_groups() -> HashMap<String, ToolGroupDef> {
         },
     );
 
-    // ---- Voice Clone ----
-    groups.insert(
-        "voice-clone".into(),
-        ToolGroupDef {
-            name: "voice-clone".into(),
-            description: "Voice cloning for TTS customization".into(),
-            always_loaded: false,
-            keywords: vec![
-                "clone voice".into(), "voice clone".into(), "sound like".into(),
-                "voice sample".into(), "mimic".into(), "change voice".into(),
-                "my voice".into(),
-            ],
-            dependencies: vec![],
-            tools: vec![
-                ToolDef {
-                    name: "clone_voice".into(),
-                    description: "Clone a voice from an audio sample for TTS.".into(),
-                    input_schema: json!({
-                        "type": "object",
-                        "properties": {
-                            "audio_url": { "type": "string", "description": "URL to download audio from" },
-                            "audio_path": { "type": "string", "description": "Local file path to an audio file" },
-                            "voice_name": { "type": "string", "description": "Name for this voice clone (default: \"custom\")" },
-                            "transcript": { "type": "string", "description": "Optional transcript of what is said in the audio." }
-                        }
-                    }),
-                },
-                ToolDef {
-                    name: "clear_voice_clone".into(),
-                    description: "Clear the current voice clone and return to using preset speaker voices.".into(),
-                    input_schema: json!({ "type": "object", "properties": {} }),
-                },
-                ToolDef {
-                    name: "list_voice_clones".into(),
-                    description: "List all saved voice clones.".into(),
-                    input_schema: json!({ "type": "object", "properties": {} }),
-                },
-            ],
-        },
-    );
-
     // ---- Browser ----
     groups.insert(
         "browser".into(),
@@ -719,7 +628,7 @@ fn build_all_groups() -> HashMap<String, ToolGroupDef> {
                 "look up".into(), "find online".into(), "what is".into(),
                 "who is".into(), "latest news".into(),
             ],
-            dependencies: vec!["screen".into()],
+            dependencies: vec![],
             tools: vec![
                 ToolDef { name: "browser_start".into(), description: "Launch a managed Chrome browser instance with CDP debugging enabled.".into(), input_schema: json!({ "type": "object", "properties": { "profile": { "type": "string", "description": "Browser profile name (default: \"default\")" } } }) },
                 ToolDef { name: "browser_stop".into(), description: "Stop the managed Chrome browser instance.".into(), input_schema: json!({ "type": "object", "properties": { "profile": { "type": "string" } } }) },
@@ -737,6 +646,54 @@ fn build_all_groups() -> HashMap<String, ToolGroupDef> {
                 ToolDef { name: "browser_fetch".into(), description: "Fetch and extract text content from a URL.".into(), input_schema: json!({ "type": "object", "properties": { "url": { "type": "string" }, "timeout": { "type": "number" }, "max_length": { "type": "number" }, "include_links": { "type": "boolean" } }, "required": ["url"] }) },
                 ToolDef { name: "browser_cookies".into(), description: "Manage browser cookies.".into(), input_schema: json!({ "type": "object", "properties": { "action": { "type": "string", "enum": ["list", "set", "delete", "clear"] }, "name": { "type": "string" }, "value": { "type": "string" }, "url": { "type": "string" }, "domain": { "type": "string" }, "path": { "type": "string" }, "secure": { "type": "boolean" }, "httpOnly": { "type": "boolean" }, "sameSite": { "type": "string", "enum": ["Strict", "Lax", "None"] }, "profile": { "type": "string" } }, "required": ["action"] }) },
                 ToolDef { name: "browser_storage".into(), description: "Read/write browser localStorage or sessionStorage.".into(), input_schema: json!({ "type": "object", "properties": { "type": { "type": "string", "enum": ["localStorage", "sessionStorage"] }, "action": { "type": "string", "enum": ["get", "set", "delete", "clear"] }, "key": { "type": "string" }, "value": { "type": "string" }, "profile": { "type": "string" } }, "required": ["action"] }) },
+            ],
+        },
+    );
+
+    // ---- Capture (window screenshots) ----
+    groups.insert(
+        "capture".into(),
+        ToolGroupDef {
+            name: "capture".into(),
+            description: "Window capture and screenshots (2 tools)".into(),
+            always_loaded: true,
+            keywords: vec![
+                "screenshot".into(), "capture".into(), "window".into(),
+                "screen".into(), "game".into(), "application".into(),
+                "look at".into(), "show me".into(),
+            ],
+            dependencies: vec![],
+            tools: vec![
+                ToolDef {
+                    name: "capture_list_windows".into(),
+                    description: "List all visible windows on the user's desktop. Returns window titles, process names, and dimensions. Use this to find the right window before capturing.".into(),
+                    input_schema: json!({
+                        "type": "object",
+                        "properties": {
+                            "filter": {
+                                "type": "string",
+                                "description": "Optional filter to match window title or process name (case-insensitive substring match)"
+                            }
+                        }
+                    }),
+                },
+                ToolDef {
+                    name: "capture_window".into(),
+                    description: "Take a screenshot of a specific desktop window. The user must have the window open. Use capture_list_windows first to find the target, then capture by title or HWND. Returns the screenshot as an image.".into(),
+                    input_schema: json!({
+                        "type": "object",
+                        "properties": {
+                            "title": {
+                                "type": "string",
+                                "description": "Window title substring to match (case-insensitive). Captures the first matching window."
+                            },
+                            "hwnd": {
+                                "type": "number",
+                                "description": "Exact window handle (HWND) from capture_list_windows. More precise than title matching."
+                            }
+                        }
+                    }),
+                },
             ],
         },
     );
@@ -780,139 +737,6 @@ fn build_all_groups() -> HashMap<String, ToolGroupDef> {
         },
     );
 
-    // ---- Diagnostic ----
-    groups.insert(
-        "diagnostic".into(),
-        ToolGroupDef {
-            name: "diagnostic".into(),
-            description: "Pipeline diagnostic tools".into(),
-            always_loaded: false,
-            keywords: vec![
-                "diagnostic".into(), "trace".into(), "pipeline".into(),
-                "debug".into(), "test pipeline".into(),
-            ],
-            dependencies: vec![],
-            tools: vec![ToolDef {
-                name: "pipeline_trace".into(),
-                description: "Send a test message through the live Voice Mirror pipeline and trace every stage.".into(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "message": { "type": "string", "description": "The test message to send through the pipeline" },
-                        "timeout_seconds": { "type": "number", "description": "Max wait time (default: 30)" }
-                    },
-                    "required": ["message"]
-                }),
-            }],
-        },
-    );
-
-    // ---- Facade groups (single-tool wrappers for voice mode) ----
-    groups.insert(
-        "memory-facade".into(),
-        ToolGroupDef {
-            name: "memory-facade".into(),
-            description: "Memory system (single tool: memory_manage)".into(),
-            always_loaded: false,
-            keywords: vec![
-                "remember".into(), "memory".into(), "recall".into(), "forget".into(),
-                "what did i say".into(), "previously".into(), "last time".into(),
-                "you told me".into(), "i mentioned".into(),
-            ],
-            dependencies: vec![],
-            tools: vec![ToolDef {
-                name: "memory_manage".into(),
-                description: "Manage persistent memories. Actions: search, remember, forget, stats, flush.".into(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "action": { "type": "string", "enum": ["search", "remember", "forget", "stats", "flush"], "description": "Action to perform" },
-                        "query": { "type": "string" },
-                        "content": { "type": "string" },
-                        "tier": { "type": "string", "enum": ["core", "stable", "notes"] },
-                        "content_or_id": { "type": "string" },
-                        "confirmed": { "type": "boolean" },
-                        "max_results": { "type": "number" },
-                        "topics": { "type": "array", "items": { "type": "string" } },
-                        "decisions": { "type": "array", "items": { "type": "string" } },
-                        "action_items": { "type": "array", "items": { "type": "string" } },
-                        "summary": { "type": "string" }
-                    },
-                    "required": ["action"]
-                }),
-            }],
-        },
-    );
-
-    groups.insert(
-        "n8n-facade".into(),
-        ToolGroupDef {
-            name: "n8n-facade".into(),
-            description: "n8n workflow automation (single tool: n8n_manage)".into(),
-            always_loaded: false,
-            keywords: vec![
-                "n8n".into(), "workflow".into(), "automation".into(),
-                "trigger".into(), "webhook".into(),
-            ],
-            dependencies: vec![],
-            tools: vec![ToolDef {
-                name: "n8n_manage".into(),
-                description: "Manage n8n workflows. Actions: list, get, create, trigger, status, delete.".into(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "action": { "type": "string", "enum": ["list", "get", "create", "trigger", "status", "delete"] },
-                        "workflow_id": { "type": "string" },
-                        "name": { "type": "string" },
-                        "nodes": { "type": "array", "items": { "type": "object" } },
-                        "connections": { "type": "object" },
-                        "data": { "type": "object" },
-                        "confirmed": { "type": "boolean" },
-                        "active_only": { "type": "boolean" }
-                    },
-                    "required": ["action"]
-                }),
-            }],
-        },
-    );
-
-    groups.insert(
-        "browser-facade".into(),
-        ToolGroupDef {
-            name: "browser-facade".into(),
-            description: "Browser control and web research (single tool: browser_manage)".into(),
-            always_loaded: false,
-            keywords: vec![
-                "search".into(), "browse".into(), "website".into(), "web".into(),
-                "google".into(), "open page".into(), "fetch url".into(),
-                "look up".into(), "find online".into(), "what is".into(),
-                "who is".into(), "latest news".into(),
-            ],
-            dependencies: vec!["screen".into()],
-            tools: vec![ToolDef {
-                name: "browser_manage".into(),
-                description: "Control Chrome browser and do web research. Actions: search, open, fetch, snapshot, screenshot, click, type, tabs, navigate, start, stop.".into(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "action": { "type": "string", "enum": ["search", "open", "fetch", "snapshot", "screenshot", "click", "type", "tabs", "navigate", "start", "stop"] },
-                        "query": { "type": "string" },
-                        "url": { "type": "string" },
-                        "ref": { "type": "string" },
-                        "text": { "type": "string" },
-                        "request": { "type": "object" },
-                        "targetId": { "type": "string" },
-                        "profile": { "type": "string" },
-                        "max_results": { "type": "number" },
-                        "timeout": { "type": "number" },
-                        "max_length": { "type": "number" }
-                    },
-                    "required": ["action"]
-                }),
-            }],
-        },
-    );
-
     groups
 }
 
@@ -923,9 +747,10 @@ mod tests {
     #[test]
     fn test_registry_new() {
         let reg = ToolRegistry::new();
-        // Core and meta should be loaded by default
+        // Core should be loaded by default (always_loaded)
         assert!(reg.is_tool_loaded("voice_send"));
-        assert!(reg.is_tool_loaded("load_tools"));
+        // Capture should be loaded by default (always_loaded)
+        assert!(reg.is_tool_loaded("capture_window"));
         // Memory should not be loaded by default
         assert!(!reg.is_tool_loaded("memory_search"));
     }
@@ -934,8 +759,8 @@ mod tests {
     fn test_list_tools_default() {
         let reg = ToolRegistry::new();
         let tools = reg.list_tools();
-        // Should have core (4) + meta (3) = 7 tools
-        assert_eq!(tools.len(), 7);
+        // Should have core (4) + capture (2) = 6 always-loaded tools
+        assert_eq!(tools.len(), 6);
     }
 
     #[test]
@@ -953,9 +778,12 @@ mod tests {
     }
 
     #[test]
-    fn test_cannot_unload_core() {
+    fn test_cannot_unload_always_loaded() {
         let mut reg = ToolRegistry::new();
         let result = reg.unload_group("core");
+        assert!(result.is_err());
+        // capture is also always_loaded
+        let result = reg.unload_group("capture");
         assert!(result.is_err());
     }
 
@@ -970,13 +798,9 @@ mod tests {
     }
 
     #[test]
-    fn test_browser_loads_screen_dependency() {
+    fn test_browser_loads_without_dependencies() {
         let mut reg = ToolRegistry::new();
-        assert!(!reg.is_tool_loaded("capture_screen"));
-
         let _names = reg.load_group("browser").unwrap();
-        // Screen should have been loaded as a dependency
-        assert!(reg.is_tool_loaded("capture_screen"));
         assert!(reg.is_tool_loaded("browser_start"));
     }
 
@@ -984,17 +808,28 @@ mod tests {
     fn test_apply_profile() {
         let mut reg = ToolRegistry::new();
         reg.apply_profile(&ToolProfile {
-            groups: vec!["core".into(), "meta".into(), "memory".into()],
+            groups: vec!["core".into(), "memory".into()],
         });
         assert!(reg.is_tool_loaded("memory_search"));
         assert!(!reg.is_tool_loaded("browser_start"));
+        // always_loaded groups survive profile changes
+        assert!(reg.is_tool_loaded("capture_window"));
     }
 
     #[test]
     fn test_list_groups() {
         let reg = ToolRegistry::new();
         let groups = reg.list_groups();
-        assert!(groups.len() >= 8); // core, meta, screen, memory, voice-clone, browser, n8n, diagnostic, facades
+        assert!(groups.len() >= 4); // core, memory, browser, n8n
+    }
+
+    #[test]
+    fn test_capture_group() {
+        let mut reg = ToolRegistry::new();
+        let names = reg.load_group("capture").unwrap();
+        assert_eq!(names.len(), 2);
+        assert!(reg.is_tool_loaded("capture_list_windows"));
+        assert!(reg.is_tool_loaded("capture_window"));
     }
 
     #[test]

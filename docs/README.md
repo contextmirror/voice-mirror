@@ -2,33 +2,82 @@
 
 Project documentation for Voice Mirror.
 
-> Voice Mirror has migrated from Electron to **Tauri 2**. The `tauri/` directory is the source of truth. Legacy Electron documentation may reference outdated patterns.
+> **Voice Mirror** is a voice-assisted development environment built on **Tauri 2**. It combines voice control (STT/TTS/VAD), AI agent integration (Claude Code, OpenCode), and a full-featured Lens workspace (file editor, live browser preview, terminal, dev server management) into a single desktop app. The `src-tauri/` directory contains the Rust backend and `src/` the Svelte 5 frontend.
 
-## Documents
+## Folder Structure
+
+```
+docs/
+├── guides/            User-facing setup and feature docs
+├── reference/         Technical architecture and API reference
+├── design/            Architecture decisions and design docs
+├── implementation/    Active feature plans and roadmaps
+├── troubleshooting/   Known issues and debugging guides
+└── README.md          This file
+```
+
+## Guides
+
+How-to docs for getting started and using features.
 
 | File | Description |
 |------|-------------|
-| [ARCHITECTURE.md](ARCHITECTURE.md) | System overview, component diagram, data flow |
-| [CONFIGURATION.md](CONFIGURATION.md) | Config file locations, settings reference, environment variables |
-| [DEVELOPMENT.md](DEVELOPMENT.md) | Dev setup, Tauri commands, project structure, testing |
-| [VOICE-PIPELINE.md](VOICE-PIPELINE.md) | Rust-native voice pipeline: STT (Whisper ONNX), TTS (Kokoro/Edge), VAD |
-| [PROVIDER-SYSTEM.md](PROVIDER-SYSTEM.md) | Multi-AI provider system: CLI agents (PTY), HTTP API providers |
-| [THEME-SYSTEM.md](THEME-SYSTEM.md) | Theme presets, color derivation, custom themes |
-| [IPC-PROTOCOL.md](IPC-PROTOCOL.md) | Tauri command reference, invoke() patterns |
-| [BROWSER-CONTROL-REFERENCE.md](BROWSER-CONTROL-REFERENCE.md) | Browser control via CDP |
-| [TAURI-MIGRATION.md](TAURI-MIGRATION.md) | Migration notes from Electron to Tauri 2 |
+| [GETTING-STARTED.md](guides/GETTING-STARTED.md) | Dev setup, project structure, Tauri commands, testing |
+| [CONFIGURATION.md](guides/CONFIGURATION.md) | Config file locations, settings reference, environment variables |
+| [VOICE-PIPELINE.md](guides/VOICE-PIPELINE.md) | Voice pipeline: STT (Whisper), TTS (Kokoro/Edge), VAD |
+| [THEME-SYSTEM.md](guides/THEME-SYSTEM.md) | Theme presets, color derivation, custom themes |
 
-Also see the repo root:
+## Reference
+
+Technical architecture and API documentation.
+
+| File | Description |
+|------|-------------|
+| [ARCHITECTURE.md](reference/ARCHITECTURE.md) | System overview, component diagram, data flow |
+| [BROWSER-CONTROL.md](reference/BROWSER-CONTROL.md) | Browser control via native WebView2 bridge |
+
+## Design
+
+Architecture decisions, design documents, and integration plans.
+
+| File | Description |
+|------|-------------|
+| [LSP-DESIGN.md](design/LSP-DESIGN.md) | LSP integration design, tiers, Zed comparison |
+| [CODE-NAVIGATION-MCP.md](design/CODE-NAVIGATION-MCP.md) | MCP tool group for voice-first IDE control |
+| [UNIFIED-SERVER-PLAN.md](design/UNIFIED-SERVER-PLAN.md) | Unified server plan (dev servers, MCP, LSP tabs) |
+
+## Implementation
+
+Active feature plans, roadmaps, and research.
+
+| File | Description |
+|------|-------------|
+| [DEV-SERVER-DETECTION.md](implementation/DEV-SERVER-DETECTION.md) | Dev server auto-detection and workspace integration |
+| [MCP-SERVERS.md](implementation/MCP-SERVERS.md) | External MCP server management plan |
+| [STT-MODELS.md](implementation/STT-MODELS.md) | Speech-to-text model comparison and research |
+| [IDE-GAPS.md](implementation/IDE-GAPS.md) | IDE feature gap analysis vs VS Code/Zed |
+| [INSTALLER-PLAN.md](implementation/INSTALLER-PLAN.md) | Optional component installation plan |
+
+## Troubleshooting
+
+Known issues, bug trackers, and debugging guides.
+
+| File | Description |
+|------|-------------|
+| [KNOWN-ISSUES.md](troubleshooting/KNOWN-ISSUES.md) | Known bugs and issues tracker |
+| [TERMINAL-RENDERING-BUG.md](troubleshooting/TERMINAL-RENDERING-BUG.md) | Terminal rendering glitch analysis and fix |
+
+## Also See
+
 - [CLAUDE.md](../CLAUDE.md) -- project context for Claude Code AI assistants
 - [CONTRIBUTING.md](../CONTRIBUTING.md) -- contributor onboarding guide
 
 ## Suggested Reading Order
 
-1. **ARCHITECTURE.md** -- understand the Tauri 2 system (Rust backend + Svelte 5 frontend)
-2. **CONFIGURATION.md** -- know where settings live
-3. **DEVELOPMENT.md** -- get a dev environment running with `cargo tauri dev`
-4. **PROVIDER-SYSTEM.md** -- understand CLI (portable-pty) and HTTP API providers
-5. **VOICE-PIPELINE.md** -- understand the Rust-native STT/TTS/VAD pipeline
-6. **THEME-SYSTEM.md** -- understand the theme/appearance system
-7. **IPC-PROTOCOL.md** -- reference for Tauri commands and invoke() wrappers
-8. **BROWSER-CONTROL-REFERENCE.md** -- understand browser integration
+1. **guides/GETTING-STARTED.md** -- get a dev environment running
+2. **reference/ARCHITECTURE.md** -- system overview: Rust backend, Svelte 5 frontend, Lens workspace
+3. **guides/CONFIGURATION.md** -- settings, AI providers, voice engine
+4. **guides/VOICE-PIPELINE.md** -- Rust-native STT/TTS/VAD pipeline
+5. **reference/BROWSER-CONTROL.md** -- native WebView2 browser integration
+6. **guides/THEME-SYSTEM.md** -- theme presets, color derivation, custom themes
+7. **design/LSP-DESIGN.md** -- if working on the Lens editor

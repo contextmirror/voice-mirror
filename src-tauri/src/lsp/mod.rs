@@ -250,7 +250,47 @@ impl LspManager {
                     "hover": {
                         "contentFormat": ["plaintext", "markdown"]
                     },
+                    "signatureHelp": {
+                        "signatureInformation": {
+                            "documentationFormat": ["plaintext", "markdown"],
+                            "parameterInformation": {
+                                "labelOffsetSupport": true
+                            }
+                        }
+                    },
                     "definition": {
+                        "dynamicRegistration": false
+                    },
+                    "documentSymbol": {
+                        "hierarchicalDocumentSymbolSupport": true
+                    },
+                    "references": {
+                        "dynamicRegistration": false
+                    },
+                    "codeAction": {
+                        "dynamicRegistration": false,
+                        "codeActionLiteralSupport": {
+                            "codeActionKind": {
+                                "valueSet": [
+                                    "quickfix",
+                                    "refactor",
+                                    "refactor.extract",
+                                    "refactor.inline",
+                                    "refactor.rewrite",
+                                    "source",
+                                    "source.organizeImports"
+                                ]
+                            }
+                        }
+                    },
+                    "rename": {
+                        "dynamicRegistration": false,
+                        "prepareSupport": true
+                    },
+                    "formatting": {
+                        "dynamicRegistration": false
+                    },
+                    "rangeFormatting": {
                         "dynamicRegistration": false
                     },
                     "publishDiagnostics": {
@@ -567,6 +607,47 @@ impl LspManager {
         Ok(serde_json::json!({ "contents": contents }))
     }
 
+    /// Request signature help at a position.
+    pub async fn request_signature_help(
+        &mut self,
+        uri: &str,
+        lang_id: &str,
+        line: u32,
+        character: u32,
+    ) -> Result<Value, String> {
+        let server = self
+            .servers
+            .get_mut(lang_id)
+            .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
+
+        let params = serde_json::json!({
+            "textDocument": { "uri": uri },
+            "position": { "line": line, "character": character }
+        });
+
+        let rx = client::send_request(
+            &mut server.stdin,
+            &server.pending_requests,
+            "textDocument/signatureHelp",
+            params,
+            &server.next_id,
+        )
+        .await?;
+
+        let response = tokio::time::timeout(std::time::Duration::from_secs(10), rx)
+            .await
+            .map_err(|_| "Signature help request timed out".to_string())?
+            .map_err(|_| "Signature help response channel closed".to_string())?;
+
+        let result = response.get("result").cloned().unwrap_or(Value::Null);
+
+        if result.is_null() {
+            Ok(serde_json::json!({ "signatures": [] }))
+        } else {
+            Ok(result)
+        }
+    }
+
     /// Request go-to-definition at a position.
     pub async fn request_definition(
         &mut self,
@@ -617,6 +698,345 @@ impl LspManager {
         };
 
         Ok(serde_json::json!({ "locations": locations }))
+    }
+
+    /// Request document symbols for a file (outline view).
+    pub async fn request_document_symbols(
+        &mut self,
+        uri: &str,
+        lang_id: &str,
+    ) -> Result<Value, String> {
+        let server = self
+            .servers
+            .get_mut(lang_id)
+            .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
+
+        let params = serde_json::json!({
+            "textDocument": { "uri": uri }
+        });
+
+        let rx = client::send_request(
+            &mut server.stdin,
+            &server.pending_requests,
+            "textDocument/documentSymbol",
+            params,
+            &server.next_id,
+        )
+        .await?;
+
+        let response = tokio::time::timeout(std::time::Duration::from_secs(10), rx)
+            .await
+            .map_err(|_| "Document symbols request timed out".to_string())?
+            .map_err(|_| "Document symbols response channel closed".to_string())?;
+
+        let result = response.get("result").cloned().unwrap_or(Value::Null);
+
+        // Result can be DocumentSymbol[] or SymbolInformation[]
+        let symbols = if result.is_array() {
+            result
+        } else {
+            Value::Array(vec![])
+        };
+
+        Ok(serde_json::json!({ "symbols": symbols }))
+    }
+
+    /// Request all references to a symbol at a position.
+    pub async fn request_references(
+        &mut self,
+        uri: &str,
+        lang_id: &str,
+        line: u32,
+        character: u32,
+    ) -> Result<Value, String> {
+        let server = self
+            .servers
+            .get_mut(lang_id)
+            .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
+
+        let params = serde_json::json!({
+            "textDocument": { "uri": uri },
+            "position": { "line": line, "character": character },
+            "context": { "includeDeclaration": true }
+        });
+
+        let rx = client::send_request(
+            &mut server.stdin,
+            &server.pending_requests,
+            "textDocument/references",
+            params,
+            &server.next_id,
+        )
+        .await?;
+
+        // References can scan many files — use a longer timeout
+        let response = tokio::time::timeout(std::time::Duration::from_secs(15), rx)
+            .await
+            .map_err(|_| "References request timed out".to_string())?
+            .map_err(|_| "References response channel closed".to_string())?;
+
+        let result = response.get("result").cloned().unwrap_or(Value::Null);
+
+        let locations: Vec<Value> = if let Some(arr) = result.as_array() {
+            arr.iter().map(|loc| normalize_location(loc)).collect()
+        } else {
+            vec![]
+        };
+
+        Ok(serde_json::json!({ "locations": locations }))
+    }
+
+    /// Request code actions for a range in a file.
+    pub async fn request_code_actions(
+        &mut self,
+        uri: &str,
+        lang_id: &str,
+        range_start_line: u32,
+        range_start_char: u32,
+        range_end_line: u32,
+        range_end_char: u32,
+        diagnostics: Value,
+    ) -> Result<Value, String> {
+        let server = self
+            .servers
+            .get_mut(lang_id)
+            .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
+
+        let params = serde_json::json!({
+            "textDocument": { "uri": uri },
+            "range": {
+                "start": { "line": range_start_line, "character": range_start_char },
+                "end": { "line": range_end_line, "character": range_end_char }
+            },
+            "context": {
+                "diagnostics": diagnostics
+            }
+        });
+
+        let rx = client::send_request(
+            &mut server.stdin,
+            &server.pending_requests,
+            "textDocument/codeAction",
+            params,
+            &server.next_id,
+        )
+        .await?;
+
+        let response = tokio::time::timeout(std::time::Duration::from_secs(10), rx)
+            .await
+            .map_err(|_| "Code actions request timed out".to_string())?
+            .map_err(|_| "Code actions response channel closed".to_string())?;
+
+        let result = response.get("result").cloned().unwrap_or(Value::Null);
+
+        // Result is (Command | CodeAction)[] or null
+        let actions = if result.is_array() {
+            result
+        } else {
+            Value::Array(vec![])
+        };
+
+        Ok(serde_json::json!({ "actions": actions }))
+    }
+
+    /// Prepare a rename operation (check if symbol is renameable, get range + placeholder).
+    pub async fn request_prepare_rename(
+        &mut self,
+        uri: &str,
+        lang_id: &str,
+        line: u32,
+        character: u32,
+    ) -> Result<Value, String> {
+        let server = self
+            .servers
+            .get_mut(lang_id)
+            .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
+
+        let params = serde_json::json!({
+            "textDocument": { "uri": uri },
+            "position": { "line": line, "character": character }
+        });
+
+        let rx = client::send_request(
+            &mut server.stdin,
+            &server.pending_requests,
+            "textDocument/prepareRename",
+            params,
+            &server.next_id,
+        )
+        .await?;
+
+        let response = tokio::time::timeout(std::time::Duration::from_secs(10), rx)
+            .await
+            .map_err(|_| "Prepare rename request timed out".to_string())?
+            .map_err(|_| "Prepare rename response channel closed".to_string())?;
+
+        // Check for error response
+        if let Some(error) = response.get("error") {
+            let msg = error
+                .get("message")
+                .and_then(|v| v.as_str())
+                .unwrap_or("Cannot rename this symbol");
+            return Err(msg.to_string());
+        }
+
+        let result = response.get("result").cloned().unwrap_or(Value::Null);
+
+        if result.is_null() {
+            return Err("Symbol cannot be renamed".to_string());
+        }
+
+        Ok(result)
+    }
+
+    /// Perform a rename operation across the workspace.
+    pub async fn request_rename(
+        &mut self,
+        uri: &str,
+        lang_id: &str,
+        line: u32,
+        character: u32,
+        new_name: &str,
+    ) -> Result<Value, String> {
+        let server = self
+            .servers
+            .get_mut(lang_id)
+            .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
+
+        let params = serde_json::json!({
+            "textDocument": { "uri": uri },
+            "position": { "line": line, "character": character },
+            "newName": new_name
+        });
+
+        let rx = client::send_request(
+            &mut server.stdin,
+            &server.pending_requests,
+            "textDocument/rename",
+            params,
+            &server.next_id,
+        )
+        .await?;
+
+        let response = tokio::time::timeout(std::time::Duration::from_secs(15), rx)
+            .await
+            .map_err(|_| "Rename request timed out".to_string())?
+            .map_err(|_| "Rename response channel closed".to_string())?;
+
+        // Check for error response
+        if let Some(error) = response.get("error") {
+            let msg = error
+                .get("message")
+                .and_then(|v| v.as_str())
+                .unwrap_or("Rename failed");
+            return Err(msg.to_string());
+        }
+
+        let result = response.get("result").cloned().unwrap_or(Value::Null);
+
+        Ok(serde_json::json!({ "workspaceEdit": result }))
+    }
+
+    /// Request document formatting for an entire file.
+    pub async fn request_formatting(
+        &mut self,
+        uri: &str,
+        lang_id: &str,
+        tab_size: u32,
+        insert_spaces: bool,
+    ) -> Result<Value, String> {
+        let server = self
+            .servers
+            .get_mut(lang_id)
+            .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
+
+        let params = serde_json::json!({
+            "textDocument": { "uri": uri },
+            "options": {
+                "tabSize": tab_size,
+                "insertSpaces": insert_spaces
+            }
+        });
+
+        let rx = client::send_request(
+            &mut server.stdin,
+            &server.pending_requests,
+            "textDocument/formatting",
+            params,
+            &server.next_id,
+        )
+        .await?;
+
+        let response = tokio::time::timeout(std::time::Duration::from_secs(10), rx)
+            .await
+            .map_err(|_| "Formatting request timed out".to_string())?
+            .map_err(|_| "Formatting response channel closed".to_string())?;
+
+        let result = response.get("result").cloned().unwrap_or(Value::Null);
+
+        // Result is TextEdit[] or null
+        let edits = if result.is_array() {
+            result
+        } else {
+            Value::Array(vec![])
+        };
+
+        Ok(serde_json::json!({ "edits": edits }))
+    }
+
+    /// Request formatting for a range within a file.
+    pub async fn request_range_formatting(
+        &mut self,
+        uri: &str,
+        lang_id: &str,
+        range_start_line: u32,
+        range_start_char: u32,
+        range_end_line: u32,
+        range_end_char: u32,
+        tab_size: u32,
+        insert_spaces: bool,
+    ) -> Result<Value, String> {
+        let server = self
+            .servers
+            .get_mut(lang_id)
+            .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
+
+        let params = serde_json::json!({
+            "textDocument": { "uri": uri },
+            "range": {
+                "start": { "line": range_start_line, "character": range_start_char },
+                "end": { "line": range_end_line, "character": range_end_char }
+            },
+            "options": {
+                "tabSize": tab_size,
+                "insertSpaces": insert_spaces
+            }
+        });
+
+        let rx = client::send_request(
+            &mut server.stdin,
+            &server.pending_requests,
+            "textDocument/rangeFormatting",
+            params,
+            &server.next_id,
+        )
+        .await?;
+
+        let response = tokio::time::timeout(std::time::Duration::from_secs(10), rx)
+            .await
+            .map_err(|_| "Range formatting request timed out".to_string())?
+            .map_err(|_| "Range formatting response channel closed".to_string())?;
+
+        let result = response.get("result").cloned().unwrap_or(Value::Null);
+
+        // Result is TextEdit[] or null
+        let edits = if result.is_array() {
+            result
+        } else {
+            Value::Array(vec![])
+        };
+
+        Ok(serde_json::json!({ "edits": edits }))
     }
 
     /// Get status information for all servers.

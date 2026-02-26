@@ -6,15 +6,17 @@
    * auto-scroll (only scrolls if user is near bottom), and shows an
    * empty state when there are no messages.
    */
+  import { tick } from 'svelte';
   import { chatStore } from '../../lib/stores/chat.svelte.js';
   import { voiceStore } from '../../lib/stores/voice.svelte.js';
   import { attachmentsStore } from '../../lib/stores/attachments.svelte.js';
-  import { exportChatToFile, lensCapturePreview } from '../../lib/api.js';
+  import { chatLoad, chatSave, exportChatToFile, lensCapturePreview } from '../../lib/api.js';
   import { lensStore } from '../../lib/stores/lens.svelte.js';
   import { save } from '@tauri-apps/plugin-dialog';
   import MessageGroup from './MessageGroup.svelte';
   import ChatInput from './ChatInput.svelte';
   import ScreenshotPicker from './ScreenshotPicker.svelte';
+  import ChatSessionDropdown from './ChatSessionDropdown.svelte';
 
   let {
     onSend = () => {},
@@ -64,28 +66,58 @@
 
   const hasMessages = $derived(chatStore.messages.length > 0);
 
+  /** Whether the user has manually scrolled up away from the bottom. */
+  let userScrolledUp = $state(false);
+
+  /** Handle scroll events to detect manual scroll-up. */
+  function handleScroll() {
+    if (!scrollContainer) return;
+    const distanceFromBottom =
+      scrollContainer.scrollHeight - scrollContainer.scrollTop - scrollContainer.clientHeight;
+    userScrolledUp = distanceFromBottom > SCROLL_THRESHOLD;
+  }
+
   /**
    * Smart auto-scroll: only scroll if user is near the bottom.
    * During streaming, use instant scroll for responsiveness.
    * When not streaming, use smooth scroll for polish.
+   * @param {boolean} [forceSmooth=false] - Force smooth scrolling (e.g. for new messages)
    */
-  function autoScroll() {
+  function autoScroll(forceSmooth = false) {
     if (!scrollContainer) return;
+    if (userScrolledUp) return;
 
-    const distanceFromBottom =
-      scrollContainer.scrollHeight - scrollContainer.scrollTop - scrollContainer.clientHeight;
-
-    if (distanceFromBottom > SCROLL_THRESHOLD) return;
+    const behavior = forceSmooth ? 'smooth'
+      : chatStore.isStreaming ? 'instant'
+      : 'smooth';
 
     scrollContainer.scrollTo({
       top: scrollContainer.scrollHeight,
-      behavior: chatStore.isStreaming ? 'instant' : 'smooth',
+      behavior,
     });
   }
 
-  /** Clear all messages from the current chat. */
-  function handleClear() {
+  /** Clear all messages from the current chat.
+   *  Immediately persists empty state to disk (bypasses the 500ms auto-save
+   *  debounce) so messages don't resurrect if the app is closed quickly. */
+  async function handleClear() {
+    const activeId = chatStore.activeChatId;
     chatStore.clearMessages();
+
+    // Flush empty messages to disk immediately
+    if (activeId) {
+      try {
+        const result = await chatLoad(activeId);
+        const chat = result?.data || result;
+        if (chat) {
+          chat.messages = [];
+          chat.updatedAt = Date.now();
+          await chatSave(chat);
+        }
+      } catch (err) {
+        console.warn('[ChatPanel] Failed to persist clear:', err);
+      }
+    }
   }
 
   /** Export the current chat via a native Save As dialog. */
@@ -167,23 +199,56 @@
     showScreenshotPicker = false;
   }
 
-  // Auto-scroll whenever messages change or streaming updates
-  $effect(() => {
-    // Track messages length and streaming state to trigger this effect
-    const _len = chatStore.messages.length;
-    const _streaming = chatStore.isStreaming;
+  // Track previous message count and chat ID to detect new messages vs session switches
+  let prevMessageCount = 0;
+  let prevChatId = null;
 
-    // Use tick-like delay to let DOM update first
-    if (scrollContainer) {
-      requestAnimationFrame(() => {
-        autoScroll();
-      });
+  // Reset scroll instantly on session switch
+  $effect(() => {
+    const id = chatStore.activeChatId;
+    if (id !== prevChatId) {
+      prevChatId = id;
+      if (scrollContainer) {
+        scrollContainer.scrollTop = 0;
+        userScrolledUp = false;
+      }
+      prevMessageCount = chatStore.messages.length;
     }
+  });
+
+  // Auto-scroll when new messages are added (length changes)
+  $effect(() => {
+    const len = chatStore.messages.length;
+    if (!scrollContainer || len === 0) return;
+
+    if (len > prevMessageCount) {
+      // New message arrived — reset scroll lock so we follow it
+      userScrolledUp = false;
+    }
+    prevMessageCount = len;
+
+    tick().then(() => {
+      autoScroll(true);
+    });
+  });
+
+  // Auto-scroll during streaming updates (text content changes).
+  // Only reads .length and .streaming to minimize proxy subscriptions.
+  $effect(() => {
+    const len = chatStore.messages.length;
+    if (!scrollContainer || len === 0) return;
+    const streaming = chatStore.isStreaming;
+    if (!streaming) return;
+
+    tick().then(() => {
+      autoScroll();
+    });
   });
 </script>
 
 <div class="chat-panel">
-  <div class="chat-scroll-area" bind:this={scrollContainer}>
+  <ChatSessionDropdown />
+  <div class="chat-scroll-area" bind:this={scrollContainer} onscroll={handleScroll}>
     {#if hasMessages}
       <div class="messages-container">
         {#each messageGroups as group (group.id)}
@@ -243,6 +308,7 @@
     padding: 12px 8px;
     position: relative;
   }
+
 
   .messages-container {
     display: flex;

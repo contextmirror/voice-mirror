@@ -740,6 +740,48 @@ impl ApiProvider {
 
         self.send_message_internal(false);
     }
+
+    /// Send a message with a pre-encoded image data URL (no file I/O).
+    ///
+    /// Uses the same OpenAI vision format as `send_message_with_image`,
+    /// but skips the file read + base64 encode step.
+    fn send_message_with_image_data_url(&mut self, text: String, data_url: &str) {
+        if !self.running.load(Ordering::SeqCst) {
+            let _ = self
+                .event_tx
+                .send(ProviderEvent::Error("Provider not running".to_string()));
+            return;
+        }
+
+        // Build multimodal content array (OpenAI vision format)
+        let mut content_parts = vec![
+            serde_json::json!({
+                "type": "image_url",
+                "image_url": { "url": data_url }
+            }),
+        ];
+        if !text.is_empty() {
+            content_parts.push(serde_json::json!({
+                "type": "text",
+                "text": text
+            }));
+        }
+
+        // Per-message system reinforcement
+        if self.system_prompt.is_some() && self.messages.len() > 1 {
+            self.messages.push(serde_json::json!({
+                "role": "system",
+                "content": "Remember: answer only what was asked. Stay on topic."
+            }));
+        }
+        self.messages.push(serde_json::json!({
+            "role": "user",
+            "content": content_parts
+        }));
+        self.current_tool_iteration = 0;
+
+        self.send_message_internal(false);
+    }
 }
 
 impl Provider for ApiProvider {
@@ -795,6 +837,10 @@ impl Provider for ApiProvider {
 
     fn send_input_with_image(&mut self, data: &str, image_path: &str) {
         self.send_message_with_image(data.to_string(), image_path);
+    }
+
+    fn send_input_with_image_data_url(&mut self, data: &str, data_url: &str) {
+        self.send_message_with_image_data_url(data.to_string(), data_url);
     }
 
     fn send_raw_input(&mut self, _data: &[u8]) {

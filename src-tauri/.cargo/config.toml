@@ -1,0 +1,6 @@
+# CUDA build configuration for whisper-rs-sys.
+# CUDA 13.x dropped support for old architectures (compute_52, 61, 70).
+# Set to Blackwell (120) for RTX 5070 Ti. Add more archs for broader GPU support:
+#   "75;80;89;120" covers Turing, Ampere, Ada Lovelace, and Blackwell.
+[env]
+CMAKE_CUDA_ARCHITECTURES = "120"

@@ -1,8 +1,9 @@
 /**
  * command-palette.test.cjs -- Source-inspection tests for CommandPalette.svelte
  *
- * Validates imports, props, commands, keyboard handling, file search,
- * styling, and accessibility by reading the source and asserting patterns.
+ * Validates imports, props, prefix-based modes, keyboard handling, file search,
+ * command execution, go-to-line/symbol, styling, and accessibility by reading
+ * the source and asserting patterns.
  */
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
@@ -24,45 +25,49 @@ describe('CommandPalette: imports', () => {
     );
   });
 
-  it('imports searchFiles from api.js', () => {
+  it('imports searchFiles and lspRequestDocumentSymbols from api.js', () => {
     assert.ok(
-      src.includes("import { searchFiles }") && src.includes('api.js'),
+      src.includes('searchFiles') && src.includes('api.js'),
       'Should import searchFiles from api.js'
+    );
+    assert.ok(
+      src.includes('lspRequestDocumentSymbols'),
+      'Should import lspRequestDocumentSymbols from api.js'
+    );
+  });
+
+  it('imports commandRegistry from commands.svelte.js', () => {
+    assert.ok(
+      src.includes('commandRegistry') && src.includes('commands.svelte.js'),
+      'Should import commandRegistry from commands.svelte.js'
     );
   });
 
   it('imports tabsStore', () => {
     assert.ok(
-      src.includes("import { tabsStore }") && src.includes('tabs.svelte.js'),
+      src.includes('tabsStore') && src.includes('tabs.svelte.js'),
       'Should import tabsStore from tabs.svelte.js'
     );
   });
 
   it('imports projectStore', () => {
     assert.ok(
-      src.includes("import { projectStore }") && src.includes('project.svelte.js'),
+      src.includes('projectStore') && src.includes('project.svelte.js'),
       'Should import projectStore from project.svelte.js'
-    );
-  });
-
-  it('imports layoutStore', () => {
-    assert.ok(
-      src.includes("import { layoutStore }") && src.includes('layout.svelte.js'),
-      'Should import layoutStore from layout.svelte.js'
-    );
-  });
-
-  it('imports navigationStore', () => {
-    assert.ok(
-      src.includes("import { navigationStore }") && src.includes('navigation.svelte.js'),
-      'Should import navigationStore from navigation.svelte.js'
     );
   });
 
   it('imports lensStore for freeze-frame', () => {
     assert.ok(
-      src.includes("import { lensStore }") && src.includes('lens.svelte.js'),
+      src.includes('lensStore') && src.includes('lens.svelte.js'),
       'Should import lensStore from lens.svelte.js'
+    );
+  });
+
+  it('imports editorGroupsStore', () => {
+    assert.ok(
+      src.includes('editorGroupsStore') && src.includes('editor-groups.svelte.js'),
+      'Should import editorGroupsStore from editor-groups.svelte.js'
     );
   });
 });
@@ -106,18 +111,79 @@ describe('CommandPalette: props', () => {
       'onClose should default to () => {}'
     );
   });
+
+  it('has initialMode prop', () => {
+    assert.ok(
+      src.includes('initialMode'),
+      'Should have initialMode prop for opening mode'
+    );
+  });
+});
+
+// ============ Mode Detection ============
+
+describe('CommandPalette: mode detection', () => {
+  it('derives mode from query prefix', () => {
+    assert.ok(
+      src.includes('let mode = $derived.by('),
+      'mode should be $derived.by'
+    );
+  });
+
+  it('detects > prefix for command mode', () => {
+    assert.ok(
+      src.includes("startsWith('>')") && src.includes("'commands'"),
+      'Should detect > prefix for command mode'
+    );
+  });
+
+  it('detects : prefix for goto-line mode', () => {
+    assert.ok(
+      src.includes("startsWith(':')") && src.includes("'goto-line'"),
+      'Should detect : prefix for goto-line mode'
+    );
+  });
+
+  it('detects @ prefix for goto-symbol mode', () => {
+    assert.ok(
+      src.includes("startsWith('@')") && src.includes("'goto-symbol'"),
+      'Should detect @ prefix for goto-symbol mode'
+    );
+  });
+
+  it('defaults to files mode', () => {
+    assert.ok(
+      src.includes("return 'files'"),
+      'Should default to files mode when no prefix'
+    );
+  });
+
+  it('has strippedQuery that removes prefix', () => {
+    assert.ok(
+      src.includes('strippedQuery') && src.includes('query.slice(1)'),
+      'Should strip prefix from query'
+    );
+  });
+
+  it('has dynamic placeholder per mode', () => {
+    assert.ok(
+      src.includes('let placeholder = $derived.by('),
+      'placeholder should be $derived.by based on mode'
+    );
+    assert.ok(
+      src.includes('Search files and commands...'),
+      'Should have files mode placeholder'
+    );
+    assert.ok(
+      src.includes('Type a command name...'),
+      'Should have commands mode placeholder'
+    );
+  });
 });
 
 // ============ Search Input ============
 
 describe('CommandPalette: search input', () => {
-  it('has placeholder text "Search files and commands..."', () => {
-    assert.ok(
-      src.includes('placeholder="Search files and commands..."'),
-      'Input should have placeholder "Search files and commands..."'
-    );
-  });
-
   it('has spellcheck disabled', () => {
     assert.ok(
       src.includes('spellcheck="false"'),
@@ -147,132 +213,188 @@ describe('CommandPalette: search input', () => {
   });
 });
 
-// ============ Built-in Commands ============
+// ============ Command Mode ============
 
-describe('CommandPalette: built-in commands', () => {
-  const expectedCommands = [
-    { id: 'open-lens', label: 'Open Lens' },
-    { id: 'new-session', label: 'New Session' },
-    { id: 'toggle-terminal', label: 'Toggle Terminal' },
-    { id: 'toggle-chat', label: 'Toggle Chat' },
-    { id: 'toggle-file-tree', label: 'Toggle File Tree' },
-    { id: 'open-settings', label: 'Settings' },
-  ];
-
-  it('defines a commands array', () => {
+describe('CommandPalette: command mode', () => {
+  it('derives commandResults from registry', () => {
     assert.ok(
-      src.includes('const commands = ['),
-      'Should define const commands array'
+      src.includes('let commandResults = $derived.by('),
+      'commandResults should be $derived.by'
     );
   });
 
-  it('has all built-in commands', () => {
-    for (const cmd of expectedCommands) {
-      assert.ok(
-        src.includes(`id: '${cmd.id}'`),
-        `Should have command with id '${cmd.id}'`
-      );
-    }
-  });
-
-  for (const cmd of expectedCommands) {
-    it(`has command "${cmd.id}" with label "${cmd.label}"`, () => {
-      assert.ok(
-        src.includes(`id: '${cmd.id}'`),
-        `Should have command id '${cmd.id}'`
-      );
-      assert.ok(
-        src.includes(`label: '${cmd.label}'`),
-        `Should have label '${cmd.label}'`
-      );
-    });
-  }
-
-  it('all commands have category "command"', () => {
+  it('calls commandRegistry.search for queries', () => {
     assert.ok(
-      src.includes("category: 'command'"),
-      'Commands should have category "command"'
+      src.includes('commandRegistry.search(strippedQuery)'),
+      'Should call commandRegistry.search for filtered results'
     );
   });
 
-  it('new-session has hint Ctrl+Shift+S', () => {
+  it('calls commandRegistry.getAll for empty query', () => {
     assert.ok(
-      src.includes("hint: 'Ctrl+Shift+S'"),
-      'new-session should have hint Ctrl+Shift+S'
+      src.includes('commandRegistry.getAll()'),
+      'Should call commandRegistry.getAll for grouped view'
     );
   });
 
-  it('toggle-terminal has hint Ctrl+`', () => {
+  it('executes commands via commandRegistry.execute', () => {
     assert.ok(
-      src.includes("hint: 'Ctrl+`'"),
-      'toggle-terminal should have hint Ctrl+`'
+      src.includes('commandRegistry.execute(item.id)'),
+      'Should call commandRegistry.execute(item.id) for command items'
     );
   });
 
-  it('open-settings has hint Ctrl+,', () => {
+  it('renders keybinding badges for commands', () => {
     assert.ok(
-      src.includes("hint: 'Ctrl+,'"),
-      'open-settings should have hint Ctrl+,'
+      src.includes('item.keybinding') && src.includes('class="item-hint"'),
+      'Should render keybinding badges via item.keybinding'
+    );
+  });
+
+  it('renders category tags for commands', () => {
+    assert.ok(
+      src.includes('item.category') && src.includes('class="item-category"'),
+      'Should render category tag for command items'
     );
   });
 });
 
-// ============ Command Handlers ============
+// ============ Go-to-Line Mode ============
 
-describe('CommandPalette: command handlers', () => {
-  it('defines commandHandlers object', () => {
+describe('CommandPalette: go-to-line mode', () => {
+  it('parses line number from strippedQuery', () => {
     assert.ok(
-      src.includes('const commandHandlers = {'),
-      'Should define commandHandlers object'
+      src.includes('parseInt(strippedQuery, 10)'),
+      'Should parse line number from stripped query'
     );
   });
 
-  it('toggle-terminal calls layoutStore.toggleTerminal()', () => {
+  it('dispatches lens-goto-position event', () => {
     assert.ok(
-      src.includes("'toggle-terminal': () => layoutStore.toggleTerminal()"),
-      'toggle-terminal should call layoutStore.toggleTerminal()'
+      src.includes('lens-goto-position-'),
+      'Should dispatch lens-goto-position event'
     );
   });
 
-  it('toggle-chat calls layoutStore.toggleChat()', () => {
+  it('uses editorGroupsStore.focusedGroupId', () => {
     assert.ok(
-      src.includes("'toggle-chat': () => layoutStore.toggleChat()"),
-      'toggle-chat should call layoutStore.toggleChat()'
+      src.includes('editorGroupsStore.focusedGroupId'),
+      'Should use focusedGroupId for goto event dispatch'
     );
   });
 
-  it('toggle-file-tree calls layoutStore.toggleFileTree()', () => {
+  it('shows goto-line item with label', () => {
     assert.ok(
-      src.includes("'toggle-file-tree': () => layoutStore.toggleFileTree()"),
-      'toggle-file-tree should call layoutStore.toggleFileTree()'
+      src.includes("type: 'goto-line'") && src.includes('Go to line'),
+      'Should create goto-line item with label'
+    );
+  });
+});
+
+// ============ Go-to-Symbol Mode ============
+
+describe('CommandPalette: go-to-symbol mode', () => {
+  it('has symbols state', () => {
+    assert.ok(
+      src.includes('let symbols = $state('),
+      'Should have symbols state variable'
     );
   });
 
-  it('open-settings calls navigationStore.setView("settings")', () => {
+  it('has loadingSymbols state', () => {
     assert.ok(
-      src.includes("'open-settings': () => navigationStore.setView('settings')"),
-      'open-settings should call navigationStore.setView("settings")'
+      src.includes('let loadingSymbols = $state('),
+      'Should have loadingSymbols state'
     );
   });
 
-  it('new-session has a handler (TODO)', () => {
+  it('defines fetchSymbols function', () => {
     assert.ok(
-      src.includes("'new-session':"),
-      'new-session should have a handler entry'
+      src.includes('async function fetchSymbols()'),
+      'Should define fetchSymbols async function'
     );
   });
 
-  it('executeItem dispatches command handlers', () => {
+  it('calls lspRequestDocumentSymbols', () => {
     assert.ok(
-      src.includes("commandHandlers[item.id]"),
-      'executeItem should look up handler by item.id'
+      src.includes('lspRequestDocumentSymbols('),
+      'Should call lspRequestDocumentSymbols for symbol data'
     );
   });
 
-  it('executeItem opens file via tabsStore.openFile', () => {
+  it('uses fuzzysort for symbol filtering', () => {
     assert.ok(
-      src.includes("tabsStore.openFile({ name: item.name, path: item.path })"),
-      'executeItem should call tabsStore.openFile for file items'
+      src.includes('fuzzysort.go(strippedQuery, symbols,'),
+      'Should use fuzzysort to filter symbols'
+    );
+  });
+
+  it('has SYMBOL_KIND_LABELS mapping', () => {
+    assert.ok(
+      src.includes('SYMBOL_KIND_LABELS') && src.includes('function') && src.includes('class') && src.includes('variable'),
+      'Should have SYMBOL_KIND_LABELS with standard LSP kinds'
+    );
+  });
+
+  it('renders symbol kind badges', () => {
+    assert.ok(
+      src.includes('class="symbol-kind"'),
+      'Should render symbol-kind badge class'
+    );
+  });
+
+  it('fetches symbols on mode change', () => {
+    assert.ok(
+      src.includes("mode === 'goto-symbol'") && src.includes('fetchSymbols()'),
+      'Should fetch symbols when entering goto-symbol mode'
+    );
+  });
+});
+
+// ============ Command Execution ============
+
+describe('CommandPalette: command execution', () => {
+  it('has executeItem function', () => {
+    assert.ok(
+      src.includes('function executeItem(item)'),
+      'Should define executeItem function'
+    );
+  });
+
+  it('handles command type items', () => {
+    assert.ok(
+      src.includes("item.type === 'command'"),
+      'Should handle command type items'
+    );
+  });
+
+  it('handles file type items via tabsStore.openFile', () => {
+    assert.ok(
+      src.includes("item.type === 'file'") &&
+      src.includes('tabsStore.openFile('),
+      'Should handle file type items via tabsStore.openFile'
+    );
+  });
+
+  it('handles goto-line type items', () => {
+    assert.ok(
+      src.includes("item.type === 'goto-line'"),
+      'Should handle goto-line type items'
+    );
+  });
+
+  it('handles symbol type items', () => {
+    assert.ok(
+      src.includes("item.type === 'symbol'"),
+      'Should handle symbol type items'
+    );
+  });
+
+  it('calls close() after execution', () => {
+    // close() should be called at the end of executeItem
+    assert.ok(
+      src.includes('close()'),
+      'executeItem should call close() after executing'
     );
   });
 });
@@ -338,7 +460,6 @@ describe('CommandPalette: keyboard navigation', () => {
   });
 
   it('Escape calls close()', () => {
-    // In the Escape handler block
     assert.ok(
       src.includes("'Escape'") && src.includes('close()'),
       'Escape should call close()'
@@ -357,45 +478,6 @@ describe('CommandPalette: keyboard navigation', () => {
     assert.ok(
       src.includes('onkeydown={handleKeydown}'),
       'Modal should bind onkeydown to handleKeydown'
-    );
-  });
-});
-
-// ============ Fuzzysort Usage ============
-
-describe('CommandPalette: fuzzysort usage', () => {
-  it('uses fuzzysort.go for command filtering', () => {
-    assert.ok(
-      src.includes("fuzzysort.go(query, commands, { key: 'label'"),
-      'Should use fuzzysort.go with commands and key: "label"'
-    );
-  });
-
-  it('uses fuzzysort.go for file filtering', () => {
-    assert.ok(
-      src.includes('fuzzysort.go(query, cachedFiles,'),
-      'Should use fuzzysort.go with cachedFiles'
-    );
-  });
-
-  it('limits command results to 10', () => {
-    assert.ok(
-      src.includes('limit: 10'),
-      'Command filter should limit to 10 results'
-    );
-  });
-
-  it('limits file results to 20', () => {
-    assert.ok(
-      src.includes('limit: 20'),
-      'File filter should limit to 20 results'
-    );
-  });
-
-  it('maps fuzzysort results to objects', () => {
-    assert.ok(
-      src.includes('results.map(r => r.obj)'),
-      'Command results should map to r.obj'
     );
   });
 });
@@ -476,6 +558,31 @@ describe('CommandPalette: file fetching', () => {
   });
 });
 
+// ============ Fuzzysort Usage ============
+
+describe('CommandPalette: fuzzysort usage', () => {
+  it('uses fuzzysort.go for file filtering', () => {
+    assert.ok(
+      src.includes('fuzzysort.go(strippedQuery, cachedFiles,'),
+      'Should use fuzzysort.go with cachedFiles'
+    );
+  });
+
+  it('limits file results to 20', () => {
+    assert.ok(
+      src.includes('limit: 20'),
+      'File filter should limit to 20 results'
+    );
+  });
+
+  it('uses fuzzysort.go for symbol filtering', () => {
+    assert.ok(
+      src.includes('fuzzysort.go(strippedQuery, symbols,'),
+      'Should use fuzzysort.go for symbol filtering'
+    );
+  });
+});
+
 // ============ Results Display ============
 
 describe('CommandPalette: results display', () => {
@@ -521,10 +628,10 @@ describe('CommandPalette: results display', () => {
     );
   });
 
-  it('displays keyboard hint for commands with hints', () => {
+  it('displays keybinding hints for commands', () => {
     assert.ok(
-      src.includes('class="item-hint"') && src.includes('{item.hint}'),
-      'Should render item-hint with the command hint text'
+      src.includes('class="item-hint"') && src.includes('item.keybinding'),
+      'Should render item-hint with keybinding text'
     );
   });
 
@@ -542,10 +649,17 @@ describe('CommandPalette: results display', () => {
     );
   });
 
+  it('shows no-commands message', () => {
+    assert.ok(
+      src.includes('No commands matching'),
+      'Should show "No commands matching" when command query has no matches'
+    );
+  });
+
   it('shows start typing prompt', () => {
     assert.ok(
-      src.includes('Start typing to search...'),
-      'Should show "Start typing to search..." as initial prompt'
+      src.includes('Start typing to search'),
+      'Should show start typing prompt as initial state'
     );
   });
 
@@ -556,10 +670,10 @@ describe('CommandPalette: results display', () => {
     );
   });
 
-  it('renders "Commands" category header', () => {
+  it('has mode-pill for prefix modes', () => {
     assert.ok(
-      src.includes("label: 'Commands'"),
-      'Should have "Commands" category header in allResults'
+      src.includes('class="mode-pill"'),
+      'Should have mode-pill class for prefix indicator'
     );
   });
 });
@@ -664,7 +778,7 @@ describe('CommandPalette: accessibility', () => {
 
   it('mouseenter updates selectedIndex', () => {
     assert.ok(
-      src.includes('onmouseenter={() => { selectedIndex = selIdx; }}'),
+      src.includes('onmouseenter') && src.includes('selectedIndex = selIdx'),
       'mouseenter should update selectedIndex'
     );
   });
@@ -722,13 +836,6 @@ describe('CommandPalette: state management', () => {
     );
   });
 
-  it('uses $derived.by for filteredCommands', () => {
-    assert.ok(
-      src.includes('let filteredCommands = $derived.by('),
-      'filteredCommands should use $derived.by'
-    );
-  });
-
   it('uses $derived.by for filteredFiles', () => {
     assert.ok(
       src.includes('let filteredFiles = $derived.by('),
@@ -743,10 +850,10 @@ describe('CommandPalette: state management', () => {
     );
   });
 
-  it('uses $derived for selectableItems (filters out headers)', () => {
+  it('uses $derived for selectableItems (filters out headers and hints)', () => {
     assert.ok(
-      src.includes("let selectableItems = $derived(allResults.filter(i => i.type !== 'header'))"),
-      'selectableItems should derive from allResults filtering out headers'
+      src.includes('let selectableItems = $derived(') && src.includes("'header'") && src.includes("'hint'"),
+      'selectableItems should derive from allResults filtering out headers and hints'
     );
   });
 
@@ -757,10 +864,10 @@ describe('CommandPalette: state management', () => {
     );
   });
 
-  it('$effect resets query and selectedIndex when visible', () => {
+  it('$effect pre-fills prefix based on initialMode', () => {
     assert.ok(
-      src.includes("if (visible)") && src.includes("query = ''") && src.includes('selectedIndex = 0'),
-      'Should reset query and selectedIndex when palette opens'
+      src.includes('initialMode') && src.includes("query = '>'") && src.includes("query = ':'") && src.includes("query = '@'"),
+      'Should pre-fill query with prefix based on initialMode'
     );
   });
 
@@ -768,6 +875,13 @@ describe('CommandPalette: state management', () => {
     assert.ok(
       src.includes('fetchFiles()'),
       'Should call fetchFiles when palette becomes visible'
+    );
+  });
+
+  it('$effect resets selectedIndex when query changes', () => {
+    assert.ok(
+      src.includes('selectedIndex = 0'),
+      'Should reset selectedIndex to 0'
     );
   });
 

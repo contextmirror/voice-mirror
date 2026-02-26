@@ -15,6 +15,9 @@ import { configStore } from './config.svelte.js';
  * @property {'info'|'success'|'warning'|'error'} severity - Visual style
  * @property {number} duration - Auto-dismiss duration in ms (0 = no auto-dismiss)
  * @property {{ label: string, callback: () => void }|null} action - Optional action button
+ * @property {Array<{ label: string, callback: () => void }>|null} actions - Optional multiple action buttons
+ * @property {string|null} key - Deduplication key
+ * @property {number|null} progress - Progress bar value 0-100, null for no bar
  * @property {number} createdAt - Creation timestamp
  */
 
@@ -40,27 +43,47 @@ function createToastStore() {
     timers.set(id, timer);
   }
 
+  /** Duration for toasts with multiple actions (gives user time to read and click) */
+  const MULTI_ACTION_DURATION = 15000;
+
   /**
    * Add a toast notification.
-   * @param {{ message: string, severity?: string, duration?: number, action?: { label: string, callback: () => void } }} options
+   * @param {{ message: string, severity?: string, duration?: number, action?: { label: string, callback: () => void }|null, actions?: Array<{ label: string, callback: () => void }>|null, key?: string|null }} options
    * @returns {string} The toast ID
    */
   function addToast({
     message,
     severity = 'info',
-    duration = DEFAULT_DURATION,
+    duration,
     action = null,
+    actions = null,
+    key = null,
+    progress = null,
   }) {
     // Respect the showToasts config setting (errors always shown)
-    if (severity !== 'error' && configStore.value?.behavior?.showToasts === false) return '';
+    if (severity !== 'error' && configStore.value?.behavior?.showToasts === false) return null;
+
+    // Deduplicate by key — dismiss existing toast with same key
+    if (key) {
+      const existing = toasts.find(t => t.key === key);
+      if (existing) dismissToast(existing.id);
+    }
+
+    // Use longer duration for multi-action toasts unless explicitly set
+    const effectiveDuration = duration !== undefined
+      ? duration
+      : (actions ? MULTI_ACTION_DURATION : DEFAULT_DURATION);
 
     const id = uid();
     const toast = {
       id,
       message,
       severity,
-      duration,
+      duration: effectiveDuration,
       action,
+      actions,
+      key,
+      progress,
       createdAt: Date.now(),
     };
 
@@ -71,7 +94,7 @@ function createToastStore() {
     }
 
     toasts = [...toasts, toast];
-    scheduleDismiss(id, duration);
+    scheduleDismiss(id, effectiveDuration);
     return id;
   }
 
@@ -89,6 +112,15 @@ function createToastStore() {
   }
 
   /**
+   * Update an existing toast's properties (e.g., message, progress).
+   * @param {string} id - Toast ID to update
+   * @param {Partial<Toast>} updates - Properties to merge
+   */
+  function updateToast(id, updates) {
+    toasts = toasts.map(t => t.id === id ? { ...t, ...updates } : t);
+  }
+
+  /**
    * Dismiss all toasts.
    */
   function dismissAll() {
@@ -102,6 +134,7 @@ function createToastStore() {
   return {
     get toasts() { return toasts; },
     addToast,
+    updateToast,
     dismissToast,
     dismissAll,
   };

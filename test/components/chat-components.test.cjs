@@ -295,6 +295,15 @@ describe('ChatPanel.svelte', () => {
     assert.ok(src.includes('inputDisabled'), 'Should accept inputDisabled prop');
   });
 
+  it('handleClear immediately persists empty messages to disk', () => {
+    // Fix for messages resurrecting after app close — bypasses 500ms debounce
+    assert.ok(src.includes('chatSave'), 'Should import chatSave for immediate persist');
+    assert.ok(src.includes('chatLoad'), 'Should import chatLoad to preserve metadata');
+    const clearFn = src.slice(src.indexOf('async function handleClear'), src.indexOf('async function handleClear') + 600);
+    assert.ok(clearFn.includes('chat.messages = []'), 'Should set messages to empty array');
+    assert.ok(clearFn.includes('await chatSave('), 'Should immediately save to disk');
+  });
+
   it('imports ScreenshotPicker', () => {
     assert.ok(src.includes("import ScreenshotPicker from './ScreenshotPicker.svelte'"), 'Should import ScreenshotPicker');
   });
@@ -351,6 +360,38 @@ describe('ChatPanel.svelte', () => {
       'Should pass onClearAttachments to ChatInput'
     );
   });
+
+  it('imports tick from svelte for post-DOM-update scrolling', () => {
+    assert.ok(src.includes("import { tick } from 'svelte'"), 'Should import tick from svelte');
+  });
+
+  it('uses tick() instead of requestAnimationFrame for auto-scroll', () => {
+    assert.ok(src.includes('tick().then'), 'Should use tick().then for DOM update timing');
+    assert.ok(!src.includes('requestAnimationFrame'), 'Should NOT use requestAnimationFrame');
+  });
+
+  it('tracks userScrolledUp state for scroll position awareness', () => {
+    assert.ok(src.includes('userScrolledUp'), 'Should have userScrolledUp state');
+  });
+
+  it('has handleScroll to detect manual scroll-up', () => {
+    assert.ok(src.includes('function handleScroll'), 'Should have handleScroll function');
+    assert.ok(src.includes('onscroll={handleScroll}'), 'Should bind onscroll to handleScroll');
+  });
+
+  it('has separate $effect for streaming scroll updates', () => {
+    // The streaming effect uses chatStore.isStreaming to minimize proxy subscriptions
+    assert.ok(src.includes('chatStore.isStreaming'), 'Should track isStreaming for scroll');
+  });
+
+  it('resets userScrolledUp when new messages arrive', () => {
+    assert.ok(src.includes('userScrolledUp = false'), 'Should reset userScrolledUp on new messages');
+  });
+
+  it('uses smooth scroll for new messages and instant for streaming', () => {
+    assert.ok(src.includes("forceSmooth ? 'smooth'"), 'Should use smooth for forced scroll');
+    assert.ok(src.includes("chatStore.isStreaming ? 'instant'"), 'Should use instant during streaming');
+  });
 });
 
 // ---- ScreenshotPicker.svelte ----
@@ -383,9 +424,9 @@ describe('ScreenshotPicker.svelte', () => {
     assert.ok(src.includes('Entire Screen'), 'Should have Entire Screen tab');
   });
 
-  it('has picker-overlay with z-index 10001', () => {
+  it('has picker-overlay with z-index above design toolbar', () => {
     assert.ok(src.includes('picker-overlay'), 'Should have picker-overlay');
-    assert.ok(src.includes('z-index: 10001'), 'Should have z-index 10001');
+    assert.ok(src.includes('z-index: 10002'), 'Should have z-index 10002');
   });
 
   it('has Cancel and Share buttons', () => {

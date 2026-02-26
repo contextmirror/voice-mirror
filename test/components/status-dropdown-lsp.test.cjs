@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 
-const src = fs.readFileSync(path.join(__dirname, '../../src/components/lens/StatusDropdown.svelte'), 'utf-8');
+const src = fs.readFileSync(path.join(__dirname, '../../src/components/lens/LspTab.svelte'), 'utf-8');
 
 describe('StatusDropdown LSP tab', () => {
   it('imports lspGetStatus from api', () => {
@@ -38,5 +38,13 @@ describe('StatusDropdown LSP tab', () => {
   });
   it('fetches status when LSP tab is selected', () => {
     assert.ok(src.includes('lspGetStatus'));
+  });
+  it('uses cancelled flag pattern for event listener cleanup', () => {
+    assert.ok(src.includes('let cancelled = false'), 'Should use cancelled flag');
+    assert.ok(src.includes('if (!cancelled'), 'Should guard event handler with cancelled check');
+    assert.ok(src.includes('cancelled = true'), 'Cleanup should set cancelled to true');
+  });
+  it('calls unlisten on cleanup if already resolved', () => {
+    assert.ok(src.includes('if (cancelled) fn()'), 'Should unlisten immediately if cancelled before resolve');
   });
 });

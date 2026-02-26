@@ -33,6 +33,7 @@ describe('config.svelte.js -- DEFAULT_CONFIG structure', () => {
     'overlay',
     'advanced',
     'sidebar',
+    'editor',
     'workspace',
     'user',
     'system',
@@ -86,6 +87,10 @@ describe('config.svelte.js -- critical field values', () => {
     assert.ok(src.includes("provider: 'claude'"), 'provider should default to claude');
   });
 
+  it('has ai.autoStart field defaulting to false', () => {
+    assert.ok(src.includes('autoStart: false'), 'autoStart should default to false');
+  });
+
   it('has contextLength field', () => {
     assert.ok(src.includes('contextLength:'), 'Should have contextLength');
   });
@@ -105,6 +110,10 @@ describe('config.svelte.js -- critical field values', () => {
 
   it('defaults sidebar.mode to mirror', () => {
     assert.ok(src.includes("mode: 'mirror'"), 'sidebar.mode should default to mirror');
+  });
+
+  it('has formatOnSave editor config', () => {
+    assert.ok(src.includes('formatOnSave'), 'Should have formatOnSave in editor config');
   });
 });
 

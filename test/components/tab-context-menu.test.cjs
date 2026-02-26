@@ -72,9 +72,9 @@ describe('TabContextMenu.svelte: close actions', () => {
     assert.ok(src.includes('Close All'));
     assert.ok(src.includes('closeAll'));
   });
-  it('skips Close for browser tab', () => {
-    assert.ok(src.includes('isBrowser'));
-    assert.ok(src.includes('{#if !isBrowser}'));
+  it('shows file actions directly (browser decoupled)', () => {
+    // Browser is no longer a tab, so no isBrowser branching needed
+    assert.ok(src.includes('handleClose'), 'Should have close handler');
   });
   it('disables Close Others when no other tabs', () => {
     assert.ok(src.includes('hasOtherTabs'));
@@ -152,19 +152,84 @@ describe('TabBar.svelte: tab context menu integration', () => {
     assert.ok(tabBarSrc.includes('x={tabMenu.x}'));
     assert.ok(tabBarSrc.includes('y={tabMenu.y}'));
   });
+  it('does not pass onNewBrowserTab (browser decoupled)', () => {
+    assert.ok(!tabBarSrc.includes('{onNewBrowserTab}'), 'Should not pass browser callback');
+  });
+});
+
+describe('TabContextMenu.svelte: browser decoupled', () => {
+  it('does not have isBrowser branching (browser is not a tab)', () => {
+    // Browser was decoupled from tabs -- it's now a fixed UI element
+    assert.ok(!src.includes('{#if isBrowser}'), 'Should not branch on isBrowser');
+  });
+  it('does not import browser-specific stores', () => {
+    assert.ok(!src.includes('browserTabsStore'), 'Should not import browserTabsStore');
+    assert.ok(!src.includes('lensHardRefresh'), 'Should not import lensHardRefresh');
+  });
+  it('scopes hasOtherTabs to same group', () => {
+    assert.ok(src.includes('hasOtherTabs'), 'Should have hasOtherTabs');
+    assert.ok(src.includes('groupId'), 'Should scope to groupId');
+  });
+});
+
+// ============ Split actions ============
+
+describe('TabContextMenu.svelte: split actions', () => {
+  it('has "Split Right" menu item', () => {
+    assert.ok(src.includes('Split Right'), 'Should have Split Right menu item');
+  });
+
+  it('has "Split Down" menu item', () => {
+    assert.ok(src.includes('Split Down'), 'Should have Split Down menu item');
+  });
+
+  it('has "Open to the Side" menu item', () => {
+    assert.ok(
+      src.includes('Open to the Side') || src.includes('Open to Side'),
+      'Should have Open to the Side menu item'
+    );
+  });
+
+  it('imports editorGroupsStore', () => {
+    assert.ok(
+      src.includes('editorGroupsStore') || src.includes('editor-groups.svelte.js'),
+      'Should import editorGroupsStore'
+    );
+  });
+
+  it('Split Right calls splitGroup with horizontal', () => {
+    assert.ok(
+      src.includes('splitGroup') && src.includes("'horizontal'"),
+      'Split Right should call splitGroup with horizontal direction'
+    );
+  });
+
+  it('Split Down calls splitGroup with vertical', () => {
+    assert.ok(
+      src.includes('splitGroup') && src.includes("'vertical'"),
+      'Split Down should call splitGroup with vertical direction'
+    );
+  });
+
+  it('shows Ctrl+\\ shortcut hint for Split Right', () => {
+    assert.ok(
+      src.includes('Ctrl+\\') || src.includes('Ctrl+\\\\'),
+      'Should show keyboard shortcut hint for Split Right'
+    );
+  });
 });
 
 describe('tabs.svelte.js: closeOthers and closeToRight', () => {
   it('has closeOthers method', () => {
-    assert.ok(tabsSrc.includes('closeOthers(id)'));
+    assert.ok(tabsSrc.includes('closeOthers'));
   });
-  it('closeOthers keeps browser tab', () => {
-    assert.ok(tabsSrc.includes("t.id === 'browser'"));
+  it('closeOthers scopes to group', () => {
+    assert.ok(tabsSrc.includes('closeOthers') && tabsSrc.includes('groupId'));
   });
   it('has closeToRight method', () => {
-    assert.ok(tabsSrc.includes('closeToRight(id)'));
+    assert.ok(tabsSrc.includes('closeToRight'));
   });
-  it('closeToRight splices tabs after index', () => {
-    assert.ok(tabsSrc.includes('tabs.splice(idx + 1)'));
+  it('closeToRight scopes to group', () => {
+    assert.ok(tabsSrc.includes('closeToRight') && tabsSrc.includes('groupId'));
   });
 });

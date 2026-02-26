@@ -34,7 +34,7 @@ describe('SettingsPanel.svelte', () => {
     assert.ok(src.includes("import AISettings from './AISettings.svelte'"), 'Should import AISettings');
   });
 
-  it('imports ToolSettings for CLI providers', () => {
+  it('imports and renders ToolSettings', () => {
     assert.ok(src.includes("import ToolSettings from './ToolSettings.svelte'"), 'Should import ToolSettings');
     assert.ok(src.includes('<ToolSettings'), 'Should render ToolSettings');
   });
@@ -247,13 +247,6 @@ describe('providers.js', () => {
     assert.ok(src.includes('export const MCP_PROVIDERS'), 'Should export MCP_PROVIDERS');
   });
 
-  it('exports getProviderIcon helper', () => {
-    assert.ok(src.includes('export function getProviderIcon'), 'Should export getProviderIcon');
-  });
-
-  it('exports getProviderName helper', () => {
-    assert.ok(src.includes('export function getProviderName'), 'Should export getProviderName');
-  });
 });
 
 // ---- VoiceSettings.svelte ----
@@ -327,6 +320,59 @@ describe('VoiceSettings.svelte', () => {
 
   it('has save handler', () => {
     assert.ok(src.includes('saveVoiceSettings'), 'Should have saveVoiceSettings function');
+  });
+
+  it('imports ensureSttModel and restartVoice from api', () => {
+    assert.ok(src.includes('ensureSttModel'), 'Should import ensureSttModel');
+    assert.ok(src.includes('restartVoice'), 'Should import restartVoice');
+    assert.ok(src.includes('getVoiceStatus'), 'Should import getVoiceStatus');
+  });
+
+  it('imports GPU and model management API functions', () => {
+    assert.ok(src.includes('detectGpu'), 'Should import detectGpu');
+    assert.ok(src.includes('listSttModels'), 'Should import listSttModels');
+    assert.ok(src.includes('deleteSttModel'), 'Should import deleteSttModel');
+  });
+
+  it('has GPU detection state', () => {
+    assert.ok(src.includes('gpuInfo'), 'Should have gpuInfo state');
+    assert.ok(src.includes('sttUseGpu'), 'Should have sttUseGpu state');
+  });
+
+  it('has installed models state and handlers', () => {
+    assert.ok(src.includes('installedModels'), 'Should have installedModels state');
+    assert.ok(src.includes('handleDeleteModel'), 'Should have handleDeleteModel function');
+    assert.ok(src.includes('refreshInstalledModels'), 'Should have refreshInstalledModels function');
+  });
+
+  it('renders GPU toggle conditional on whisper-local', () => {
+    assert.ok(src.includes('GPU Acceleration (CUDA)'), 'Should have GPU toggle label');
+    assert.ok(src.includes('currentSTTAdapter.showGpu'), 'Should check showGpu flag');
+  });
+
+  it('renders Installed Models section', () => {
+    assert.ok(src.includes('Installed Models'), 'Should have Installed Models section');
+    assert.ok(src.includes('model-row'), 'Should have model-row class');
+    assert.ok(src.includes('modelDisplayName'), 'Should use modelDisplayName helper');
+  });
+
+  it('imports listen from Tauri event API', () => {
+    assert.ok(src.includes("from '@tauri-apps/api/event'"), 'Should import from @tauri-apps/api/event');
+    assert.ok(src.includes('listen'), 'Should import listen');
+  });
+
+  it('listens for stt-download-progress events', () => {
+    assert.ok(src.includes("'stt-download-progress'"), 'Should listen for stt-download-progress');
+  });
+
+  it('shows download progress toast with progress bar', () => {
+    assert.ok(src.includes("key: 'stt-model-download'"), 'Should use stt-model-download key for dedup');
+    assert.ok(src.includes('progress: 0'), 'Should start progress bar at 0');
+  });
+
+  it('restarts voice pipeline when STT model changes', () => {
+    assert.ok(src.includes('restartVoice()'), 'Should call restartVoice');
+    assert.ok(src.includes('sttChanged'), 'Should track whether STT changed');
   });
 });
 
@@ -440,12 +486,29 @@ describe('voice-adapters.js', () => {
     assert.ok(src.includes('export function formatKeybind'), 'Should export formatKeybind');
   });
 
-  it('exports getVoicesForAdapter helper', () => {
-    assert.ok(src.includes('export function getVoicesForAdapter'), 'Should export getVoicesForAdapter');
+  it('has large-v3-turbo model size option', () => {
+    assert.ok(src.includes("'large-v3-turbo'"), 'Should have large-v3-turbo model size');
+    assert.ok(src.includes('Turbo'), 'Should have Turbo label');
+    assert.ok(src.includes('574MB'), 'Should show ~574MB size');
   });
 
-  it('exports getModelsForAdapter helper', () => {
-    assert.ok(src.includes('export function getModelsForAdapter'), 'Should export getModelsForAdapter');
+  it('has large-v3 model size option', () => {
+    assert.ok(src.includes("'large-v3'"), 'Should have large-v3 model size');
+    assert.ok(src.includes('Large v3'), 'Should have Large v3 label');
+    assert.ok(src.includes('3.1GB'), 'Should show ~3.1GB size');
+  });
+
+  it('has 5 whisper model sizes', () => {
+    // tiny, base, small, large-v3-turbo, large-v3
+    const matches = src.match(/\{ value: '/g);
+    // Count just in STT_REGISTRY section (modelSizes array)
+    const sttSection = src.split("'whisper-local'")[1]?.split('],')[0] || '';
+    const sttMatches = sttSection.match(/value: '/g);
+    assert.ok(sttMatches && sttMatches.length >= 5, 'Should have at least 5 STT model sizes');
+  });
+
+  it('has showGpu flag on whisper-local', () => {
+    assert.ok(src.includes('showGpu: true'), 'whisper-local should have showGpu: true');
   });
 });
 
@@ -627,6 +690,15 @@ describe('BehaviorSettings.svelte', () => {
     assert.ok(src.includes('Start with System'), 'Should show Start with System label');
   });
 
+  it('has autoStartProvider toggle', () => {
+    assert.ok(src.includes('autoStartProvider'), 'Should have autoStartProvider state');
+    assert.ok(src.includes('Auto-Start AI Provider'), 'Should show Auto-Start AI Provider label');
+  });
+
+  it('includes ai.autoStart in save patch', () => {
+    assert.ok(src.includes('autoStart: autoStartProvider'), 'Should save autoStart to ai config');
+  });
+
   it('has debugMode toggle', () => {
     assert.ok(src.includes('debugMode'), 'Should have debugMode');
     assert.ok(src.includes('Debug Mode'), 'Should show Debug Mode label');
@@ -651,6 +723,29 @@ describe('BehaviorSettings.svelte', () => {
 
   it('has Advanced section heading', () => {
     assert.ok(src.includes('>Advanced<'), 'Should have Advanced section heading');
+  });
+
+  it('has Editor section heading', () => {
+    assert.ok(src.includes('>Editor<'), 'Should have Editor section heading');
+  });
+
+  it('has markdownPreview toggle', () => {
+    assert.ok(src.includes('markdownPreview'), 'Should have markdownPreview state');
+    assert.ok(src.includes('Markdown Preview'), 'Should show Markdown Preview label');
+  });
+
+  it('reads markdownPreview from editor config', () => {
+    assert.ok(
+      src.includes('cfg.editor?.markdownPreview'),
+      'Should read markdownPreview from config'
+    );
+  });
+
+  it('includes editor.markdownPreview in save patch', () => {
+    assert.ok(
+      src.includes('editor:') && src.includes('markdownPreview'),
+      'Should save markdownPreview to editor config'
+    );
   });
 });
 
@@ -741,14 +836,13 @@ describe('ToolSettings.svelte', () => {
   it('defines TOOL_GROUPS with user-facing groups only', () => {
     assert.ok(src.includes('const TOOL_GROUPS'), 'Should define TOOL_GROUPS');
     assert.ok(src.includes("id: 'core'"), 'Should have core group');
-    assert.ok(src.includes("id: 'meta'"), 'Should have meta group');
     assert.ok(src.includes("id: 'browser'"), 'Should have browser group');
     assert.ok(src.includes("id: 'memory'"), 'Should have memory group');
     assert.ok(src.includes("id: 'n8n'"), 'Should have n8n group');
   });
 
-  it('excludes internal facade and diagnostic groups from UI', () => {
-    // These are auto-selected by profiles, not shown to users
+  it('excludes internal and removed groups from UI', () => {
+    assert.ok(!src.includes("id: 'meta'"), 'Should NOT show meta group (removed)');
     assert.ok(!src.includes("id: 'diagnostic'"), 'Should NOT show diagnostic group');
     assert.ok(!src.includes("id: 'memory-facade'"), 'Should NOT show memory-facade group');
     assert.ok(!src.includes("id: 'n8n-facade'"), 'Should NOT show n8n-facade group');

@@ -127,3 +127,19 @@ describe('editor-theme.js: theme structure', () => {
     assert.ok(src.includes('tags.typeName'), 'Should style type names');
   });
 });
+
+describe('editor-theme.js: minimap styling', () => {
+  it('styles .cm-minimap with theme background', () => {
+    assert.ok(src.includes("'.cm-minimap'"), 'Should style .cm-minimap');
+    assert.ok(src.includes('--cm-background'), 'Minimap should use --cm-background');
+  });
+
+  it('styles minimap container with border', () => {
+    assert.ok(src.includes("'.cm-minimap-container'"), 'Should style .cm-minimap-container');
+  });
+
+  it('styles minimap overlay with theme-aware colors', () => {
+    assert.ok(src.includes("'.cm-minimap .cm-minimap-overlay'"), 'Should style minimap overlay');
+    assert.ok(src.includes('--cm-selection'), 'Overlay should use --cm-selection');
+  });
+});

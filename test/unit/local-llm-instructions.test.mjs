@@ -8,7 +8,6 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   buildLocalLlmInstructions,
-  DEFAULT_LOCAL_LLM_PROMPT,
 } from '../../src/lib/local-llm-instructions.js';
 
 describe('buildLocalLlmInstructions', () => {
@@ -92,18 +91,15 @@ describe('buildLocalLlmInstructions', () => {
   });
 });
 
-describe('DEFAULT_LOCAL_LLM_PROMPT', () => {
-  it('is a non-empty string', () => {
-    assert.equal(typeof DEFAULT_LOCAL_LLM_PROMPT, 'string');
-    assert.ok(DEFAULT_LOCAL_LLM_PROMPT.length > 0);
+describe('buildLocalLlmInstructions default output', () => {
+  it('default output is a non-empty string', () => {
+    const result = buildLocalLlmInstructions();
+    assert.equal(typeof result, 'string');
+    assert.ok(result.length > 0);
   });
 
-  it('matches no-args buildLocalLlmInstructions() call', () => {
-    const fromFunction = buildLocalLlmInstructions();
-    assert.equal(DEFAULT_LOCAL_LLM_PROMPT, fromFunction);
-  });
-
-  it('uses default "User" name', () => {
-    assert.ok(DEFAULT_LOCAL_LLM_PROMPT.includes("The user's name is User"));
+  it('default output uses "User" name', () => {
+    const result = buildLocalLlmInstructions();
+    assert.ok(result.includes("The user's name is User"));
   });
 });

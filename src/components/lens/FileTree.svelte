@@ -1,13 +1,18 @@
 <script>
-  import { listDirectory, getGitChanges, createFile, createDirectory, renameEntry, revealInExplorer } from '../../lib/api.js';
+  import { listDirectory, getGitChanges, createFile, createDirectory, renameEntry, revealInExplorer, gitStage, gitUnstage, gitStageAll, gitUnstageAll, gitDiscard } from '../../lib/api.js';
   import { listen } from '@tauri-apps/api/event';
-  import { chooseIconName } from '../../lib/file-icons.js';
   import { projectStore } from '../../lib/stores/project.svelte.js';
-  import spriteUrl from '../../assets/icons/file-icons-sprite.svg';
+  import { searchStore } from '../../lib/stores/search.svelte.js';
+  import FileTreeNode from './FileTreeNode.svelte';
+  import GitChangesPanel from './GitChangesPanel.svelte';
   import FileContextMenu from './FileContextMenu.svelte';
   import StatusDropdown from './StatusDropdown.svelte';
+  import OutlinePanel from './OutlinePanel.svelte';
+  import SearchPanel from './SearchPanel.svelte';
+  import GitCommitPanel from './GitCommitPanel.svelte';
+  import { lspDiagnosticsStore } from '../../lib/stores/lsp-diagnostics.svelte.js';
 
-  let { onFileClick = () => {}, onFileDblClick = () => {}, onChangeClick = () => {} } = $props();
+  let { onFileClick = () => {}, onFileDblClick = () => {}, onChangeClick = () => {}, onChangeDblClick = () => {}, activeFilePath = null, activeDiffPath = null, activeFileHasLsp = false, onSymbolClick = () => {} } = $props();
 
   // State
   let activeTab = $state('files');
@@ -16,6 +21,9 @@
   let dirChildren = $state(new Map());
   let loadingDirs = $state(new Set());
   let gitChanges = $state([]);
+  let currentBranch = $state('');
+  let stagedChanges = $derived(gitChanges.filter(c => c.staged));
+  let unstagedChanges = $derived(gitChanges.filter(c => c.unstaged || (!c.staged && !c.unstaged)));
 
   // Context menu state
   let contextMenu = $state({ visible: false, x: 0, y: 0, entry: null, isFolder: false, isChange: false });
@@ -29,9 +37,11 @@
   // Selected entry for F2 rename shortcut
   let selectedEntry = $state(null);
 
-  // Reload when active project changes
+  // Reload when active project changes.
   $effect(() => {
-    const _ = projectStore.activeIndex;  // track dependency
+    const _idx = projectStore.activeIndex;
+    const _len = projectStore.entries.length;
+    const _path = projectStore.activeProject?.path;
     expandedDirs = new Set();
     dirChildren = new Map();
     loadRoot();
@@ -54,16 +64,21 @@
     };
   });
 
+  // Listen for programmatic search tab activation (from Ctrl+Shift+F)
+  $effect(() => {
+    function handleFocusSearch() { activeTab = 'search'; }
+    window.addEventListener('lens-focus-search', handleFocusSearch);
+    return () => window.removeEventListener('lens-focus-search', handleFocusSearch);
+  });
+
   async function handleTreeChanged(event) {
     const { directories, root: rootChanged } = event.payload;
     const currentRoot = projectStore.activeProject?.path || null;
 
-    // Reload root listing if the root directory itself was affected
     if (rootChanged) {
       await loadRoot();
     }
 
-    // Re-fetch any expanded directories that were affected
     if (directories && directories.length > 0) {
       const updated = new Map(dirChildren);
       let changed = false;
@@ -91,7 +106,11 @@
   }
 
   async function loadRoot() {
-    const root = projectStore.activeProject?.path || null;
+    const root = projectStore.activeProject?.path;
+    if (!root) {
+      rootEntries = [];
+      return;
+    }
     try {
       const resp = await listDirectory(null, root);
       if (resp && resp.data) {
@@ -103,32 +122,36 @@
   }
 
   async function loadGitChanges() {
-    const root = projectStore.activeProject?.path || null;
+    const root = projectStore.activeProject?.path;
+    if (!root) {
+      gitChanges = [];
+      currentBranch = '';
+      return;
+    }
     try {
       const resp = await getGitChanges(root);
-      if (resp && resp.data && Array.isArray(resp.data.changes)) {
-        gitChanges = resp.data.changes;
+      if (resp && resp.data) {
+        gitChanges = Array.isArray(resp.data.changes) ? resp.data.changes : [];
+        currentBranch = resp.data.branch || '';
       }
     } catch (err) {
       console.error('FileTree: failed to load git changes', err);
       gitChanges = [];
+      currentBranch = '';
     }
   }
 
   async function toggleDir(entry) {
     const path = entry.path;
     if (expandedDirs.has(path)) {
-      // Collapse
       const next = new Set(expandedDirs);
       next.delete(path);
       expandedDirs = next;
     } else {
-      // Expand
       const next = new Set(expandedDirs);
       next.add(path);
       expandedDirs = next;
 
-      // Lazy-load children if not cached
       if (!dirChildren.has(path)) {
         const loading = new Set(loadingDirs);
         loading.add(path);
@@ -190,7 +213,6 @@
   }
 
   function handleEmptyContextMenu(e) {
-    // Only fire if clicking on the scroll container itself (empty space), not a child
     if (e.target === e.currentTarget || e.target.classList.contains('tree-scroll')) {
       e.preventDefault();
       contextMenu = { visible: true, x: e.clientX, y: e.clientY, entry: null, isFolder: false, isChange: false };
@@ -256,14 +278,12 @@
 
   function getParentPath(entry) {
     if (!entry) return '';
-    // If it's a folder, create inside it; if it's a file, create in its parent directory
     if (entry.type === 'directory') return entry.path;
     return entry.path.includes('/') ? entry.path.substring(0, entry.path.lastIndexOf('/')) : '';
   }
 
   function startNewFile(parentEntry) {
     const parentPath = getParentPath(parentEntry);
-    // Ensure the folder is expanded
     if (parentPath && !expandedDirs.has(parentPath) && parentEntry?.type === 'directory') {
       toggleDir(parentEntry);
     }
@@ -318,8 +338,15 @@
     }
   }
 
-  // ── Project path collapse + context menu ──
-  let projectPathOpen = $state(false);
+  // ── Project name header state ──
+  let projectTreeOpen = $state(true);
+
+  function collapseAll() {
+    expandedDirs = new Set();
+    dirChildren = new Map();
+  }
+
+  // ── Project context menu ──
   let projectMenu = $state({ visible: false, x: 0, y: 0 });
 
   function handleProjectContextMenu(e) {
@@ -357,11 +384,48 @@
     }
   }
 
+  // ── Git stage/unstage/discard handlers ──
+
+  async function handleStage(change) {
+    const root = projectStore.activeProject?.path;
+    if (!root) return;
+    try { await gitStage([change.path], root); await loadGitChanges(); }
+    catch (err) { console.error('git stage failed', err); }
+  }
+
+  async function handleUnstage(change) {
+    const root = projectStore.activeProject?.path;
+    if (!root) return;
+    try { await gitUnstage([change.path], root); await loadGitChanges(); }
+    catch (err) { console.error('git unstage failed', err); }
+  }
+
+  async function handleStageAll() {
+    const root = projectStore.activeProject?.path;
+    if (!root) return;
+    try { await gitStageAll(root); await loadGitChanges(); }
+    catch (err) { console.error('git stage all failed', err); }
+  }
+
+  async function handleUnstageAll() {
+    const root = projectStore.activeProject?.path;
+    if (!root) return;
+    try { await gitUnstageAll(root); await loadGitChanges(); }
+    catch (err) { console.error('git unstage all failed', err); }
+  }
+
+  async function handleDiscard(change) {
+    if (!confirm(`Discard changes to ${change.path}? This cannot be undone.`)) return;
+    const root = projectStore.activeProject?.path;
+    if (!root) return;
+    try { await gitDiscard([change.path], root); await loadGitChanges(); }
+    catch (err) { console.error('git discard failed', err); }
+  }
+
   // ── Autofocus action ──
 
   function autofocus(node) {
     node.focus();
-    // Select filename without extension for rename
     const dotIdx = node.value.lastIndexOf('.');
     if (dotIdx > 0) {
       node.setSelectionRange(0, dotIdx);
@@ -385,88 +449,53 @@
       class:active={activeTab === 'changes'}
       onclick={() => { activeTab = 'changes'; }}
     >{gitChanges.length} Changes</button>
+    <button
+      class="files-tab"
+      class:active={activeTab === 'outline'}
+      onclick={() => { activeTab = 'outline'; }}
+    >Outline</button>
+    <button
+      class="files-tab"
+      class:active={activeTab === 'search'}
+      onclick={() => { activeTab = 'search'; }}
+    >Search{searchStore.totalMatches > 0 ? ` (${searchStore.totalMatches})` : ''}</button>
     <StatusDropdown />
   </div>
 
-  {#if activeTab === 'files'}
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div class="tree-scroll" oncontextmenu={handleEmptyContextMenu}>
-      {#snippet treeNode(entries, depth)}
-        {#each entries as entry}
-          {#if entry.type === 'directory'}
-            {@const isExpanded = expandedDirs.has(entry.path)}
-            {#if editingEntry?.path === entry.path}
-              <div class="tree-item folder" style="padding-left: {8 + depth * 16}px">
-                <span class="tree-chevron">{isExpanded ? 'v' : '>'}</span>
-                <input
-                  class="tree-rename-input"
-                  type="text"
-                  bind:value={editingValue}
-                  onkeydown={handleRenameKeydown}
-                  onblur={saveRename}
-                  use:autofocus
-                />
-              </div>
-            {:else}
-              <button
-                class="tree-item folder"
-                style="padding-left: {8 + depth * 16}px"
-                onclick={() => toggleDir(entry)}
-                oncontextmenu={(e) => handleContextMenu(e, entry, true, false)}
-              >
-                <span class="tree-chevron">{isExpanded ? 'v' : '>'}</span>
-                <svg class="tree-icon"><use href="{spriteUrl}#{chooseIconName(entry.path, 'directory', isExpanded)}" /></svg>
-                <span class="tree-name">{entry.name}</span>
-              </button>
-            {/if}
-            {#if isExpanded}
-              {#if creatingIn?.parentPath === entry.path}
-                <div class="tree-item file" style="padding-left: {8 + (depth + 1) * 16 + 18}px">
-                  <input
-                    class="tree-rename-input"
-                    type="text"
-                    placeholder={creatingIn.type === 'file' ? 'filename...' : 'folder name...'}
-                    bind:value={creatingValue}
-                    onkeydown={handleCreateKeydown}
-                    onblur={saveCreate}
-                    use:autofocus
-                  />
-                </div>
-              {/if}
-              {#if loadingDirs.has(entry.path)}
-                <div class="tree-loading" style="padding-left: {8 + (depth + 1) * 16}px">...</div>
-              {:else if dirChildren.has(entry.path)}
-                {@render treeNode(dirChildren.get(entry.path), depth + 1)}
-              {/if}
-            {/if}
-          {:else}
-            {#if editingEntry?.path === entry.path}
-              <div class="tree-item file" style="padding-left: {8 + depth * 16 + 18}px">
-                <input
-                  class="tree-rename-input"
-                  type="text"
-                  bind:value={editingValue}
-                  onkeydown={handleRenameKeydown}
-                  onblur={saveRename}
-                  use:autofocus
-                />
-              </div>
-            {:else}
-              <button
-                class="tree-item file"
-                style="padding-left: {8 + depth * 16 + 18}px"
-                onclick={() => handleFileClick(entry)}
-                ondblclick={() => onFileDblClick(entry)}
-                oncontextmenu={(e) => handleContextMenu(e, entry, false, false)}
-              >
-                <svg class="tree-icon"><use href="{spriteUrl}#{chooseIconName(entry.path, 'file')}" /></svg>
-                <span class="tree-name" class:ignored={entry.ignored}>{entry.name}</span>
-              </button>
-            {/if}
-          {/if}
-        {/each}
-      {/snippet}
+  {#if !projectStore.activeProject}
+    <div class="tree-empty">No project open</div>
+  {:else if activeTab === 'files'}
+    <!-- Project name header (VS Code-style) -->
+    <div class="project-name-header">
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <button
+        class="project-name-label"
+        onclick={() => { projectTreeOpen = !projectTreeOpen; }}
+        oncontextmenu={handleProjectContextMenu}
+        ondblclick={revealProject}
+        title={projectStore.activeProject.path}
+      >
+        <svg class="project-name-chevron" class:collapsed={!projectTreeOpen} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        <span>{projectStore.activeProject.path.split(/[/\\]/).pop()?.toUpperCase() || 'PROJECT'}</span>
+      </button>
+      <div class="project-name-actions">
+        <button class="project-action-btn" title="New File" onclick={() => startNewFile(null)}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+        </button>
+        <button class="project-action-btn" title="New Folder" onclick={() => startNewFolder(null)}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
+        </button>
+        <button class="project-action-btn" title="Refresh" onclick={loadRoot}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+        </button>
+        <button class="project-action-btn" title="Collapse All" onclick={collapseAll}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+        </button>
+      </div>
+    </div>
 
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="tree-scroll" oncontextmenu={handleEmptyContextMenu} class:hidden={!projectTreeOpen}>
       {#if creatingIn?.parentPath === ''}
         <div class="tree-item file" style="padding-left: {8 + 18}px">
           <input
@@ -481,57 +510,74 @@
         </div>
       {/if}
 
-      {@render treeNode(rootEntries, 0)}
+      <FileTreeNode
+        entries={rootEntries}
+        depth={0}
+        {expandedDirs}
+        {dirChildren}
+        {loadingDirs}
+        {activeFilePath}
+        {editingEntry}
+        bind:editingValue
+        {creatingIn}
+        bind:creatingValue
+        onToggle={toggleDir}
+        onFileClick={handleFileClick}
+        onFileDblClick={(entry) => onFileDblClick(entry)}
+        onContextMenu={handleContextMenu}
+        onRenameKeydown={handleRenameKeydown}
+        onRenameSave={saveRename}
+        onCreateKeydown={handleCreateKeydown}
+        onCreateSave={saveCreate}
+        {autofocus}
+      />
     </div>
   {/if}
 
   {#if activeTab === 'changes'}
+    <GitCommitPanel
+      branch={currentBranch}
+      stagedCount={stagedChanges.length}
+      onCommit={loadGitChanges}
+      root={projectStore.activeProject?.path}
+    />
     <div class="tree-scroll">
-      {#if gitChanges.length === 0}
-        <div class="changes-empty">No changes</div>
-      {:else}
-        {#each gitChanges as change}
-          <button
-            class="change-item"
-            onclick={() => onChangeClick(change)}
-            oncontextmenu={(e) => handleContextMenu(e, change, false, true)}
-          >
-            <svg class="tree-icon"><use href="{spriteUrl}#{chooseIconName(change.path, 'file')}" /></svg>
-            <span class="change-path">{change.path}</span>
-            <span
-              class="change-badge"
-              class:added={change.status === 'added'}
-              class:modified={change.status === 'modified'}
-              class:deleted={change.status === 'deleted'}
-            >
-              {change.status === 'added' ? 'A' : change.status === 'deleted' ? 'D' : 'M'}
-            </span>
-          </button>
-        {/each}
-      {/if}
+      <GitChangesPanel
+        {stagedChanges}
+        {unstagedChanges}
+        {activeDiffPath}
+        onStageAll={handleStageAll}
+        onUnstageAll={handleUnstageAll}
+        onStage={handleStage}
+        onUnstage={handleUnstage}
+        onDiscard={handleDiscard}
+        onChangeClick={(change) => onChangeClick(change)}
+        onChangeDblClick={(change) => onChangeDblClick(change)}
+        onContextMenu={handleContextMenu}
+      />
     </div>
   {/if}
 
-  <!-- Project path (collapsible, bottom) -->
-  {#if projectStore.activeProject?.path}
-    <div class="project-path-section">
-      <button
-        class="project-path-toggle"
-        onclick={() => { projectPathOpen = !projectPathOpen; }}
-        oncontextmenu={handleProjectContextMenu}
-        aria-expanded={projectPathOpen}
-        title={projectStore.activeProject.path}
-      >
-        <svg class="project-path-chevron" class:open={projectPathOpen} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-        <svg class="project-path-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-        <span class="project-path-label">Project</span>
-      </button>
-      {#if projectPathOpen}
-        <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div class="project-path-value" oncontextmenu={handleProjectContextMenu}>{projectStore.activeProject.path}</div>
-      {/if}
+  {#if activeTab === 'outline'}
+    <div class="tree-scroll">
+      <OutlinePanel filePath={activeFilePath} hasLsp={activeFileHasLsp} {onSymbolClick} />
     </div>
   {/if}
+
+  {#if activeTab === 'search'}
+    <div class="tree-scroll">
+      <SearchPanel onResultClick={(result) => {
+        const name = result.path.split(/[/\\]/).pop() || result.path;
+        onFileClick({ name, path: result.path });
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('lens-goto-position', {
+            detail: { line: result.line - 1, character: result.character || 0 }
+          }));
+        }, 50);
+      }} />
+    </div>
+  {/if}
+
 
   {#if projectMenu.visible}
     <div class="project-context-menu" style="top: {projectMenu.y}px; left: {projectMenu.x}px;" role="menu">
@@ -576,7 +622,9 @@
 
   .files-header {
     display: flex;
+    align-items: center;
     gap: 0;
+    height: 36px;
     padding: 0 8px;
     border-bottom: 1px solid var(--border);
     flex-shrink: 0;
@@ -584,13 +632,17 @@
   }
 
   .files-tab {
-    padding: 6px 10px;
+    padding: 0 10px;
     font-size: 12px;
     border: none;
     background: transparent;
     color: var(--muted);
     cursor: pointer;
     border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    height: 100%;
+    display: flex;
+    align-items: center;
     -webkit-app-region: no-drag;
   }
   .files-tab.active {
@@ -601,10 +653,93 @@
     color: var(--text);
   }
 
+  /* ── Project name header (VS Code-style) ── */
+
+  .project-name-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 28px;
+    padding: 0 4px 0 0;
+    flex-shrink: 0;
+    background: var(--bg);
+  }
+
+  .project-name-label {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 0 8px;
+    height: 100%;
+    border: none;
+    background: transparent;
+    color: var(--text);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    cursor: pointer;
+    text-align: left;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    -webkit-app-region: no-drag;
+    flex: 1;
+    min-width: 0;
+  }
+  .project-name-label:hover {
+    color: var(--text-strong, var(--text));
+  }
+  .project-name-label span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .project-name-chevron {
+    flex-shrink: 0;
+    transition: transform var(--duration-fast, 100ms) var(--ease-out, ease-out);
+    transform: rotate(90deg);
+  }
+  .project-name-chevron.collapsed {
+    transform: rotate(0deg);
+  }
+
+  .project-name-actions {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    flex-shrink: 0;
+    opacity: 0;
+    transition: opacity var(--duration-fast, 100ms) var(--ease-out, ease-out);
+  }
+  .project-name-header:hover .project-name-actions {
+    opacity: 1;
+  }
+
+  .project-action-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    border-radius: 4px;
+    -webkit-app-region: no-drag;
+  }
+  .project-action-btn:hover {
+    color: var(--text);
+    background: color-mix(in srgb, var(--text) 10%, transparent);
+  }
+
   .tree-scroll {
     flex: 1;
     overflow-y: auto;
     padding: 4px 0;
+  }
+  .tree-scroll.hidden {
+    display: none;
   }
 
   .tree-item {
@@ -622,45 +757,6 @@
     text-align: left;
     -webkit-app-region: no-drag;
   }
-  .tree-item:hover {
-    background: var(--bg-elevated);
-  }
-
-  .tree-chevron {
-    width: 14px;
-    text-align: center;
-    color: var(--muted);
-    font-size: 10px;
-    flex-shrink: 0;
-  }
-
-  .tree-icon {
-    width: 16px;
-    height: 16px;
-    flex-shrink: 0;
-  }
-
-  .tree-name {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .tree-name.ignored {
-    color: var(--muted);
-    opacity: 0.6;
-  }
-
-  .tree-item.file {
-    color: var(--muted);
-  }
-
-  .tree-loading {
-    font-size: 12px;
-    color: var(--muted);
-    font-style: italic;
-    font-family: var(--font-mono);
-    padding: 3px 8px;
-  }
 
   .tree-rename-input {
     flex: 1;
@@ -675,115 +771,13 @@
     outline: none;
   }
 
-  .change-item {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    width: 100%;
-    border: none;
-    background: transparent;
-    padding: 3px 12px;
-    font-size: 12px;
-    font-family: var(--font-mono);
-    color: var(--text);
-    cursor: pointer;
-    text-align: left;
-    -webkit-app-region: no-drag;
-  }
-  .change-item:hover {
-    background: var(--bg-elevated);
-  }
-
-  .change-badge {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 18px;
-    height: 18px;
-    font-size: 10px;
-    font-weight: 600;
-    border-radius: 3px;
-    flex-shrink: 0;
-    color: var(--bg);
-  }
-  .change-badge.added {
-    background: var(--ok);
-  }
-  .change-badge.modified {
-    background: var(--accent);
-  }
-  .change-badge.deleted {
-    background: var(--danger);
-  }
-
-  .change-path {
-    flex: 1;
-    min-width: 0;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .changes-empty {
+  .tree-empty {
     color: var(--muted);
     text-align: center;
     padding: 24px 12px;
     font-size: 12px;
   }
 
-  /* ── Project path (collapsible footer) ── */
-
-  .project-path-section {
-    flex-shrink: 0;
-    border-top: 1px solid var(--border);
-  }
-
-  .project-path-toggle {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    width: 100%;
-    padding: 6px 8px;
-    border: none;
-    background: transparent;
-    color: var(--muted);
-    font-size: 11px;
-    cursor: pointer;
-    text-align: left;
-    -webkit-app-region: no-drag;
-    transition: color var(--duration-fast) var(--ease-out);
-  }
-  .project-path-toggle:hover {
-    color: var(--text);
-  }
-
-  .project-path-chevron {
-    flex-shrink: 0;
-    transition: transform var(--duration-fast) var(--ease-out);
-  }
-  .project-path-chevron.open {
-    transform: rotate(90deg);
-  }
-
-  .project-path-icon {
-    flex-shrink: 0;
-    opacity: 0.6;
-  }
-
-  .project-path-label {
-    white-space: nowrap;
-  }
-
-  .project-path-value {
-    padding: 0 8px 8px 30px;
-    font-size: 11px;
-    font-family: var(--font-mono);
-    color: var(--muted);
-    word-break: break-all;
-    line-height: 1.4;
-    user-select: text;
-    -webkit-user-select: text;
-  }
 
   /* ── Project context menu ── */
 

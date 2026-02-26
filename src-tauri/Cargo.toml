@@ -16,16 +16,13 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = ["tray-icon", "unstable"] }
 tauri-plugin-shell = "2"
-tauri-plugin-updater = "2"
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-single-instance = "2"
-tauri-plugin-autostart = "2"
 tauri-plugin-dialog = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["full"] }
 dirs = "6"
-once_cell = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-appender = "0.2"
@@ -39,6 +36,7 @@ ignore = "0.4"
 # MCP handler dependencies
 notify = "7"
 url = "2"
+percent-encoding = "2"
 regex = "1"
 
 # Voice engine dependencies
@@ -46,7 +44,7 @@ cpal = "0.15"
 rodio = "0.19"
 
 # STT: whisper-rs (C++ FFI to whisper.cpp)
-whisper-rs = { version = "0.13", optional = true }
+whisper-rs = { version = "0.15", optional = true }
 
 # TTS: ONNX Runtime for Kokoro local inference
 ort = { version = "2.0.0-rc.11", optional = true }
@@ -58,6 +56,12 @@ symphonia = { version = "0.5", default-features = false, features = ["mp3"] }
 
 # Tool calling: UUID generation for tool call IDs
 uuid = { version = "1", features = ["v4"] }
+
+# Base64 encoding for screenshot data URLs
+base64 = "0.22"
+
+# Image encoding (bitmap → PNG) and thumbnail resize for native window capture
+image = { version = "0.25", default-features = false, features = ["png"] }
 
 # LSP client
 lsp-types = "0.97"
@@ -73,6 +77,21 @@ tauri-plugin-decorum = "1.1.1"
 # Cross-platform trash/recycle bin support
 trash = "5"
 
+# Direct WebView2 COM access for JS eval + screenshot capture (Windows only)
+[target.'cfg(windows)'.dependencies]
+webview2-com = "0.38"
+windows-core = "0.61"
+windows = { version = "0.61", features = [
+    "Win32_System_Com_StructuredStorage",
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_System_Threading",
+    "Win32_System_ProcessStatus",
+    "Win32_Graphics_Dwm",
+    "Win32_Storage_Xps",
+] }
+
 [[bin]]
 name = "voice-mirror-mcp"
 path = "src/bin/mcp.rs"
@@ -80,5 +99,6 @@ path = "src/bin/mcp.rs"
 [features]
 default = []
 whisper = ["whisper-rs"]
+cuda = ["whisper-rs/cuda"]
 onnx = ["ort", "zip", "byteorder"]
 native-ml = ["whisper", "onnx"]

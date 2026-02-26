@@ -177,12 +177,11 @@ pub fn write_mcp_config(project_root: &std::path::Path, enabled_groups: &str) ->
 /// This matches the path used by `inbox_watcher.rs::get_mcp_data_dir()` —
 /// both must agree on where inbox.json lives.
 ///
-/// Currently: `{config_dir}/voice-mirror-electron/data/`
-/// (matches the Electron convention for backwards compatibility)
+/// Currently: `{config_dir}/voice-mirror/data/`
 pub fn get_mcp_data_dir_for_env() -> PathBuf {
     dirs::config_dir()
         .unwrap_or_else(|| PathBuf::from("."))
-        .join("voice-mirror-electron")
+        .join("voice-mirror")
         .join("data")
 }
 

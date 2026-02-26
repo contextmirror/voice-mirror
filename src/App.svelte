@@ -70,12 +70,16 @@
     }
   });
 
-  // Auto-start AI provider once config is loaded
+  // Auto-start AI provider once config is loaded (gated by ai.autoStart config)
   let providerStarted = $state(false);
   $effect(() => {
     if (configStore.loaded && !providerStarted) {
       providerStarted = true;
-      startProvider();
+      const cfg = configStore.value;
+      const provider = cfg?.ai?.provider || 'claude';
+      if (provider === 'dictation' || cfg?.ai?.autoStart) {
+        startProvider();
+      }
     }
   });
 
@@ -91,8 +95,9 @@
   // ---- Stats dashboard visibility ----
   let statsVisible = $state(false);
 
-  // ---- Command palette visibility ----
+  // ---- Command palette visibility + mode ----
   let commandPaletteVisible = $state(false);
+  let commandPaletteMode = $state('files');
 
   // ---- Voice activation handlers (shared by keyboard shortcuts + mouse buttons) ----
 
@@ -172,7 +177,15 @@
       setActionHandler('toggle-voice', handleVoicePress);
       setReleaseHandler('toggle-voice', handleVoiceRelease);
       setActionHandler('stats-dashboard', () => { statsVisible = !statsVisible; });
-      setActionHandler('open-file-search', () => { commandPaletteVisible = true; });
+      setActionHandler('open-file-search', () => { commandPaletteMode = 'commands'; commandPaletteVisible = true; });
+      setActionHandler('go-to-file', () => { commandPaletteMode = 'files'; commandPaletteVisible = true; });
+      setActionHandler('go-to-line', () => { commandPaletteMode = 'goto-line'; commandPaletteVisible = true; });
+      setActionHandler('go-to-symbol', () => { commandPaletteMode = 'goto-symbol'; commandPaletteVisible = true; });
+      setActionHandler('open-text-search', () => {
+        navigationStore.setMode('lens');
+        if (!layoutStore.showFileTree) layoutStore.toggleFileTree();
+        window.dispatchEvent(new CustomEvent('lens-focus-search'));
+      });
 
       // Listen for PTT events from the unified input hook.
       // The Rust hook handles matching the configured key and emits
@@ -201,7 +214,7 @@
     let unlistenFn;
     listen('lens-shortcut', (event) => {
       const key = event.payload?.key;
-      if (key === 'F1') { commandPaletteVisible = true; }
+      if (key === 'F1') { commandPaletteMode = 'commands'; commandPaletteVisible = true; }
       else if (key === ',') { navigationStore.setView('settings'); }
     }).then(fn => { unlistenFn = fn; });
     return () => { unlistenFn?.(); };
@@ -313,20 +326,26 @@
    */
   function handleChatSend(text, attachments = []) {
     // In dictation-only mode, there's no AI to route to.
-    // The message is already added to the chat store by ChatInput.
-    // (Voice transcriptions are injected via injectText in voice.svelte.js)
     if (aiStatusStore.isDictationProvider) {
       return;
     }
 
-    const imagePath = attachments.length > 0 ? attachments[0].path : null;
+    const att = attachments.length > 0 ? attachments[0] : null;
+    const imagePath = att?.path || null;
+    const imageDataUrl = att?.dataUrl || null;
+    const hiddenContext = att?.context || null;
+
+    // Prepend hidden element context to the message text (invisible to user, visible to AI)
+    const fullText = hiddenContext
+      ? `[Element Context]\n${hiddenContext}\n[/Element Context]\n\n${text}`
+      : text;
 
     if (aiStatusStore.isApiProvider) {
-      aiPtyInput(text, imagePath).catch((err) => {
+      aiPtyInput(fullText, imagePath, imageDataUrl).catch((err) => {
         console.warn('[chat] Failed to send message to API provider:', err);
       });
     } else {
-      writeUserMessage(text, null, null, imagePath).catch((err) => {
+      writeUserMessage(fullText, null, null, imagePath, imageDataUrl).catch((err) => {
         console.warn('[chat] Failed to write user message to inbox:', err);
       });
     }
@@ -368,7 +387,7 @@
         </div>
         <div class="titlebar-search-trigger">
           <!-- svelte-ignore a11y_no_static_element_interactions -->
-          <div class="titlebar-search-box" onclick={() => { commandPaletteVisible = true; }}>
+          <div class="titlebar-search-box" onclick={() => { commandPaletteMode = 'files'; commandPaletteVisible = true; }}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <span>Search Voice Mirror</span>
             <kbd>F1</kbd>
@@ -443,7 +462,7 @@
 {/if}
 
 <StatsBar bind:visible={statsVisible} />
-<CommandPalette bind:visible={commandPaletteVisible} onClose={() => { commandPaletteVisible = false; }} />
+<CommandPalette bind:visible={commandPaletteVisible} initialMode={commandPaletteMode} onClose={() => { commandPaletteVisible = false; }} />
 <ToastContainer />
 
 <style>
@@ -479,37 +498,6 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
-  }
-
-  .view-placeholder {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    color: var(--muted);
-    user-select: none;
-  }
-
-  .view-placeholder h2 {
-    color: var(--text-strong);
-    font-size: 20px;
-    font-weight: 600;
-    margin: 0;
-  }
-
-  .view-placeholder p {
-    margin: 0;
-    font-size: 14px;
-  }
-
-  .view-placeholder .placeholder-icon {
-    width: 48px;
-    height: 48px;
-    color: var(--muted);
-    opacity: 0.5;
-    margin-bottom: 8px;
   }
 
   /* ========== Titlebar Provider Status ========== */

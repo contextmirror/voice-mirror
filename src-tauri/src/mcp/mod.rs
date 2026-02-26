@@ -10,5 +10,6 @@
 //! - `handlers/` -- Tool handler implementations (core, memory, ...)
 
 pub mod handlers;
+pub mod pipe_router;
 pub mod server;
 pub mod tools;

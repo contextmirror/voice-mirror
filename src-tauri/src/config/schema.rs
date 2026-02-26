@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-/// Root configuration matching Voice Mirror Electron's DEFAULT_CONFIG.
+/// Root application configuration.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppConfig {
@@ -31,6 +31,8 @@ pub struct AppConfig {
     pub ai: AiConfig,
     #[serde(default)]
     pub projects: ProjectsConfig,
+    #[serde(default)]
+    pub editor: EditorConfig,
 }
 
 /// Wake word detection settings.
@@ -86,6 +88,8 @@ pub struct VoiceConfig {
     #[serde(default)]
     pub stt_model_name: Option<String>,
     #[serde(default)]
+    pub stt_use_gpu: bool,
+    #[serde(default)]
     pub input_device: Option<String>,
     #[serde(default)]
     pub output_device: Option<String>,
@@ -111,6 +115,7 @@ impl Default for VoiceConfig {
             stt_api_key: None,
             stt_endpoint: None,
             stt_model_name: None,
+            stt_use_gpu: false,
             input_device: None,
             output_device: None,
             announce_startup: true,
@@ -366,6 +371,12 @@ pub struct AiConfig {
     #[serde(default = "default_provider")]
     pub provider: String,
     #[serde(default)]
+    pub auto_start: bool,
+    /// Auto-inject voice loop command on provider startup (default: true).
+    /// When disabled, user must press the Voice button to start the voice loop.
+    #[serde(default = "default_true")]
+    pub auto_voice_loop: bool,
+    #[serde(default)]
     pub model: Option<String>,
     #[serde(default = "default_context_length")]
     pub context_length: u32,
@@ -387,6 +398,8 @@ impl Default for AiConfig {
     fn default() -> Self {
         Self {
             provider: "claude".into(),
+            auto_start: false,
+            auto_voice_loop: true,
             model: None,
             context_length: 32768,
             auto_detect: true,
@@ -403,6 +416,25 @@ impl Default for AiConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolProfile {
     pub groups: Vec<String>,
+}
+
+/// Editor settings (formatting, preview).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EditorConfig {
+    #[serde(default = "default_true")]
+    pub markdown_preview: bool,
+    #[serde(default)]
+    pub format_on_save: bool,
+}
+
+impl Default for EditorConfig {
+    fn default() -> Self {
+        Self {
+            markdown_preview: true,
+            format_on_save: false,
+        }
+    }
 }
 
 /// Multi-project configuration.
@@ -451,22 +483,19 @@ fn default_tool_profile() -> String { "voice-assistant".into() }
 fn default_tool_profiles() -> HashMap<String, ToolProfile> {
     let mut m = HashMap::new();
     m.insert("voice-assistant".into(), ToolProfile {
-        groups: vec!["core".into(), "meta".into(), "screen".into(), "memory".into(), "browser".into()],
+        groups: vec!["core".into(), "memory".into(), "browser".into()],
     });
     m.insert("n8n-workflows".into(), ToolProfile {
-        groups: vec!["core".into(), "meta".into(), "n8n".into()],
+        groups: vec!["core".into(),"n8n".into()],
     });
     m.insert("web-browser".into(), ToolProfile {
-        groups: vec!["core".into(), "meta".into(), "screen".into(), "browser".into()],
+        groups: vec!["core".into(), "browser".into()],
     });
     m.insert("full-toolbox".into(), ToolProfile {
-        groups: vec!["core".into(), "meta".into(), "screen".into(), "memory".into(), "voice-clone".into(), "browser".into(), "n8n".into()],
+        groups: vec!["core".into(), "memory".into(), "browser".into(), "n8n".into()],
     });
     m.insert("minimal".into(), ToolProfile {
-        groups: vec!["core".into(), "meta".into()],
-    });
-    m.insert("voice-assistant-lite".into(), ToolProfile {
-        groups: vec!["core".into(), "meta".into(), "screen".into(), "memory-facade".into(), "browser-facade".into()],
+        groups: vec!["core".into()],
     });
     m
 }

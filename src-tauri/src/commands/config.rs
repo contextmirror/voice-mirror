@@ -4,14 +4,13 @@ use crate::config::schema::AppConfig;
 use crate::services::platform;
 use super::IpcResponse;
 
-use std::sync::Mutex;
+use std::sync::{LazyLock, Mutex};
 
-use once_cell::sync::Lazy;
 use serde_json::Value;
 
 /// Global config state, protected by a mutex.
 /// Loaded once on first access, then kept in memory.
-pub(crate) static CONFIG: Lazy<Mutex<AppConfig>> = Lazy::new(|| {
+pub(crate) static CONFIG: LazyLock<Mutex<AppConfig>> = LazyLock::new(|| {
     let config_dir = platform::get_config_dir();
     Mutex::new(persistence::load_config(&config_dir))
 });

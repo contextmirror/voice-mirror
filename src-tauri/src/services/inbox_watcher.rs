@@ -108,19 +108,17 @@ impl WatcherState {
 
 /// Get the MCP server data directory.
 ///
-/// The MCP server uses `voice-mirror-electron` as its app name, which differs
-/// from the Tauri app's `voice-mirror`. We must use the MCP server's path
-/// to find the inbox file.
+/// Uses `voice-mirror` as the app name under the platform config directory.
 ///
-/// - Windows: `%APPDATA%\voice-mirror-electron\data\`
-/// - macOS:   `~/Library/Application Support/voice-mirror-electron/data/`
-/// - Linux:   `~/.config/voice-mirror-electron/data/`
+/// - Windows: `%APPDATA%\voice-mirror\data\`
+/// - macOS:   `~/Library/Application Support/voice-mirror/data/`
+/// - Linux:   `~/.config/voice-mirror/data/`
 pub fn get_mcp_data_dir() -> PathBuf {
-    // The MCP server uses config_dir (APPDATA on Windows, ~/.config on Linux,
-    // ~/Library/Application Support on macOS) + "voice-mirror-electron/data"
+    // Uses config_dir (APPDATA on Windows, ~/.config on Linux,
+    // ~/Library/Application Support on macOS) + "voice-mirror/data"
     dirs::config_dir()
         .unwrap_or_else(|| PathBuf::from("."))
-        .join("voice-mirror-electron")
+        .join("voice-mirror")
         .join("data")
 }
 
@@ -459,8 +457,8 @@ mod tests {
         let dir = get_mcp_data_dir();
         let path_str = dir.to_string_lossy();
         assert!(
-            path_str.contains("voice-mirror-electron"),
-            "MCP data dir should contain 'voice-mirror-electron', got: {}",
+            path_str.contains("voice-mirror"),
+            "MCP data dir should contain 'voice-mirror', got: {}",
             path_str
         );
     }

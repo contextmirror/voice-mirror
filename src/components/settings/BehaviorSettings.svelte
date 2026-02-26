@@ -16,7 +16,10 @@
   let userName = $state('');
   let startMinimized = $state(false);
   let startWithSystem = $state(false);
+  let autoStartProvider = $state(false);
+  let autoVoiceLoop = $state(true);
   let showToasts = $state(true);
+  let markdownPreview = $state(true);
   let debugMode = $state(false);
   let showDependencies = $state(false);
 
@@ -31,7 +34,10 @@
     userName = cfg.user?.name || '';
     startMinimized = cfg.behavior?.startMinimized === true;
     startWithSystem = cfg.behavior?.startWithSystem === true;
+    autoStartProvider = cfg.ai?.autoStart === true;
+    autoVoiceLoop = cfg.ai?.autoVoiceLoop !== false;
     showToasts = cfg.behavior?.showToasts !== false;
+    markdownPreview = cfg.editor?.markdownPreview !== false;
     debugMode = cfg.advanced?.debugMode === true;
     showDependencies = cfg.advanced?.showDependencies === true;
   });
@@ -49,6 +55,13 @@
           startMinimized,
           startWithSystem,
           showToasts,
+        },
+        ai: {
+          autoStart: autoStartProvider,
+          autoVoiceLoop,
+        },
+        editor: {
+          markdownPreview,
         },
         advanced: {
           debugMode,
@@ -96,6 +109,18 @@
         checked={startWithSystem}
         onChange={(v) => (startWithSystem = v)}
       />
+      <Toggle
+        label="Auto-Start AI Provider"
+        description="Start the selected AI provider automatically on launch"
+        checked={autoStartProvider}
+        onChange={(v) => (autoStartProvider = v)}
+      />
+      <Toggle
+        label="Auto Voice Loop"
+        description="Inject the voice listen/send loop on provider startup. Disable to use the Voice button instead."
+        checked={autoVoiceLoop}
+        onChange={(v) => (autoVoiceLoop = v)}
+      />
     </div>
   </section>
 
@@ -108,6 +133,19 @@
         description="Show popup notifications for file operations and other events"
         checked={showToasts}
         onChange={(v) => (showToasts = v)}
+      />
+    </div>
+  </section>
+
+  <!-- Editor -->
+  <section class="settings-section">
+    <h3>Editor</h3>
+    <div class="settings-group">
+      <Toggle
+        label="Markdown Preview"
+        description="Show rendered preview by default when opening .md files"
+        checked={markdownPreview}
+        onChange={(v) => (markdownPreview = v)}
       />
     </div>
   </section>

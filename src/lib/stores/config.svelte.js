@@ -8,7 +8,7 @@
 import { getConfig, setConfig, resetConfig as apiResetConfig } from '../api.js';
 import { deepMerge } from '../utils.js';
 
-/** Default configuration (mirrors Voice Mirror Electron defaults) */
+/** Default application configuration */
 const DEFAULT_CONFIG = {
   wakeWord: {
     enabled: true,
@@ -27,6 +27,7 @@ const DEFAULT_CONFIG = {
     sttModel: 'whisper-local',
     sttAdapter: 'whisper-local',
     sttModelSize: 'base',
+    sttUseGpu: false,
     sttApiKey: null,
     sttEndpoint: null,
     sttModelName: null,
@@ -82,6 +83,10 @@ const DEFAULT_CONFIG = {
     entries: [],
     activeIndex: 0,
   },
+  editor: {
+    markdownPreview: true,
+    formatOnSave: false,
+  },
   workspace: {
     showChat: false,
     showTerminal: false,
@@ -99,18 +104,19 @@ const DEFAULT_CONFIG = {
   },
   ai: {
     provider: 'claude',
+    autoStart: false,
+    autoVoiceLoop: true,
     model: null,
     contextLength: 32768,
     autoDetect: true,
     systemPrompt: null,
     toolProfile: 'voice-assistant',
     toolProfiles: {
-      'voice-assistant': { groups: ['core', 'meta', 'screen', 'memory', 'browser'] },
-      'n8n-workflows': { groups: ['core', 'meta', 'n8n'] },
-      'web-browser': { groups: ['core', 'meta', 'screen', 'browser'] },
-      'full-toolbox': { groups: ['core', 'meta', 'screen', 'memory', 'voice-clone', 'browser', 'n8n'] },
-      'minimal': { groups: ['core', 'meta'] },
-      'voice-assistant-lite': { groups: ['core', 'meta', 'screen', 'memory-facade', 'browser-facade'] },
+      'voice-assistant': { groups: ['core', 'memory', 'browser'] },
+      'n8n-workflows': { groups: ['core','n8n'] },
+      'web-browser': { groups: ['core', 'browser'] },
+      'full-toolbox': { groups: ['core', 'memory', 'browser', 'n8n'] },
+      'minimal': { groups: ['core'] },
     },
     endpoints: {
       ollama: 'http://127.0.0.1:11434',

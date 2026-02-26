@@ -14,6 +14,18 @@ const src = fs.readFileSync(
   path.join(__dirname, '../../src/components/lens/StatusDropdown.svelte'),
   'utf-8'
 );
+const serversSrc = fs.readFileSync(
+  path.join(__dirname, '../../src/components/lens/ServersTab.svelte'),
+  'utf-8'
+);
+const mcpSrc = fs.readFileSync(
+  path.join(__dirname, '../../src/components/lens/McpTab.svelte'),
+  'utf-8'
+);
+const lspSrc = fs.readFileSync(
+  path.join(__dirname, '../../src/components/lens/LspTab.svelte'),
+  'utf-8'
+);
 
 describe('StatusDropdown.svelte: badge trigger', () => {
   it('has status badge button', () => {
@@ -146,48 +158,66 @@ describe('StatusDropdown.svelte: tabs (OpenCode layout)', () => {
 
 describe('StatusDropdown.svelte: servers tab content', () => {
   it('shows provider name', () => {
-    assert.ok(src.includes('providerName'));
+    assert.ok(serversSrc.includes('providerName'));
   });
   it('shows provider type as version', () => {
-    assert.ok(src.includes('providerType'));
+    assert.ok(serversSrc.includes('providerType'));
   });
   it('has checkmark for connected server', () => {
-    assert.ok(src.includes('row-check'));
-    assert.ok(src.includes('polyline'));
+    assert.ok(serversSrc.includes('row-check'));
+    assert.ok(serversSrc.includes('polyline'));
   });
   it('shows dev server entry', () => {
-    assert.ok(src.includes('Dev Server'));
+    assert.ok(serversSrc.includes('Dev Server'));
   });
   it('has status rows with dot indicators', () => {
-    assert.ok(src.includes('status-row'));
-    assert.ok(src.includes('row-dot'));
+    assert.ok(serversSrc.includes('status-row'));
+    assert.ok(serversSrc.includes('row-dot'));
   });
   it('has Manage servers button', () => {
-    assert.ok(src.includes('manage-btn'));
-    assert.ok(src.includes('Manage servers'));
+    assert.ok(serversSrc.includes('manage-btn'));
+    assert.ok(serversSrc.includes('Manage servers'));
+  });
+  it('imports ServersTab in StatusDropdown', () => {
+    assert.ok(src.includes("import ServersTab from './ServersTab.svelte'"));
   });
 });
 
 describe('StatusDropdown.svelte: MCP tab content', () => {
   it('shows voice-mirror MCP entry for CLI providers', () => {
-    assert.ok(src.includes('voice-mirror'));
+    assert.ok(mcpSrc.includes('voice-mirror'));
   });
   it('shows tool count', () => {
-    assert.ok(src.includes('55 tools'));
+    assert.ok(mcpSrc.includes('55 tools'));
   });
   it('has toggle switch for MCP', () => {
-    assert.ok(src.includes('row-toggle'));
-    assert.ok(src.includes('toggle-track'));
-    assert.ok(src.includes('toggle-thumb'));
+    assert.ok(mcpSrc.includes('row-toggle'));
+    assert.ok(mcpSrc.includes('toggle-track'));
+    assert.ok(mcpSrc.includes('toggle-thumb'));
+  });
+  it('toggle has cursor: default (non-interactive, auto-managed)', () => {
+    assert.ok(mcpSrc.includes('cursor: default'), 'Toggle should have cursor: default');
+  });
+  it('toggle has title tooltip explaining auto-management', () => {
+    assert.ok(mcpSrc.includes('title="Auto-managed by provider"'), 'Toggle should have explanatory tooltip');
+  });
+  it('uses --muted for stopped dot (not --danger)', () => {
+    assert.ok(mcpSrc.includes('.row-dot.stopped { background: var(--muted)'), 'MCP stopped dot should be muted gray');
   });
   it('shows empty state for non-CLI providers', () => {
-    assert.ok(src.includes('No MCP tools configured'));
+    assert.ok(mcpSrc.includes('No MCP tools configured'));
+  });
+  it('imports McpTab in StatusDropdown', () => {
+    assert.ok(src.includes("import McpTab from './McpTab.svelte'"));
   });
 });
 
 describe('StatusDropdown.svelte: LSP tab content', () => {
   it('shows auto-detected LSP message', () => {
-    assert.ok(src.includes('Auto-detected from open file types'));
+    assert.ok(lspSrc.includes('Auto-detected from open file types'));
+  });
+  it('imports LspTab in StatusDropdown', () => {
+    assert.ok(src.includes("import LspTab from './LspTab.svelte'"));
   });
 });
 
@@ -259,6 +289,19 @@ describe('StatusDropdown.svelte: manage search', () => {
     assert.ok(src.includes('Search servers'));
     assert.ok(src.includes('bind:value={searchQuery}'));
   });
+  it('has filteredServers derived that filters by searchQuery', () => {
+    assert.ok(src.includes('filteredServers'), 'Should have filteredServers');
+    assert.ok(src.includes('searchQuery'), 'Should use searchQuery for filtering');
+  });
+  it('filters by framework name (case-insensitive)', () => {
+    assert.ok(src.includes("(s.framework || '').toLowerCase().includes(searchQuery.toLowerCase())"), 'Should filter by framework');
+  });
+  it('filters by port number', () => {
+    assert.ok(src.includes('String(s.port).includes(searchQuery)'), 'Should filter by port');
+  });
+  it('uses filteredServers in each loop', () => {
+    assert.ok(src.includes('{#each filteredServers as server}'), 'Should iterate filteredServers, not devServers');
+  });
 });
 
 describe('StatusDropdown.svelte: manage server list', () => {
@@ -268,27 +311,157 @@ describe('StatusDropdown.svelte: manage server list', () => {
   it('has manage rows', () => {
     assert.ok(src.includes('manage-row'));
   });
-  it('shows provider name and type', () => {
+  it('shows provider name and type in info column', () => {
     assert.ok(src.includes('manage-row-name'));
-    assert.ok(src.includes('manage-row-version'));
+    assert.ok(src.includes('manage-row-info'));
+    assert.ok(src.includes('manage-row-type'));
   });
-  it('has Current Server badge', () => {
+  it('has Active badge for healthy provider', () => {
     assert.ok(src.includes('manage-row-badge'));
-    assert.ok(src.includes('Current Server'));
+    assert.ok(src.includes('Active'));
   });
-  it('shows dev server with localhost', () => {
-    assert.ok(src.includes('Dev Server (Vite)'));
-    assert.ok(src.includes('localhost:1420'));
+  it('provider row is a div not a button (informational only)', () => {
+    // The provider row should be a div, not an interactive button
+    const manageListBlock = src.split('manage-list')[1]?.split('<!-- Dev servers')[0] || '';
+    assert.ok(manageListBlock.includes('<div class="manage-row">'), 'Provider row should be a div');
   });
-  it('has server options menu button', () => {
-    assert.ok(src.includes('manage-row-menu'));
-    assert.ok(src.includes('Server options'));
+  it('shows dev servers from lensStore with localhost port', () => {
+    assert.ok(src.includes('server.framework'));
+    assert.ok(src.includes('server.port'));
   });
-  it('stops propagation on menu click', () => {
-    assert.ok(src.includes('e.stopPropagation()'));
+  it('does not have noop server options menu button', () => {
+    assert.ok(!src.includes('manage-row-menu'), 'Noop menu button should be removed');
+    assert.ok(!src.includes('Server options'), 'Server options aria-label should be removed');
   });
-  it('has Add server button', () => {
-    assert.ok(src.includes('manage-add'));
-    assert.ok(src.includes('Add server'));
+  it('has Refresh detection button instead of Add server', () => {
+    assert.ok(src.includes('manage-refresh'));
+    assert.ok(src.includes('Refresh detection'));
+    assert.ok(!src.includes('manage-add'), 'Add server button should be removed');
+    assert.ok(!src.includes('Add server'), 'Add server text should be removed');
+  });
+});
+
+describe('StatusDropdown.svelte: row-dot stopped color consistency', () => {
+  it('uses --muted for stopped dot (not --danger)', () => {
+    // .row-dot.stopped should use var(--muted), consistent with ServersTab
+    assert.ok(src.includes('.row-dot.stopped { background: var(--muted)'), 'Stopped dot should be muted gray, not danger red');
+    assert.ok(!src.includes('.row-dot.stopped { background: var(--danger)'), 'Stopped dot should NOT use --danger');
+  });
+});
+
+describe('StatusDropdown.svelte: manage view interactive controls', () => {
+  it('imports projectStore for active project context', () => {
+    assert.ok(src.includes('projectStore'));
+    assert.ok(src.includes('project.svelte.js'));
+  });
+
+  it('imports detectDevServers from api', () => {
+    assert.ok(src.includes('detectDevServers'));
+    assert.ok(src.includes("from '../../lib/api.js'"));
+  });
+
+  it('has getServerState function (same logic as ServersTab)', () => {
+    assert.ok(src.includes('function getServerState(server)'));
+  });
+
+  it('getServerState distinguishes managed vs external', () => {
+    const fn = src.split('function getServerState')[1]?.split('\n  }')[0] || '';
+    assert.ok(fn.includes('managed: true'), 'Should return managed: true for lifecycle-managed servers');
+    assert.ok(fn.includes('managed: false'), 'Should return managed: false for external servers');
+  });
+
+  it('has handleStopExternal function for external servers', () => {
+    assert.ok(src.includes('function handleStopExternal(server)'));
+    assert.ok(src.includes('devServerManager.stopExternalServer'));
+  });
+
+  it('has handleStart function', () => {
+    assert.ok(src.includes('function handleStart(server)'));
+    assert.ok(src.includes('devServerManager.startServer'));
+  });
+
+  it('has handleStop function', () => {
+    assert.ok(src.includes('function handleStop()'));
+    assert.ok(src.includes('devServerManager.stopServer'));
+  });
+
+  it('has handleRestart function', () => {
+    assert.ok(src.includes('function handleRestart()'));
+    assert.ok(src.includes('devServerManager.restartServer'));
+  });
+
+  it('has refreshServers function calling detectDevServers', () => {
+    assert.ok(src.includes('function refreshServers()'));
+    assert.ok(src.includes('detectDevServers(project.path)'));
+  });
+
+  it('has Start button for stopped servers', () => {
+    assert.ok(src.includes('manage-start-btn'));
+    assert.ok(src.includes("state.status === 'stopped'"));
+  });
+
+  it('has Stop button for running managed servers', () => {
+    assert.ok(src.includes('manage-stop-btn'));
+    assert.ok(src.includes('state.managed'));
+  });
+
+  it('has Running status label for running servers', () => {
+    assert.ok(src.includes('manage-status-label'));
+    assert.ok(src.includes('Running'));
+  });
+
+  it('has manage-status-label CSS classes for running and idle', () => {
+    assert.ok(src.includes('.manage-status-label.running'));
+    assert.ok(src.includes('.manage-status-label.idle'));
+  });
+
+  it('Stop button calls handleStop for managed or handleStopExternal for external', () => {
+    assert.ok(src.includes('state.managed ? handleStop() : handleStopExternal(server)'));
+  });
+
+  it('has Starting indicator with animated dot', () => {
+    assert.ok(src.includes('manage-starting-label'));
+    assert.ok(src.includes('starting-dot'));
+  });
+
+  it('has Restart button for crashed servers', () => {
+    assert.ok(src.includes('manage-restart-btn'));
+    assert.ok(src.includes('Restart'));
+  });
+
+  it('shows crash loop warning text', () => {
+    assert.ok(src.includes('crash-loop-text'));
+    assert.ok(src.includes('Crash loop'));
+  });
+
+  it('has Show button for hidden tabs', () => {
+    assert.ok(src.includes('manage-show-btn'));
+    assert.ok(src.includes('Show'));
+  });
+
+  it('calls terminalTabsStore.unhideTab on Show click', () => {
+    assert.ok(src.includes('terminalTabsStore.unhideTab'));
+  });
+
+  it('checks hiddenTabs for hidden terminal tabs', () => {
+    assert.ok(src.includes('terminalTabsStore.hiddenTabs'));
+  });
+
+  it('has crashed CSS class on row dot', () => {
+    assert.ok(src.includes('class:crashed'));
+    assert.ok(src.includes('.row-dot.crashed'));
+  });
+
+  it('uses getServerState for each server in manage view', () => {
+    const manageBlock = src.split('{#if managing}')[1]?.split('{:else}')[0] || '';
+    assert.ok(manageBlock.includes('getServerState(server)'), 'Manage view should call getServerState');
+  });
+
+  it('has manage-row-actions container for button group', () => {
+    assert.ok(src.includes('manage-row-actions'));
+  });
+
+  it('uses stopPropagation on action buttons', () => {
+    assert.ok(src.includes('e.stopPropagation()'), 'Action buttons should stop propagation');
   });
 });

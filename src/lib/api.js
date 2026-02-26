@@ -24,10 +24,6 @@ export async function resetConfig() {
   return invoke('reset_config');
 }
 
-export async function getPlatformInfo() {
-  return invoke('get_platform_info');
-}
-
 // ============ Window ============
 
 export async function getWindowPosition() {
@@ -38,20 +34,8 @@ export async function setWindowPosition(x, y) {
   return invoke('set_window_position', { x, y });
 }
 
-export async function saveWindowBounds() {
-  return invoke('save_window_bounds');
-}
-
 export async function minimizeWindow() {
   return invoke('minimize_window');
-}
-
-export async function maximizeWindow() {
-  return invoke('maximize_window');
-}
-
-export async function quitApp() {
-  return invoke('quit_app');
 }
 
 export async function setWindowSize(width, height) {
@@ -85,6 +69,14 @@ export async function stopVoice() {
   return invoke('stop_voice');
 }
 
+export async function restartVoice() {
+  return invoke('restart_voice');
+}
+
+export async function ensureSttModel(modelSize) {
+  return invoke('ensure_stt_model', { modelSize });
+}
+
 export async function getVoiceStatus() {
   return invoke('get_voice_status');
 }
@@ -95,10 +87,6 @@ export async function setVoiceMode(mode) {
 
 export async function listAudioDevices() {
   return invoke('list_audio_devices');
-}
-
-export async function stopSpeaking() {
-  return invoke('stop_speaking');
 }
 
 export async function speakText(text) {
@@ -175,8 +163,8 @@ export async function getAIStatus() {
   return invoke('get_ai_status');
 }
 
-export async function aiPtyInput(data, imagePath) {
-  return invoke('ai_pty_input', { data, imagePath: imagePath || null });
+export async function aiPtyInput(data, imagePath, imageDataUrl) {
+  return invoke('ai_pty_input', { data, imagePath: imagePath || null, imageDataUrl: imageDataUrl || null });
 }
 
 export async function aiRawInput(data) {
@@ -185,10 +173,6 @@ export async function aiRawInput(data) {
 
 export async function aiPtyResize(cols, rows) {
   return invoke('ai_pty_resize', { cols, rows });
-}
-
-export async function interruptAi() {
-  return invoke('interrupt_ai');
 }
 
 export async function sendVoiceLoop(senderName) {
@@ -227,10 +211,6 @@ export async function setProvider(providerId, options = {}) {
   });
 }
 
-export async function getProvider() {
-  return invoke('get_provider');
-}
-
 /**
  * Fetch available models from a local LLM server.
  *
@@ -261,8 +241,8 @@ export async function listModels(providerType, baseUrl) {
  * @param {string} [threadId] - Thread ID (defaults to "voice-mirror")
  * @param {string} [imagePath] - Optional screenshot file path for multimodal messages
  */
-export async function writeUserMessage(message, from, threadId, imagePath) {
-  return invoke('write_user_message', { message, from, threadId, imagePath: imagePath || null });
+export async function writeUserMessage(message, from, threadId, imagePath, imageDataUrl) {
+  return invoke('write_user_message', { message, from, threadId, imagePath: imagePath || null, imageDataUrl: imageDataUrl || null });
 }
 
 // ============ Chat ============
@@ -293,10 +273,6 @@ export async function exportChatToFile(path, content) {
 
 // ============ Screenshot ============
 
-export async function takeScreenshot() {
-  return invoke('take_screenshot');
-}
-
 export async function listMonitors() {
   return invoke('list_monitors');
 }
@@ -319,14 +295,6 @@ export async function lensCapturePreview() {
 }
 
 // ============ Tools ============
-
-/**
- * Scan for CLI tools the app depends on.
- * Returns an array of { name, available, version, path } objects.
- */
-export async function scanCliTools() {
-  return invoke('scan_cli_tools');
-}
 
 /**
  * Check npm package versions (installed vs latest) and system tool status.
@@ -354,10 +322,6 @@ export async function unregisterShortcut(id) {
   return invoke('unregister_shortcut', { id });
 }
 
-export async function listShortcuts() {
-  return invoke('list_shortcuts');
-}
-
 export async function unregisterAllShortcuts() {
   return invoke('unregister_all_shortcuts');
 }
@@ -370,20 +334,7 @@ export async function getProcessStats() {
 
 // ============ Config Migration ============
 
-/**
- * Attempt to migrate settings from the old Electron app.
- * Returns the migrated config if an old config was found,
- * or null/empty if nothing to migrate.
- */
-export async function migrateElectronConfig() {
-  return invoke('migrate_electron_config');
-}
-
 // ============ Lens ============
-
-export async function lensCreateWebview(url, x, y, width, height) {
-  return invoke('lens_create_webview', { url, x, y, width, height });
-}
 
 export async function lensNavigate(url) {
   return invoke('lens_navigate', { url });
@@ -405,12 +356,92 @@ export async function lensResizeWebview(x, y, width, height) {
   return invoke('lens_resize_webview', { x, y, width, height });
 }
 
-export async function lensCloseWebview() {
-  return invoke('lens_close_webview');
-}
-
 export async function lensSetVisible(visible) {
   return invoke('lens_set_visible', { visible });
+}
+
+/** Hard-refresh the lens browser, bypassing all caches. */
+export async function lensHardRefresh() {
+  return invoke('lens_hard_refresh');
+}
+
+/** Clear all browsing data (cache, cookies, localStorage) for the lens browser. */
+export async function lensClearCache() {
+  return invoke('lens_clear_cache');
+}
+
+// ============ Design Overlay ============
+
+/** Send a design overlay command (set_tool, set_color, undo, redo, clear, enable, disable). */
+export async function designCommand(action, args = {}) {
+  return invoke('design_command', { action, args });
+}
+
+/** Get the selected element data from the design overlay. */
+export async function designGetElement() {
+  return invoke('design_get_element');
+}
+
+// ============ Browser Tabs ============
+
+export async function lensCreateTab(tabId, url, x, y, width, height) {
+  return invoke('lens_create_tab', { tabId, url, x, y, width, height });
+}
+
+export async function lensCloseTab(tabId) {
+  return invoke('lens_close_tab', { tabId });
+}
+
+export async function lensSwitchTab(tabId) {
+  return invoke('lens_switch_tab', { tabId });
+}
+
+export async function lensCloseAllTabs() {
+  return invoke('lens_close_all_tabs');
+}
+
+// ============ Dev Server ============
+
+/**
+ * Detect dev server configurations in a project directory.
+ * Scans tauri.conf.json, vite.config.*, .env, package.json for framework patterns.
+ * @param {string} projectRoot - Absolute path to the project root directory.
+ * @returns {Promise<{success: boolean, data?: {servers: Array, packageManager: string}}>}
+ */
+export async function detectDevServers(projectRoot) {
+  return invoke('detect_dev_servers', { projectRoot });
+}
+
+/**
+ * Check if a specific port is accepting TCP connections on localhost.
+ * @param {number} port - Port number to probe.
+ * @returns {Promise<{success: boolean, data?: {listening: boolean}}>}
+ */
+export async function probePort(port) {
+  return invoke('probe_port', { port });
+}
+
+/**
+ * Kill the process listening on a specific port.
+ * @param {number} port - Port number to kill.
+ * @returns {Promise<{success: boolean, data?: {killed: boolean}}>}
+ */
+export async function killPortProcess(port) {
+  return invoke('kill_port_process', { port });
+}
+
+// ============ GPU / Model Management ============
+
+export async function detectGpu() {
+  return invoke('detect_gpu');
+}
+
+export async function listSttModels() {
+  return invoke('list_stt_models');
+}
+
+export async function deleteSttModel(modelSize) {
+  return invoke('delete_stt_model', { modelSize });
 }
 
 // ============ Files ============
@@ -421,10 +452,6 @@ export async function listDirectory(path, root) {
 
 export async function getGitChanges(root) {
   return invoke('get_git_changes', { root: root || null });
-}
-
-export async function getProjectRoot() {
-  return invoke('get_project_root');
 }
 
 export async function readFile(path, root) {
@@ -450,6 +477,13 @@ export async function getFileGitContent(path, root) {
   return invoke('get_file_git_content', { path, root: root || null });
 }
 
+export async function gitStage(paths, root) { return invoke('git_stage', { paths, root: root || null }); }
+export async function gitUnstage(paths, root) { return invoke('git_unstage', { paths, root: root || null }); }
+export async function gitStageAll(root) { return invoke('git_stage_all', { root: root || null }); }
+export async function gitUnstageAll(root) { return invoke('git_unstage_all', { root: root || null }); }
+export async function gitCommit(message, root) { return invoke('git_commit', { message, root: root || null }); }
+export async function gitDiscard(paths, root) { return invoke('git_discard', { paths, root: root || null }); }
+export async function gitPush(root) { return invoke('git_push', { root: root || null }); }
 /**
  * Create a new file with optional content.
  * Errors if the file already exists. Creates parent directories as needed.
@@ -510,6 +544,31 @@ export async function searchFiles(root) {
   return invoke('search_files', { root: root || null });
 }
 
+/**
+ * Search file contents across the project using regex.
+ * Results are grouped by file with line number, column range, and text.
+ * @param {string} query - Search query (plain text or regex).
+ * @param {Object} [options] - Search options.
+ * @param {string} [options.root] - Project root override.
+ * @param {boolean} [options.caseSensitive] - Case-sensitive search.
+ * @param {boolean} [options.isRegex] - Treat query as regex.
+ * @param {boolean} [options.wholeWord] - Match whole words only.
+ * @param {string} [options.includePattern] - Comma-separated include globs.
+ * @param {string} [options.excludePattern] - Comma-separated exclude globs.
+ * @returns {Promise<{success: boolean, data?: {matches: Array, totalMatches: number, truncated: boolean}, error?: string}>}
+ */
+export async function searchContent(query, options = {}) {
+  return invoke('search_content', {
+    query,
+    root: options.root || null,
+    caseSensitive: options.caseSensitive || null,
+    isRegex: options.isRegex || null,
+    wholeWord: options.wholeWord || null,
+    includePattern: options.includePattern || null,
+    excludePattern: options.excludePattern || null,
+  });
+}
+
 export async function startFileWatching(projectRoot) {
   return invoke('start_file_watching', { projectRoot });
 }
@@ -566,14 +625,6 @@ export async function shellKill(id) {
   return invoke('shell_kill', { id });
 }
 
-/**
- * List active shell terminal sessions.
- * @returns {Promise<Object>}
- */
-export async function shellList() {
-  return invoke('shell_list');
-}
-
 // ============ LSP ============
 
 export async function lspOpenFile(path, content, projectRoot) {
@@ -600,6 +651,10 @@ export async function lspRequestHover(path, line, character, projectRoot) {
   return invoke('lsp_request_hover', { path, line, character, projectRoot });
 }
 
+export async function lspRequestSignatureHelp(path, line, character, projectRoot) {
+  return invoke('lsp_request_signature_help', { path, line, character, projectRoot });
+}
+
 export async function lspRequestDefinition(path, line, character, projectRoot) {
   return invoke('lsp_request_definition', { path, line, character, projectRoot });
 }
@@ -608,6 +663,34 @@ export async function lspGetStatus() {
   return invoke('lsp_get_status');
 }
 
-export async function lspShutdown() {
-  return invoke('lsp_shutdown');
+export async function lspRequestDocumentSymbols(path, projectRoot) {
+  return invoke('lsp_request_document_symbols', { path, projectRoot });
+}
+
+export async function lspRequestReferences(path, line, character, projectRoot) {
+  return invoke('lsp_request_references', { path, line, character, projectRoot });
+}
+
+export async function lspRequestCodeActions(path, rangeStartLine, rangeStartChar, rangeEndLine, rangeEndChar, diagnostics, projectRoot) {
+  return invoke('lsp_request_code_actions', { path, rangeStartLine, rangeStartChar, rangeEndLine, rangeEndChar, diagnostics, projectRoot });
+}
+
+export async function lspPrepareRename(path, line, character, projectRoot) {
+  return invoke('lsp_prepare_rename', { path, line, character, projectRoot });
+}
+
+export async function lspRename(path, line, character, newName, projectRoot) {
+  return invoke('lsp_rename', { path, line, character, newName, projectRoot });
+}
+
+export async function lspApplyWorkspaceEdit(edits, projectRoot) {
+  return invoke('lsp_apply_workspace_edit', { edits, projectRoot });
+}
+
+export async function lspRequestFormatting(path, tabSize, insertSpaces, projectRoot) {
+  return invoke('lsp_request_formatting', { path, tabSize, insertSpaces, projectRoot });
+}
+
+export async function lspRequestRangeFormatting(path, rangeStartLine, rangeStartChar, rangeEndLine, rangeEndChar, tabSize, insertSpaces, projectRoot) {
+  return invoke('lsp_request_range_formatting', { path, rangeStartLine, rangeStartChar, rangeEndLine, rangeEndChar, tabSize, insertSpaces, projectRoot });
 }

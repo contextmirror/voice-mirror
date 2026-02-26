@@ -1,8 +1,8 @@
 /**
  * lens-components.test.js -- Source-inspection tests for Lens components
  *
- * Validates imports, structure, and key elements of LensPanel, LensToolbar,
- * and LensPreview by reading source files and asserting patterns.
+ * Validates imports, structure, and key elements of LensToolbar.
+ * LensPreview tests are in lens-preview.test.cjs.
  */
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
@@ -14,40 +14,6 @@ const LENS_DIR = path.join(__dirname, '../../src/components/lens');
 function readComponent(name) {
   return fs.readFileSync(path.join(LENS_DIR, name), 'utf-8');
 }
-
-// ============ LensPanel ============
-
-describe('LensPanel.svelte', () => {
-  const src = readComponent('LensPanel.svelte');
-
-  it('imports LensToolbar', () => {
-    assert.ok(src.includes("import LensToolbar from './LensToolbar.svelte'"));
-  });
-
-  it('imports LensPreview', () => {
-    assert.ok(src.includes("import LensPreview from './LensPreview.svelte'"));
-  });
-
-  it('has lens-panel CSS class', () => {
-    assert.ok(src.includes('.lens-panel'));
-  });
-
-  it('renders LensToolbar', () => {
-    assert.ok(src.includes('<LensToolbar'));
-  });
-
-  it('renders LensPreview', () => {
-    assert.ok(src.includes('<LensPreview'));
-  });
-
-  it('uses flex column layout', () => {
-    assert.ok(src.includes('flex-direction: column'));
-  });
-
-  it('has height 100%', () => {
-    assert.ok(src.includes('height: 100%'));
-  });
-});
 
 // ============ LensToolbar ============
 
@@ -82,12 +48,12 @@ describe('LensToolbar.svelte', () => {
     assert.ok(src.includes('onsubmit'));
   });
 
-  it('disables back when canGoBack is false', () => {
-    assert.ok(src.includes('lensStore.canGoBack'));
+  it('has back button always enabled (WebView2 no-ops silently)', () => {
+    assert.ok(src.includes('handleBack'), 'Should have back handler');
   });
 
-  it('disables forward when canGoForward is false', () => {
-    assert.ok(src.includes('lensStore.canGoForward'));
+  it('has forward button always enabled (WebView2 no-ops silently)', () => {
+    assert.ok(src.includes('handleForward'), 'Should have forward handler');
   });
 
   it('binds url input value', () => {
@@ -102,79 +68,186 @@ describe('LensToolbar.svelte', () => {
     assert.ok(!src.includes('showChat'), 'LensToolbar should not have showChat prop');
     assert.ok(!src.includes('showTerminal'), 'LensToolbar should not have showTerminal prop');
   });
-});
 
-// ============ LensPreview ============
-
-describe('LensPreview.svelte', () => {
-  const src = readComponent('LensPreview.svelte');
-
-  it('imports lensCreateWebview from api', () => {
-    assert.ok(src.includes('lensCreateWebview'));
-  });
-
-  it('imports lensResizeWebview from api', () => {
-    assert.ok(src.includes('lensResizeWebview'));
-  });
-
-  it('imports lensCloseWebview from api', () => {
-    assert.ok(src.includes('lensCloseWebview'));
+  it('imports lensHardRefresh from api', () => {
+    assert.ok(src.includes('lensHardRefresh'));
   });
 
   it('imports listen from tauri event', () => {
     assert.ok(src.includes("from '@tauri-apps/api/event'"));
   });
 
-  it('imports lensStore', () => {
-    assert.ok(src.includes('lensStore'));
+  it('supports shift+click for hard refresh', () => {
+    assert.ok(src.includes('event.shiftKey'));
   });
 
-  it('uses bind:this for container', () => {
-    assert.ok(src.includes('bind:this={containerEl}'));
+  it('listens for lens-hard-refresh event', () => {
+    assert.ok(src.includes('lens-hard-refresh'));
   });
 
-  it('uses ResizeObserver for bounds syncing', () => {
-    assert.ok(src.includes('ResizeObserver'));
-  });
-
-  it('uses getBoundingClientRect for position', () => {
-    assert.ok(src.includes('getBoundingClientRect'));
-  });
-
-  it('has lens-preview CSS class', () => {
-    assert.ok(src.includes('.lens-preview'));
-  });
-
-  it('has loading state display', () => {
-    assert.ok(src.includes('webviewReady'));
-  });
-
-  it('listens for lens-url-changed event', () => {
-    assert.ok(src.includes('lens-url-changed'));
-  });
-
-  it('cleans up webview on unmount', () => {
-    // The cleanup function should call lensCloseWebview in onDestroy
-    assert.ok(src.includes('lensCloseWebview'), 'Should close webview on cleanup');
-    assert.ok(src.includes('onDestroy'), 'Should use onDestroy for cleanup');
-  });
-
-  it('uses onMount for lifecycle', () => {
-    assert.ok(src.includes('onMount'), 'Should use onMount for setup');
-  });
-
-  it('retries webview creation on failure', () => {
-    assert.ok(src.includes('MAX_RETRIES'), 'Should have retry limit');
-    assert.ok(src.includes('scheduleRetry'), 'Should have retry scheduler');
-    assert.ok(src.includes('RETRY_DELAY_MS'), 'Should have retry delay');
-  });
-
-  it('has loading timeout safety net', () => {
-    assert.ok(src.includes('LOADING_TIMEOUT_MS'), 'Should have loading timeout');
-    assert.ok(src.includes('startLoadingTimeout'), 'Should have timeout function');
-  });
-
-  it('throttles resize observer with rAF', () => {
-    assert.ok(src.includes('requestAnimationFrame'), 'Should throttle resize with rAF');
+  it('has tooltip mentioning shift+click', () => {
+    assert.ok(src.includes('Shift+click'));
   });
 });
+
+// ============ FileTree: Search tab ============
+
+describe('FileTree.svelte — Search tab integration', () => {
+  const ftSrc = readComponent('FileTree.svelte');
+
+  it('imports SearchPanel', () => {
+    assert.ok(
+      ftSrc.includes("import SearchPanel from './SearchPanel.svelte'"),
+      'FileTree should import SearchPanel'
+    );
+  });
+
+  it('imports searchStore', () => {
+    assert.ok(
+      ftSrc.includes("import { searchStore }"),
+      'FileTree should import searchStore'
+    );
+  });
+
+  it('has search tab button text', () => {
+    assert.ok(
+      ftSrc.includes('>Search'),
+      'FileTree should have Search tab button'
+    );
+  });
+
+  it('search tab shows totalMatches count', () => {
+    assert.ok(
+      ftSrc.includes('searchStore.totalMatches'),
+      'Search tab should display totalMatches count'
+    );
+  });
+
+  it('has lens-focus-search event listener', () => {
+    assert.ok(
+      ftSrc.includes('lens-focus-search'),
+      'FileTree should listen for lens-focus-search event'
+    );
+  });
+
+  it('switches to search tab on lens-focus-search', () => {
+    assert.ok(
+      ftSrc.includes("activeTab = 'search'"),
+      'lens-focus-search handler should set activeTab to search'
+    );
+  });
+
+  it('renders SearchPanel when activeTab is search', () => {
+    assert.ok(
+      ftSrc.includes("<SearchPanel"),
+      'FileTree should render SearchPanel component'
+    );
+  });
+
+  it('conditionally renders search tab content', () => {
+    assert.ok(
+      ftSrc.includes("{#if activeTab === 'search'}"),
+      'FileTree should conditionally render search tab'
+    );
+  });
+
+  it('SearchPanel onResultClick opens file and dispatches goto-position', () => {
+    assert.ok(
+      ftSrc.includes('lens-goto-position'),
+      'FileTree should dispatch lens-goto-position on search result click'
+    );
+  });
+});
+
+// ============ FileTree: Git Staging ============
+
+describe('FileTree.svelte -- Git staging integration', () => {
+  const ftSrc = readComponent('FileTree.svelte');
+
+  // Imports
+  it('imports gitStage from api', () => {
+    assert.ok(ftSrc.includes('gitStage'), 'FileTree should import gitStage');
+  });
+
+  it('imports gitUnstage from api', () => {
+    assert.ok(ftSrc.includes('gitUnstage'), 'FileTree should import gitUnstage');
+  });
+
+  it('imports gitStageAll from api', () => {
+    assert.ok(ftSrc.includes('gitStageAll'), 'FileTree should import gitStageAll');
+  });
+
+  it('imports gitUnstageAll from api', () => {
+    assert.ok(ftSrc.includes('gitUnstageAll'), 'FileTree should import gitUnstageAll');
+  });
+
+  it('imports gitDiscard from api', () => {
+    assert.ok(ftSrc.includes('gitDiscard'), 'FileTree should import gitDiscard');
+  });
+
+  it('imports GitCommitPanel', () => {
+    assert.ok(ftSrc.includes('GitCommitPanel'), 'FileTree should import GitCommitPanel');
+  });
+
+  // State
+  it('has currentBranch state', () => {
+    assert.ok(ftSrc.includes('currentBranch'), 'FileTree should have currentBranch state');
+  });
+
+  it('has stagedChanges derived', () => {
+    assert.ok(ftSrc.includes('stagedChanges'), 'FileTree should have stagedChanges derived');
+  });
+
+  it('has unstagedChanges derived', () => {
+    assert.ok(ftSrc.includes('unstagedChanges'), 'FileTree should have unstagedChanges derived');
+  });
+
+  // Handler functions
+  it('has handleStage function', () => {
+    assert.ok(ftSrc.includes('handleStage'), 'FileTree should have handleStage function');
+  });
+
+  it('has handleUnstage function', () => {
+    assert.ok(ftSrc.includes('handleUnstage'), 'FileTree should have handleUnstage function');
+  });
+
+  it('has handleStageAll function', () => {
+    assert.ok(ftSrc.includes('handleStageAll'), 'FileTree should have handleStageAll function');
+  });
+
+  it('has handleUnstageAll function', () => {
+    assert.ok(ftSrc.includes('handleUnstageAll'), 'FileTree should have handleUnstageAll function');
+  });
+
+  it('has handleDiscard function', () => {
+    assert.ok(ftSrc.includes('handleDiscard'), 'FileTree should have handleDiscard function');
+  });
+
+  // Rendering
+  it('renders GitCommitPanel in changes tab', () => {
+    assert.ok(ftSrc.includes('<GitCommitPanel'), 'FileTree should render GitCommitPanel');
+  });
+
+  it('renders GitChangesPanel in changes tab', () => {
+    assert.ok(ftSrc.includes('<GitChangesPanel'), 'FileTree should render GitChangesPanel');
+  });
+
+  // Props passed to GitCommitPanel
+  it('passes branch prop to GitCommitPanel', () => {
+    assert.ok(
+      ftSrc.includes('branch=') || ftSrc.includes('branch={'),
+      'FileTree should pass branch prop to GitCommitPanel'
+    );
+  });
+
+  it('passes stagedCount prop to GitCommitPanel', () => {
+    assert.ok(
+      ftSrc.includes('stagedCount'),
+      'FileTree should pass stagedCount prop to GitCommitPanel'
+    );
+  });
+
+});
+
+// ============ LensPreview ============
+// Detailed LensPreview tests are in lens-preview.test.cjs

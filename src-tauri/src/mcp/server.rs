@@ -15,7 +15,7 @@ use super::handlers;
 use super::handlers::McpToolResult;
 use super::tools::ToolRegistry;
 
-use crate::ipc::pipe_client::PipeClient;
+use crate::mcp::pipe_router::PipeRouter;
 
 // ---------------------------------------------------------------------------
 // JSON-RPC message types
@@ -54,7 +54,6 @@ struct JsonRpcError {
 /// Outgoing JSON-RPC notification (no id).
 /// Used for sending tools/list_changed notifications.
 #[derive(Debug, Serialize)]
-#[allow(dead_code)]
 struct JsonRpcNotification {
     jsonrpc: String,
     method: String,
@@ -94,8 +93,12 @@ impl JsonRpcResponse {
 pub struct McpServerState {
     registry: ToolRegistry,
     data_dir: std::path::PathBuf,
-    /// Optional named pipe client for fast IPC with the Tauri app.
-    pipe: Option<Arc<PipeClient>>,
+    /// Optional pipe router for fast IPC with the Tauri app.
+    /// Handles concurrent message routing (browser responses, user messages).
+    router: Option<Arc<PipeRouter>>,
+    /// Flag set when tool list changes (load/unload/auto-unload).
+    /// The main loop checks this after each request to send notifications.
+    tools_changed: bool,
 }
 
 /// Run the MCP server on stdin/stdout.
@@ -104,19 +107,33 @@ pub struct McpServerState {
 /// stdin, dispatches them, and writes responses to stdout. Diagnostic logs go
 /// to stderr.
 ///
-/// The optional `pipe` parameter enables fast named-pipe IPC for voice_send/voice_listen.
-/// When `None`, the server falls back to file-based IPC (inbox.json).
+/// The optional `router` parameter enables fast named-pipe IPC for voice_send/voice_listen
+/// and browser tool requests. When `None`, the server falls back to file-based IPC (inbox.json).
+///
+/// The optional `enabled_groups` parameter (comma-separated group names from
+/// `ENABLED_GROUPS` env var) pre-loads tool groups at startup so they appear
+/// in the initial `tools/list` response.
 pub async fn run_server(
     data_dir: std::path::PathBuf,
-    pipe: Option<Arc<PipeClient>>,
+    router: Option<Arc<PipeRouter>>,
+    enabled_groups: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Ensure data directory exists
     tokio::fs::create_dir_all(&data_dir).await?;
 
+    let mut registry = ToolRegistry::new();
+
+    // Pre-load groups from ENABLED_GROUPS env var so they appear in
+    // the initial tools/list handshake (BUG-005 Fix 1).
+    if let Some(ref groups_str) = enabled_groups {
+        registry.apply_enabled_groups(groups_str);
+    }
+
     let state = Arc::new(Mutex::new(McpServerState {
-        registry: ToolRegistry::new(),
+        registry,
         data_dir,
-        pipe,
+        router,
+        tools_changed: false,
     }));
 
     let stdin = tokio::io::stdin();
@@ -172,6 +189,21 @@ pub async fn run_server(
                 // Method handled as notification, no response needed
             }
         }
+
+        // Send tools/list_changed notification if tool list was modified
+        // (BUG-005 Fix 2). This tells the MCP client to re-fetch tools/list.
+        {
+            let mut st = state.lock().await;
+            if st.tools_changed {
+                st.tools_changed = false;
+                let notification = JsonRpcNotification {
+                    jsonrpc: "2.0".into(),
+                    method: "notifications/tools/list_changed".into(),
+                    params: None,
+                };
+                write_notification(&mut writer, &notification).await;
+            }
+        }
     }
 
     eprintln!("MCP server stdin closed, shutting down");
@@ -224,7 +256,7 @@ fn handle_initialize(id: Value) -> JsonRpcResponse {
                 }
             },
             "serverInfo": {
-                "name": "voice-mirror-electron",
+                "name": "voice-mirror",
                 "version": "1.0.0"
             }
         }),
@@ -265,14 +297,14 @@ async fn handle_tools_call(
         return JsonRpcResponse::error(id, -32602, "Missing tool name in params");
     }
 
-    // Record tool call and get data_dir + pipe
-    let (data_dir, is_destructive, pipe) = {
+    // Record tool call and get data_dir + router
+    let (data_dir, is_destructive, router) = {
         let mut state = state.lock().await;
         state.registry.record_tool_call(&tool_name);
         (
             state.data_dir.clone(),
             state.registry.is_destructive(&tool_name),
-            state.pipe.clone(),
+            state.router.clone(),
         )
     };
 
@@ -291,15 +323,14 @@ async fn handle_tools_call(
     }
 
     // Route to handler
-    let result = route_tool_call(&tool_name, &args, &data_dir, state.clone(), pipe.as_ref()).await;
+    let result = route_tool_call(&tool_name, &args, &data_dir, state.clone(), router.as_ref()).await;
 
     // After tool execution, check for idle groups
     {
         let mut state = state.lock().await;
         let unloaded = state.registry.auto_unload_idle();
         if !unloaded.is_empty() {
-            // In a full implementation we'd send a tools/list_changed notification here.
-            // For now, just log it.
+            state.tools_changed = true;
             info!("[MCP] Auto-unloaded idle groups: {:?}", unloaded);
         }
     }
@@ -312,58 +343,12 @@ async fn route_tool_call(
     name: &str,
     args: &Value,
     data_dir: &std::path::Path,
-    state: Arc<Mutex<McpServerState>>,
-    pipe: Option<&Arc<PipeClient>>,
+    _state: Arc<Mutex<McpServerState>>,
+    router: Option<&Arc<PipeRouter>>,
 ) -> McpToolResult {
     match name {
-        // ---- Meta tools ----
-        "load_tools" => {
-            let group = args.get("group").and_then(|v| v.as_str()).unwrap_or("");
-            if group.is_empty() {
-                return McpToolResult::error("Error: group is required");
-            }
-            let mut state = state.lock().await;
-            match state.registry.load_group(group) {
-                Ok(tool_names) => McpToolResult::text(format!(
-                    "Loaded tool group \"{}\" ({} tools):\n{}",
-                    group,
-                    tool_names.len(),
-                    tool_names.join(", ")
-                )),
-                Err(e) => McpToolResult::error(e),
-            }
-        }
-        "unload_tools" => {
-            let group = args.get("group").and_then(|v| v.as_str()).unwrap_or("");
-            if group.is_empty() {
-                return McpToolResult::error("Error: group is required");
-            }
-            let mut state = state.lock().await;
-            match state.registry.unload_group(group) {
-                Ok(count) => McpToolResult::text(format!(
-                    "Unloaded tool group \"{}\". {} tools removed from context.",
-                    group, count
-                )),
-                Err(e) => McpToolResult::error(e),
-            }
-        }
-        "list_tool_groups" => {
-            let state = state.lock().await;
-            let groups = state.registry.list_groups();
-            let mut lines = vec!["=== Tool Groups ===".to_string(), String::new()];
-            for g in &groups {
-                lines.push(format!(
-                    "[{}] {} ({} tools) -- {}",
-                    g.status, g.name, g.tool_count, g.description
-                ));
-                lines.push(format!("  Tools: {}", g.tool_names.join(", ")));
-                lines.push(String::new());
-            }
-            McpToolResult::text(lines.join("\n"))
-        }
-
         // ---- Core tools ----
-        "voice_send" => handlers::core::handle_voice_send(args, data_dir, pipe).await,
+        "voice_send" => handlers::core::handle_voice_send(args, data_dir, router).await,
         "voice_inbox" => {
             let result = handlers::core::handle_voice_inbox(args, data_dir).await;
             // Auto-load by intent based on inbox messages
@@ -371,7 +356,7 @@ async fn route_tool_call(
             //  The Node.js version does it inline.)
             result
         }
-        "voice_listen" => handlers::core::handle_voice_listen(args, data_dir, pipe).await,
+        "voice_listen" => handlers::core::handle_voice_listen(args, data_dir, router).await,
         "voice_status" => handlers::core::handle_voice_status(args, data_dir).await,
 
         // ---- Memory tools ----
@@ -382,26 +367,27 @@ async fn route_tool_call(
         "memory_stats" => handlers::memory::handle_memory_stats(args, data_dir).await,
         "memory_flush" => handlers::memory::handle_memory_flush(args, data_dir).await,
 
-        // ---- Screen tools ----
-        "capture_screen" => handlers::screen::handle_capture_screen(args, data_dir).await,
-
         // ---- Browser tools ----
-        "browser_start" => handlers::browser::handle_browser_start(args, data_dir).await,
+        "browser_start" => handlers::browser::handle_browser_start(args, data_dir, router).await,
         "browser_stop" => handlers::browser::handle_browser_stop(args, data_dir).await,
-        "browser_status" => handlers::browser::handle_browser_status(args, data_dir).await,
-        "browser_tabs" => handlers::browser::handle_browser_tabs(args, data_dir).await,
-        "browser_open" => handlers::browser::handle_browser_open(args, data_dir).await,
-        "browser_close_tab" => handlers::browser::handle_browser_close_tab(args, data_dir).await,
-        "browser_focus" => handlers::browser::handle_browser_focus(args, data_dir).await,
-        "browser_navigate" => handlers::browser::handle_browser_navigate(args, data_dir).await,
-        "browser_screenshot" => handlers::browser::handle_browser_screenshot(args, data_dir).await,
-        "browser_snapshot" => handlers::browser::handle_browser_snapshot(args, data_dir).await,
-        "browser_act" => handlers::browser::handle_browser_act(args, data_dir).await,
-        "browser_console" => handlers::browser::handle_browser_console(args, data_dir).await,
+        "browser_status" => handlers::browser::handle_browser_status(args, data_dir, router).await,
+        "browser_tabs" => handlers::browser::handle_browser_tabs(args, data_dir, router).await,
+        "browser_open" => handlers::browser::handle_browser_open(args, data_dir, router).await,
+        "browser_close_tab" => handlers::browser::handle_browser_close_tab(args, data_dir, router).await,
+        "browser_focus" => handlers::browser::handle_browser_focus(args, data_dir, router).await,
+        "browser_navigate" => handlers::browser::handle_browser_navigate(args, data_dir, router).await,
+        "browser_screenshot" => handlers::browser::handle_browser_screenshot(args, data_dir, router).await,
+        "browser_snapshot" => handlers::browser::handle_browser_snapshot(args, data_dir, router).await,
+        "browser_act" => handlers::browser::handle_browser_act(args, data_dir, router).await,
+        "browser_console" => handlers::browser::handle_browser_console(args, data_dir, router).await,
         "browser_search" => handlers::browser::handle_browser_search(args, data_dir).await,
         "browser_fetch" => handlers::browser::handle_browser_fetch(args, data_dir).await,
-        "browser_cookies" => handlers::browser::handle_browser_cookies(args, data_dir).await,
-        "browser_storage" => handlers::browser::handle_browser_storage(args, data_dir).await,
+        "browser_cookies" => handlers::browser::handle_browser_cookies(args, data_dir, router).await,
+        "browser_storage" => handlers::browser::handle_browser_storage(args, data_dir, router).await,
+
+        // ---- Capture tools ----
+        "capture_list_windows" => handlers::capture::handle_capture_list_windows(args, data_dir, router).await,
+        "capture_window" => handlers::capture::handle_capture_window(args, data_dir, router).await,
 
         // ---- n8n tools ----
         "n8n_list_workflows" => handlers::n8n::handle_n8n_list_workflows(args, data_dir).await,
@@ -427,19 +413,6 @@ async fn route_tool_call(
         "n8n_delete_tag" => handlers::n8n::handle_n8n_delete_tag(args, data_dir).await,
         "n8n_list_variables" => handlers::n8n::handle_n8n_list_variables(args, data_dir).await,
 
-        // ---- Diagnostic tools ----
-        "pipeline_trace" => handlers::diagnostic::handle_pipeline_trace(args, data_dir).await,
-
-        // ---- Facade tools (voice mode) ----
-        "memory_manage" => handlers::facades::handle_memory_manage(args, data_dir).await,
-        "n8n_manage" => handlers::facades::handle_n8n_manage(args, data_dir).await,
-        "browser_manage" => handlers::facades::handle_browser_manage(args, data_dir).await,
-
-        // ---- Voice clone tools ----
-        "clone_voice" => handlers::voice_clone::handle_clone_voice(args, data_dir).await,
-        "clear_voice_clone" => handlers::voice_clone::handle_clear_voice_clone(args, data_dir).await,
-        "list_voice_clones" => handlers::voice_clone::handle_list_voice_clones(args, data_dir).await,
-
         _ => McpToolResult::error(format!("Unknown tool: {}", name)),
     }
 }
@@ -458,6 +431,28 @@ async fn write_response<W: AsyncWriteExt + Unpin>(writer: &mut W, response: &Jso
         }
         Err(e) => {
             error!("[MCP] Failed to serialize response: {}", e);
+        }
+    }
+}
+
+/// Write a JSON-RPC notification to stdout (no id, no response expected).
+async fn write_notification<W: AsyncWriteExt + Unpin>(
+    writer: &mut W,
+    notification: &JsonRpcNotification,
+) {
+    match serde_json::to_string(notification) {
+        Ok(json) => {
+            let line = format!("{}\n", json);
+            if let Err(e) = writer.write_all(line.as_bytes()).await {
+                error!("[MCP] Failed to write notification: {}", e);
+            }
+            if let Err(e) = writer.flush().await {
+                error!("[MCP] Failed to flush stdout: {}", e);
+            }
+            info!("[MCP] Sent tools/list_changed notification");
+        }
+        Err(e) => {
+            error!("[MCP] Failed to serialize notification: {}", e);
         }
     }
 }
@@ -486,7 +481,7 @@ mod tests {
     fn test_handle_initialize() {
         let resp = handle_initialize(json!(1));
         let result = resp.result.unwrap();
-        assert_eq!(result["serverInfo"]["name"], "voice-mirror-electron");
+        assert_eq!(result["serverInfo"]["name"], "voice-mirror");
         assert!(result["capabilities"]["tools"]["listChanged"].as_bool().unwrap());
     }
 
@@ -495,13 +490,14 @@ mod tests {
         let state = McpServerState {
             registry: ToolRegistry::new(),
             data_dir: std::path::PathBuf::from("/tmp/test"),
-            pipe: None,
+            router: None,
+            tools_changed: false,
         };
         let resp = handle_tools_list(json!(1), &state);
         let result = resp.result.unwrap();
         let tools = result["tools"].as_array().unwrap();
-        // Default: core (4) + meta (3) = 7
-        assert_eq!(tools.len(), 7);
+        // Default: core (4) + capture (2) = 6 always-loaded tools
+        assert_eq!(tools.len(), 6);
     }
 
     #[test]
@@ -510,5 +506,60 @@ mod tests {
         let req: JsonRpcRequest = serde_json::from_str(json).unwrap();
         assert_eq!(req.method, "tools/list");
         assert_eq!(req.id, Some(json!(1)));
+    }
+
+    #[test]
+    fn test_enabled_groups_loads_tools_at_startup() {
+        // BUG-005 Fix 1: ENABLED_GROUPS should pre-load tool groups
+        let mut registry = ToolRegistry::new();
+        // Default: always-loaded groups = core (4) + capture (2) = 6
+        assert_eq!(registry.list_tools().len(), 6);
+
+        // Apply enabled groups (simulating ENABLED_GROUPS env var)
+        // always_loaded groups (core, capture) are always included
+        registry.apply_enabled_groups("core,memory");
+        let tools = registry.list_tools();
+
+        // Should have core (4) + memory (6) + capture (2) = 12
+        assert_eq!(tools.len(), 12);
+        let tool_names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
+        assert!(tool_names.contains(&"memory_search"));
+        assert!(tool_names.contains(&"capture_window"));
+    }
+
+    #[test]
+    fn test_enabled_groups_in_tools_list() {
+        // Verify that tools/list returns all enabled-group tools
+        let mut registry = ToolRegistry::new();
+        registry.apply_enabled_groups("core,browser");
+
+        let state = McpServerState {
+            registry,
+            data_dir: std::path::PathBuf::from("/tmp/test"),
+            router: None,
+            tools_changed: false,
+        };
+        let resp = handle_tools_list(json!(1), &state);
+        let result = resp.result.unwrap();
+        let tools = result["tools"].as_array().unwrap();
+        // core (4) + capture (2) + browser (16) = 22
+        assert!(tools.len() > 6, "Should have more than default 6 tools");
+        let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
+        assert!(names.contains(&"browser_start"));
+    }
+
+    #[test]
+    fn test_notification_serialization() {
+        // BUG-005 Fix 2: verify notification JSON format
+        let notification = JsonRpcNotification {
+            jsonrpc: "2.0".into(),
+            method: "notifications/tools/list_changed".into(),
+            params: None,
+        };
+        let json = serde_json::to_string(&notification).unwrap();
+        assert!(json.contains("\"jsonrpc\":\"2.0\""));
+        assert!(json.contains("\"method\":\"notifications/tools/list_changed\""));
+        // params should be omitted (skip_serializing_if)
+        assert!(!json.contains("\"params\""));
     }
 }

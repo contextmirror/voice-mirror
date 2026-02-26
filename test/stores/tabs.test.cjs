@@ -27,10 +27,11 @@ describe('tabs.svelte.js', () => {
     assert.ok(src.includes('let activeTabId'), 'Should have activeTabId state');
   });
 
-  it('has browser tab as default', () => {
+  it('starts with empty tabs array (browser is not a tab)', () => {
+    // Browser was decoupled from tabs -- it's now a fixed UI element in LensWorkspace
     assert.ok(
-      src.includes("id: 'browser'") && src.includes("type: 'browser'"),
-      'Should have default browser tab'
+      !src.includes("id: 'browser'") || !src.includes("type: 'browser'"),
+      'Should not have browser as a default tab'
     );
   });
 
@@ -79,7 +80,7 @@ describe('tabs.svelte.js: methods', () => {
 
 describe('tabs.svelte.js: preview tab logic', () => {
   it('creates preview tabs on openFile', () => {
-    assert.ok(src.includes('preview: true'), 'Should create tabs with preview: true');
+    assert.ok(src.includes('preview: previewEnabled'), 'Should create tabs with preview based on previewEnabled setting');
   });
 
   it('replaces existing preview tab', () => {
@@ -92,20 +93,40 @@ describe('tabs.svelte.js: preview tab logic', () => {
   it('pinTab sets preview to false', () => {
     assert.ok(src.includes('preview = false') || src.includes('preview: false'), 'Should unset preview on pin');
   });
+
+  it('has previewEnabled state', () => {
+    assert.ok(src.includes('previewEnabled'), 'Should have previewEnabled state');
+    assert.ok(src.includes('get previewEnabled()'), 'Should expose previewEnabled getter');
+  });
+
+  it('has togglePreviewMode method', () => {
+    assert.ok(src.includes('togglePreviewMode'), 'Should have togglePreviewMode method');
+  });
+
+  it('togglePreviewMode pins existing preview tabs when disabling', () => {
+    assert.ok(src.includes('!previewEnabled'), 'Should check previewEnabled state');
+    assert.ok(src.includes('tab.preview = false'), 'Should pin preview tabs when disabling');
+  });
+
+  it('respects previewEnabled when opening files', () => {
+    // When disabled, previewIdx search is skipped
+    assert.ok(src.includes('previewEnabled ? tabs.findIndex'), 'Should skip preview replacement when disabled');
+  });
 });
 
-describe('tabs.svelte.js: browser tab protection', () => {
-  it('prevents closing browser tab', () => {
+describe('tabs.svelte.js: browser decoupled', () => {
+  it('does not contain browser tab type', () => {
+    // Browser is now a fixed UI element in LensWorkspace, not a tab
     assert.ok(
-      src.includes("id === 'browser'") || src.includes("=== 'browser'"),
-      'Should check for browser tab in closeTab'
+      !src.includes("type: 'browser'"),
+      'Should not have browser tab type (browser decoupled)'
     );
   });
 
-  it('closeAll keeps browser tab', () => {
+  it('closeAll resets all tabs and groups', () => {
     assert.ok(
-      src.includes("type: 'browser'"),
-      'Should re-add browser tab in closeAll'
+      src.includes('closeAll') && src.includes('tabs.length = 0'),
+      'closeAll should clear all tabs'
     );
   });
 });
@@ -131,6 +152,131 @@ describe('tabs.svelte.js: tab switching on close', () => {
     assert.ok(
       src.includes('activeTabId === id') || src.includes('activeTabId'),
       'Should handle active tab switching on close'
+    );
+  });
+});
+
+// ============ groupId support ============
+
+describe('tabs.svelte.js: groupId support', () => {
+  it('tab objects include groupId field', () => {
+    assert.ok(src.includes('groupId'), 'Tab objects should have groupId field');
+  });
+
+  it('openFile sets groupId on new tabs', () => {
+    // openFile should assign a groupId when creating a tab
+    const openFileStart = src.indexOf('openFile(');
+    const chunk = src.slice(openFileStart, openFileStart + 1500);
+    assert.ok(chunk.includes('groupId'), 'openFile should set groupId on new tabs');
+  });
+
+  it('has getTabsForGroup method', () => {
+    assert.ok(src.includes('getTabsForGroup(') || src.includes('getTabsForGroup ('), 'Should have getTabsForGroup method');
+  });
+
+  it('has getActiveTabForGroup method', () => {
+    assert.ok(
+      src.includes('getActiveTabForGroup(') || src.includes('getActiveTabForGroup ('),
+      'Should have getActiveTabForGroup method'
+    );
+  });
+});
+
+// ============ split operations ============
+
+describe('tabs.svelte.js: split operations', () => {
+  it('has openFileToSide method', () => {
+    assert.ok(src.includes('openFileToSide(') || src.includes('openFileToSide ('), 'Should have openFileToSide method');
+  });
+
+  it('has moveTab method', () => {
+    assert.ok(src.includes('moveTab(') || src.includes('moveTab ('), 'Should have moveTab method');
+  });
+
+  it('has reorderTab method', () => {
+    assert.ok(src.includes('reorderTab(') || src.includes('reorderTab ('), 'Should have reorderTab method');
+  });
+});
+
+// ============ group-scoped operations ============
+
+describe('tabs.svelte.js: group-scoped operations', () => {
+  it('closeTab checks if group becomes empty', () => {
+    assert.ok(
+      src.includes('closeTab') && (src.includes('groupId') || src.includes('closeGroup')),
+      'closeTab should check if the group becomes empty'
+    );
+  });
+
+  it('closeOthers scopes to groupId', () => {
+    assert.ok(
+      src.includes('closeOthers') && src.includes('groupId'),
+      'closeOthers should scope to groupId'
+    );
+  });
+
+  it('closeToRight scopes to groupId', () => {
+    assert.ok(
+      src.includes('closeToRight') && src.includes('groupId'),
+      'closeToRight should scope to groupId'
+    );
+  });
+
+  it('openFile respects targetGroupId parameter', () => {
+    assert.ok(
+      src.includes('targetGroupId') || src.includes('groupId'),
+      'openFile should accept a target group'
+    );
+  });
+
+  it('preview replacement scoped to group', () => {
+    // Preview tab replacement should only replace preview tabs in the same group
+    assert.ok(
+      src.includes('preview') && src.includes('groupId'),
+      'Preview replacement should be scoped to group'
+    );
+  });
+});
+
+// ============ browser tab removed ============
+
+describe('tabs.svelte.js: browser tab removal', () => {
+  it('imports editorGroupsStore', () => {
+    assert.ok(
+      src.includes('editorGroupsStore') || src.includes('editor-groups.svelte.js'),
+      'Should import editorGroupsStore for group management'
+    );
+  });
+});
+
+describe('tabs.svelte.js: diff tab support', () => {
+  it('has openDiff method', () => {
+    assert.ok(src.includes('openDiff('), 'Should have openDiff method');
+  });
+
+  it('openDiff creates diff tab with diffStats: null', () => {
+    assert.ok(src.includes('diffStats: null'), 'Should initialize diffStats as null');
+  });
+
+  it('openDiff uses diff: prefix for tab id', () => {
+    assert.ok(src.includes('`diff:${'), 'Should prefix diff tab ids');
+  });
+
+  it('openDiff sets type to diff', () => {
+    assert.ok(
+      src.includes("type: 'diff'"),
+      'Should set tab type to diff'
+    );
+  });
+
+  it('has setDiffStats method', () => {
+    assert.ok(src.includes('setDiffStats('), 'Should have setDiffStats method');
+  });
+
+  it('setDiffStats finds tab by id and sets stats', () => {
+    assert.ok(
+      src.includes('tab.diffStats = stats'),
+      'Should assign stats to tab.diffStats'
     );
   });
 });

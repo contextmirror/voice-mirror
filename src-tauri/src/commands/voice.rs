@@ -26,6 +26,35 @@ pub fn start_voice(
     app_handle: AppHandle,
     voice_state: State<'_, VoiceEngineState>,
 ) -> IpcResponse {
+    // Read the saved config so the engine starts with user's settings
+    // (STT model, GPU toggle, TTS adapter, etc.) instead of hardcoded defaults.
+    let app_cfg = super::config::get_config_snapshot();
+    let voice_cfg = crate::voice::VoiceEngineConfig {
+        mode: crate::voice::VoiceMode::from_str_flexible(
+            &app_cfg.behavior.activation_mode,
+        )
+        .unwrap_or_default(),
+        stt_adapter: app_cfg.voice.stt_adapter.clone(),
+        stt_model_size: app_cfg.voice.stt_model_size.clone(),
+        stt_use_gpu: app_cfg.voice.stt_use_gpu,
+        tts_adapter: app_cfg.voice.tts_adapter.clone(),
+        tts_voice: app_cfg.voice.tts_voice.clone(),
+        tts_speed: app_cfg.voice.tts_speed as f32,
+        tts_volume: app_cfg.voice.tts_volume as f32,
+        input_device: app_cfg.voice.input_device.clone(),
+        output_device: app_cfg.voice.output_device.clone(),
+        ..Default::default()
+    };
+
+    tracing::info!(
+        stt_model = %voice_cfg.stt_model_size,
+        stt_adapter = %voice_cfg.stt_adapter,
+        use_gpu = voice_cfg.stt_use_gpu,
+        tts_adapter = %voice_cfg.tts_adapter,
+        mode = %voice_cfg.mode,
+        "start_voice: applying saved config"
+    );
+
     let mut engine = match voice_state.lock() {
         Ok(guard) => guard,
         Err(e) => return IpcResponse::err(format!("Failed to lock voice state: {}", e)),
@@ -34,6 +63,9 @@ pub fn start_voice(
     if engine.is_running() {
         return IpcResponse::err("Voice engine is already running");
     }
+
+    // Apply saved config before starting
+    engine.update_config(voice_cfg);
 
     match engine.start(app_handle) {
         Ok(()) => {
@@ -264,8 +296,308 @@ pub fn configure_dictation_key(key_spec: String) -> IpcResponse {
 /// Used by the dictation feature: after STT transcribes speech, the
 /// frontend calls this to paste the text into whatever app has focus.
 #[tauri::command]
-pub async fn inject_text(text: String) -> Result<(), String> {
-    crate::services::text_injector::inject_text(&text).await
+pub async fn inject_text(text: String) -> IpcResponse {
+    match crate::services::text_injector::inject_text(&text).await {
+        Ok(()) => IpcResponse::ok_empty(),
+        Err(e) => IpcResponse::err(e),
+    }
+}
+
+/// Ensure a Whisper STT model is downloaded and ready.
+///
+/// Downloads the model from HuggingFace if it doesn't exist locally.
+/// Emits `stt-download-progress` events with percentage and byte counts.
+/// Returns immediately if the model is already present on disk.
+#[tauri::command]
+pub async fn ensure_stt_model(app_handle: AppHandle, model_size: String) -> IpcResponse {
+    let data_dir = crate::services::platform::get_data_dir();
+    match crate::voice::stt::ensure_model_exists(&data_dir, &model_size, Some(&app_handle)).await {
+        Ok(path) => IpcResponse::ok(json!({
+            "path": path.display().to_string(),
+            "modelSize": model_size,
+        })),
+        Err(e) => IpcResponse::err(format!("{}", e)),
+    }
+}
+
+/// Restart the voice pipeline with the current configuration.
+///
+/// Reads the latest saved app config, builds a fresh `VoiceEngineConfig`,
+/// stops the pipeline if running, updates the engine config, then starts
+/// again. This picks up any config changes (STT model, TTS adapter, etc.)
+/// without requiring an app restart. Works for both AI voice and dictation modes.
+#[tauri::command]
+pub fn restart_voice(
+    app_handle: AppHandle,
+    voice_state: State<'_, VoiceEngineState>,
+) -> IpcResponse {
+    // Read the latest saved config so the engine picks up new STT model etc.
+    let app_cfg = super::config::get_config_snapshot();
+    let voice_cfg = crate::voice::VoiceEngineConfig {
+        mode: crate::voice::VoiceMode::from_str_flexible(
+            &app_cfg.behavior.activation_mode,
+        )
+        .unwrap_or_default(),
+        stt_adapter: app_cfg.voice.stt_adapter.clone(),
+        stt_model_size: app_cfg.voice.stt_model_size.clone(),
+        stt_use_gpu: app_cfg.voice.stt_use_gpu,
+        tts_adapter: app_cfg.voice.tts_adapter.clone(),
+        tts_voice: app_cfg.voice.tts_voice.clone(),
+        tts_speed: app_cfg.voice.tts_speed as f32,
+        tts_volume: app_cfg.voice.tts_volume as f32,
+        input_device: app_cfg.voice.input_device.clone(),
+        output_device: app_cfg.voice.output_device.clone(),
+        ..Default::default()
+    };
+
+    let mut engine = match voice_state.lock() {
+        Ok(guard) => guard,
+        Err(e) => return IpcResponse::err(format!("Failed to lock voice state: {}", e)),
+    };
+
+    let was_running = engine.is_running();
+    if was_running {
+        engine.stop();
+        tracing::info!("Voice engine stopped for restart");
+    }
+
+    // Update the engine config before starting so it uses the new model/adapter
+    engine.update_config(voice_cfg);
+
+    match engine.start(app_handle) {
+        Ok(()) => {
+            tracing::info!("Voice engine restarted successfully");
+            IpcResponse::ok(json!({
+                "running": true,
+                "wasRunning": was_running,
+            }))
+        }
+        Err(e) => {
+            tracing::error!("Failed to restart voice engine: {}", e);
+            IpcResponse::err(format!("Restart failed: {}", e))
+        }
+    }
+}
+
+/// Detect available GPU for Whisper acceleration.
+///
+/// Runs `nvidia-smi` to check for NVIDIA GPUs and returns GPU name,
+/// VRAM, and driver version. Also reports whether the binary was
+/// compiled with CUDA support.
+///
+/// Falls back to `wmic` on Windows to detect AMD/Intel GPUs when
+/// nvidia-smi is not available. Non-NVIDIA GPUs are reported but
+/// marked as not CUDA-capable.
+#[tauri::command]
+pub fn detect_gpu() -> IpcResponse {
+    let cuda_compiled = cfg!(feature = "cuda");
+
+    // Try NVIDIA first via nvidia-smi
+    if let Ok(output) = std::process::Command::new("nvidia-smi")
+        .args(["--query-gpu=name,memory.total,driver_version", "--format=csv,noheader"])
+        .output()
+    {
+        if output.status.success() {
+            let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            // Parse "NVIDIA GeForce RTX 5070 Ti, 16303 MiB, 581.80"
+            let parts: Vec<&str> = text.split(", ").collect();
+            let name = parts.first().unwrap_or(&"Unknown").to_string();
+            let vram_mb = parts
+                .get(1)
+                .and_then(|s| s.replace(" MiB", "").parse::<u64>().ok());
+            let driver = parts.get(2).unwrap_or(&"").to_string();
+
+            tracing::info!(
+                gpu = %name,
+                vram_mb = ?vram_mb,
+                driver = %driver,
+                cuda_compiled = cuda_compiled,
+                "NVIDIA GPU detected"
+            );
+
+            return IpcResponse::ok(json!({
+                "available": true,
+                "vendor": "nvidia",
+                "name": name,
+                "vramMb": vram_mb,
+                "driverVersion": driver,
+                "cudaCompiled": cuda_compiled,
+            }));
+        }
+    }
+
+    // Fallback: detect non-NVIDIA GPUs via wmic (Windows) or lspci (Linux)
+    let fallback_gpu = detect_gpu_fallback();
+    if let Some((name, vendor)) = fallback_gpu {
+        tracing::info!(
+            gpu = %name,
+            vendor = %vendor,
+            "Non-NVIDIA GPU detected (CUDA not available)"
+        );
+        return IpcResponse::ok(json!({
+            "available": true,
+            "vendor": vendor,
+            "name": name,
+            "vramMb": null,
+            "driverVersion": null,
+            "cudaCompiled": cuda_compiled,
+        }));
+    }
+
+    tracing::info!(cuda_compiled = cuda_compiled, "No GPU detected");
+    IpcResponse::ok(json!({
+        "available": false,
+        "cudaCompiled": cuda_compiled,
+    }))
+}
+
+/// Detect non-NVIDIA GPUs via platform tools.
+/// Returns (name, vendor) if a discrete GPU is found.
+fn detect_gpu_fallback() -> Option<(String, String)> {
+    #[cfg(target_os = "windows")]
+    {
+        // wmic lists all video controllers including integrated graphics.
+        // We filter for discrete GPUs (AMD Radeon, Intel Arc) over generic
+        // "Microsoft Basic" or "Intel UHD" integrated adapters.
+        if let Ok(output) = std::process::Command::new("wmic")
+            .args(["path", "win32_VideoController", "get", "name"])
+            .output()
+        {
+            if output.status.success() {
+                let text = String::from_utf8_lossy(&output.stdout);
+                for line in text.lines() {
+                    let name = line.trim();
+                    if name.is_empty() || name == "Name" {
+                        continue;
+                    }
+                    let lower = name.to_lowercase();
+                    if lower.contains("radeon") && !lower.contains("integrated") {
+                        return Some((name.to_string(), "amd".to_string()));
+                    }
+                    if lower.contains("intel") && lower.contains("arc") {
+                        return Some((name.to_string(), "intel".to_string()));
+                    }
+                }
+                // Second pass: pick any non-generic adapter
+                for line in text.lines() {
+                    let name = line.trim();
+                    if name.is_empty() || name == "Name" {
+                        continue;
+                    }
+                    let lower = name.to_lowercase();
+                    if lower.contains("radeon") || lower.contains("arc") || lower.contains("geforce") {
+                        let vendor = if lower.contains("radeon") { "amd" }
+                            else if lower.contains("intel") { "intel" }
+                            else { "nvidia" };
+                        return Some((name.to_string(), vendor.to_string()));
+                    }
+                }
+            }
+        }
+    }
+    #[cfg(target_os = "linux")]
+    {
+        // lspci to detect GPU on Linux
+        if let Ok(output) = std::process::Command::new("lspci").output() {
+            if output.status.success() {
+                let text = String::from_utf8_lossy(&output.stdout);
+                for line in text.lines() {
+                    let lower = line.to_lowercase();
+                    if lower.contains("vga") || lower.contains("3d controller") {
+                        if lower.contains("amd") || lower.contains("radeon") {
+                            let name = line.split(": ").nth(1).unwrap_or(line).trim();
+                            return Some((name.to_string(), "amd".to_string()));
+                        }
+                        if lower.contains("intel") && lower.contains("arc") {
+                            let name = line.split(": ").nth(1).unwrap_or(line).trim();
+                            return Some((name.to_string(), "intel".to_string()));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+/// List installed Whisper STT models on disk.
+///
+/// Scans the models directory for known GGML model files and returns
+/// their size, filename, and model size identifier.
+#[tauri::command]
+pub fn list_stt_models() -> IpcResponse {
+    let data_dir = crate::services::platform::get_data_dir();
+    let models_dir = data_dir.join("models");
+
+    let known_models: &[(&str, &str)] = &[
+        ("tiny", "ggml-tiny.en.bin"),
+        ("base", "ggml-base.en.bin"),
+        ("small", "ggml-small.en.bin"),
+        ("large-v3-turbo", "ggml-large-v3-turbo-q5_0.bin"),
+        ("large-v3", "ggml-large-v3.bin"),
+    ];
+
+    let mut installed = Vec::new();
+    for (size, filename) in known_models {
+        let path = models_dir.join(filename);
+        if path.exists() {
+            let bytes = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+            installed.push(json!({
+                "modelSize": size,
+                "filename": filename,
+                "sizeMb": (bytes as f64 / 1_048_576.0).round(),
+            }));
+        }
+    }
+
+    IpcResponse::ok(json!({ "models": installed }))
+}
+
+/// Delete an installed Whisper STT model from disk.
+///
+/// Refuses to delete a model that is currently in use by the running
+/// voice engine. Returns the deleted model size on success.
+#[tauri::command]
+pub fn delete_stt_model(
+    model_size: String,
+    voice_state: State<'_, VoiceEngineState>,
+) -> IpcResponse {
+    // Safety: refuse to delete if voice engine is running with this model
+    let engine = match voice_state.lock() {
+        Ok(guard) => guard,
+        Err(e) => return IpcResponse::err(format!("Failed to lock voice state: {}", e)),
+    };
+    let active_model = engine.config().stt_model_size.clone();
+    let is_running = engine.is_running();
+    tracing::info!(
+        model_size = %model_size,
+        active_model = %active_model,
+        is_running = is_running,
+        "delete_stt_model requested"
+    );
+    if is_running && active_model == model_size {
+        return IpcResponse::err(
+            "Cannot delete the active model. Stop the voice engine first.",
+        );
+    }
+    drop(engine); // release lock before file I/O
+
+    let data_dir = crate::services::platform::get_data_dir();
+    let filename = crate::voice::stt::model_filename(&model_size);
+    let model_path = data_dir.join("models").join(&filename);
+    tracing::info!(model_path = %model_path.display(), exists = model_path.exists(), "delete target");
+
+    if !model_path.exists() {
+        return IpcResponse::err("Model file not found");
+    }
+
+    match std::fs::remove_file(&model_path) {
+        Ok(()) => {
+            tracing::info!(model_size = %model_size, filename = %filename, "STT model deleted");
+            IpcResponse::ok(json!({ "deleted": model_size, "filename": filename }))
+        }
+        Err(e) => IpcResponse::err(format!("Failed to delete model: {}", e)),
+    }
 }
 
 // ── Tests ───────────────────────────────────────────────────────────

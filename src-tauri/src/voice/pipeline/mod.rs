@@ -122,7 +122,15 @@ pub(crate) struct PipelineShared {
     /// Whether the pipeline is running.
     pub(crate) running: AtomicBool,
     /// Cancellation flag for TTS playback.
+    /// Used to signal the current speak() call to stop. Also checked by
+    /// the synthesis loop. External callers (barge-in, stop_speaking) set
+    /// this flag, and speak() propagates it to the per-request cancel token.
     pub(crate) tts_cancel: AtomicBool,
+    /// Per-request cancel token for the currently active TTS playback thread.
+    /// This token is owned by the active speak() call and passed to the
+    /// playback thread. When a new speak() cancels the old one, the old
+    /// token stays true so the old playback thread stops draining.
+    pub(crate) active_playback_cancel: Mutex<Option<Arc<AtomicBool>>>,
     /// Force-stop recording flag (PTT release / Toggle stop).
     /// When set, the processing loop immediately transitions Recording -> Processing.
     force_stop_recording: AtomicBool,
@@ -181,12 +189,12 @@ impl VoicePipeline {
         // Create ring buffer for audio
         let (producer, consumer) = create_ring_buffer(RING_BUFFER_CAPACITY);
 
-        // Initialize STT engine (with Electron model dir fallback)
-        let data_dir = crate::services::platform::get_data_dir_with_fallback();
+        let data_dir = crate::services::platform::get_data_dir();
         let stt_engine = match stt::create_stt_engine(
             &config.stt_adapter,
             &data_dir,
             Some(&config.stt_model_size),
+            config.stt_use_gpu,
         ) {
             Ok(engine) => {
                 tracing::info!(adapter = %config.stt_adapter, "STT engine initialized");
@@ -249,6 +257,7 @@ impl VoicePipeline {
             mode: std::sync::Mutex::new(config.mode),
             running: AtomicBool::new(true),
             tts_cancel: AtomicBool::new(false),
+            active_playback_cancel: Mutex::new(None),
             force_stop_recording: AtomicBool::new(false),
             app_handle: app_handle.clone(),
             ring_producer: Mutex::new(Some(producer)),
@@ -312,6 +321,11 @@ impl VoicePipeline {
         tracing::info!("Stopping voice pipeline");
         self.shared.running.store(false, Ordering::SeqCst);
         self.shared.tts_cancel.store(true, Ordering::SeqCst);
+        if let Ok(guard) = self.shared.active_playback_cancel.lock() {
+            if let Some(ref cancel) = *guard {
+                cancel.store(true, Ordering::SeqCst);
+            }
+        }
 
         let _ = self
             .shared
@@ -388,6 +402,12 @@ impl VoicePipeline {
                 // Barge-in: interrupt TTS and start recording immediately
                 tracing::info!("Barge-in: interrupting TTS to start recording");
                 self.shared.tts_cancel.store(true, Ordering::SeqCst);
+                // Also cancel the per-request playback token
+                if let Ok(guard) = self.shared.active_playback_cancel.lock() {
+                    if let Some(ref cancel) = *guard {
+                        cancel.store(true, Ordering::SeqCst);
+                    }
+                }
                 self.begin_recording();
             }
             _ => {
@@ -437,6 +457,12 @@ impl VoicePipeline {
     /// Interrupt TTS playback.
     pub fn stop_speaking(&self) {
         self.shared.tts_cancel.store(true, Ordering::SeqCst);
+        // Also cancel the per-request playback token
+        if let Ok(guard) = self.shared.active_playback_cancel.lock() {
+            if let Some(ref cancel) = *guard {
+                cancel.store(true, Ordering::SeqCst);
+            }
+        }
         tracing::info!("TTS playback interrupted");
     }
 
@@ -711,8 +737,11 @@ async fn audio_processing_loop(shared: Arc<PipelineShared>) {
                 vad.process_frame(chunk);
 
                 // Check for force-stop (PTT release / Toggle stop) OR silence timeout
+                // In toggle mode, only stop on manual press — never on silence
                 let force_stop = shared.force_stop_recording.swap(false, Ordering::SeqCst);
-                if force_stop || vad.silence_exceeded(silence_timeout) {
+                let current_mode = shared.mode.lock().map(|g| *g).unwrap_or(VoiceMode::PushToTalk);
+                let silence_stop = current_mode != VoiceMode::Toggle && vad.silence_exceeded(silence_timeout);
+                if force_stop || silence_stop {
                     tracing::info!(
                         reason = if force_stop { "manual" } else { "silence" },
                         "Stopping recording"

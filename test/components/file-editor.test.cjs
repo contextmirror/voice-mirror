@@ -13,6 +13,16 @@ const src = fs.readFileSync(
   'utf-8'
 );
 
+const extSrc = fs.readFileSync(
+  path.join(__dirname, '../../src/lib/editor-extensions.js'),
+  'utf-8'
+);
+
+const mdPreviewCss = fs.readFileSync(
+  path.join(__dirname, '../../src/styles/markdown-preview.css'),
+  'utf-8'
+);
+
 describe('FileEditor.svelte', () => {
   it('has file-editor CSS class', () => {
     assert.ok(src.includes('file-editor'), 'Should have file-editor class');
@@ -45,6 +55,63 @@ describe('FileEditor.svelte', () => {
   });
 });
 
+describe('FileEditor.svelte: editor extensions extraction', () => {
+  it('imports buildEditorExtensions from editor-extensions.js', () => {
+    assert.ok(src.includes('buildEditorExtensions'), 'Should import buildEditorExtensions');
+    assert.ok(src.includes('editor-extensions.js'), 'Should import from editor-extensions.js');
+  });
+
+  it('calls buildEditorExtensions with cm, lsp, and options', () => {
+    assert.ok(src.includes('buildEditorExtensions(cm, lsp,'), 'Should call buildEditorExtensions');
+  });
+
+  it('editor-extensions.js exports buildEditorExtensions', () => {
+    assert.ok(extSrc.includes('export function buildEditorExtensions'), 'Should export buildEditorExtensions');
+  });
+
+  it('editor-extensions.js builds basicSetup extension', () => {
+    assert.ok(extSrc.includes('cm.basicSetup'), 'Should include basicSetup');
+  });
+
+  it('editor-extensions.js builds multi-cursor keybindings', () => {
+    assert.ok(extSrc.includes('Ctrl-Alt-ArrowUp'), 'Should have multi-cursor up');
+    assert.ok(extSrc.includes('Ctrl-Alt-ArrowDown'), 'Should have multi-cursor down');
+  });
+
+  it('editor-extensions.js adds LSP keybindings when LSP active', () => {
+    assert.ok(extSrc.includes("'F2'"), 'Should have F2 rename shortcut');
+    assert.ok(extSrc.includes("'Shift-F12'"), 'Should have Shift-F12 references shortcut');
+    assert.ok(extSrc.includes("'Mod-.'"), 'Should have Mod-. code actions shortcut');
+  });
+
+  it('editor-extensions.js adds domEventHandlers', () => {
+    assert.ok(extSrc.includes('domEventHandlers'), 'Should add domEventHandlers');
+  });
+});
+
+describe('editor-extensions.js: CodeMirror minimap', () => {
+  it('imports showMinimap from @replit/codemirror-minimap', () => {
+    assert.ok(extSrc.includes("import { showMinimap }"), 'Should import showMinimap');
+    assert.ok(extSrc.includes('@replit/codemirror-minimap'), 'Should import from @replit/codemirror-minimap');
+  });
+
+  it('adds showMinimap.compute to extensions', () => {
+    assert.ok(extSrc.includes('showMinimap.compute'), 'Should call showMinimap.compute');
+  });
+
+  it('uses blocks display mode', () => {
+    assert.ok(extSrc.includes("displayText: 'blocks'"), 'Should use blocks display text');
+  });
+
+  it('shows overlay always', () => {
+    assert.ok(extSrc.includes("showOverlay: 'always'"), 'Should show overlay always');
+  });
+
+  it('creates container with cm-minimap-container class', () => {
+    assert.ok(extSrc.includes('cm-minimap-container'), 'Should create container with minimap class');
+  });
+});
+
 describe('FileEditor.svelte: CodeMirror integration', () => {
   it('dynamically imports codemirror', () => {
     assert.ok(
@@ -74,7 +141,7 @@ describe('FileEditor.svelte: CodeMirror integration', () => {
   });
 
   it('has Mod-s keymap for save', () => {
-    assert.ok(src.includes('Mod-s'), 'Should have Mod-s save shortcut');
+    assert.ok(extSrc.includes('Mod-s'), 'Should have Mod-s save shortcut in editor-extensions.js');
   });
 
   it('destroys view on cleanup', () => {
@@ -102,7 +169,7 @@ describe('FileEditor.svelte: save functionality', () => {
 
 describe('FileEditor.svelte: dirty tracking', () => {
   it('marks tab dirty on doc change', () => {
-    assert.ok(src.includes('docChanged'), 'Should detect document changes');
+    assert.ok(extSrc.includes('docChanged'), 'Should detect document changes in editor-extensions.js');
   });
 
   it('pins tab on edit', () => {
@@ -111,40 +178,19 @@ describe('FileEditor.svelte: dirty tracking', () => {
 });
 
 describe('FileEditor.svelte: language support', () => {
-  it('has language loading function', () => {
-    assert.ok(src.includes('loadLanguage'), 'Should have loadLanguage function');
+  it('has loadLanguage via shared codemirror-languages.js', () => {
+    assert.ok(src.includes('loadLanguage'), 'Should have loadLanguage reference');
+    assert.ok(
+      src.includes("import { loadLanguageExtension } from '../../lib/codemirror-languages.js'"),
+      'Should import loadLanguageExtension from codemirror-languages.js'
+    );
   });
 
-  it('supports JavaScript', () => {
-    assert.ok(src.includes('@codemirror/lang-javascript'), 'Should support JS');
-  });
-
-  it('supports TypeScript', () => {
-    assert.ok(src.includes('typescript: true'), 'Should support TS');
-  });
-
-  it('supports Rust', () => {
-    assert.ok(src.includes('@codemirror/lang-rust'), 'Should support Rust');
-  });
-
-  it('supports CSS', () => {
-    assert.ok(src.includes('@codemirror/lang-css'), 'Should support CSS');
-  });
-
-  it('supports HTML', () => {
-    assert.ok(src.includes('@codemirror/lang-html'), 'Should support HTML');
-  });
-
-  it('supports JSON', () => {
-    assert.ok(src.includes('@codemirror/lang-json'), 'Should support JSON');
-  });
-
-  it('supports Markdown', () => {
-    assert.ok(src.includes('@codemirror/lang-markdown'), 'Should support Markdown');
-  });
-
-  it('supports Python', () => {
-    assert.ok(src.includes('@codemirror/lang-python'), 'Should support Python');
+  it('delegates language loading to shared module', () => {
+    assert.ok(
+      src.includes('loadLanguageExtension'),
+      'Should use loadLanguageExtension from shared module'
+    );
   });
 });
 
@@ -159,13 +205,13 @@ describe('FileEditor.svelte: autocomplete', () => {
 
   it('enables autocomplete in extensions', () => {
     assert.ok(
-      src.includes('cm.autocompletion('),
-      'Should add autocompletion to editor extensions'
+      extSrc.includes('cm.autocompletion('),
+      'Should add autocompletion to editor extensions in editor-extensions.js'
     );
   });
 
   it('activates on typing', () => {
-    assert.ok(src.includes('activateOnTyping: true'), 'Should activate autocomplete on typing');
+    assert.ok(extSrc.includes('activateOnTyping: true'), 'Should activate autocomplete on typing in editor-extensions.js');
   });
 });
 
@@ -192,10 +238,10 @@ describe('FileEditor.svelte: external file support', () => {
     assert.ok(src.includes('readExternalFile'), 'Should import readExternalFile');
   });
 
-  it('uriToRelativePath returns { path, external } object', () => {
+  it('imports uriToRelativePath from editor-lsp.svelte.js', () => {
     assert.ok(
-      src.includes('external: false') && src.includes('external: true'),
-      'Should distinguish internal vs external paths'
+      src.includes('uriToRelativePath') && src.includes('editor-lsp.svelte.js'),
+      'Should import uriToRelativePath from editor-lsp'
     );
   });
 
@@ -222,8 +268,8 @@ describe('FileEditor.svelte: external file support', () => {
 
   it('applies readOnly extension for read-only tabs', () => {
     assert.ok(
-      src.includes('EditorState.readOnly.of(true)'),
-      'Should add readOnly extension when tab is readOnly'
+      extSrc.includes('EditorState.readOnly.of(true)'),
+      'Should add readOnly extension when tab is readOnly in editor-extensions.js'
     );
   });
 
@@ -300,6 +346,63 @@ describe('FileEditor.svelte: conflict detection', () => {
   });
 });
 
+describe('FileEditor.svelte: gutter context menu fallback (BUG-004)', () => {
+  it('has oncontextmenu handler on .file-editor container', () => {
+    assert.ok(
+      src.includes('oncontextmenu='),
+      'Should have oncontextmenu fallback on container div'
+    );
+  });
+
+  it('skips fallback when CM handler already fired', () => {
+    assert.ok(
+      src.includes('if (editorMenu.visible) return'),
+      'Should skip fallback when editor menu is already visible'
+    );
+  });
+
+  it('tries posAtCoords for line resolution', () => {
+    // The fallback handler resolves line number from click coordinates
+    const handlerStart = src.indexOf('oncontextmenu=');
+    const chunk = src.slice(handlerStart, handlerStart + 800);
+    assert.ok(
+      chunk.includes('posAtCoords'),
+      'Should attempt posAtCoords in fallback handler'
+    );
+  });
+
+  it('falls back to lineBlockAtHeight for gutter clicks', () => {
+    const handlerStart = src.indexOf('oncontextmenu=');
+    const chunk = src.slice(handlerStart, handlerStart + 1200);
+    assert.ok(
+      chunk.includes('lineBlockAtHeight'),
+      'Should try lineBlockAtHeight as secondary line resolution'
+    );
+  });
+
+  it('checks diagnostics by line number for gutter markers', () => {
+    const handlerStart = src.indexOf('oncontextmenu=');
+    const chunk = src.slice(handlerStart, handlerStart + 1500);
+    assert.ok(
+      chunk.includes('cachedDiagnostics'),
+      'Should check cached diagnostics in fallback handler'
+    );
+  });
+});
+
+describe('FileEditor.svelte: group support', () => {
+  it('accepts groupId prop', () => {
+    assert.ok(src.includes('groupId'), 'Should accept groupId prop');
+  });
+
+  it('defaults groupId to 1', () => {
+    assert.ok(
+      src.includes('groupId') && (src.includes('= 1') || src.includes('?? 1')),
+      'Should default groupId to 1'
+    );
+  });
+});
+
 describe('FileEditor.svelte: lifecycle', () => {
   it('uses $effect to react to tab changes', () => {
     assert.ok(src.includes('$effect'), 'Should use $effect for reactive loading');
@@ -323,5 +426,170 @@ describe('FileEditor.svelte: lifecycle', () => {
 
   it('overrides CodeMirror height to fill space', () => {
     assert.ok(src.includes('.cm-editor'), 'Should override cm-editor height');
+  });
+});
+
+describe('FileEditor.svelte: markdown preview', () => {
+  it('imports renderMarkdown from markdown.js', () => {
+    assert.ok(src.includes('renderMarkdown'), 'Should import renderMarkdown');
+    assert.ok(src.includes('markdown.js'), 'Should import from markdown.js');
+  });
+
+  it('has isMarkdown derived check', () => {
+    assert.ok(
+      src.includes('isMarkdown') && src.includes('md|markdown'),
+      'Should have isMarkdown derived checking .md extension'
+    );
+  });
+
+  it('has showPreview state defaulting to true', () => {
+    assert.ok(
+      src.includes('showPreview') && src.includes('$state(true)'),
+      'Should have showPreview state defaulting to true'
+    );
+  });
+
+  it('has markdownContent state for rendered content', () => {
+    assert.ok(src.includes('markdownContent'), 'Should have markdownContent state');
+  });
+
+  it('has markdown-preview class for preview container', () => {
+    assert.ok(src.includes('markdown-preview'), 'Should have markdown-preview class');
+  });
+
+  it('has editor-preview-toolbar class', () => {
+    assert.ok(src.includes('editor-preview-toolbar'), 'Should have editor-preview-toolbar class');
+  });
+
+  it('uses @html to render markdown', () => {
+    assert.ok(
+      src.includes('{@html renderMarkdown('),
+      'Should use @html directive to render markdown'
+    );
+  });
+
+  it('has preview toggle buttons', () => {
+    assert.ok(src.includes('preview-btn'), 'Should have preview toggle buttons');
+  });
+
+  it('hides editor when preview is active', () => {
+    assert.ok(
+      src.includes('file-editor') && src.includes('hidden'),
+      'Should hide editor when preview is shown'
+    );
+  });
+});
+
+describe('FileEditor.svelte: markdown preview styles', () => {
+  it('imports markdown-preview.css', () => {
+    assert.ok(
+      src.includes("@import '../../styles/markdown-preview.css'"),
+      'Should import markdown-preview.css in style block'
+    );
+  });
+
+  it('has table styling in markdown-preview', () => {
+    assert.ok(
+      mdPreviewCss.includes('.markdown-preview') && mdPreviewCss.includes('border-collapse'),
+      'Should style tables in markdown preview'
+    );
+  });
+
+  it('has heading styles', () => {
+    assert.ok(
+      mdPreviewCss.includes(':global(h1)') && mdPreviewCss.includes(':global(h2)'),
+      'Should have heading styles in markdown preview'
+    );
+  });
+
+  it('has code block styling', () => {
+    assert.ok(
+      mdPreviewCss.includes('.markdown-preview') && mdPreviewCss.includes(':global(pre)'),
+      'Should have code block styles in preview'
+    );
+  });
+
+  it('has blockquote styling', () => {
+    assert.ok(
+      mdPreviewCss.includes('.markdown-preview') && mdPreviewCss.includes(':global(blockquote)'),
+      'Should have blockquote styles in preview'
+    );
+  });
+
+  it('has list styling', () => {
+    assert.ok(
+      mdPreviewCss.includes('.markdown-preview') && mdPreviewCss.includes(':global(ul)'),
+      'Should have list styles in preview'
+    );
+  });
+
+  it('has collapsible code block support', () => {
+    assert.ok(
+      mdPreviewCss.includes('.markdown-preview') && mdPreviewCss.includes('code-collapse'),
+      'Should have collapsible code block styles'
+    );
+  });
+});
+
+describe('FileEditor.svelte: markdown preview config', () => {
+  it('imports configStore', () => {
+    assert.ok(src.includes('configStore'), 'Should import configStore');
+  });
+
+  it('derives markdownPreviewDefault from config', () => {
+    assert.ok(
+      src.includes('markdownPreviewDefault') && src.includes('editor?.markdownPreview'),
+      'Should derive preview default from editor config'
+    );
+  });
+
+  it('resets showPreview to config default on file load', () => {
+    const loadStart = src.indexOf('async function loadFile');
+    const chunk = src.slice(loadStart, loadStart + 500);
+    assert.ok(
+      chunk.includes('showPreview = markdownPreviewDefault'),
+      'Should reset showPreview to config default when loading a new file'
+    );
+  });
+});
+
+describe('FileEditor.svelte: markdown link safety', () => {
+  it('imports open from @tauri-apps/plugin-shell', () => {
+    assert.ok(
+      src.includes("import { open } from '@tauri-apps/plugin-shell'"),
+      'Should import shell open for external links'
+    );
+  });
+
+  it('intercepts link clicks in markdown preview', () => {
+    assert.ok(
+      src.includes("closest('a[href]')"),
+      'Should use closest to find clicked links'
+    );
+  });
+
+  it('opens external links via shell open', () => {
+    const previewStart = src.indexOf('markdown-preview');
+    const chunk = src.slice(previewStart, previewStart + 500);
+    assert.ok(
+      chunk.includes('open(href)'),
+      'Should open links with Tauri shell'
+    );
+  });
+
+  it('only opens http/https links externally', () => {
+    assert.ok(
+      src.includes("href.startsWith('http://')") || src.includes("href.startsWith('https://')"),
+      'Should only open http/https links'
+    );
+  });
+
+  it('prevents default navigation on link click', () => {
+    const previewStart = src.indexOf('markdown-preview');
+    const chunk = src.slice(previewStart, previewStart + 500);
+    assert.ok(
+      chunk.includes('e.preventDefault()'),
+      'Should prevent default link navigation'
+    );
   });
 });

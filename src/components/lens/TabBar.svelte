@@ -2,6 +2,8 @@
   import { tabsStore } from '../../lib/stores/tabs.svelte.js';
   import TabContextMenu from './TabContextMenu.svelte';
 
+  let {} = $props();
+
   let tabMenu = $state({ visible: false, x: 0, y: 0, tab: null });
 
   function handleTabContextMenu(event, tab) {
@@ -27,7 +29,6 @@
   }
 
   function getTabIcon(tab) {
-    if (tab.type === 'browser') return 'globe';
     if (tab.type === 'diff') return 'diff';
     const ext = tab.title?.split('.').pop()?.toLowerCase() || '';
     if (['js', 'jsx', 'mjs', 'cjs', 'ts', 'tsx'].includes(ext)) return 'code';
@@ -59,9 +60,7 @@
       title={tab.path || tab.title}
     >
       <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        {#if getTabIcon(tab) === 'globe'}
-          <circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
-        {:else if getTabIcon(tab) === 'diff'}
+        {#if getTabIcon(tab) === 'diff'}
           <circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/>
         {:else}
           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
@@ -73,7 +72,12 @@
           <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
         </svg>
       {/if}
-      {#if tab.type === 'diff' && tab.status}
+      {#if tab.type === 'diff' && tab.diffStats}
+        <span class="tab-diff-stats">
+          <span class="tab-diff-stats-add">+{tab.diffStats.additions}</span>
+          <span class="tab-diff-stats-del">-{tab.diffStats.deletions}</span>
+        </span>
+      {:else if tab.type === 'diff' && tab.status}
         <span
           class="tab-diff-badge"
           class:added={tab.status === 'added'}
@@ -84,17 +88,15 @@
       {#if tab.dirty}
         <span class="dirty-dot"></span>
       {/if}
-      {#if tab.type !== 'browser'}
-        <button
-          class="tab-action"
-          class:pinned={!tab.preview}
-          onclick={(e) => { e.stopPropagation(); tabsStore.closeTab(tab.id); }}
-          aria-label="Close tab"
-        >
-          <svg class="icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
-          <svg class="icon-pin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 2h6l-1 7h4l-8 8-1-7H5z"/></svg>
-        </button>
-      {/if}
+      <button
+        class="tab-action"
+        class:pinned={!tab.preview}
+        onclick={(e) => { e.stopPropagation(); tabsStore.closeTab(tab.id); }}
+        aria-label="Close tab"
+      >
+        <svg class="icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        <svg class="icon-pin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 2h6l-1 7h4l-8 8-1-7H5z"/></svg>
+      </button>
     </div>
   {/each}
   <button class="tab-add" onclick={handleAddFile} aria-label="Open file" title="Open file">
@@ -116,18 +118,19 @@
 />
 
 <style>
+  /* ── Linear Floating Pill style ── */
   .tab-bar {
     display: flex;
     align-items: center;
-    height: 30px;
+    height: 36px;
     flex-shrink: 0;
-    padding: 0 4px;
-    background: var(--bg-elevated);
-    border-bottom: 1px solid var(--border);
+    padding: 0 8px;
+    background: var(--bg);
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 40%, transparent);
     -webkit-app-region: no-drag;
     overflow-x: auto;
     overflow-y: hidden;
-    gap: 1px;
+    gap: 2px;
   }
 
   .tab-bar::-webkit-scrollbar {
@@ -142,10 +145,10 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    height: 100%;
-    padding: 0 10px;
+    height: 26px;
+    padding: 0 12px;
     border: none;
-    border-radius: 0;
+    border-radius: 6px;
     background: transparent;
     color: var(--muted);
     font-size: 12px;
@@ -154,18 +157,18 @@
     white-space: nowrap;
     flex-shrink: 0;
     position: relative;
-    transition: color 0.15s ease;
+    transition: background 0.15s ease, color 0.15s ease;
   }
 
   .tab:hover {
     color: var(--text);
-    background: var(--bg);
+    background: color-mix(in srgb, var(--text) 8%, transparent);
   }
 
   .tab.active {
     color: var(--text-strong);
-    background: var(--bg);
-    box-shadow: inset 0 -2px 0 var(--accent);
+    background: color-mix(in srgb, var(--text) 12%, transparent);
+    font-weight: 500;
   }
 
   .tab.preview .tab-title {
@@ -199,7 +202,7 @@
     width: 16px;
     height: 16px;
     border: none;
-    border-radius: 3px;
+    border-radius: 4px;
     background: transparent;
     color: var(--muted);
     cursor: pointer;
@@ -228,8 +231,8 @@
   .tab:hover .tab-action.pinned { opacity: 1; }
 
   .tab-action:hover {
-    background: var(--bg-elevated);
-    color: var(--text);
+    background: color-mix(in srgb, var(--danger) 20%, transparent);
+    color: var(--danger);
   }
 
   .tab-add {
@@ -239,16 +242,17 @@
     width: 24px;
     height: 24px;
     border: none;
-    border-radius: 4px;
+    border-radius: 6px;
     background: transparent;
     color: var(--muted);
     cursor: pointer;
     flex-shrink: 0;
-    margin-left: 4px;
+    margin-left: 2px;
+    transition: background 0.12s ease, color 0.12s ease;
   }
 
   .tab-add:hover {
-    background: var(--bg);
+    background: color-mix(in srgb, var(--text) 8%, transparent);
     color: var(--text);
   }
 
@@ -259,16 +263,17 @@
     width: 24px;
     height: 24px;
     border: none;
-    border-radius: 4px;
+    border-radius: 6px;
     background: transparent;
     color: var(--muted);
     cursor: pointer;
     flex-shrink: 0;
     margin-left: 2px;
+    transition: background 0.12s ease, color 0.12s ease;
   }
 
   .tab-close-all:hover {
-    background: var(--bg);
+    background: color-mix(in srgb, var(--danger) 20%, transparent);
     color: var(--danger);
   }
 
@@ -297,5 +302,23 @@
   }
   .tab-diff-badge.deleted {
     background: var(--danger);
+  }
+
+  .tab-diff-stats {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    font-family: var(--font-mono);
+    flex-shrink: 0;
+  }
+
+  .tab-diff-stats-add {
+    color: var(--ok);
+  }
+
+  .tab-diff-stats-del {
+    color: var(--danger);
   }
 </style>

@@ -167,6 +167,20 @@ impl AiManager {
         false
     }
 
+    /// Send text input with a pre-encoded image data URL to the active API provider.
+    ///
+    /// Skips file I/O — the data URL is already base64-encoded.
+    /// Returns false if no provider is running.
+    pub fn send_input_with_image_data_url(&mut self, data: &str, data_url: &str) -> bool {
+        if let Some(ref mut provider) = self.provider {
+            if provider.is_running() {
+                provider.send_input_with_image_data_url(data, data_url);
+                return true;
+            }
+        }
+        false
+    }
+
     /// Send raw bytes to the active provider (PTY passthrough).
     pub fn send_raw_input(&mut self, data: &[u8]) -> bool {
         if let Some(ref mut provider) = self.provider {

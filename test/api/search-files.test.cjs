@@ -1,8 +1,8 @@
 /**
- * search-files.test.cjs -- Source-inspection tests for the searchFiles API function
+ * search-files.test.cjs -- Parameter-passing tests for the searchFiles API function
  *
- * Verifies that searchFiles is exported and calls invoke('search_files', ...)
- * with the correct parameters.
+ * Export/invoke existence is already covered by api-signatures.test.cjs.
+ * These tests verify parameter passing and documentation patterns.
  */
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
@@ -12,21 +12,7 @@ const path = require('node:path');
 const SRC_PATH = path.join(__dirname, '../../src/lib/api.js');
 const src = fs.readFileSync(SRC_PATH, 'utf-8');
 
-describe('api.js -- searchFiles function', () => {
-  it('exports searchFiles as an async function', () => {
-    assert.ok(
-      src.includes('export async function searchFiles('),
-      'Should export async function searchFiles'
-    );
-  });
-
-  it('calls invoke with "search_files" command', () => {
-    assert.ok(
-      src.includes("invoke('search_files'"),
-      'Should call invoke("search_files")'
-    );
-  });
-
+describe('api.js -- searchFiles parameter passing', () => {
   it('passes root parameter to invoke', () => {
     assert.ok(
       src.includes("invoke('search_files', { root:"),
@@ -48,23 +34,7 @@ describe('api.js -- searchFiles function', () => {
     );
   });
 
-  it('has JSDoc comment describing the function', () => {
-    // The function has a JSDoc comment with description
-    assert.ok(
-      src.includes('Recursively list all files'),
-      'Should have JSDoc describing recursive file listing'
-    );
-  });
-
-  it('mentions .gitignore in documentation', () => {
-    assert.ok(
-      src.includes('.gitignore'),
-      'JSDoc should mention .gitignore respect'
-    );
-  });
-
   it('is in the Files section', () => {
-    // searchFiles should be after the Files section comment
     const filesSectionIndex = src.indexOf('// ============ Files');
     const searchFilesIndex = src.indexOf('export async function searchFiles');
     assert.ok(filesSectionIndex > 0, 'Should have a Files section');

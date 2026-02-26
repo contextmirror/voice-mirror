@@ -68,7 +68,7 @@ describe('shortcuts: exports', () => {
 
 describe('shortcuts: DEFAULT_GLOBAL_SHORTCUTS entries', () => {
   const expectedGlobals = [
-    { id: 'toggle-voice', keys: 'Ctrl+Shift+Space', label: 'Toggle voice recording' },
+    { id: 'toggle-voice', keys: 'Ctrl+Shift+;', label: 'Toggle voice recording' },
     { id: 'toggle-mute', keys: 'Ctrl+Shift+M', label: 'Toggle mute' },
     { id: 'toggle-overlay', keys: 'Ctrl+Shift+O', label: 'Toggle overlay mode' },
     { id: 'toggle-window', keys: 'Ctrl+Shift+H', label: 'Show/hide window' },
@@ -109,6 +109,7 @@ describe('shortcuts: IN_APP_SHORTCUTS entries', () => {
     { id: 'switch-terminal', keys: 'Ctrl+T', label: 'Switch to terminal' },
     { id: 'close-panel', keys: 'Escape', label: 'Close current panel/modal' },
     { id: 'open-file-search', keys: 'F1', label: 'Search files and commands' },
+    { id: 'open-text-search', keys: 'Ctrl+Shift+F', label: 'Search in files' },
   ];
 
   for (const { id, keys, label } of expectedInApp) {
@@ -244,10 +245,45 @@ describe('shortcuts: setupInAppShortcuts', () => {
     );
   });
 
+  it('handles Ctrl+Shift+P for open-file-search (avoids browser print dialog)', () => {
+    assert.ok(
+      src.includes("event.key === 'P'") || src.includes("key === 'P'"),
+      'Should handle Ctrl+Shift+P for quick file open'
+    );
+  });
+
+  it('handles Ctrl+Shift+F for open-text-search', () => {
+    assert.ok(
+      src.includes("event.shiftKey") && src.includes("event.key === 'F'"),
+      'Should handle Ctrl+Shift+F for open-text-search'
+    );
+    assert.ok(
+      src.includes("actionHandlers['open-text-search']"),
+      'Should dispatch to open-text-search action handler'
+    );
+  });
+
+  it('Ctrl+Shift+F works even inside INPUT/TEXTAREA', () => {
+    // The Ctrl+Shift+F check is placed BEFORE the INPUT/TEXTAREA guard
+    const shiftFIndex = src.indexOf("event.key === 'F'");
+    const inputGuardIndex = src.indexOf("tag === 'INPUT'");
+    assert.ok(
+      shiftFIndex < inputGuardIndex,
+      'Ctrl+Shift+F handler should be before INPUT/TEXTAREA guard'
+    );
+  });
+
   it('handles Escape for close-panel', () => {
     assert.ok(
       src.includes("event.key === 'Escape'") || src.includes("key === 'Escape'"),
       'Should handle Escape for close-panel'
+    );
+  });
+
+  it('lets CodeMirror handle Escape when editor is focused', () => {
+    assert.ok(
+      src.includes('.cm-editor'),
+      'Should check for .cm-editor to let CodeMirror handle Escape first'
     );
   });
 
@@ -304,6 +340,60 @@ describe('shortcuts: $state reactivity', () => {
 
   it('uses $state for error', () => {
     assert.ok(/let\s+error\s*=\s*\$state\(/.test(src), 'Should use $state for error');
+  });
+});
+
+// ============ Split editor keybindings ============
+
+describe('shortcuts: split editor keybindings', () => {
+  it('has split-editor in IN_APP_SHORTCUTS', () => {
+    assert.ok(
+      src.includes("'split-editor'") || src.includes('"split-editor"'),
+      'IN_APP_SHORTCUTS should contain split-editor'
+    );
+  });
+
+  it('has focus-group-1 in IN_APP_SHORTCUTS', () => {
+    assert.ok(
+      src.includes("'focus-group-1'") || src.includes('"focus-group-1"'),
+      'IN_APP_SHORTCUTS should contain focus-group-1'
+    );
+  });
+
+  it('has focus-group-2 in IN_APP_SHORTCUTS', () => {
+    assert.ok(
+      src.includes("'focus-group-2'") || src.includes('"focus-group-2"'),
+      'IN_APP_SHORTCUTS should contain focus-group-2'
+    );
+  });
+
+  it('handles Ctrl+\\ for split-editor', () => {
+    assert.ok(
+      src.includes("event.key === '\\\\'") || src.includes("'Ctrl+\\\\'") || src.includes("Ctrl+\\\\"),
+      'Should handle Ctrl+\\ for split-editor'
+    );
+  });
+
+  it('handles Ctrl+1 for focus-group-1', () => {
+    assert.ok(
+      src.includes("event.key === '1'") || src.includes("'Ctrl+1'") || src.includes("Ctrl+1"),
+      'Should handle Ctrl+1 for focus-group-1'
+    );
+  });
+
+  it('handles Ctrl+2 for focus-group-2', () => {
+    assert.ok(
+      src.includes("event.key === '2'") || src.includes("'Ctrl+2'") || src.includes("Ctrl+2"),
+      'Should handle Ctrl+2 for focus-group-2'
+    );
+  });
+
+  it('Ctrl+1/2 skips when inside .cm-editor', () => {
+    // The .cm-editor guard should also cover the group focus shortcuts
+    assert.ok(
+      src.includes('.cm-editor'),
+      'Should check for .cm-editor to skip shortcuts inside CodeMirror'
+    );
   });
 });
 

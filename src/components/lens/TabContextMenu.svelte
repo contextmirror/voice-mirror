@@ -3,9 +3,11 @@
    * TabContextMenu -- Right-click menu for editor tabs.
    *
    * Actions: Close, Close Others, Close to the Right, Close All,
-   * Copy Path, Copy Relative Path, Reveal in File Explorer.
+   *          Split Right, Split Down, Open to the Side,
+   *          Copy Path, Copy Relative Path, Reveal in File Explorer.
    */
   import { tabsStore } from '../../lib/stores/tabs.svelte.js';
+  import { editorGroupsStore } from '../../lib/stores/editor-groups.svelte.js';
   import { projectStore } from '../../lib/stores/project.svelte.js';
   import { revealInExplorer } from '../../lib/api.js';
 
@@ -15,23 +17,24 @@
     tab = null,
     visible = false,
     onClose = () => {},
+    onRename = () => {},
   } = $props();
 
   let menuEl = $state(null);
 
   let menuStyle = $derived.by(() => {
     const maxX = typeof window !== 'undefined' ? window.innerWidth - 220 : x;
-    const maxY = typeof window !== 'undefined' ? window.innerHeight - 200 : y;
+    const maxY = typeof window !== 'undefined' ? window.innerHeight - 320 : y;
     return `left: ${Math.min(x, maxX)}px; top: ${Math.min(y, maxY)}px;`;
   });
 
-  let isBrowser = $derived(tab?.id === 'browser');
   let hasPath = $derived(!!tab?.path);
-  let hasOtherTabs = $derived(tabsStore.tabs.filter(t => t.id !== 'browser' && t.id !== tab?.id).length > 0);
+  let hasOtherTabs = $derived(tabsStore.tabs.filter(t => t.id !== tab?.id && t.groupId === tab?.groupId).length > 0);
   let hasTabsToRight = $derived.by(() => {
     if (!tab) return false;
-    const idx = tabsStore.tabs.findIndex(t => t.id === tab.id);
-    return tabsStore.tabs.slice(idx + 1).some(t => t.id !== 'browser');
+    const groupTabs = tabsStore.tabs.filter(t => t.groupId === tab.groupId);
+    const idx = groupTabs.findIndex(t => t.id === tab.id);
+    return idx !== -1 && idx < groupTabs.length - 1;
   });
 
   function close() { onClose(); }
@@ -102,16 +105,58 @@
       console.error('TabContextMenu: reveal failed', err);
     }
   }
+
+  function handleRename() {
+    close();
+    if (tab) onRename(tab);
+  }
+
+  // ── Split-editor actions ──
+
+  function handleSplitRight() {
+    close();
+    if (!tab) return;
+    const sourceGroup = tab.groupId || 1;
+    const newGroupId = editorGroupsStore.splitGroup(sourceGroup, 'horizontal');
+    // Duplicate the file into the new group (like VS Code Ctrl+\)
+    tabsStore.openFile({ name: tab.title, path: tab.path, readOnly: tab.readOnly, external: tab.external }, newGroupId);
+  }
+
+  function handleSplitDown() {
+    close();
+    if (!tab) return;
+    const sourceGroup = tab.groupId || 1;
+    const newGroupId = editorGroupsStore.splitGroup(sourceGroup, 'vertical');
+    // Duplicate the file into the new group (like VS Code Ctrl+\)
+    tabsStore.openFile({ name: tab.title, path: tab.path, readOnly: tab.readOnly, external: tab.external }, newGroupId);
+  }
+
+  function handleOpenToSide() {
+    close();
+    if (!tab) return;
+    const sourceGroup = tab.groupId || 1;
+    const allIds = editorGroupsStore.allGroupIds;
+    const otherGroup = allIds.find(id => id !== sourceGroup);
+    if (otherGroup) {
+      if (tabsStore.moveTab) {
+        tabsStore.moveTab(tab.id, otherGroup);
+      }
+    } else {
+      const newGroupId = editorGroupsStore.splitGroup(sourceGroup, 'horizontal');
+      if (tabsStore.moveTab) {
+        tabsStore.moveTab(tab.id, newGroupId);
+      }
+    }
+  }
 </script>
 
 {#if visible && tab}
   <div class="context-menu" style={menuStyle} bind:this={menuEl} role="menu">
-    {#if !isBrowser}
-      <button class="context-item" onclick={handleClose} role="menuitem">
-        Close
-        <span class="context-shortcut">Ctrl+W</span>
-      </button>
-    {/if}
+    <!-- File tab actions -->
+    <button class="context-item" onclick={handleClose} role="menuitem">
+      Close
+      <span class="context-shortcut">Ctrl+W</span>
+    </button>
     <button class="context-item" onclick={handleCloseOthers} role="menuitem" disabled={!hasOtherTabs}>
       Close Others
     </button>
@@ -120,6 +165,25 @@
     </button>
     <button class="context-item" onclick={handleCloseAll} role="menuitem">
       Close All
+    </button>
+
+    <div class="context-separator"></div>
+    <button class="context-item" onclick={handleRename} role="menuitem">
+      Rename
+      <span class="context-shortcut">F2</span>
+    </button>
+
+    <div class="context-separator"></div>
+    <button class="context-item" onclick={handleSplitRight} role="menuitem">
+      Split Right
+      <span class="context-shortcut">Ctrl+\</span>
+    </button>
+    <button class="context-item" onclick={handleSplitDown} role="menuitem">
+      Split Down
+    </button>
+    <button class="context-item" onclick={handleOpenToSide} role="menuitem">
+      Open to the Side
+      <span class="context-shortcut">Ctrl+Enter</span>
     </button>
 
     {#if hasPath}

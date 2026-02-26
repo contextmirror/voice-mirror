@@ -10,9 +10,11 @@
    * - Ctrl+Tab / Ctrl+Shift+Tab to cycle tabs
    * - Smart shell numbering (fills gaps)
    */
+  import { onMount } from 'svelte';
   import Terminal from './Terminal.svelte';
   import ShellTerminal from './ShellTerminal.svelte';
   import { terminalTabsStore } from '../../lib/stores/terminal-tabs.svelte.js';
+  import { devServerManager } from '../../lib/stores/dev-server-manager.svelte.js';
   import { projectStore } from '../../lib/stores/project.svelte.js';
   import { sendVoiceLoop } from '../../lib/api.js';
   import { voiceStore } from '../../lib/stores/voice.svelte.js';
@@ -76,6 +78,60 @@
   async function handleAddShell() {
     const cwd = projectStore.activeProject?.path || null;
     await terminalTabsStore.addShellTab({ cwd });
+  }
+
+  // ---- Close confirmation for dev-server tabs ----
+
+  let closeConfirmVisible = $state(false);
+  let closeConfirmTab = $state(null);
+
+  /**
+   * Attempt to close a tab. If it's a running dev-server tab, show confirmation.
+   * Otherwise close immediately.
+   * @param {string} tabId
+   */
+  function requestCloseTab(tabId) {
+    if (tabId === 'ai') return;
+    const tab = terminalTabsStore.tabs.find(t => t.id === tabId);
+    if (tab && tab.type === 'dev-server' && tab.running) {
+      closeConfirmTab = tab;
+      closeConfirmVisible = true;
+    } else {
+      terminalTabsStore.closeTab(tabId);
+    }
+  }
+
+  /** Stop server, then close the tab */
+  async function confirmStopAndClose() {
+    const tab = closeConfirmTab;
+    closeConfirmVisible = false;
+    closeConfirmTab = null;
+    if (!tab) return;
+    const current = terminalTabsStore.tabs.find(t => t.id === tab.id);
+    if (!current) return;
+    if (tab.projectPath) {
+      try {
+        await devServerManager.stopServer(tab.projectPath);
+      } catch (err) {
+        console.error('[TerminalTabs] stopServer failed:', err);
+      }
+    }
+    terminalTabsStore.closeTab(tab.id);
+  }
+
+  /** Hide tab (keep process alive) */
+  function confirmHideTab() {
+    const tab = closeConfirmTab;
+    closeConfirmVisible = false;
+    closeConfirmTab = null;
+    if (!tab) return;
+    terminalTabsStore.hideTab(tab.id);
+  }
+
+  /** Cancel close confirmation */
+  function cancelCloseConfirm() {
+    closeConfirmVisible = false;
+    closeConfirmTab = null;
   }
 
   // ---- Tab renaming (double-click) ----
@@ -147,7 +203,7 @@
 
   function contextClose() {
     if (contextMenu.tabId !== 'ai') {
-      terminalTabsStore.closeTab(contextMenu.tabId);
+      requestCloseTab(contextMenu.tabId);
     }
     closeContextMenu();
   }
@@ -269,7 +325,7 @@
 
   // ---- Keyboard tab cycling (Ctrl+Tab / Ctrl+Shift+Tab) ----
 
-  $effect(() => {
+  onMount(() => {
     function handleKeydown(e) {
       if (e.ctrlKey && e.key === 'Tab') {
         e.preventDefault();
@@ -332,15 +388,14 @@
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <span
             class="tab-label"
-            role="textbox"
             ondblclick={(e) => { e.preventDefault(); startRename(tab.id); }}
           >{tab.title}</span>
         {/if}
 
-        {#if tab.type === 'shell' && editingTabId !== tab.id}
+        {#if (tab.type === 'shell' || tab.type === 'dev-server') && editingTabId !== tab.id}
           <button
             class="tab-close"
-            onclick={(e) => { e.stopPropagation(); terminalTabsStore.closeTab(tab.id); }}
+            onclick={(e) => { e.stopPropagation(); requestCloseTab(tab.id); }}
             title="Close terminal"
           >
             <svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -480,6 +535,32 @@
     </div>
   {/if}
 
+  <!-- Close confirmation dialog for dev-server tabs -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div
+    class="close-confirm-overlay"
+    class:close-confirm-hidden={!closeConfirmVisible}
+    onkeydown={(e) => { if (e.key === 'Escape') cancelCloseConfirm(); }}
+  >
+    <div class="close-confirm-dialog" role="alertdialog" aria-modal="true" aria-label="Close dev server confirmation">
+      <div class="close-confirm-title">Dev server running</div>
+      <div class="close-confirm-message">
+        {closeConfirmTab?.framework || 'Server'}{closeConfirmTab?.port ? ` on :${closeConfirmTab.port}` : ''} is still running.
+      </div>
+      <div class="close-confirm-actions">
+        <button class="close-confirm-btn stop" type="button" onclick={confirmStopAndClose} aria-label="Stop server and close tab">
+          Stop Server
+        </button>
+        <button class="close-confirm-btn hide" type="button" onclick={confirmHideTab} aria-label="Hide tab but keep server running">
+          Hide Tab
+        </button>
+        <button class="close-confirm-btn cancel" type="button" onclick={cancelCloseConfirm} aria-label="Cancel closing">
+          Cancel
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- Terminal panels -->
   <div class="terminal-panels">
     <!-- AI terminal (always mounted) -->
@@ -487,8 +568,8 @@
       <Terminal onRegisterActions={(actions) => { termActions['ai'] = actions; }} />
     </div>
 
-    <!-- Shell terminals (mounted when tab exists, hidden when inactive) -->
-    {#each terminalTabsStore.tabs.filter(t => t.type === 'shell') as tab (tab.id)}
+    <!-- Shell + dev-server terminals (mounted when tab exists, hidden when inactive) -->
+    {#each terminalTabsStore.tabs.filter(t => t.type === 'shell' || t.type === 'dev-server') as tab (tab.id)}
       <div class="terminal-panel" class:hidden={terminalTabsStore.activeTabId !== tab.id}>
         <ShellTerminal
           shellId={tab.shellId}
@@ -514,12 +595,12 @@
   .terminal-tab-bar {
     display: flex;
     align-items: center;
-    gap: 1px;
-    padding: 0 6px;
-    height: 34px;
-    min-height: 34px;
-    background: var(--bg-elevated);
-    border-bottom: 1px solid var(--border, rgba(255,255,255,0.06));
+    gap: 2px;
+    padding: 0 8px;
+    height: 36px;
+    min-height: 36px;
+    background: var(--bg);
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 40%, transparent);
     user-select: none;
   }
 
@@ -537,39 +618,31 @@
   .terminal-tab {
     display: flex;
     align-items: center;
-    gap: 5px;
-    padding: 0 10px;
-    height: 28px;
-    background: none;
+    gap: 6px;
+    padding: 0 12px;
+    height: 26px;
+    background: transparent;
     border: none;
-    border-radius: 4px 4px 0 0;
+    border-radius: 6px;
     color: var(--muted);
     font-size: 12px;
     font-family: var(--font-family);
     cursor: pointer;
     white-space: nowrap;
+    flex-shrink: 0;
     position: relative;
-    transition: color 0.15s, background 0.15s;
+    transition: background 0.15s ease, color 0.15s ease;
   }
 
   .terminal-tab:hover {
     color: var(--text);
-    background: rgba(255,255,255,0.04);
+    background: color-mix(in srgb, var(--text) 8%, transparent);
   }
 
   .terminal-tab.active {
-    color: var(--text);
-    background: var(--bg);
-  }
-
-  .terminal-tab.active::after {
-    content: '';
-    position: absolute;
-    bottom: -1px;
-    left: 0;
-    right: 0;
-    height: 1px;
-    background: var(--accent);
+    color: var(--text-strong);
+    background: color-mix(in srgb, var(--text) 12%, transparent);
+    font-weight: 500;
   }
 
   .terminal-tab.exited {
@@ -613,15 +686,17 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: none;
+    width: 16px;
+    height: 16px;
+    background: transparent;
     border: none;
     color: var(--muted);
     cursor: pointer;
-    padding: 1px;
-    border-radius: 3px;
+    padding: 0;
+    border-radius: 4px;
     margin-left: 2px;
     opacity: 0;
-    transition: opacity 0.15s, color 0.15s, background 0.15s;
+    transition: opacity 0.1s, color 0.15s, background 0.15s;
   }
 
   .terminal-tab:hover .tab-close {
@@ -629,27 +704,29 @@
   }
 
   .tab-close:hover {
-    color: var(--text);
-    background: rgba(255,255,255,0.1);
+    background: color-mix(in srgb, var(--danger) 20%, transparent);
+    color: var(--danger);
   }
 
   .tab-add {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: none;
+    width: 24px;
+    height: 24px;
     border: none;
+    border-radius: 6px;
+    background: transparent;
     color: var(--muted);
     cursor: pointer;
-    padding: 4px;
-    border-radius: 4px;
+    flex-shrink: 0;
     margin-left: 2px;
-    transition: color 0.15s, background 0.15s;
+    transition: background 0.12s ease, color 0.12s ease;
   }
 
   .tab-add:hover {
+    background: color-mix(in srgb, var(--text) 8%, transparent);
     color: var(--text);
-    background: rgba(255,255,255,0.06);
   }
 
   /* ── Toolbar actions (right side) ── */
@@ -664,18 +741,18 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: none;
+    background: transparent;
     border: none;
     color: var(--muted);
     cursor: pointer;
     padding: 3px 5px;
     border-radius: 4px;
-    transition: color 0.15s, background 0.15s;
+    transition: color 0.15s ease, background 0.15s ease;
   }
 
   .toolbar-btn:hover {
     color: var(--text);
-    background: rgba(255,255,255,0.06);
+    background: color-mix(in srgb, var(--text) 8%, transparent);
   }
 
   .toolbar-btn:focus-visible {
@@ -857,6 +934,87 @@
 
   .terminal-panel.hidden {
     display: none;
+  }
+
+  /* ── Close confirmation dialog ── */
+
+  .close-confirm-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.5);
+  }
+
+  .close-confirm-overlay.close-confirm-hidden {
+    display: none !important;
+  }
+
+  .close-confirm-dialog {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border, rgba(255,255,255,0.1));
+    border-radius: 8px;
+    padding: 16px;
+    min-width: 260px;
+    max-width: 340px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  }
+
+  .close-confirm-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 6px;
+  }
+
+  .close-confirm-message {
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 12px;
+  }
+
+  .close-confirm-actions {
+    display: flex;
+    gap: 6px;
+  }
+
+  .close-confirm-btn {
+    flex: 1;
+    padding: 5px 10px;
+    font-size: 11px;
+    font-weight: 500;
+    font-family: var(--font-family);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: transparent;
+    cursor: pointer;
+    transition: background 0.15s;
+    -webkit-app-region: no-drag;
+  }
+
+  .close-confirm-btn.stop {
+    color: var(--danger, #ef4444);
+    border-color: color-mix(in srgb, var(--danger, #ef4444) 40%, transparent);
+  }
+  .close-confirm-btn.stop:hover {
+    background: color-mix(in srgb, var(--danger, #ef4444) 12%, transparent);
+  }
+
+  .close-confirm-btn.hide {
+    color: var(--accent);
+    border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  }
+  .close-confirm-btn.hide:hover {
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+
+  .close-confirm-btn.cancel {
+    color: var(--muted);
+  }
+  .close-confirm-btn.cancel:hover {
+    background: rgba(255,255,255,0.06);
   }
 
   @media (prefers-reduced-motion: reduce) {

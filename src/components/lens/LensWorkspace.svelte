@@ -1,39 +1,132 @@
 <script>
+  import { onMount } from 'svelte';
+  import { listen } from '@tauri-apps/api/event';
   import LensToolbar from './LensToolbar.svelte';
+  import DesignToolbar from './DesignToolbar.svelte';
   import LensPreview from './LensPreview.svelte';
+  import BrowserTabBar from './BrowserTabBar.svelte';
   import FileTree from './FileTree.svelte';
-  import TabBar from './TabBar.svelte';
+  import GroupTabBar from './GroupTabBar.svelte';
   import FileEditor from './FileEditor.svelte';
   import DiffViewer from './DiffViewer.svelte';
+  import EditorPane from './EditorPane.svelte';
   import SplitPanel from '../shared/SplitPanel.svelte';
   import ChatPanel from '../chat/ChatPanel.svelte';
   import TerminalTabs from '../terminal/TerminalTabs.svelte';
   import { tabsStore } from '../../lib/stores/tabs.svelte.js';
+  import { editorGroupsStore } from '../../lib/stores/editor-groups.svelte.js';
   import { layoutStore } from '../../lib/stores/layout.svelte.js';
   import { lensStore } from '../../lib/stores/lens.svelte.js';
-  import { lensSetVisible, startFileWatching, stopFileWatching } from '../../lib/api.js';
+  import { browserTabsStore } from '../../lib/stores/browser-tabs.svelte.js';
+  import { lensSetVisible, startFileWatching, stopFileWatching, lensCapturePreview } from '../../lib/api.js';
+  import { attachmentsStore } from '../../lib/stores/attachments.svelte.js';
   import { projectStore } from '../../lib/stores/project.svelte.js';
+  import { lspDiagnosticsStore } from '../../lib/stores/lsp-diagnostics.svelte.js';
+  import { LSP_EXTENSIONS } from '../../lib/editor-lsp.svelte.js';
+  import { setActionHandler } from '../../lib/stores/shortcuts.svelte.js';
 
   let {
     onSend = () => {},
   } = $props();
 
+  let lensPreviewRef;
+
   // Split ratios (will be persisted to config later)
-  let verticalRatio = $state(0.75);   // main area vs terminal
-  let chatRatio = $state(0.18);       // chat vs center+right
-  let previewRatio = $state(0.78);    // preview vs file tree
+  let chatRatio = $state(0.18);             // left column vs center+right
+  let chatVerticalRatio = $state(0.80);     // chat vs pixel agents placeholder
+  let centerRatio = $state(0.75);           // editor/preview vs terminal
+  let previewRatio = $state(0.78);          // center column vs file tree
 
-  // Derive active tab type for display switching
-  let isBrowser = $derived(tabsStore.activeTab?.type === 'browser');
-  let isFile = $derived(tabsStore.activeTab?.type === 'file');
-  let isDiff = $derived(tabsStore.activeTab?.type === 'diff');
+  // Browser is a fixed UI element, not a tab — follows the first (leftmost) group
+  let showBrowser = $state(false);
+  let firstGroupId = $derived(editorGroupsStore.allGroupIds[0]);
 
-  // Toggle browser webview visibility when switching between browser and file tabs.
-  // Guard on webviewReady so we never call before the webview exists.
-  // When webviewReady transitions false→true, this effect re-fires and syncs visibility.
+  // Track file-tree drag state to suppress stop-sign cursor across the workspace
+  let fileTreeDragging = $state(false);
+  // Workspace-level ancestor drop zone (full-width top/bottom overlays)
+  let ancestorDropZone = $state(null);
+
+  $effect(() => {
+    const onStart = () => { fileTreeDragging = true; };
+    const onEnd = () => { fileTreeDragging = false; ancestorDropZone = null; };
+    window.addEventListener('file-tree-drag-start', onStart);
+    window.addEventListener('file-tree-drag-end', onEnd);
+    return () => {
+      window.removeEventListener('file-tree-drag-start', onStart);
+      window.removeEventListener('file-tree-drag-end', onEnd);
+    };
+  });
+
+  /** Handle seam dragover — detect top/bottom half and show ancestor overlay */
+  function handleSeamDragOver(e, seamDirection) {
+    if (!fileTreeDragging) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'copy';
+
+    // For a horizontal seam (between left/right panes), detect top vs bottom half
+    if (seamDirection === 'horizontal') {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const y = (e.clientY - rect.top) / rect.height;
+      ancestorDropZone = y > 0.5 ? 'bottom' : 'top';
+    } else {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const x = (e.clientX - rect.left) / rect.width;
+      ancestorDropZone = x > 0.5 ? 'right' : 'left';
+    }
+  }
+
+  function handleSeamDragLeave(e) {
+    if (!e.currentTarget.contains(e.relatedTarget)) {
+      ancestorDropZone = null;
+    }
+  }
+
+  /** Handle drop on seam — create full-width/height ancestor split */
+  function handleSeamDrop(e) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    let raw = e.dataTransfer.getData('application/x-voice-mirror-file');
+    if (!raw) raw = e.dataTransfer.getData('text/plain');
+    if (!raw) return;
+
+    let data;
+    try { data = JSON.parse(raw); } catch { return; }
+    if (data?.type !== 'file-tree' || !data.entry?.path) return;
+
+    const zone = ancestorDropZone;
+    ancestorDropZone = null;
+
+    if (zone === 'bottom') {
+      const newId = editorGroupsStore.splitAncestor(editorGroupsStore.focusedGroupId, 'vertical');
+      tabsStore.openFile(data.entry, newId);
+    } else if (zone === 'top') {
+      const newId = editorGroupsStore.splitAncestor(editorGroupsStore.focusedGroupId, 'vertical', 'before');
+      tabsStore.openFile(data.entry, newId);
+    } else if (zone === 'right') {
+      const newId = editorGroupsStore.splitAncestor(editorGroupsStore.focusedGroupId, 'horizontal');
+      tabsStore.openFile(data.entry, newId);
+    } else if (zone === 'left') {
+      const newId = editorGroupsStore.splitAncestor(editorGroupsStore.focusedGroupId, 'horizontal', 'before');
+      tabsStore.openFile(data.entry, newId);
+    }
+
+    window.dispatchEvent(new CustomEvent('file-tree-drag-end'));
+  }
+
+  // Derive active file info for FileTree highlighting
+  let focusedGroupId = $derived(editorGroupsStore.focusedGroupId);
+  let focusedActiveTabId = $derived(editorGroupsStore.groups.get(focusedGroupId)?.activeTabId);
+  let activeTab = $derived(focusedActiveTabId ? tabsStore.tabs.find(t => t.id === focusedActiveTabId) : null);
+  let isFile = $derived(activeTab?.type === 'file');
+  let isDiff = $derived(activeTab?.type === 'diff');
+  let activeExt = $derived(activeTab?.path?.split('.').pop()?.toLowerCase());
+
+  // Toggle browser webview visibility
   $effect(() => {
     if (!lensStore.webviewReady) return;
-    lensSetVisible(isBrowser).catch(() => {});
+    lensSetVisible(showBrowser).catch(() => {});
   });
 
   // Start/stop file watcher when entering Lens mode or switching projects
@@ -49,54 +142,228 @@
       stopFileWatching().catch(() => {});
     };
   });
+
+  /** Capture the annotated browser screenshot and add it as a chat attachment. */
+  async function handleDesignSend() {
+    try {
+      const result = await lensCapturePreview();
+      if (result?.success && result?.data) {
+        attachmentsStore.add({
+          path: result.data.path,
+          dataUrl: result.data.dataUrl,
+          type: 'image/png',
+          name: 'Design Annotation',
+        });
+      } else {
+        console.warn('[LensWorkspace] Design capture failed:', result?.error || result);
+      }
+    } catch (err) {
+      console.error('[LensWorkspace] Design capture error:', err);
+    }
+    lensStore.setDesignMode(false);
+  }
+
+  /** Handle element selection from design toolbar — queue screenshot + context as pending attachment. */
+  function handleElementSend({ imageDataUrl, contextText, name }) {
+    // Queue the element capture as a pending attachment with hidden context
+    attachmentsStore.add({
+      path: 'element-capture',
+      dataUrl: imageDataUrl,
+      type: 'image/png',
+      name: name || 'Selected Element',
+      context: contextText,
+    });
+
+    // Ensure chat panel is visible and focus the input
+    layoutStore.setShowChat(true);
+    lensStore.setDesignMode(false);
+
+    // Focus the chat input so the user can immediately type their instruction
+    requestAnimationFrame(() => {
+      const textarea = document.querySelector('.chat-input-bar textarea');
+      if (textarea) textarea.focus();
+    });
+  }
+
+  // Start/stop LSP diagnostics store listener on project switch
+  $effect(() => {
+    const path = projectStore.activeProject?.path;
+    if (!path) return;
+
+    lspDiagnosticsStore.clear();
+    lspDiagnosticsStore.startListening(path).catch((err) => {
+      console.warn('[LensWorkspace] Failed to start diagnostics listener:', err);
+    });
+
+    return () => {
+      lspDiagnosticsStore.stopListening();
+    };
+  });
+
+  // ── Action handlers for split-editor shortcuts ──
+  onMount(() => {
+    setActionHandler('split-editor', () => {
+      if (editorGroupsStore.hasSplit) {
+        // Close the focused group (if not group 1)
+        if (editorGroupsStore.focusedGroupId !== 1) {
+          editorGroupsStore.closeGroup(editorGroupsStore.focusedGroupId);
+        }
+      } else {
+        const fId = editorGroupsStore.focusedGroupId;
+        const focusedActiveTab = tabsStore.getActiveTabForGroup
+          ? tabsStore.tabs.find(t => t.id === (editorGroupsStore.groups.get(fId)?.activeTabId))
+          : tabsStore.activeTab;
+        if (focusedActiveTab) {
+          const newGroupId = editorGroupsStore.splitGroup(fId, 'horizontal');
+          tabsStore.openFile({ name: focusedActiveTab.title, path: focusedActiveTab.path }, newGroupId);
+        }
+      }
+    });
+
+    setActionHandler('focus-group-1', () => editorGroupsStore.setFocusedGroup(1));
+    setActionHandler('focus-group-2', () => {
+      const ids = editorGroupsStore.allGroupIds;
+      if (ids.length >= 2) editorGroupsStore.setFocusedGroup(ids[1]);
+    });
+
+    // Directional focus (Ctrl+K Ctrl+Arrow)
+    setActionHandler('focus-group-left', () => editorGroupsStore.focusDirection('left'));
+    setActionHandler('focus-group-right', () => editorGroupsStore.focusDirection('right'));
+    setActionHandler('focus-group-up', () => editorGroupsStore.focusDirection('up'));
+    setActionHandler('focus-group-down', () => editorGroupsStore.focusDirection('down'));
+
+    // Even sizes (Ctrl+K Ctrl+=)
+    setActionHandler('even-editor-sizes', () => editorGroupsStore.evenSizes());
+
+    // Maximize group (Ctrl+K Ctrl+M)
+    setActionHandler('maximize-editor-group', () => editorGroupsStore.toggleMaximize());
+  });
 </script>
 
-<div class="lens-workspace">
+{#snippet renderNode(node)}
+  {#if node.type === 'leaf'}
+    <EditorPane groupId={node.groupId} showBrowser={node.groupId === firstGroupId ? showBrowser : false} onBrowserClick={node.groupId === firstGroupId ? () => { showBrowser = !showBrowser; } : null} />
+  {:else}
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="grid-branch" class:horizontal={node.direction === 'horizontal'} class:vertical={node.direction === 'vertical'}>
+      <SplitPanel direction={node.direction} bind:ratio={node.ratio} minA={150} minB={150}>
+        {#snippet panelA()}
+          {@render renderNode(node.children[0])}
+        {/snippet}
+        {#snippet panelB()}
+          {@render renderNode(node.children[1])}
+        {/snippet}
+      </SplitPanel>
+      <!-- Seam drop zone: invisible overlay on the divider, active during file-tree drags -->
+      {#if fileTreeDragging}
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div
+          class="seam-drop-zone"
+          class:horizontal={node.direction === 'horizontal'}
+          class:vertical={node.direction === 'vertical'}
+          style={node.direction === 'horizontal'
+            ? `left: calc(${node.ratio * 100}% - 20px); width: 40px; top: 0; bottom: 0;`
+            : `top: calc(${node.ratio * 100}% - 20px); height: 40px; left: 0; right: 0;`}
+          ondragover={(e) => handleSeamDragOver(e, node.direction)}
+          ondragleave={handleSeamDragLeave}
+          ondrop={handleSeamDrop}
+        ></div>
+      {/if}
+    </div>
+  {/if}
+{/snippet}
+
+
+
+<div class="lens-workspace" ondragover={(e) => { if (fileTreeDragging) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; } }}>
   <div class="workspace-content">
-    <!-- Vertical split: main panels (top) | terminal (bottom) -->
-    <SplitPanel direction="vertical" bind:ratio={verticalRatio} minA={200} minB={80} collapseB={!layoutStore.showTerminal}>
+    <!-- Horizontal split: left-column (chat) | center+right -->
+    <SplitPanel direction="horizontal" bind:ratio={chatRatio} minA={180} minB={400} collapseA={!layoutStore.showChat}>
       {#snippet panelA()}
-        <!-- Horizontal split: chat (left) | center+right -->
-        <SplitPanel direction="horizontal" bind:ratio={chatRatio} minA={180} minB={400} collapseA={!layoutStore.showChat}>
+        <!-- Left column: chat (top) | pixel agents placeholder (bottom) -->
+        <SplitPanel direction="vertical" bind:ratio={chatVerticalRatio} minA={200} minB={60}>
           {#snippet panelA()}
             <div class="chat-area">
               <ChatPanel {onSend} />
             </div>
           {/snippet}
           {#snippet panelB()}
-            <!-- Horizontal split: preview (center) | file tree (right) -->
-            <SplitPanel direction="horizontal" bind:ratio={previewRatio} minA={300} minB={140} collapseB={!layoutStore.showFileTree}>
-              {#snippet panelA()}
-                <div class="preview-area">
-                  <TabBar />
-                  <!-- Always mount all views, toggle visibility with CSS to avoid destroy/recreate -->
-                  <div class="preview-layer" class:visible={isBrowser}>
-                    <LensToolbar />
-                    <LensPreview />
-                  </div>
-                  {#if isFile}
-                    <FileEditor tab={tabsStore.activeTab} />
-                  {/if}
-                  {#if isDiff}
-                    <DiffViewer tab={tabsStore.activeTab} />
-                  {/if}
-                </div>
-              {/snippet}
-              {#snippet panelB()}
-                <FileTree
-                  onFileClick={(entry) => tabsStore.openFile(entry)}
-                  onFileDblClick={(entry) => tabsStore.pinTab(entry.path)}
-                  onChangeClick={(change) => tabsStore.openDiff(change)}
-                />
-              {/snippet}
-            </SplitPanel>
+            <div class="placeholder-area">
+              <div class="placeholder-content">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="24" height="24">
+                  <rect x="2" y="3" width="20" height="14" rx="2" />
+                  <circle cx="8" cy="10" r="2" />
+                  <circle cx="16" cy="10" r="2" />
+                  <path d="M9 14h6" />
+                </svg>
+                <span>Pixel Agents</span>
+              </div>
+            </div>
           {/snippet}
         </SplitPanel>
       {/snippet}
       {#snippet panelB()}
-        <div class="terminal-area">
-          <TerminalTabs />
-        </div>
+        <!-- Horizontal split: center-column | file tree -->
+        <SplitPanel direction="horizontal" bind:ratio={previewRatio} minA={300} minB={140} collapseB={!layoutStore.showFileTree}>
+          {#snippet panelA()}
+            <!-- Center column: editor/preview (top) | terminal (bottom) -->
+            <SplitPanel direction="vertical" bind:ratio={centerRatio} minA={200} minB={80} collapseB={!layoutStore.showTerminal}>
+              {#snippet panelA()}
+                <div class="preview-area">
+                  <!-- Editor Grid: always visible so GroupTabBar stays accessible -->
+                  <div class="editor-grid">
+                    {#if editorGroupsStore.maximizedGroupId !== null}
+                      <EditorPane groupId={editorGroupsStore.maximizedGroupId} showBrowser={editorGroupsStore.maximizedGroupId === firstGroupId ? showBrowser : false} onBrowserClick={editorGroupsStore.maximizedGroupId === firstGroupId ? () => { showBrowser = !showBrowser; } : null} />
+                    {:else}
+                      {@render renderNode(editorGroupsStore.gridRoot)}
+                    {/if}
+                    <!-- Workspace-level drop zone overlay for full-width ancestor splits -->
+                    {#if ancestorDropZone}
+                      <div class="ancestor-drop-overlay">
+                        <div class="ancestor-zone" class:top={ancestorDropZone === 'top'} class:bottom={ancestorDropZone === 'bottom'} class:left={ancestorDropZone === 'left'} class:right={ancestorDropZone === 'right'}></div>
+                      </div>
+                    {/if}
+                  </div>
+
+                  <!-- Browser layer: overlays editor content when visible (tab bar stays above) -->
+                  <div class="preview-layer" class:visible={showBrowser}>
+                    <BrowserTabBar onNewTab={() => lensPreviewRef?.createNewTab()} />
+                    <LensToolbar />
+                    {#if lensStore.designMode}
+                      <DesignToolbar
+                        onSend={handleDesignSend}
+                        onElementSend={handleElementSend}
+                        onClose={() => lensStore.setDesignMode(false)}
+                      />
+                    {/if}
+                    <LensPreview bind:this={lensPreviewRef} />
+                  </div>
+                </div>
+              {/snippet}
+              {#snippet panelB()}
+                <div class="terminal-area">
+                  <TerminalTabs />
+                </div>
+              {/snippet}
+            </SplitPanel>
+          {/snippet}
+          {#snippet panelB()}
+            <FileTree
+              onFileClick={(entry) => { showBrowser = false; tabsStore.openFile(entry, editorGroupsStore.focusedGroupId); }}
+              onFileDblClick={(entry) => tabsStore.pinTab(entry.path)}
+              onChangeClick={(change) => tabsStore.openDiff(change)}
+              onChangeDblClick={(change) => tabsStore.pinTab(`diff:${change.path}`)}
+              activeFilePath={isFile ? activeTab?.path : null}
+              activeDiffPath={isDiff ? activeTab?.path : null}
+              activeFileHasLsp={isFile && LSP_EXTENSIONS.has(activeExt)}
+              onSymbolClick={({ line, character }) => {
+                const gId = editorGroupsStore.focusedGroupId;
+                const event = new CustomEvent(`lens-goto-position-${gId}`, { detail: { line, character } });
+                window.dispatchEvent(event);
+              }}
+            />
+          {/snippet}
+        </SplitPanel>
       {/snippet}
     </SplitPanel>
   </div>
@@ -111,7 +378,7 @@
     background: var(--bg);
   }
 
-  /* ── Workspace Content ── */
+  /* -- Workspace Content -- */
 
   .workspace-content {
     display: flex;
@@ -131,19 +398,96 @@
     position: relative;
   }
 
-  /* Browser layer: always mounted, shown/hidden via CSS */
+  /* Editor grid: recursive SplitPanel tree — always visible for GroupTabBar */
+  .editor-grid {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* Workspace-level drop zone overlay for full-width ancestor splits */
+  .ancestor-drop-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 10000;
+    pointer-events: none;
+  }
+
+  .ancestor-zone {
+    position: absolute;
+    left: 8px;
+    right: 8px;
+    height: calc(50% - 12px);
+    background: color-mix(in srgb, var(--accent) 20%, transparent);
+    border: 2px dashed var(--accent);
+    border-radius: 4px;
+    opacity: 1;
+    transition: opacity 70ms ease-out;
+  }
+
+  .ancestor-zone.bottom {
+    bottom: 8px;
+  }
+
+  .ancestor-zone.top {
+    top: 8px;
+  }
+
+  .ancestor-zone.left {
+    top: 8px;
+    bottom: 8px;
+    left: 8px;
+    right: auto;
+    height: auto;
+    width: calc(50% - 12px);
+  }
+
+  .ancestor-zone.right {
+    top: 8px;
+    bottom: 8px;
+    right: 8px;
+    left: auto;
+    height: auto;
+    width: calc(50% - 12px);
+  }
+
+  /* Grid branch wrapper — needed for seam drop zone positioning */
+  .grid-branch {
+    display: flex;
+    flex: 1;
+    position: relative;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  /* Seam drop zone: invisible overlay on the SplitPanel divider */
+  .seam-drop-zone {
+    position: absolute;
+    z-index: 9999;
+    pointer-events: auto;
+  }
+
+  /* Browser layer: overlays editor content below the tab bars */
   .preview-layer {
     display: none;
     flex-direction: column;
-    flex: 1;
-    min-height: 0;
+    position: absolute;
+    top: 36px;  /* below GroupTabBar height */
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 10;
   }
 
   .preview-layer.visible {
     display: flex;
   }
 
-  /* ── Chat Panel ── */
+  /* Editor pane styles are in EditorPane.svelte */
+
+  /* -- Chat Panel -- */
 
   .chat-area {
     display: flex;
@@ -152,10 +496,9 @@
     overflow: hidden;
     background: var(--bg);
     border-right: 1px solid var(--border);
-    border-radius: var(--radius-lg) 0 0 0;
   }
 
-  /* ── Terminal Panel ── */
+  /* -- Terminal Panel -- */
 
   .terminal-area {
     display: flex;
@@ -164,5 +507,33 @@
     overflow: hidden;
     background: var(--bg);
     border-top: 1px solid var(--border);
+  }
+
+  /* -- Pixel Agents Placeholder -- */
+
+  .placeholder-area {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg);
+    border-top: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+  }
+
+  .placeholder-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    color: var(--muted);
+    font-size: 12px;
+    opacity: 0.5;
+    user-select: none;
+  }
+
+  .placeholder-content svg {
+    opacity: 0.6;
   }
 </style>

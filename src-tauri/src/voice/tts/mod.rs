@@ -150,8 +150,7 @@ pub fn create_tts_engine(
             #[cfg(feature = "onnx")]
             {
                 let v = voice.unwrap_or("af_bella");
-                // Load from data directory (with Electron fallback)
-                let data_dir = crate::services::platform::get_data_dir_with_fallback()
+                let data_dir = crate::services::platform::get_data_dir()
                     .join("models")
                     .join("kokoro");
 

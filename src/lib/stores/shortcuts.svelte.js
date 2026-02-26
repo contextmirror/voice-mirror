@@ -26,7 +26,7 @@ import { overlayStore } from './overlay.svelte.js';
  */
 export const DEFAULT_GLOBAL_SHORTCUTS = {
   'toggle-voice': {
-    keys: 'Ctrl+Shift+Space',
+    keys: 'Ctrl+Shift+;',
     label: 'Toggle voice recording',
     category: 'global',
   },
@@ -78,8 +78,73 @@ export const IN_APP_SHORTCUTS = {
     category: 'in-app',
   },
   'open-file-search': {
-    keys: 'F1',
+    keys: 'Ctrl+Shift+P',
     label: 'Search files and commands',
+    category: 'in-app',
+  },
+  'open-text-search': {
+    keys: 'Ctrl+Shift+F',
+    label: 'Search in files',
+    category: 'in-app',
+  },
+  'split-editor': {
+    keys: 'Ctrl+\\',
+    label: 'Split editor right',
+    category: 'in-app',
+  },
+  'focus-group-1': {
+    keys: 'Ctrl+1',
+    label: 'Focus first editor group',
+    category: 'in-app',
+  },
+  'focus-group-2': {
+    keys: 'Ctrl+2',
+    label: 'Focus second editor group',
+    category: 'in-app',
+  },
+  'focus-group-left': {
+    keys: 'Ctrl+K Ctrl+Left',
+    label: 'Focus editor group to the left',
+    category: 'in-app',
+  },
+  'focus-group-right': {
+    keys: 'Ctrl+K Ctrl+Right',
+    label: 'Focus editor group to the right',
+    category: 'in-app',
+  },
+  'focus-group-up': {
+    keys: 'Ctrl+K Ctrl+Up',
+    label: 'Focus editor group above',
+    category: 'in-app',
+  },
+  'focus-group-down': {
+    keys: 'Ctrl+K Ctrl+Down',
+    label: 'Focus editor group below',
+    category: 'in-app',
+  },
+  'even-editor-sizes': {
+    keys: 'Ctrl+K Ctrl+=',
+    label: 'Reset editor groups to equal sizes',
+    category: 'in-app',
+  },
+  'maximize-editor-group': {
+    keys: 'Ctrl+K Ctrl+M',
+    label: 'Toggle maximize editor group',
+    category: 'in-app',
+  },
+  'go-to-file': {
+    keys: 'Ctrl+P',
+    label: 'Go to file',
+    category: 'in-app',
+  },
+  'go-to-line': {
+    keys: 'Ctrl+G',
+    label: 'Go to line',
+    category: 'in-app',
+  },
+  'go-to-symbol': {
+    keys: 'Ctrl+Shift+O',
+    label: 'Go to symbol in editor',
     category: 'in-app',
   },
 };
@@ -373,15 +438,86 @@ export function getActionHandler(id) {
  * This should be called once from App.svelte's $effect.
  */
 export function setupInAppShortcuts() {
+  // Chord state: Ctrl+K starts a chord, next Ctrl+key completes it
+  let chordPending = false;
+  let chordTimer = null;
+
+  function clearChord() {
+    chordPending = false;
+    if (chordTimer) { clearTimeout(chordTimer); chordTimer = null; }
+  }
+
   function handleKeydown(event) {
+    const ctrl = event.ctrlKey || event.metaKey;
+
+    // ── Chord handling: Ctrl+K was pressed, waiting for second key ──
+    if (chordPending && ctrl) {
+      const key = event.key;
+      let handled = false;
+
+      if (key === 'ArrowLeft')  { actionHandlers['focus-group-left']?.();  handled = true; }
+      if (key === 'ArrowRight') { actionHandlers['focus-group-right']?.(); handled = true; }
+      if (key === 'ArrowUp')    { actionHandlers['focus-group-up']?.();    handled = true; }
+      if (key === 'ArrowDown')  { actionHandlers['focus-group-down']?.();  handled = true; }
+      if (key === '=')          { actionHandlers['even-editor-sizes']?.(); handled = true; }
+      if (key === 'm' || key === 'M') { actionHandlers['maximize-editor-group']?.(); handled = true; }
+
+      clearChord();
+      if (handled) {
+        event.preventDefault();
+        return;
+      }
+      // Not a recognized chord — fall through to normal handling
+    }
+
+    // Ctrl+K starts a chord sequence (500ms timeout)
+    if (ctrl && event.key === 'k') {
+      if (event.target?.closest('.cm-editor')) return;
+      event.preventDefault();
+      chordPending = true;
+      chordTimer = setTimeout(clearChord, 500);
+      return;
+    }
+
+    // Non-chord key pressed — cancel any pending chord
+    if (chordPending && !ctrl) {
+      clearChord();
+    }
+
+    // Ctrl+Shift+F -> Search in files (works from any context including inputs)
+    if (ctrl && event.shiftKey && event.key === 'F') {
+      event.preventDefault();
+      actionHandlers['open-text-search']?.();
+      return;
+    }
+
+    // Ctrl+P -> Go to file (before input guard so it works from anywhere)
+    if (ctrl && event.key === 'p' && !event.shiftKey) {
+      event.preventDefault();
+      actionHandlers['go-to-file']?.();
+      return;
+    }
+
+    // Ctrl+G -> Go to line
+    if (ctrl && event.key === 'g') {
+      event.preventDefault();
+      actionHandlers['go-to-line']?.();
+      return;
+    }
+
+    // Ctrl+Shift+O -> Go to symbol (in-app takes priority over global toggle-overlay)
+    if (ctrl && event.shiftKey && event.key === 'O') {
+      event.preventDefault();
+      actionHandlers['go-to-symbol']?.();
+      return;
+    }
+
     // Don't intercept shortcuts when user is typing in an input/textarea
     const tag = event.target?.tagName;
     if (tag === 'INPUT' || tag === 'TEXTAREA' || event.target?.isContentEditable) {
       // Only allow Escape in input fields
       if (event.key !== 'Escape') return;
     }
-
-    const ctrl = event.ctrlKey || event.metaKey;
 
     // Ctrl+, -> Open settings
     if (ctrl && event.key === ',') {
@@ -404,15 +540,40 @@ export function setupInAppShortcuts() {
       return;
     }
 
-    // F1 -> Open file search / command palette
-    if (event.key === 'F1') {
+    // F1 or Ctrl+Shift+P -> Open file search / command palette
+    if (event.key === 'F1' || (ctrl && event.shiftKey && event.key === 'P')) {
       event.preventDefault();
       actionHandlers['open-file-search']?.();
       return;
     }
 
-    // Escape -> Close panel/modal
+    // Ctrl+\ -> Split editor right
+    if (ctrl && event.key === '\\') {
+      if (event.target?.closest('.cm-editor')) return;
+      event.preventDefault();
+      actionHandlers['split-editor']?.();
+      return;
+    }
+
+    // Ctrl+1 -> Focus group 1
+    if (ctrl && event.key === '1') {
+      if (event.target?.closest('.cm-editor')) return;
+      event.preventDefault();
+      actionHandlers['focus-group-1']?.();
+      return;
+    }
+
+    // Ctrl+2 -> Focus group 2
+    if (ctrl && event.key === '2') {
+      if (event.target?.closest('.cm-editor')) return;
+      event.preventDefault();
+      actionHandlers['focus-group-2']?.();
+      return;
+    }
+
+    // Escape -> Close panel/modal (but let CodeMirror handle it first when editor is focused)
     if (event.key === 'Escape') {
+      if (event.target?.closest('.cm-editor')) return;
       event.preventDefault();
       actionHandlers['close-panel']?.();
       return;
@@ -423,5 +584,6 @@ export function setupInAppShortcuts() {
 
   return () => {
     window.removeEventListener('keydown', handleKeydown);
+    clearChord();
   };
 }

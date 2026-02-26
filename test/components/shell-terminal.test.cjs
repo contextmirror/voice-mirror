@@ -26,6 +26,26 @@ describe('ShellTerminal.svelte -- imports', () => {
   it('imports terminalTabsStore', () => {
     assert.ok(src.includes('terminalTabsStore'), 'Should import terminalTabsStore');
   });
+
+  it('imports devServerManager for crash detection', () => {
+    assert.ok(src.includes('devServerManager'), 'Should import devServerManager');
+    assert.ok(src.includes('dev-server-manager.svelte.js'), 'Should import from dev-server-manager store');
+  });
+});
+
+describe('ShellTerminal.svelte -- crash detection wiring', () => {
+  it('calls devServerManager.handleShellExit on exit event', () => {
+    const exitBlock = src.split("case 'exit':")[1]?.split('break')[0] || '';
+    assert.ok(exitBlock.includes('devServerManager.handleShellExit(shellId, data.code)'), 'Should call handleShellExit with shellId and exit code');
+  });
+
+  it('calls handleShellExit after markExited', () => {
+    const exitBlock = src.split("case 'exit':")[1]?.split('break')[0] || '';
+    const markIdx = exitBlock.indexOf('markExited');
+    const handleIdx = exitBlock.indexOf('handleShellExit');
+    assert.ok(markIdx > -1 && handleIdx > -1, 'Should have both calls');
+    assert.ok(markIdx < handleIdx, 'markExited should be called before handleShellExit');
+  });
 });
 
 describe('ShellTerminal.svelte -- props', () => {

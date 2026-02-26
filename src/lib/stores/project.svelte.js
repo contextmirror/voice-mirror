@@ -67,7 +67,14 @@ function createProjectStore() {
       // Extract folder name (last path segment)
       const name = path.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || path;
       const color = COLOR_PALETTE[hashToIndex(name)];
-      entries = [...entries, { path, name, color }];
+      entries = [...entries, {
+        path,
+        name,
+        color,
+        preferredServerUrl: null,
+        lastBrowserUrl: null,
+        autoStartServer: null,
+      }];
       activeIndex = entries.length - 1;
       this._persist();
       this.loadSessions();
@@ -124,6 +131,31 @@ function createProjectStore() {
       } catch (err) {
         console.error('[project] Failed to load sessions:', err);
         sessions = [];
+      }
+    },
+
+    /**
+     * Update a single field on a project entry by index.
+     * @param {number} index
+     * @param {string} field
+     * @param {*} value
+     */
+    updateProjectField(index, field, value) {
+      if (entries[index]) {
+        entries[index][field] = value;
+        this._persist();
+      }
+    },
+
+    /**
+     * Update a field on the currently active project.
+     * @param {string} field
+     * @param {*} value
+     */
+    updateActiveField(field, value) {
+      if (activeIndex >= 0 && activeIndex < entries.length) {
+        entries[activeIndex][field] = value;
+        this._persist();
       }
     },
 

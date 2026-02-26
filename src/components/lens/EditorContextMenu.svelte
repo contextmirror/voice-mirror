@@ -1,4 +1,7 @@
 <script>
+  import { revealInExplorer } from '../../lib/api.js';
+  import { projectStore } from '../../lib/stores/project.svelte.js';
+
   let {
     x = 0,
     y = 0,
@@ -10,8 +13,12 @@
     diagnosticMessage = '',
     filePath = '',
     lineNumber = 1,
+    view = null,
+    tab = null,
+    lsp = null,
     onClose = () => {},
-    onAction = () => {},
+    onSendToAi = () => {},
+    onNavigateDefinition = () => {},
   } = $props();
 
   // Clamp position to viewport
@@ -50,101 +57,153 @@
     }
   });
 
+  function getLanguageFromPath(path) {
+    const ext = path?.split('.').pop()?.toLowerCase() || '';
+    const map = { js: 'javascript', ts: 'typescript', rs: 'rust', py: 'python', svelte: 'svelte', json: 'json', css: 'css', html: 'html', md: 'markdown' };
+    return map[ext] || ext;
+  }
+
   // ── Diagnostic Actions ──
 
   function handleAiFix() {
     close();
-    onAction('ai-fix', { diagnosticMessage, filePath, lineNumber });
+    const msg = `Error on line ${lineNumber} of \`${filePath}\`: "${diagnosticMessage}"\n\nFix this error.`;
+    onSendToAi(msg);
   }
 
   // ── AI Actions ──
 
   function handleAiExplain() {
     close();
-    onAction('ai-explain', { selectedText, filePath, lineNumber });
+    const lang = getLanguageFromPath(filePath);
+    const msg = `Looking at \`${filePath}\` line ${lineNumber}:\n\`\`\`${lang}\n${selectedText}\n\`\`\`\nExplain what this code does.`;
+    onSendToAi(msg);
   }
 
   function handleAiRefactor() {
     close();
-    onAction('ai-refactor', { selectedText, filePath, lineNumber });
+    const lang = getLanguageFromPath(filePath);
+    const msg = `Looking at \`${filePath}\` line ${lineNumber}:\n\`\`\`${lang}\n${selectedText}\n\`\`\`\nRefactor this code to be cleaner and more maintainable.`;
+    onSendToAi(msg);
   }
 
   function handleAiTest() {
     close();
-    onAction('ai-test', { selectedText, filePath, lineNumber });
+    const lang = getLanguageFromPath(filePath);
+    const msg = `Looking at \`${filePath}\` line ${lineNumber}:\n\`\`\`${lang}\n${selectedText}\n\`\`\`\nWrite tests for this code.`;
+    onSendToAi(msg);
   }
 
   // ── LSP Actions ──
 
   function handleGotoDefinition() {
     close();
-    onAction('goto-definition');
+    onNavigateDefinition();
+  }
+
+  function handleFindReferences() {
+    close();
+    if (lsp && view) lsp.handleFindReferences(view, filePath);
+  }
+
+  function handleRenameSymbol() {
+    close();
+    if (lsp && view) lsp.handleRenameSymbol(view, filePath);
+  }
+
+  function handleQuickFix() {
+    close();
+    if (lsp && view) {
+      const allDiags = lsp.cachedDiagnostics.get(filePath) || [];
+      const pos = view.state.selection.main.head;
+      const cursorDiags = allDiags.filter(d => pos >= d.from && pos <= d.to);
+      lsp.handleCodeActions(view, filePath, cursorDiags);
+    }
   }
 
   // ── Edit Actions ──
 
   function handleCut() {
     close();
-    onAction('cut');
+    document.execCommand('cut');
   }
 
   function handleCopy() {
     close();
-    onAction('copy');
+    document.execCommand('copy');
   }
 
   function handlePaste() {
     close();
-    onAction('paste');
+    navigator.clipboard.readText().then(text => {
+      if (!view) return;
+      const { from, to } = view.state.selection.main;
+      view.dispatch({ changes: { from, to, insert: text } });
+    }).catch(err => console.warn('[editor] Clipboard read denied:', err));
   }
 
   function handleSelectAll() {
     close();
-    onAction('select-all');
+    if (view) view.dispatch({ selection: { anchor: 0, head: view.state.doc.length } });
   }
 
   // ── Folding Actions ──
 
-  function handleFold() {
+  async function handleFold() {
     close();
-    onAction('fold');
+    if (!view) return;
+    const { foldCode } = await import('@codemirror/language');
+    foldCode(view);
   }
 
-  function handleUnfold() {
+  async function handleUnfold() {
     close();
-    onAction('unfold');
+    if (!view) return;
+    const { unfoldCode } = await import('@codemirror/language');
+    unfoldCode(view);
   }
 
-  function handleFoldAll() {
+  async function handleFoldAll() {
     close();
-    onAction('fold-all');
+    if (!view) return;
+    const { foldAll } = await import('@codemirror/language');
+    foldAll(view);
   }
 
-  function handleUnfoldAll() {
+  async function handleUnfoldAll() {
     close();
-    onAction('unfold-all');
+    if (!view) return;
+    const { unfoldAll } = await import('@codemirror/language');
+    unfoldAll(view);
   }
 
   // ── File Actions ──
 
   function handleCopyPath() {
     close();
-    onAction('copy-path');
+    const root = projectStore.activeProject?.path || '';
+    const fullPath = root ? `${root}/${filePath}` : filePath;
+    navigator.clipboard.writeText(fullPath.replace(/\//g, '\\'));
   }
 
   function handleCopyRelativePath() {
     close();
-    onAction('copy-relative-path');
+    navigator.clipboard.writeText(filePath);
   }
 
   function handleCopyMarkdown() {
     close();
-    onAction('copy-markdown');
+    if (!view) return;
+    const lang = getLanguageFromPath(filePath);
+    const text = view.state.selection.main.empty
+      ? view.state.doc.toString()
+      : view.state.sliceDoc(view.state.selection.main.from, view.state.selection.main.to);
+    navigator.clipboard.writeText(`\`${filePath}\`\n\`\`\`${lang}\n${text}\n\`\`\``);
   }
 
   function handleReveal() {
     close();
-    onAction('reveal');
+    revealInExplorer(filePath, projectStore.activeProject?.path || null);
   }
 </script>
 
@@ -167,24 +226,41 @@
         Go to Definition
         <span class="context-shortcut">Ctrl+Click</span>
       </button>
-      <button class="context-item context-item-disabled" disabled role="menuitem">
+      <button class="context-item" onclick={handleFindReferences} role="menuitem">
         Find References
+        <span class="context-shortcut">Shift+F12</span>
       </button>
+      {#if !tab?.readOnly}
+        <button class="context-item" onclick={handleRenameSymbol} role="menuitem">
+          Rename Symbol
+          <span class="context-shortcut">F2</span>
+        </button>
+      {/if}
+      {#if hasDiagnostic}
+        <button class="context-item" onclick={handleQuickFix} role="menuitem">
+          Quick Fix...
+          <span class="context-shortcut">Ctrl+.</span>
+        </button>
+      {/if}
       <div class="context-separator"></div>
     {/if}
 
-    <button class="context-item" onclick={handleCut} role="menuitem">
-      Cut
-      <span class="context-shortcut">Ctrl+X</span>
-    </button>
+    {#if !tab?.readOnly}
+      <button class="context-item" onclick={handleCut} role="menuitem">
+        Cut
+        <span class="context-shortcut">Ctrl+X</span>
+      </button>
+    {/if}
     <button class="context-item" onclick={handleCopy} role="menuitem">
       Copy
       <span class="context-shortcut">Ctrl+C</span>
     </button>
-    <button class="context-item" onclick={handlePaste} role="menuitem">
-      Paste
-      <span class="context-shortcut">Ctrl+V</span>
-    </button>
+    {#if !tab?.readOnly}
+      <button class="context-item" onclick={handlePaste} role="menuitem">
+        Paste
+        <span class="context-shortcut">Ctrl+V</span>
+      </button>
+    {/if}
     <button class="context-item" onclick={handleSelectAll} role="menuitem">
       Select All
       <span class="context-shortcut">Ctrl+A</span>

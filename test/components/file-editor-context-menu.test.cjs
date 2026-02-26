@@ -3,7 +3,10 @@
  * context menu integration.
  *
  * Verifies that FileEditor wires up the EditorContextMenu component with
- * proper event handling, state management, and action dispatch.
+ * proper event handling, state management, and callback props.
+ *
+ * Action dispatch logic has been moved to EditorContextMenu.svelte —
+ * see editor-context-menu.test.cjs for those tests.
  */
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
@@ -69,83 +72,32 @@ describe('FileEditor context menu: state management', () => {
   });
 });
 
-describe('FileEditor context menu: action dispatch', () => {
-  it('has handleMenuAction function', () => {
-    assert.ok(src.includes('handleMenuAction'));
-  });
+describe('FileEditor context menu: callback props', () => {
   it('has sendAiMessage function', () => {
     assert.ok(src.includes('sendAiMessage'));
   });
-  it('handles ai-fix action', () => {
-    assert.ok(src.includes('ai-fix'));
+  it('has handleGoToDefinition function', () => {
+    assert.ok(src.includes('handleGoToDefinition'));
   });
-  it('handles ai-explain action', () => {
-    assert.ok(src.includes('ai-explain'));
+  it('passes onSendToAi callback to EditorContextMenu', () => {
+    assert.ok(src.includes('onSendToAi'));
   });
-  it('handles ai-refactor action', () => {
-    assert.ok(src.includes('ai-refactor'));
+  it('passes onNavigateDefinition callback to EditorContextMenu', () => {
+    assert.ok(src.includes('onNavigateDefinition'));
   });
-  it('handles ai-test action', () => {
-    assert.ok(src.includes('ai-test'));
+  it('passes view prop to EditorContextMenu', () => {
+    assert.ok(src.includes('{view}'));
   });
-});
-
-describe('FileEditor context menu: clipboard actions', () => {
-  it('handles cut action', () => {
-    assert.ok(src.includes("'cut'"));
+  it('passes tab prop to EditorContextMenu', () => {
+    assert.ok(src.includes('{tab}'));
   });
-  it('handles copy action', () => {
-    assert.ok(src.includes("'copy'"));
-  });
-  it('handles paste action', () => {
-    assert.ok(src.includes("'paste'"));
-  });
-  it('handles select-all action', () => {
-    assert.ok(src.includes("'select-all'") || src.includes('select-all'));
-  });
-  it('uses document.execCommand for cut/copy', () => {
-    assert.ok(src.includes('document.execCommand'));
-  });
-  it('uses navigator.clipboard for paste', () => {
-    assert.ok(src.includes('navigator.clipboard'));
-  });
-});
-
-describe('FileEditor context menu: folding actions', () => {
-  it('handles fold action', () => {
-    assert.ok(src.includes("'fold'"));
-  });
-  it('handles unfold action', () => {
-    assert.ok(src.includes("'unfold'"));
-  });
-  it('handles fold-all action', () => {
-    assert.ok(src.includes("'fold-all'") || src.includes('fold-all'));
-  });
-  it('handles unfold-all action', () => {
-    assert.ok(src.includes("'unfold-all'") || src.includes('unfold-all'));
-  });
-});
-
-describe('FileEditor context menu: file actions', () => {
-  it('handles copy-path action', () => {
-    assert.ok(src.includes("'copy-path'") || src.includes('copy-path'));
-  });
-  it('handles copy-relative-path action', () => {
-    assert.ok(src.includes("'copy-relative-path'") || src.includes('copy-relative-path'));
-  });
-  it('handles copy-markdown action', () => {
-    assert.ok(src.includes("'copy-markdown'") || src.includes('copy-markdown'));
-  });
-  it('handles reveal action', () => {
-    assert.ok(src.includes("'reveal'"));
+  it('passes lsp prop to EditorContextMenu', () => {
+    assert.ok(src.includes('{lsp}'));
   });
 });
 
 describe('FileEditor context menu: template integration', () => {
   it('mounts EditorContextMenu in template', () => {
     assert.ok(src.includes('<EditorContextMenu') || src.includes('EditorContextMenu'));
-  });
-  it('has getLanguageFromPath helper function', () => {
-    assert.ok(src.includes('getLanguageFromPath'));
   });
 });

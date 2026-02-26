@@ -14,8 +14,8 @@ use tokio::time::{Duration, Instant};
 use tracing::{info, warn};
 
 use super::{McpContent, McpToolResult};
-use crate::ipc::pipe_client::PipeClient;
 use crate::ipc::protocol::{AppToMcp, McpToApp};
+use crate::mcp::pipe_router::PipeRouter;
 
 /// Extract base64 from a `data:image/png;base64,...` URL and build an MCP image content block.
 fn image_content_from_data_url(data_url: &str) -> Option<McpContent> {
@@ -326,7 +326,7 @@ async fn refresh_listener_lock(data_dir: &Path, instance_id: &str) {
 pub async fn handle_voice_send(
     args: &Value,
     data_dir: &Path,
-    pipe: Option<&Arc<PipeClient>>,
+    router: Option<&Arc<PipeRouter>>,
 ) -> McpToolResult {
     let instance_id = match args.get("instance_id").and_then(|v| v.as_str()) {
         Some(id) => id,
@@ -405,7 +405,7 @@ pub async fn handle_voice_send(
 
     // Fast path: also send via named pipe for instant delivery to the Tauri app.
     // This bypasses the file watcher debounce (~100ms) for sub-ms event delivery.
-    if let Some(pipe) = pipe {
+    if let Some(router) = router {
         let pipe_msg = McpToApp::VoiceSend {
             from: instance_id.to_string(),
             message: message.to_string(),
@@ -414,7 +414,7 @@ pub async fn handle_voice_send(
             message_id: new_message.id.clone(),
             timestamp: new_message.timestamp.clone(),
         };
-        if let Err(e) = pipe.send(&pipe_msg).await {
+        if let Err(e) = router.send(&pipe_msg).await {
             warn!("[voice_send] Pipe send failed (file fallback still active): {}", e);
         }
     }
@@ -561,7 +561,7 @@ pub async fn handle_voice_inbox(args: &Value, data_dir: &Path) -> McpToolResult 
 pub async fn handle_voice_listen(
     args: &Value,
     data_dir: &Path,
-    pipe: Option<&Arc<PipeClient>>,
+    router: Option<&Arc<PipeRouter>>,
 ) -> McpToolResult {
     let instance_id = match args.get("instance_id").and_then(|v| v.as_str()) {
         Some(id) => id,
@@ -603,10 +603,11 @@ pub async fn handle_voice_listen(
         store.messages.iter().map(|m| m.id.clone()).collect()
     };
 
-    // Fast path: if pipe is available, listen for instant message delivery.
-    if let Some(pipe) = pipe {
+    // Fast path: if pipe router is available, listen for instant message delivery
+    // via the router's user_messages_rx channel (already dispatched by PipeRouter).
+    if let Some(router) = router {
         // Notify the Tauri app that we're listening
-        let _ = pipe
+        let _ = router
             .send(&McpToApp::ListenStart {
                 instance_id: instance_id.to_string(),
                 from_sender: from_sender.to_string(),
@@ -615,10 +616,11 @@ pub async fn handle_voice_listen(
             .await;
 
         info!(
-            "[voice_listen] Waiting for pipe message from '{}' (timeout: {}s)",
+            "[voice_listen] Waiting for routed message from '{}' (timeout: {}s)",
             from_sender, timeout_seconds
         );
 
+        let mut rx_guard = router.user_messages_rx.lock().await;
         let mut pipe_ok = true;
         loop {
             let remaining = timeout.saturating_sub(start.elapsed());
@@ -632,8 +634,8 @@ pub async fn handle_voice_listen(
                 last_lock_refresh = Instant::now();
             }
 
-            match tokio::time::timeout(remaining.min(Duration::from_secs(30)), pipe.recv()).await {
-                Ok(Ok(Some(AppToMcp::UserMessage {
+            match tokio::time::timeout(remaining.min(Duration::from_secs(30)), rx_guard.recv()).await {
+                Ok(Some(AppToMcp::UserMessage {
                     id,
                     from,
                     message,
@@ -641,7 +643,7 @@ pub async fn handle_voice_listen(
                     timestamp,
                     image_path: _,
                     image_data_url,
-                }))) => {
+                })) => {
                     // Check sender match
                     if from.to_lowercase() != from_sender.to_lowercase() {
                         continue;
@@ -654,10 +656,11 @@ pub async fn handle_voice_listen(
                     }
 
                     let wait_secs = start.elapsed().as_secs();
+                    drop(rx_guard);
                     release_listener_lock(data_dir, instance_id).await;
 
                     info!(
-                        "[voice_listen] Pipe message received from '{}', has_image: {}, image_data_url_len: {}",
+                        "[voice_listen] Routed message received from '{}', has_image: {}, image_data_url_len: {}",
                         from,
                         image_data_url.is_some(),
                         image_data_url.as_ref().map(|u| u.len()).unwrap_or(0),
@@ -677,18 +680,18 @@ pub async fn handle_voice_listen(
                     );
                     return text_with_optional_image(text, image_data_url.as_deref());
                 }
-                Ok(Ok(Some(AppToMcp::Shutdown))) => {
+                Ok(Some(AppToMcp::Shutdown)) => {
+                    drop(rx_guard);
                     release_listener_lock(data_dir, instance_id).await;
                     return McpToolResult::text("Shutdown requested, stopping listener.");
                 }
-                Ok(Ok(None)) => {
-                    // Pipe disconnected — fall back to file polling
-                    warn!("[voice_listen] Pipe disconnected, falling back to file polling");
-                    pipe_ok = false;
-                    break;
+                Ok(Some(_)) => {
+                    // BrowserResponse shouldn't arrive here (routed by PipeRouter), skip
+                    continue;
                 }
-                Ok(Err(e)) => {
-                    warn!("[voice_listen] Pipe read error: {}, falling back to file polling", e);
+                Ok(None) => {
+                    // Channel closed — fall back to file polling
+                    warn!("[voice_listen] User message channel closed, falling back to file polling");
                     pipe_ok = false;
                     break;
                 }
@@ -698,6 +701,8 @@ pub async fn handle_voice_listen(
                 }
             }
         }
+
+        drop(rx_guard);
 
         // If pipe was healthy and we just timed out, return timeout
         if pipe_ok {

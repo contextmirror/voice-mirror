@@ -1,15 +1,26 @@
 <script>
   import { onDestroy, tick } from 'svelte';
   import { listen } from '@tauri-apps/api/event';
-  import { readFile, readExternalFile, writeFile, lspOpenFile, lspCloseFile, lspChangeFile, lspSaveFile, lspRequestCompletion, lspRequestHover, lspRequestDefinition, revealInExplorer, writeUserMessage, aiPtyInput } from '../../lib/api.js';
+  import { readFile, readExternalFile, writeFile, lspRequestDefinition, lspApplyWorkspaceEdit, writeUserMessage, aiPtyInput } from '../../lib/api.js';
   import { tabsStore } from '../../lib/stores/tabs.svelte.js';
   import { projectStore } from '../../lib/stores/project.svelte.js';
+  import { configStore } from '../../lib/stores/config.svelte.js';
   import { chatStore } from '../../lib/stores/chat.svelte.js';
   import { aiStatusStore } from '../../lib/stores/ai-status.svelte.js';
   import EditorContextMenu from './EditorContextMenu.svelte';
+  import ReferencesPanel from './ReferencesPanel.svelte';
+  import CodeActionsMenu from './CodeActionsMenu.svelte';
+  import RenameInput from './RenameInput.svelte';
+  import SignatureHelp from './SignatureHelp.svelte';
+  import { open } from '@tauri-apps/plugin-shell';
   import { voiceMirrorEditorTheme } from '../../lib/editor-theme.js';
+  import { renderMarkdown } from '../../lib/markdown.js';
+  import { createEditorLsp, LSP_EXTENSIONS, uriToRelativePath, lspPositionToOffset, mapCompletionKind } from '../../lib/editor-lsp.svelte.js';
+  import { lspDiagnosticsStore } from '../../lib/stores/lsp-diagnostics.svelte.js';
+  import { buildEditorExtensions } from '../../lib/editor-extensions.js';
+  import { loadLanguageExtension } from '../../lib/codemirror-languages.js';
 
-  let { tab } = $props();
+  let { tab, groupId = 1 } = $props();
 
   let editorEl;
   let view;
@@ -22,6 +33,12 @@
   // Conflict detection state — shown when file changes on disk while tab is dirty
   let conflictDetected = $state(false);
 
+  // Markdown preview state
+  let isMarkdown = $derived(!!tab?.path?.match(/\.(md|markdown)$/i));
+  let markdownPreviewDefault = $derived(configStore.value?.editor?.markdownPreview !== false);
+  let showPreview = $state(true);
+  let markdownContent = $state('');
+
   // Context menu state
   let editorMenu = $state({ visible: false, x: 0, y: 0 });
   let menuContext = $state({
@@ -32,13 +49,12 @@
     lineNumber: 0,
   });
 
-  // LSP state
-  let lspVersion = $state(0);
-  let lspDebounceTimer = null;
-  let cachedDiagnostics = $state(new Map()); // path -> diagnostics array
-  let hasLsp = $state(false); // whether current file has LSP support
+  // Signature help positioning
+  let sigHelpCoords = $state({ x: 0, y: 0 });
+  let sigHelpDebounce = null;
 
-  const LSP_EXTENSIONS = new Set(['js', 'jsx', 'mjs', 'cjs', 'ts', 'tsx', 'rs', 'py', 'css', 'scss', 'html', 'svelte', 'json', 'md', 'markdown']);
+  // LSP helper (extracted to editor-lsp.svelte.js)
+  const lsp = createEditorLsp();
 
   // Cache CodeMirror modules after first load
   let cmCache = null;
@@ -47,7 +63,7 @@
     if (cmCache) return cmCache;
     const [
       { EditorView, basicSetup },
-      { EditorState },
+      { EditorState, EditorSelection },
       { keymap, hoverTooltip },
       { autocompletion },
       { setDiagnostics, lintGutter },
@@ -58,129 +74,11 @@
       import('@codemirror/autocomplete'),
       import('@codemirror/lint'),
     ]);
-    cmCache = { EditorView, basicSetup, EditorState, keymap, hoverTooltip, autocompletion, setDiagnostics, lintGutter };
+    cmCache = { EditorView, basicSetup, EditorState, EditorSelection, keymap, hoverTooltip, autocompletion, setDiagnostics, lintGutter };
     return cmCache;
   }
 
-  async function loadLanguage(filePath) {
-    const ext = filePath?.split('.').pop()?.toLowerCase() || '';
-    try {
-      switch (ext) {
-        case 'js': case 'jsx': case 'mjs': case 'cjs': {
-          const { javascript } = await import('@codemirror/lang-javascript');
-          return javascript();
-        }
-        case 'ts': case 'tsx': {
-          const { javascript } = await import('@codemirror/lang-javascript');
-          return javascript({ typescript: true });
-        }
-        case 'rs': {
-          const { rust } = await import('@codemirror/lang-rust');
-          return rust();
-        }
-        case 'css': case 'scss': {
-          const { css } = await import('@codemirror/lang-css');
-          return css();
-        }
-        case 'html': case 'svelte': {
-          const { html } = await import('@codemirror/lang-html');
-          return html();
-        }
-        case 'json': {
-          const { json } = await import('@codemirror/lang-json');
-          return json();
-        }
-        case 'md': case 'markdown': {
-          const { markdown } = await import('@codemirror/lang-markdown');
-          return markdown();
-        }
-        case 'py': case 'python': {
-          const { python } = await import('@codemirror/lang-python');
-          return python();
-        }
-        default:
-          return [];
-      }
-    } catch (err) {
-      console.warn('[FileEditor] Language load failed for', ext, err);
-      return [];
-    }
-  }
-
-  /** Convert a file:// URI to a project-relative path.
-   *  Returns { path, external } where external=true if outside project root. */
-  function uriToRelativePath(uri, root) {
-    if (!uri) return null;
-    try {
-      const url = new URL(uri);
-      if (url.protocol !== 'file:') return null;
-      // Decode percent-encoded characters and normalize slashes
-      let filePath = decodeURIComponent(url.pathname).replace(/\\/g, '/');
-      // On Windows, pathname starts with /C:/... — strip leading slash
-      if (/^\/[A-Za-z]:\//.test(filePath)) filePath = filePath.slice(1);
-      const normalizedRoot = root.replace(/\\/g, '/').replace(/\/$/, '');
-      // Windows paths are case-insensitive — compare lowercase for prefix check
-      const filePathLower = filePath.toLowerCase();
-      const rootLower = normalizedRoot.toLowerCase();
-      if (filePathLower.startsWith(rootLower + '/')) {
-        return { path: filePath.slice(normalizedRoot.length + 1), external: false };
-      }
-      // Outside project root — return absolute path marked as external
-      return { path: filePath, external: true };
-    } catch {
-      return null;
-    }
-  }
-
-  function lspPositionToOffset(doc, pos) {
-    const line = doc.line(Math.min(pos.line + 1, doc.lines));
-    return line.from + Math.min(pos.character, line.length);
-  }
-
-  function mapCompletionKind(kind) {
-    const kinds = {
-      1: 'text', 2: 'method', 3: 'function', 4: 'constructor',
-      5: 'field', 6: 'variable', 7: 'class', 8: 'interface',
-      9: 'module', 10: 'property', 11: 'unit', 12: 'value',
-      13: 'enum', 14: 'keyword', 15: 'snippet', 16: 'color',
-      17: 'file', 18: 'reference', 19: 'folder', 20: 'enum',
-      21: 'constant', 22: 'struct', 23: 'event', 24: 'operator',
-      25: 'type',
-    };
-    return kinds[kind] || 'text';
-  }
-
-  async function lspCompletionSource(context) {
-    if (!hasLsp || !currentPath) return null;
-    const pos = context.state.doc.lineAt(context.pos);
-    const line = pos.number - 1; // LSP is 0-indexed
-    const character = context.pos - pos.from;
-    const root = projectStore.activeProject?.path || null;
-
-    try {
-      const result = await lspRequestCompletion(currentPath, line, character, root);
-      if (!result?.data?.items?.length) return null;
-
-      return {
-        from: context.pos - (context.matchBefore(/\w*/)?.text.length || 0),
-        options: result.data.items.map(item => ({
-          label: item.label,
-          type: mapCompletionKind(item.kind),
-          detail: item.detail || undefined,
-          info: item.documentation || undefined,
-          apply: item.textEdit?.newText || item.insertText || item.label,
-        })),
-      };
-    } catch {
-      return null; // Fall back to keyword completions
-    }
-  }
-
-  function getLanguageFromPath(path) {
-    const ext = path.split('.').pop()?.toLowerCase() || '';
-    const map = { js: 'javascript', ts: 'typescript', rs: 'rust', py: 'python', svelte: 'svelte', json: 'json', css: 'css', html: 'html', md: 'markdown' };
-    return map[ext] || ext;
-  }
+  const loadLanguage = loadLanguageExtension;
 
   function sendAiMessage(text) {
     chatStore.addMessage('user', text);
@@ -191,145 +89,43 @@
     }
   }
 
-  async function handleGoToDefinition() {
-    if (!view || !hasLsp || !currentPath) return;
+  async function handleFormat() {
+    if (!view || !lsp.hasLsp) return;
+    const root = projectStore.activeProject?.path || null;
+    await lsp.formatDocument(view, currentPath, root);
+  }
+
+  function handleGoToDefinition() {
+    if (!view || !lsp.hasLsp || !currentPath) return;
     const pos = view.state.selection.main.head;
-    const lineInfo = view.state.doc.lineAt(pos);
-    const line = lineInfo.number - 1;
-    const character = pos - lineInfo.from;
-    const r = projectStore.activeProject?.path || null;
-
-    try {
-      const result = await lspRequestDefinition(currentPath, line, character, r);
-      if (!result?.data?.locations?.length) return;
-      const loc = result.data.locations[0];
-      const root = projectStore.activeProject?.path || '';
-      const resolved = uriToRelativePath(loc.uri, root);
-      if (!resolved) return;
-      if (resolved.path === currentPath && !resolved.external) {
-        const targetLine = view.state.doc.line(loc.range.start.line + 1);
-        view.dispatch({
-          selection: { anchor: targetLine.from + loc.range.start.character },
-          scrollIntoView: true,
-        });
-      } else {
-        const fileName = resolved.path.split(/[/\\]/).pop() || resolved.path;
-        tabsStore.openFile({ name: fileName, path: resolved.path, readOnly: resolved.external, external: resolved.external });
-      }
-    } catch {}
-  }
-
-  async function foldAtCursor() {
-    if (!view) return;
-    const { foldCode } = await import('@codemirror/language');
-    foldCode(view);
-  }
-
-  async function unfoldAtCursor() {
-    if (!view) return;
-    const { unfoldCode } = await import('@codemirror/language');
-    unfoldCode(view);
-  }
-
-  async function foldAllCode() {
-    if (!view) return;
-    const { foldAll } = await import('@codemirror/language');
-    foldAll(view);
-  }
-
-  async function unfoldAllCode() {
-    if (!view) return;
-    const { unfoldAll } = await import('@codemirror/language');
-    unfoldAll(view);
-  }
-
-  function handleMenuAction(action, data) {
-    if (!view) return;
-    switch (action) {
-      // AI Actions
-      case 'ai-fix': {
-        const msg = `Error on line ${data.lineNumber} of \`${data.filePath}\`: "${data.diagnosticMessage}"\n\nFix this error.`;
-        sendAiMessage(msg);
-        break;
-      }
-      case 'ai-explain': {
-        const lang = getLanguageFromPath(data.filePath);
-        const msg = `Looking at \`${data.filePath}\` line ${data.lineNumber}:\n\`\`\`${lang}\n${data.selectedText}\n\`\`\`\nExplain what this code does.`;
-        sendAiMessage(msg);
-        break;
-      }
-      case 'ai-refactor': {
-        const lang = getLanguageFromPath(data.filePath);
-        const msg = `Looking at \`${data.filePath}\` line ${data.lineNumber}:\n\`\`\`${lang}\n${data.selectedText}\n\`\`\`\nRefactor this code to be cleaner and more maintainable.`;
-        sendAiMessage(msg);
-        break;
-      }
-      case 'ai-test': {
-        const lang = getLanguageFromPath(data.filePath);
-        const msg = `Looking at \`${data.filePath}\` line ${data.lineNumber}:\n\`\`\`${lang}\n${data.selectedText}\n\`\`\`\nWrite tests for this code.`;
-        sendAiMessage(msg);
-        break;
-      }
-
-      // LSP Actions
-      case 'goto-definition':
-        handleGoToDefinition();
-        break;
-
-      // Clipboard
-      case 'cut': document.execCommand('cut'); break;
-      case 'copy': document.execCommand('copy'); break;
-      case 'paste':
-        navigator.clipboard.readText().then(text => {
-          if (!view) return;
-          const { from, to } = view.state.selection.main;
-          view.dispatch({ changes: { from, to, insert: text } });
-        }).catch(err => console.warn('[editor] Clipboard read denied:', err));
-        break;
-      case 'select-all':
-        view.dispatch({ selection: { anchor: 0, head: view.state.doc.length } });
-        break;
-
-      // Folding
-      case 'fold': foldAtCursor(); break;
-      case 'unfold': unfoldAtCursor(); break;
-      case 'fold-all': foldAllCode(); break;
-      case 'unfold-all': unfoldAllCode(); break;
-
-      // File actions
-      case 'copy-path': {
-        const root = projectStore.activeProject?.path || '';
-        const fullPath = root ? `${root}/${currentPath}` : currentPath;
-        navigator.clipboard.writeText(fullPath.replace(/\//g, '\\'));
-        break;
-      }
-      case 'copy-relative-path':
-        navigator.clipboard.writeText(currentPath);
-        break;
-      case 'copy-markdown': {
-        const lang = getLanguageFromPath(currentPath);
-        const text = view.state.selection.main.empty
-          ? view.state.doc.toString()
-          : view.state.sliceDoc(view.state.selection.main.from, view.state.selection.main.to);
-        navigator.clipboard.writeText(`\`${currentPath}\`\n\`\`\`${lang}\n${text}\n\`\`\``);
-        break;
-      }
-      case 'reveal':
-        revealInExplorer(currentPath, projectStore.activeProject?.path || null);
-        break;
-    }
+    lsp.handleGoToDefinition(view, pos);
   }
 
   async function save() {
     if (!view) return;
+
+    // Untitled files can't be saved without a real path
+    if (tab.path?.startsWith('untitled:')) {
+      console.warn('[FileEditor] Cannot save untitled file — use Save As');
+      return;
+    }
+
     try {
-      const content = view.state.doc.toString();
       const root = projectStore.activeProject?.path || null;
+
+      // Format on save (if enabled)
+      if (configStore.value?.editor?.formatOnSave && lsp.hasLsp) {
+        try {
+          await lsp.formatDocument(view, tab.path, root);
+        } catch (err) {
+          console.warn('[FileEditor] Format on save failed:', err);
+        }
+      }
+
+      const content = view.state.doc.toString();
       await writeFile(tab.path, content, root);
       tabsStore.setDirty(tab.id, false);
-      if (hasLsp) {
-        lspSaveFile(tab.path, content, root).catch(() => {});
-      }
+      lsp.saveFile(tab.path, content, root);
     } catch (err) {
       console.error('[FileEditor] Save failed:', err);
     }
@@ -348,6 +144,7 @@
           changes: { from: 0, to: currentContent.length, insert: data.content },
         });
       }
+      markdownContent = data.content;
       tabsStore.setDirty(tab.id, false);
       conflictDetected = false;
     } catch (err) {
@@ -363,53 +160,64 @@
     if (!filePath || filePath === currentPath) return;
 
     // Close previous LSP document
-    if (currentPath && hasLsp) {
+    if (currentPath && lsp.hasLsp) {
       const root = projectStore.activeProject?.path || null;
-      lspCloseFile(currentPath, root).catch(() => {});
+      lsp.closeFile(currentPath, root);
     }
-    clearTimeout(lspDebounceTimer);
-    lspVersion = 0;
-    hasLsp = false;
+    lsp.reset();
+    clearTimeout(sigHelpDebounce);
 
     currentPath = filePath;
     loading = true;
     error = null;
     isBinary = false;
     conflictDetected = false;
+    showPreview = markdownPreviewDefault;
 
     // Check if this is an external (read-only) file
     const isExternal = tab?.external || false;
     const isReadOnly = tab?.readOnly || false;
+    const isUntitled = filePath.startsWith('untitled:');
 
     try {
       const cm = await loadCM();
       const root = projectStore.activeProject?.path || null;
-      const result = isExternal
-        ? await readExternalFile(filePath)
-        : await readFile(filePath, root);
-      const data = result?.data || result;
 
-      // Check if tab changed while loading
-      if (filePath !== currentPath) return;
+      let data;
+      if (isUntitled) {
+        // Untitled files start with empty content, no disk read
+        data = { content: '' };
+      } else {
+        const result = isExternal
+          ? await readExternalFile(filePath)
+          : await readFile(filePath, root);
+        data = result?.data || result;
 
-      if (!result?.success || result?.error) {
-        error = result?.error || 'Failed to read file';
-        loading = false;
-        return;
+        // Check if tab changed while loading
+        if (filePath !== currentPath) return;
+
+        if (!result?.success || result?.error) {
+          error = result?.error || 'Failed to read file';
+          loading = false;
+          return;
+        }
+
+        if (data?.binary) {
+          isBinary = true;
+          fileSize = data.size || 0;
+          loading = false;
+          return;
+        }
+
+        if (data?.content == null) {
+          error = 'Failed to read file';
+          loading = false;
+          return;
+        }
       }
 
-      if (data?.binary) {
-        isBinary = true;
-        fileSize = data.size || 0;
-        loading = false;
-        return;
-      }
-
-      if (data?.content == null) {
-        error = 'Failed to read file';
-        loading = false;
-        return;
-      }
+      // Store content for markdown preview
+      markdownContent = data.content || '';
 
       const langSupport = await loadLanguage(filePath);
 
@@ -418,78 +226,70 @@
 
       // Determine LSP support from file extension (no LSP for external files)
       const ext = filePath.split('.').pop()?.toLowerCase() || '';
-      hasLsp = !isExternal && LSP_EXTENSIONS.has(ext);
+      lsp.setHasLsp(!isExternal && LSP_EXTENSIONS.has(ext));
 
-      const extensions = [
-        cm.basicSetup,
-        ...voiceMirrorEditorTheme,
-        ...(isReadOnly ? [cm.EditorState.readOnly.of(true)] : []),
-        cm.lintGutter(),
-        cm.autocompletion(hasLsp ? {
-          override: [lspCompletionSource],
-          maxRenderedOptions: 20,
-        } : {
-          activateOnTyping: true,
-          maxRenderedOptions: 20,
-        }),
-        cm.EditorView.updateListener.of((update) => {
-          // Dismiss context menu on any document change or viewport scroll
-          if ((update.docChanged || update.viewportChanged) && editorMenu.visible) {
+      const extensions = buildEditorExtensions(cm, lsp, {
+        isReadOnly,
+        filePath,
+        voiceMirrorEditorTheme,
+        onDocChanged: (update) => {
+          tabsStore.setDirty(tab.id, true);
+          tabsStore.pinTab(tab.id);
+          markdownContent = update.state.doc.toString();
+          if (lsp.hasLsp) {
+            const content = update.state.doc.toString();
+            const r = projectStore.activeProject?.path || null;
+            lsp.changeFile(currentPath, content, r);
+          }
+        },
+        onDismissMenu: () => {
+          if (editorMenu.visible) {
             editorMenu.visible = false;
           }
-          if (update.docChanged) {
-            tabsStore.setDirty(tab.id, true);
-            tabsStore.pinTab(tab.id);
-            if (hasLsp) {
-              lspVersion++;
-              clearTimeout(lspDebounceTimer);
-              lspDebounceTimer = setTimeout(() => {
-                const content = update.state.doc.toString();
-                const r = projectStore.activeProject?.path || null;
-                lspChangeFile(currentPath, content, lspVersion, r).catch(() => {});
-              }, 300);
+        },
+        onSave: () => save(),
+        onFormat: lsp.hasLsp ? () => handleFormat() : null,
+        onSignatureHelp: lsp.hasLsp ? {
+          onDocChanged(update) {
+            const pos = update.state.selection.main.head;
+            if (pos === 0) return;
+            const lastChar = update.state.doc.sliceString(pos - 1, pos);
+
+            if (lastChar === '(' || lastChar === ',') {
+              clearTimeout(sigHelpDebounce);
+              sigHelpDebounce = setTimeout(async () => {
+                await lsp.requestSignatureHelp(update.view, currentPath, lastChar);
+                if (lsp.showSignatureHelp && update.view) {
+                  const coords = update.view.coordsAtPos(update.view.state.selection.main.head);
+                  if (coords) sigHelpCoords = { x: coords.left, y: coords.top };
+                }
+              }, 80);
+            } else if (lastChar === ')') {
+              clearTimeout(sigHelpDebounce);
+              lsp.dismissSignatureHelp();
+            } else if (lsp.showSignatureHelp) {
+              clearTimeout(sigHelpDebounce);
+              sigHelpDebounce = setTimeout(async () => {
+                await lsp.requestSignatureHelp(update.view, currentPath, null);
+                if (lsp.showSignatureHelp && update.view) {
+                  const coords = update.view.coordsAtPos(update.view.state.selection.main.head);
+                  if (coords) sigHelpCoords = { x: coords.left, y: coords.top };
+                }
+              }, 150);
             }
-          }
-        }),
-        cm.keymap.of([{
-          key: 'Mod-s',
-          run: () => { save(); return true; },
-        }]),
-      ];
-
-      // Add hover tooltip for LSP
-      if (hasLsp) {
-        extensions.push(cm.hoverTooltip(async (v, pos) => {
-          const lineInfo = v.state.doc.lineAt(pos);
-          const line = lineInfo.number - 1;
-          const character = pos - lineInfo.from;
-          const r = projectStore.activeProject?.path || null;
-
-          try {
-            const result = await lspRequestHover(currentPath, line, character, r);
-            if (!result?.data?.contents) return null;
-
-            return {
-              pos,
-              create() {
-                const dom = document.createElement('div');
-                dom.className = 'lsp-hover-tooltip';
-                dom.textContent = typeof result.data.contents === 'string'
-                  ? result.data.contents
-                  : result.data.contents.value || '';
-                return { dom };
-              },
-            };
-          } catch {
-            return null;
-          }
-        }));
-
-      }
-
-      // Context menu + optional Ctrl+Click go-to-definition
-      const domHandlers = {
-        contextmenu: (event, v) => {
+          },
+          onSelectionChanged(update) {
+            if (lsp.showSignatureHelp) {
+              const pos = update.state.selection.main.head;
+              const triggerLine = update.state.doc.lineAt(lsp.signatureHelpPos);
+              const cursorLine = update.state.doc.lineAt(pos);
+              if (pos < lsp.signatureHelpPos || cursorLine.number !== triggerLine.number) {
+                lsp.dismissSignatureHelp();
+              }
+            }
+          },
+        } : null,
+        onContextMenu: (event, v) => {
           event.preventDefault();
           const pos = v.posAtCoords({ x: event.clientX, y: event.clientY });
           if (pos == null) return true;
@@ -499,7 +299,7 @@
           const selText = selHas ? v.state.sliceDoc(sel.from, sel.to) : '';
 
           // Check if pos falls within any cached diagnostic range
-          const diagnostics = cachedDiagnostics.get(currentPath) || [];
+          const diagnostics = lsp.cachedDiagnostics.get(currentPath) || [];
           const diagnostic = diagnostics.find(d => pos >= d.from && pos <= d.to);
 
           editorMenu = { visible: true, x: event.clientX, y: event.clientY };
@@ -512,12 +312,8 @@
           };
           return true;
         },
-      };
-
-      if (hasLsp) {
-        domHandlers.click = async (event, v) => {
+        onClick: lsp.hasLsp ? async (event, v) => {
           if (!event.ctrlKey && !event.metaKey) return false;
-          // Consume the event immediately to prevent browser Ctrl+Click behavior
           event.preventDefault();
           const pos = v.posAtCoords({ x: event.clientX, y: event.clientY });
           if (pos == null) return true;
@@ -532,8 +328,8 @@
             if (!result?.data?.locations?.length) return true;
 
             const loc = result.data.locations[0];
-            const root = projectStore.activeProject?.path || '';
-            const resolved = uriToRelativePath(loc.uri, root);
+            const rootStr = projectStore.activeProject?.path || '';
+            const resolved = uriToRelativePath(loc.uri, rootStr);
             if (!resolved) return true;
 
             if (resolved.path === currentPath && !resolved.external) {
@@ -546,14 +342,10 @@
               const fileName = resolved.path.split(/[/\\]/).pop() || resolved.path;
               tabsStore.openFile({ name: fileName, path: resolved.path, readOnly: resolved.external, external: resolved.external });
             }
-          } catch {
-            // Definition lookup failed — still consume the event
-          }
+          } catch {}
           return true;
-        };
-      }
-
-      extensions.push(cm.EditorView.domEventHandlers(domHandlers));
+        } : null,
+      });
 
       if (langSupport && !Array.isArray(langSupport)) {
         extensions.splice(1, 0, langSupport);
@@ -577,18 +369,47 @@
 
       if (editorEl) {
         view = new cm.EditorView({ state, parent: editorEl });
+        // Attach current path for LSP handler access
+        view._lspPath = filePath;
       }
 
       // Open file in LSP (fire and forget)
-      if (hasLsp) {
-        lspOpenFile(filePath, data.content, root).catch(() => {});
+      if (lsp.hasLsp) {
+        lsp.openFile(filePath, data.content, root);
       }
 
-      // Restore cached diagnostics if we have them
-      if (hasLsp && cachedDiagnostics.has(filePath) && view) {
+      // Restore cached diagnostics if we have them (from editor's own cache)
+      if (lsp.hasLsp && lsp.cachedDiagnostics.has(filePath) && view) {
         try {
-          view.dispatch(cm.setDiagnostics(view.state, cachedDiagnostics.get(filePath)));
+          view.dispatch(cm.setDiagnostics(view.state, lsp.cachedDiagnostics.get(filePath)));
         } catch {}
+      }
+
+      // Also apply pre-existing diagnostics from the global store (received before file was opened).
+      // The TS language server scans the workspace and publishes diagnostics for files
+      // we haven't opened yet — the store has them, but the editor's listener wasn't active.
+      if (lsp.hasLsp && !lsp.cachedDiagnostics.has(filePath) && view) {
+        const storeDiags = lspDiagnosticsStore.getRawForFile(filePath);
+        if (storeDiags?.length) {
+          try {
+            const cmDiags = storeDiags.map(d => {
+              let from = lspPositionToOffset(view.state.doc, d.range.start);
+              let to = lspPositionToOffset(view.state.doc, d.range.end);
+              from = Math.max(0, Math.min(from, view.state.doc.length));
+              to = Math.max(0, Math.min(to, view.state.doc.length));
+              if (from > to) { const tmp = from; from = to; to = tmp; }
+              return {
+                from,
+                to,
+                severity: d.severity || 'error',
+                message: d.message,
+                source: d.source || undefined,
+              };
+            });
+            lsp.cachedDiagnostics.set(filePath, cmDiags);
+            view.dispatch(cm.setDiagnostics(view.state, cmDiags));
+          } catch {}
+        }
       }
     } catch (err) {
       if (filePath !== currentPath) return;
@@ -606,7 +427,6 @@
   });
 
   // Live file sync: reload editor content when the file changes on disk.
-  // Uses CodeMirror's dispatch to apply a minimal diff (preserves cursor + scroll).
   $effect(() => {
     let unlisten;
     (async () => {
@@ -614,7 +434,6 @@
         const { files } = event.payload;
         if (!view || !currentPath || !files?.includes(currentPath)) return;
 
-        // If the editor has unsaved changes, show conflict banner instead of auto-reloading
         const dirty = tabsStore.tabs.find(t => t.path === currentPath)?.dirty;
         if (dirty) {
           conflictDetected = true;
@@ -628,9 +447,8 @@
           if (!data?.content || data.content == null) return;
 
           const currentContent = view.state.doc.toString();
-          if (data.content === currentContent) return; // No change
+          if (data.content === currentContent) return;
 
-          // Apply as a transaction to preserve cursor position and scroll
           view.dispatch({
             changes: { from: 0, to: currentContent.length, insert: data.content },
           });
@@ -645,51 +463,57 @@
     };
   });
 
-  // Listen for LSP diagnostics
+  // Listen for LSP diagnostics via the extracted helper
   $effect(() => {
+    if (!lsp.hasLsp || !currentPath) return;
     let unlisten;
     (async () => {
-      unlisten = await listen('lsp-diagnostics', (event) => {
-        const { uri, diagnostics: lspDiags } = event.payload;
-        if (!view || !currentPath) return;
-        // Normalize path for comparison
-        const normalizedPath = currentPath.replace(/\\/g, '/');
-        if (!uri.includes(normalizedPath)) return;
-
-        try {
-          const cm = cmCache;
-          if (!cm) return;
-          const cmDiags = lspDiags.map(d => {
-            let from = lspPositionToOffset(view.state.doc, d.range.start);
-            let to = lspPositionToOffset(view.state.doc, d.range.end);
-            from = Math.max(0, Math.min(from, view.state.doc.length));
-            to = Math.max(0, Math.min(to, view.state.doc.length));
-            if (from > to) { const tmp = from; from = to; to = tmp; }
-            return {
-              from,
-              to,
-              severity: d.severity || 'error',
-              message: d.message,
-              source: d.source || undefined,
-            };
-          });
-          // Cache diagnostics for this file
-          cachedDiagnostics.set(currentPath, cmDiags);
-          view.dispatch(cm.setDiagnostics(view.state, cmDiags));
-        } catch (err) {
-          console.warn('[FileEditor] Failed to apply diagnostics:', err);
-        }
-      });
+      unlisten = await listen('lsp-diagnostics', lsp.diagnosticListener(currentPath, () => view, cmCache));
     })();
     return () => { unlisten?.(); };
   });
 
-  onDestroy(() => {
-    if (currentPath && hasLsp) {
-      const root = projectStore.activeProject?.path || null;
-      lspCloseFile(currentPath, root).catch(() => {});
+  // Listen for outline symbol navigation (from OutlinePanel via LensWorkspace)
+  // Scoped by groupId so each editor instance only handles its own events
+  $effect(() => {
+    const eventName = `lens-goto-position-${groupId}`;
+    function handleGotoPosition(e) {
+      if (!view) return;
+      const { line, character } = e.detail;
+      try {
+        const targetLine = view.state.doc.line(line + 1);
+        view.dispatch({
+          selection: { anchor: targetLine.from + Math.min(character, targetLine.length) },
+          scrollIntoView: true,
+        });
+        view.focus();
+      } catch {}
     }
-    clearTimeout(lspDebounceTimer);
+
+    // Command events dispatched by the command registry
+    const handleCommandSave = () => save();
+    const handleCommandFormat = () => handleFormat();
+
+    // Also listen to unscoped event for backwards compatibility
+    window.addEventListener(eventName, handleGotoPosition);
+    window.addEventListener('lens-goto-position', handleGotoPosition);
+    window.addEventListener('command:save', handleCommandSave);
+    window.addEventListener('command:format', handleCommandFormat);
+    return () => {
+      window.removeEventListener(eventName, handleGotoPosition);
+      window.removeEventListener('lens-goto-position', handleGotoPosition);
+      window.removeEventListener('command:save', handleCommandSave);
+      window.removeEventListener('command:format', handleCommandFormat);
+    };
+  });
+
+  onDestroy(() => {
+    if (currentPath && lsp.hasLsp) {
+      const root = projectStore.activeProject?.path || null;
+      lsp.closeFile(currentPath, root);
+    }
+    clearTimeout(sigHelpDebounce);
+    lsp.destroy();
     view?.destroy();
   });
 </script>
@@ -727,7 +551,85 @@
       <button class="conflict-btn conflict-dismiss" onclick={dismissConflict}>Dismiss</button>
     </div>
   {/if}
-  <div class="file-editor" bind:this={editorEl}>
+  {#if isMarkdown && !loading}
+    <div class="editor-preview-toolbar">
+      <button class="preview-btn" class:active={showPreview} onclick={() => { showPreview = true; }} title="Preview" aria-label="Preview markdown">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+        </svg>
+      </button>
+      <button class="preview-btn" class:active={!showPreview} onclick={() => { showPreview = false; }} title="Edit" aria-label="Edit markdown">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/>
+        </svg>
+      </button>
+    </div>
+  {/if}
+  {#if isMarkdown && showPreview && !loading}
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="markdown-preview" onclick={(e) => {
+      const a = /** @type {HTMLElement} */ (e.target).closest('a[href]');
+      if (!a) return;
+      e.preventDefault();
+      const href = a.getAttribute('href');
+      if (href && (href.startsWith('http://') || href.startsWith('https://'))) {
+        open(href);
+      }
+    }}>
+      {#if markdownContent}
+        {@html renderMarkdown(markdownContent)}
+      {:else}
+        <div class="editor-loading"><span class="loading-text">No content</span></div>
+      {/if}
+    </div>
+  {/if}
+  <div class="file-editor" class:hidden={isMarkdown && showPreview} bind:this={editorEl}
+    oncontextmenu={(e) => {
+      // Fallback: catch right-clicks on gutter markers, tooltips, and other
+      // CodeMirror DOM layers that bypass the EditorView.domEventHandlers callback.
+      // If the CM handler already fired this event cycle, editorMenu is already visible.
+      if (editorMenu.visible) return;
+      e.preventDefault();
+
+      // Try to resolve editor position from click coordinates
+      let lineNumber = 0;
+      let diagnostic = null;
+      if (view) {
+        const pos = view.posAtCoords({ x: e.clientX, y: e.clientY });
+        if (pos != null) {
+          const line = view.state.doc.lineAt(pos);
+          lineNumber = line.number;
+          const diagnostics = lsp.cachedDiagnostics.get(currentPath) || [];
+          diagnostic = diagnostics.find(d => pos >= d.from && pos <= d.to);
+        }
+      }
+
+      // If we couldn't get a precise position, try line-from-Y as best effort
+      if (!lineNumber && view) {
+        const block = view.lineBlockAtHeight(e.clientY - view.documentTop);
+        if (block) {
+          try { lineNumber = view.state.doc.lineAt(block.from).number; } catch {}
+        }
+      }
+
+      // Check for diagnostics on this line even if pos wasn't exact
+      if (!diagnostic && lineNumber && currentPath) {
+        const diagnostics = lsp.cachedDiagnostics.get(currentPath) || [];
+        diagnostic = diagnostics.find(d => {
+          try { return view.state.doc.lineAt(d.from).number === lineNumber; } catch { return false; }
+        });
+      }
+
+      editorMenu = { visible: true, x: e.clientX, y: e.clientY };
+      menuContext = {
+        hasSelection: false,
+        selectedText: '',
+        hasDiagnostic: !!diagnostic,
+        diagnosticMessage: diagnostic?.message || '',
+        lineNumber,
+      };
+    }}>
     {#if loading}
       <div class="editor-loading">
         <span class="loading-text">Loading...</span>
@@ -742,16 +644,73 @@
   visible={editorMenu.visible}
   hasSelection={menuContext.hasSelection}
   selectedText={menuContext.selectedText}
-  hasLsp={hasLsp}
+  hasLsp={lsp.hasLsp}
   hasDiagnostic={menuContext.hasDiagnostic}
   diagnosticMessage={menuContext.diagnosticMessage}
   filePath={currentPath}
   lineNumber={menuContext.lineNumber}
+  {view}
+  {tab}
+  {lsp}
   onClose={() => { editorMenu.visible = false; }}
-  onAction={handleMenuAction}
+  onSendToAi={sendAiMessage}
+  onNavigateDefinition={handleGoToDefinition}
+/>
+
+<ReferencesPanel
+  references={lsp.referencesResult}
+  visible={lsp.showReferences}
+  onClose={() => { lsp.setShowReferences(false); }}
+  onNavigate={(ref) => {
+    lsp.setShowReferences(false);
+    if (ref.path === currentPath && !ref.external) {
+      if (view) {
+        const line = view.state.doc.line((ref.range?.start?.line ?? 0) + 1);
+        view.dispatch({ selection: { anchor: line.from + (ref.range?.start?.character ?? 0) }, scrollIntoView: true });
+      }
+    } else {
+      const fileName = ref.path.split(/[/\\]/).pop() || ref.path;
+      tabsStore.openFile({ name: fileName, path: ref.path, readOnly: ref.external, external: ref.external });
+    }
+  }}
+/>
+
+<CodeActionsMenu
+  actions={lsp.codeActions}
+  visible={lsp.showCodeActions}
+  x={lsp.codeActionsPosition.x}
+  y={lsp.codeActionsPosition.y}
+  onClose={() => { lsp.setShowCodeActions(false); }}
+  onApply={async (action) => {
+    lsp.setShowCodeActions(false);
+    const edit = action.edit;
+    if (edit) {
+      const root = projectStore.activeProject?.path || null;
+      await lspApplyWorkspaceEdit(edit, root);
+    }
+  }}
+/>
+
+<RenameInput
+  visible={lsp.showRename}
+  x={lsp.renamePosition.x}
+  y={lsp.renamePosition.y}
+  currentName={lsp.renamePlaceholder}
+  onConfirm={(newName) => { lsp.executeRename(view, currentPath, newName); }}
+  onCancel={() => { lsp.setShowRename(false); }}
+/>
+
+<SignatureHelp
+  visible={lsp.showSignatureHelp}
+  data={lsp.signatureHelpData}
+  cursorX={sigHelpCoords.x}
+  cursorY={sigHelpCoords.y}
+  onDismiss={() => lsp.dismissSignatureHelp()}
 />
 
 <style>
+  @import '../../styles/markdown-preview.css';
+
   .file-editor {
     flex: 1;
     overflow: hidden;
@@ -793,7 +752,7 @@
   }
 
   .error-text {
-    color: var(--danger, #ef4444);
+    color: var(--danger);
   }
 
   .binary-title {
@@ -810,12 +769,12 @@
   .file-editor :global(.lsp-hover-tooltip) {
     max-width: 500px;
     padding: 6px 10px;
-    font-family: var(--font-mono, monospace);
+    font-family: var(--font-mono);
     font-size: 12px;
     line-height: 1.4;
     color: var(--text);
-    background: var(--bgElevated, #1e1e1e);
-    border: 1px solid var(--muted, #444);
+    background: var(--bg-elevated);
+    border: 1px solid var(--muted);
     border-radius: 4px;
     white-space: pre-wrap;
     word-break: break-word;
@@ -826,9 +785,9 @@
     align-items: center;
     gap: 8px;
     padding: 6px 12px;
-    background: var(--warn-subtle, rgba(245, 158, 11, 0.15));
-    border-bottom: 1px solid var(--warn, #f59e0b);
-    color: var(--warn, #f59e0b);
+    background: color-mix(in srgb, var(--warn) 15%, transparent);
+    border-bottom: 1px solid var(--warn);
+    color: var(--warn);
     font-size: 12px;
     font-family: var(--font-family);
   }
@@ -847,8 +806,8 @@
   }
 
   .conflict-reload {
-    background: var(--warn, #f59e0b);
-    color: var(--bg, #000);
+    background: var(--warn);
+    color: var(--bg);
     font-weight: 600;
   }
 
@@ -858,12 +817,12 @@
 
   .conflict-dismiss {
     background: transparent;
-    color: var(--warn, #f59e0b);
-    border: 1px solid var(--warn, #f59e0b);
+    color: var(--warn);
+    border: 1px solid var(--warn);
   }
 
   .conflict-dismiss:hover {
-    background: var(--warn-subtle, rgba(245, 158, 11, 0.15));
+    background: color-mix(in srgb, var(--warn) 15%, transparent);
   }
 
   .readonly-banner {
@@ -871,9 +830,9 @@
     align-items: center;
     gap: 6px;
     padding: 4px 12px;
-    background: var(--bg-elevated, #1a1a2e);
-    border-bottom: 1px solid var(--muted, #666);
-    color: var(--muted, #999);
+    background: var(--bg-elevated);
+    border-bottom: 1px solid var(--muted);
+    color: var(--muted);
     font-size: 11px;
     font-family: var(--font-family);
   }
@@ -884,10 +843,11 @@
   }
 
   .file-editor :global(.cm-lintPoint-error) {
-    border-bottom-color: var(--danger, #ef4444);
+    border-bottom-color: var(--danger);
   }
 
   .file-editor :global(.cm-lintPoint-warning) {
-    border-bottom-color: var(--warn, #f59e0b);
+    border-bottom-color: var(--warn);
   }
+
 </style>

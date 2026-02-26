@@ -63,20 +63,52 @@ describe('lens: $state reactivity', () => {
   it('uses $state for pageTitle', () => {
     assert.ok(/let\s+pageTitle\s*=\s*\$state\(/.test(src), 'Should use $state for pageTitle');
   });
+
+  it('uses $state for devServers', () => {
+    assert.ok(/let\s+devServers\s*=\s*\$state\(/.test(src), 'Should use $state for devServers');
+  });
+
+  it('uses $state for devServerLoading', () => {
+    assert.ok(/let\s+devServerLoading\s*=\s*\$state\(/.test(src), 'Should use $state for devServerLoading');
+  });
+
+  it('initializes devServers as empty array', () => {
+    assert.ok(src.includes('devServers = $state([])'), 'devServers should start as empty array');
+  });
+
+  it('initializes devServerLoading as false', () => {
+    assert.ok(src.includes('devServerLoading = $state(false)'), 'devServerLoading should start as false');
+  });
 });
 
 describe('lens: store getters', () => {
-  const getters = ['url', 'inputUrl', 'loading', 'canGoBack', 'canGoForward', 'webviewReady', 'hidden', 'pageTitle'];
+  const getters = ['url', 'inputUrl', 'loading', 'canGoBack', 'canGoForward', 'webviewReady', 'hidden', 'pageTitle', 'devServers', 'devServerLoading'];
 
   for (const getter of getters) {
     it(`has getter "${getter}"`, () => {
       assert.ok(src.includes(`get ${getter}()`), `Should have getter "${getter}"`);
     });
   }
+
+  it('has activeDevServer derived getter', () => {
+    assert.ok(src.includes('get activeDevServer()'), 'Should have activeDevServer getter');
+  });
+
+  it('activeDevServer finds first running server', () => {
+    assert.ok(
+      src.includes('devServers.find(s => s.running)'),
+      'activeDevServer should find first running server'
+    );
+  });
+
+  it('activeDevServer returns null when none running', () => {
+    const block = src.split('get activeDevServer()')[1]?.split('},')[0] || '';
+    assert.ok(block.includes('|| null'), 'activeDevServer should return null when none running');
+  });
 });
 
 describe('lens: store setters', () => {
-  const setters = ['setUrl', 'setInputUrl', 'setLoading', 'setCanGoBack', 'setCanGoForward', 'setWebviewReady', 'setHidden', 'setPageTitle'];
+  const setters = ['setUrl', 'setInputUrl', 'setLoading', 'setCanGoBack', 'setCanGoForward', 'setWebviewReady', 'setHidden', 'setPageTitle', 'setDevServers', 'setDevServerLoading'];
 
   for (const setter of setters) {
     it(`has setter "${setter}"`, () => {
@@ -105,6 +137,32 @@ describe('lens: URL normalization', () => {
   it('trims input', () => {
     assert.ok(src.includes('.trim()'), 'Should trim URL input');
   });
+
+  it('allows about: protocol without prepending https', () => {
+    assert.ok(src.includes('about:'), 'Should handle about: protocol in URL normalization');
+  });
+});
+
+describe('lens: search query fallback', () => {
+  it('detects non-URL input and redirects to Google search', () => {
+    assert.ok(src.includes('google.com/search?q='), 'Should use Google search for non-URL input');
+    assert.ok(src.includes('encodeURIComponent'), 'Should encode search query');
+  });
+
+  it('treats localhost as a URL, not a search', () => {
+    assert.ok(src.includes('localhost'), 'Should detect localhost as URL pattern');
+  });
+
+  it('treats dotted hostnames as URLs', () => {
+    // Pattern like github.com, foo.bar.baz should get https:// not search
+    const hasDotPattern = /\[\\w-\]\+\(\\.\[\\w-\]\+\)\+/.test(src) || src.includes('.test(normalized)');
+    assert.ok(hasDotPattern, 'Should have regex to detect domain-like patterns with dots');
+  });
+
+  it('preserves existing protocol detection', () => {
+    assert.ok(src.includes('https?:\\/\\/'), 'Should still detect http/https protocols');
+    assert.ok(src.includes('about:'), 'Should still detect about: protocol');
+  });
 });
 
 describe('lens: DEFAULT_URL', () => {
@@ -112,8 +170,20 @@ describe('lens: DEFAULT_URL', () => {
     assert.ok(/const\s+DEFAULT_URL\s*=\s*'/.test(src), 'DEFAULT_URL should be a string constant');
   });
 
-  it('DEFAULT_URL is a valid URL', () => {
-    assert.ok(src.includes('https://'), 'DEFAULT_URL should be an https URL');
+  it('DEFAULT_URL is about:blank (no external default)', () => {
+    assert.ok(src.includes("about:blank"), 'DEFAULT_URL should be about:blank');
+  });
+});
+
+describe('lens: reset clears dev server state', () => {
+  it('reset clears devServers', () => {
+    const resetBlock = src.split('reset()')[1]?.split('},')[0] || '';
+    assert.ok(resetBlock.includes('devServers = []'), 'reset should clear devServers');
+  });
+
+  it('reset clears devServerLoading', () => {
+    const resetBlock = src.split('reset()')[1]?.split('},')[0] || '';
+    assert.ok(resetBlock.includes('devServerLoading = false'), 'reset should clear devServerLoading');
   });
 });
 

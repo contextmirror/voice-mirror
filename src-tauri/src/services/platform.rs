@@ -40,30 +40,6 @@ pub fn get_log_dir() -> PathBuf {
         .join("logs")
 }
 
-/// Get the data directory with fallback to the Electron app's data dir.
-///
-/// Checks the primary Tauri data dir first. If its `models/` subdirectory
-/// doesn't exist, falls back to the Electron data dir where models were
-/// previously downloaded.
-pub fn get_data_dir_with_fallback() -> PathBuf {
-    let primary = get_data_dir();
-    if primary.join("models").exists() {
-        return primary;
-    }
-    // Fallback: check Electron data directory
-    if let Some(roaming) = dirs::data_dir() {
-        let electron = roaming.join("voice-mirror-electron").join("data");
-        if electron.join("models").exists() {
-            tracing::info!(
-                "Using Electron model directory: {}",
-                electron.display()
-            );
-            return electron;
-        }
-    }
-    primary
-}
-
 /// Get the platform-appropriate cache directory.
 ///
 /// - Windows: `%LOCALAPPDATA%\voice-mirror\cache\`
@@ -75,7 +51,7 @@ pub fn get_cache_dir() -> PathBuf {
         .join(APP_NAME)
 }
 
-/// Get the OS name as a string matching the Electron convention.
+/// Get the OS name as a string.
 pub fn get_os_name() -> &'static str {
     if cfg!(target_os = "windows") {
         "windows"

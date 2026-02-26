@@ -66,3 +66,20 @@ describe('App.svelte -- titlebar provider status', () => {
     assert.ok(src.includes('titlebar-status-pulse'), 'Should have pulse animation');
   });
 });
+
+describe('App.svelte -- auto-start provider gating', () => {
+  it('checks ai.autoStart config before starting provider', () => {
+    assert.ok(src.includes('autoStart'), 'Should reference autoStart config');
+  });
+
+  it('always auto-starts dictation provider regardless of autoStart', () => {
+    assert.ok(
+      src.includes("provider === 'dictation'"),
+      'Should carve out dictation from autoStart check'
+    );
+  });
+
+  it('has providerStarted guard to prevent re-starts', () => {
+    assert.ok(src.includes('providerStarted'), 'Should have providerStarted one-shot guard');
+  });
+});

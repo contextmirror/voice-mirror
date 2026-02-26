@@ -123,6 +123,10 @@ describe('TerminalTabs.svelte -- tab renaming', () => {
     assert.ok(src.includes('ondblclick'), 'Should have dblclick handler on tab label');
   });
 
+  it('tab label does not have role="textbox" (semantically wrong)', () => {
+    assert.ok(!src.includes('role="textbox"'), 'Tab label should not have textbox role');
+  });
+
   it('saves on Enter key', () => {
     assert.ok(src.includes("e.key === 'Enter'"), 'Should save on Enter');
   });
@@ -227,6 +231,14 @@ describe('TerminalTabs.svelte -- keyboard cycling', () => {
 
   it('uses capture phase for global keydown', () => {
     assert.ok(src.includes("'keydown', handleKeydown, true"), 'Should use capture phase');
+  });
+
+  it('uses onMount instead of $effect for keyboard listener (no reactive deps)', () => {
+    // The keyboard shortcut setup has no reactive dependencies, so it should be onMount
+    assert.ok(src.includes("import { onMount } from 'svelte'"), 'Should import onMount');
+    // Verify onMount wraps the keyboard listener
+    const onMountBlock = src.split('onMount(')[1] || '';
+    assert.ok(onMountBlock.includes("e.key === 'Tab'"), 'onMount should contain the Tab key handler');
   });
 });
 

@@ -12,6 +12,7 @@
 use std::path::PathBuf;
 
 use voice_mirror_lib::ipc::pipe_client;
+use voice_mirror_lib::mcp::pipe_router::PipeRouter;
 use voice_mirror_lib::mcp::server::run_server;
 
 #[tokio::main]
@@ -30,13 +31,17 @@ async fn main() {
         .map(PathBuf::from)
         .unwrap_or_else(|_| default_data_dir());
 
-    // Try to connect to the named pipe for fast IPC
+    // Try to connect to the named pipe for fast IPC.
+    // If connected, wrap in PipeRouter which runs a background dispatch loop
+    // to route BrowserResponse and UserMessage to different channels.
     let pipe_name = std::env::var("VOICE_MIRROR_PIPE").ok();
-    let pipe = if let Some(ref name) = pipe_name {
+    let router = if let Some(ref name) = pipe_name {
         match pipe_client::connect_to_pipe(name, 10).await {
             Ok(client) => {
                 eprintln!("[MCP] Connected to pipe: {}", name);
-                Some(client)
+                let router = PipeRouter::new(client);
+                router.start_dispatch();
+                Some(router)
             }
             Err(e) => {
                 eprintln!("[MCP] Pipe connection failed: {}. Falling back to file IPC.", e);
@@ -48,17 +53,20 @@ async fn main() {
         None
     };
 
+    // Read enabled groups from env (set by Tauri app via .mcp.json / settings.json)
+    let enabled_groups = std::env::var("ENABLED_GROUPS").ok();
+
     // Run the MCP server (blocks until stdin closes)
-    if let Err(e) = run_server(data_dir, pipe).await {
+    if let Err(e) = run_server(data_dir, router, enabled_groups).await {
         eprintln!("[MCP] Server error: {}", e);
         std::process::exit(1);
     }
 }
 
-/// Default data directory (matches the Tauri app's convention).
+/// Default data directory (matches the Tauri app's data directory).
 fn default_data_dir() -> PathBuf {
     dirs::config_dir()
         .unwrap_or_else(|| PathBuf::from("."))
-        .join("voice-mirror-electron")
+        .join("voice-mirror")
         .join("data")
 }

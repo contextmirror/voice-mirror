@@ -3,21 +3,15 @@
 //! Each module implements a group of related tools:
 //! - `core`        -- Voice I/O tools (voice_send, voice_inbox, voice_listen, voice_status)
 //! - `memory`      -- Memory system (search, remember, forget, get, stats, flush)
-//! - `screen`      -- Screen capture (capture_screen)
-//! - `browser`     -- Browser CDP control (16 tools, file-based IPC)
+//! - `browser`     -- Browser control (16 tools, pipe IPC)
+//! - `capture`     -- Window capture and screenshots (2 tools, pipe IPC)
 //! - `n8n`         -- n8n REST API integration (22 tools)
-//! - `diagnostic`  -- Pipeline tracing (trace_pipeline)
-//! - `facades`     -- Combined tools for voice mode (memory_manage, n8n_manage, browser_manage)
-//! - `voice_clone` -- Voice cloning tools (clone_voice, clear_voice_clone, list_voice_clones)
 
 pub mod core;
 pub mod memory;
-pub mod screen;
 pub mod browser;
+pub mod capture;
 pub mod n8n;
-pub mod diagnostic;
-pub mod facades;
-pub mod voice_clone;
 
 use serde::{Deserialize, Serialize};
 
@@ -91,16 +85,6 @@ impl McpToolResult {
         }
     }
 
-    /// Create a result with multiple text items.
-    pub fn multi_text(texts: Vec<String>) -> Self {
-        Self {
-            content: texts
-                .into_iter()
-                .map(|t| McpContent::Text { text: t })
-                .collect(),
-            is_error: false,
-        }
-    }
 }
 
 #[cfg(test)]

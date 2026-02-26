@@ -54,6 +54,10 @@ pub(crate) fn take_tts_engine(shared: &Arc<PipelineShared>) -> Option<Box<dyn Tt
 /// within ~400ms instead of waiting for full synthesis.
 ///
 /// Falls back to single-shot synthesis for short text (1 phrase).
+///
+/// Uses a per-request cancel token so that when a new speak() call cancels
+/// the previous one, the old playback thread stays cancelled even after the
+/// new request resets the shared `tts_cancel` flag.
 pub(super) async fn speak(shared: &Arc<PipelineShared>, text: &str) -> Result<(), String> {
     if text.trim().is_empty() {
         return Ok(());
@@ -65,10 +69,24 @@ pub(super) async fn speak(shared: &Arc<PipelineShared>, text: &str) -> Result<()
     if current == VoiceState::Speaking {
         tracing::info!("Cancelling previous TTS for new speech request");
         shared.tts_cancel.store(true, Ordering::SeqCst);
-        // Wait up to 1 second for the engine to be returned
-        for _ in 0..20 {
+        // Cancel the previous request's playback token directly — this ensures
+        // the old rodio Sink drain loop stops even after we reset tts_cancel.
+        if let Ok(guard) = shared.active_playback_cancel.lock() {
+            if let Some(ref prev_cancel) = *guard {
+                prev_cancel.store(true, Ordering::SeqCst);
+            }
+        }
+        // Wait up to 2 seconds for the engine to be returned AND the previous
+        // playback handle to finish.
+        for _ in 0..40 {
             tokio::time::sleep(Duration::from_millis(50)).await;
-            if shared.tts_engine.lock().map(|g| g.is_some()).unwrap_or(false) {
+            let engine_available = shared.tts_engine.lock().map(|g| g.is_some()).unwrap_or(false);
+            let no_longer_speaking = super::state_from_u8(shared.state.load(Ordering::Acquire)) != VoiceState::Speaking;
+            if engine_available && no_longer_speaking {
+                break;
+            }
+            if engine_available {
+                tokio::time::sleep(Duration::from_millis(100)).await;
                 break;
             }
         }
@@ -76,6 +94,16 @@ pub(super) async fn speak(shared: &Arc<PipelineShared>, text: &str) -> Result<()
 
     // Reset cancellation flag for the new request
     shared.tts_cancel.store(false, Ordering::SeqCst);
+
+    // Create a per-request cancel token. This ensures the playback thread for
+    // THIS request stays cancelled even if a subsequent speak() call resets
+    // the shared tts_cancel flag.
+    let request_cancel = Arc::new(AtomicBool::new(false));
+
+    // Register this token so external callers (barge-in, stop_speaking) can cancel it
+    if let Ok(mut guard) = shared.active_playback_cancel.lock() {
+        *guard = Some(Arc::clone(&request_cancel));
+    }
 
     // Set state to Speaking + emit events
     set_speaking_state(shared, text);
@@ -119,7 +147,7 @@ pub(super) async fn speak(shared: &Arc<PipelineShared>, text: &str) -> Result<()
 
     // For single phrase, use simpler non-streaming path (less overhead)
     if phrases.len() <= 1 {
-        let result = speak_oneshot(shared, engine, &phrases[0], sample_rate, volume, output_device).await;
+        let result = speak_oneshot(shared, engine, &phrases[0], sample_rate, volume, output_device, Arc::clone(&request_cancel)).await;
         finish_speaking(shared);
         return result;
     }
@@ -132,16 +160,18 @@ pub(super) async fn speak(shared: &Arc<PipelineShared>, text: &str) -> Result<()
     );
 
     let (chunk_tx, chunk_rx) = tokio::sync::mpsc::channel::<Vec<f32>>(4);
-    let shared_for_playback = Arc::clone(shared);
+    let playback_cancel = Arc::clone(&request_cancel);
 
-    // Spawn playback thread: creates Sink, receives chunks via channel
+    // Spawn playback thread: creates Sink, receives chunks via channel.
+    // Uses the per-request cancel token so it stays cancelled even if the
+    // shared tts_cancel flag is reset by a subsequent speak() call.
     let playback_handle = tokio::task::spawn_blocking(move || {
         play_chunks_rodio(
             chunk_rx,
             sample_rate,
             volume,
             output_device.as_deref(),
-            &shared_for_playback.tts_cancel,
+            &playback_cancel,
         )
     });
 
@@ -149,6 +179,8 @@ pub(super) async fn speak(shared: &Arc<PipelineShared>, text: &str) -> Result<()
     for (i, phrase) in phrases.iter().enumerate() {
         if shared.tts_cancel.load(Ordering::SeqCst) {
             tracing::info!("TTS cancelled during streaming synthesis");
+            // Propagate to per-request token so playback thread also stops
+            request_cancel.store(true, Ordering::SeqCst);
             break;
         }
 
@@ -211,6 +243,7 @@ async fn speak_oneshot(
     sample_rate: u32,
     volume: f32,
     output_device: Option<String>,
+    request_cancel: Arc<AtomicBool>,
 ) -> Result<(), String> {
     let synthesize_result = engine.synthesize(text).await;
 
@@ -231,18 +264,18 @@ async fn speak_oneshot(
 
             if shared.tts_cancel.load(Ordering::SeqCst) {
                 tracing::info!("TTS cancelled after synthesis");
+                request_cancel.store(true, Ordering::SeqCst);
                 restore_tts_engine(shared, engine);
                 return Ok(());
             }
 
-            let shared_for_playback = Arc::clone(shared);
             let playback_result = tokio::task::spawn_blocking(move || {
                 play_samples_rodio(
                     samples,
                     sample_rate,
                     volume,
                     output_device.as_deref(),
-                    &shared_for_playback.tts_cancel,
+                    &request_cancel,
                 )
             })
             .await;
@@ -363,11 +396,20 @@ fn open_output_stream(
     }
 }
 
+/// Check if cancellation has been requested (per-request token).
+#[inline]
+fn is_cancelled(cancel: &AtomicBool) -> bool {
+    cancel.load(Ordering::SeqCst)
+}
+
 /// Play f32 PCM samples through the audio output device using rodio.
 ///
 /// This runs on a blocking thread. It creates a rodio `OutputStream` and
 /// `Sink`, loads the samples as a buffer source, and blocks until playback
 /// finishes or cancellation is requested.
+///
+/// The `cancel` flag is a per-request token that stays true even if a new
+/// speak() call resets the shared tts_cancel flag.
 fn play_samples_rodio(
     samples: Vec<f32>,
     sample_rate: u32,
@@ -389,7 +431,7 @@ fn play_samples_rodio(
 
     // Poll for completion or cancellation
     while !sink.empty() {
-        if cancel.load(Ordering::SeqCst) {
+        if is_cancelled(cancel) {
             tracing::info!("TTS playback cancelled");
             sink.stop();
             return Ok(());
@@ -408,6 +450,9 @@ fn play_samples_rodio(
 /// This runs on a blocking thread. It receives synthesized audio chunks
 /// from the streaming TTS pipeline and appends each to the Sink for
 /// gapless playback. First audio plays as soon as the first chunk arrives.
+///
+/// The `cancel` flag is a per-request token that stays true even if a new
+/// speak() call resets the shared tts_cancel flag.
 fn play_chunks_rodio(
     rx: tokio::sync::mpsc::Receiver<Vec<f32>>,
     sample_rate: u32,
@@ -428,7 +473,7 @@ fn play_chunks_rodio(
 
     // Receive and play chunks as they arrive
     loop {
-        if cancel.load(Ordering::SeqCst) {
+        if is_cancelled(cancel) {
             tracing::info!("Streaming TTS playback cancelled");
             sink.stop();
             return Ok(());
@@ -448,7 +493,7 @@ fn play_chunks_rodio(
 
     // Wait for all queued audio to finish playing
     while !sink.empty() {
-        if cancel.load(Ordering::SeqCst) {
+        if is_cancelled(cancel) {
             tracing::info!("Streaming TTS playback cancelled during drain");
             sink.stop();
             return Ok(());

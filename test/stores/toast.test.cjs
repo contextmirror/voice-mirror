@@ -158,6 +158,119 @@ describe('toast.svelte.js -- uid import', () => {
   });
 });
 
+describe('toast.svelte.js -- multi-action support', () => {
+  it('addToast accepts actions parameter', () => {
+    assert.ok(src.includes('actions = null'), 'addToast should accept actions param with null default');
+  });
+
+  it('includes actions in toast object', () => {
+    // The toast object should have an actions field
+    assert.ok(src.includes('actions,') || src.includes('actions:'), 'Toast object should include actions');
+  });
+
+  it('defines MULTI_ACTION_DURATION constant', () => {
+    assert.ok(src.includes('MULTI_ACTION_DURATION'), 'Should define MULTI_ACTION_DURATION');
+  });
+
+  it('sets MULTI_ACTION_DURATION to 15000', () => {
+    assert.ok(src.includes('MULTI_ACTION_DURATION = 15000'), 'MULTI_ACTION_DURATION should be 15000ms');
+  });
+
+  it('uses longer duration when actions provided', () => {
+    assert.ok(
+      src.includes('actions ? MULTI_ACTION_DURATION : DEFAULT_DURATION'),
+      'Should use MULTI_ACTION_DURATION when actions array is provided'
+    );
+  });
+
+  it('respects explicit duration over multi-action default', () => {
+    assert.ok(
+      src.includes('duration !== undefined'),
+      'Should check if duration was explicitly provided'
+    );
+  });
+
+  it('backward compat: action (singular) still accepted', () => {
+    assert.ok(src.includes('action = null'), 'Should still accept single action param');
+    assert.ok(src.includes('action,') || src.includes('action:'), 'Toast should still include action field');
+  });
+});
+
+describe('toast.svelte.js -- key-based deduplication', () => {
+  it('addToast accepts key parameter', () => {
+    assert.ok(src.includes('key = null'), 'addToast should accept key param with null default');
+  });
+
+  it('includes key in toast object', () => {
+    // The toast object literal should include key
+    const toastObj = src.split('const toast = {')[1]?.split('};')[0] || '';
+    assert.ok(toastObj.includes('key'), 'Toast object should include key field');
+  });
+
+  it('deduplicates by key — dismisses existing toast with same key', () => {
+    assert.ok(
+      src.includes("toasts.find(t => t.key === key)"),
+      'Should find existing toast by key'
+    );
+  });
+
+  it('calls dismissToast on existing toast with same key', () => {
+    // After finding existing, should dismiss it
+    const dedupBlock = src.split('if (key)')[1]?.split('}')[0] || '';
+    assert.ok(
+      dedupBlock.includes('dismissToast(existing.id)'),
+      'Should dismiss existing toast with same key'
+    );
+  });
+
+  it('key dedup only runs when key is provided', () => {
+    assert.ok(
+      src.includes('if (key)'),
+      'Should only deduplicate when key is truthy'
+    );
+  });
+
+  it('backward compatible — key defaults to null', () => {
+    assert.ok(
+      src.includes('key = null'),
+      'key should default to null for backward compatibility'
+    );
+  });
+});
+
+describe('toast.svelte.js -- progress support', () => {
+  it('addToast accepts progress parameter', () => {
+    assert.ok(src.includes('progress = null'), 'addToast should accept progress param with null default');
+  });
+
+  it('includes progress in toast object', () => {
+    const toastObj = src.split('const toast = {')[1]?.split('};')[0] || '';
+    assert.ok(toastObj.includes('progress'), 'Toast object should include progress field');
+  });
+
+  it('has updateToast method', () => {
+    assert.ok(src.includes('function updateToast'), 'Should have updateToast method');
+  });
+
+  it('exposes updateToast in store API', () => {
+    assert.ok(src.includes('updateToast,'), 'Store should expose updateToast');
+  });
+
+  it('updateToast merges updates into existing toast', () => {
+    assert.ok(
+      src.includes("t.id === id ? { ...t, ...updates }"),
+      'updateToast should merge updates with spread'
+    );
+  });
+});
+
+describe('toast.svelte.js -- suppressed toast returns null', () => {
+  it('returns null (not empty string) when toasts are suppressed', () => {
+    assert.ok(src.includes('return null'), 'Should return null when suppressed');
+    assert.ok(!src.includes("return ''"), 'Should NOT return empty string when suppressed');
+  });
+});
+
 describe('toast.svelte.js -- severity levels documented', () => {
   it('documents info severity', () => {
     assert.ok(src.includes('info'), 'Should document info severity');

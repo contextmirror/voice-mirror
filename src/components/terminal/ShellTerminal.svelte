@@ -11,6 +11,7 @@
   import { shellInput, shellResize } from '../../lib/api.js';
   import { currentThemeName } from '../../lib/stores/theme.svelte.js';
   import { terminalTabsStore } from '../../lib/stores/terminal-tabs.svelte.js';
+  import { devServerManager } from '../../lib/stores/dev-server-manager.svelte.js';
 
   let { shellId, visible = true, onRegisterActions } = $props();
 
@@ -164,6 +165,7 @@
         term.writeln('');
         term.writeln(`\x1b[33m[Shell exited with code ${data.code ?? '?'}]\x1b[0m`);
         terminalTabsStore.markExited(shellId);
+        devServerManager.handleShellExit(shellId, data.code);
         break;
     }
   }

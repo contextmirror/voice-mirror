@@ -4,9 +4,13 @@
    * streaming support, tool cards, and copy button.
    */
   import { fly } from 'svelte/transition';
+  import { open } from '@tauri-apps/plugin-shell';
   import { renderMarkdown } from '../../lib/markdown.js';
+  import { chatStore } from '../../lib/stores/chat.svelte.js';
   import StreamingCursor from './StreamingCursor.svelte';
   import ToolCard from './ToolCard.svelte';
+
+  let isSwitching = $derived(chatStore.isSwitching);
 
   let { message } = $props();
 
@@ -40,7 +44,7 @@
   class:assistant={!isUser && !isError}
   class:error={isError}
   class:streaming={message.streaming}
-  transition:fly={{ y: 12, duration: 250 }}
+  in:fly={{ y: isSwitching ? 0 : 12, duration: isSwitching ? 0 : 250 }}
 >
   <div class="bubble-content">
     {#if hasAttachments}
@@ -51,8 +55,20 @@
       </div>
     {/if}
     {#if message.text}
+      <!-- svelte-ignore a11y_click_events_have_key_events -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
       <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-      {@html htmlContent}
+      <div onclick={(e) => {
+        const a = /** @type {HTMLElement} */ (e.target).closest('a[href]');
+        if (!a) return;
+        const href = a.getAttribute('href');
+        if (href && (href.startsWith('http://') || href.startsWith('https://'))) {
+          e.preventDefault();
+          open(href);
+        }
+      }}>
+        {@html htmlContent}
+      </div>
     {/if}
     {#if message.streaming}
       <StreamingCursor />

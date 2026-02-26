@@ -2,7 +2,8 @@
  * editor-context-menu.test.cjs -- Source-inspection tests for EditorContextMenu.svelte
  *
  * Right-click context menu for the code editor with AI actions, LSP actions,
- * edit operations, folding, and file actions.
+ * edit operations, folding, and file actions. Handles all actions internally
+ * via callback props (onSendToAi, onNavigateDefinition) and direct API calls.
  */
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
@@ -22,8 +23,20 @@ describe('EditorContextMenu.svelte: component structure', () => {
     assert.ok(src.includes('onClose'));
     assert.ok(src.includes('$props'));
   });
-  it('has onAction callback in $props()', () => {
-    assert.ok(src.includes('onAction'));
+  it('has onSendToAi callback in $props()', () => {
+    assert.ok(src.includes('onSendToAi'));
+  });
+  it('has onNavigateDefinition callback in $props()', () => {
+    assert.ok(src.includes('onNavigateDefinition'));
+  });
+  it('has view prop for CodeMirror operations', () => {
+    assert.ok(src.includes('view'));
+  });
+  it('has lsp prop for LSP operations', () => {
+    assert.ok(src.includes('lsp'));
+  });
+  it('has tab prop', () => {
+    assert.ok(src.includes('tab'));
   });
   it('has hasSelection context prop', () => {
     assert.ok(src.includes('hasSelection'));
@@ -52,6 +65,12 @@ describe('EditorContextMenu.svelte: AI actions section', () => {
   it('has "Ask AI: Add Tests" action', () => {
     assert.ok(src.includes('Ask AI: Add Tests'));
   });
+  it('calls onSendToAi for AI actions', () => {
+    assert.ok(src.includes('onSendToAi(msg)'), 'Should call onSendToAi with message');
+  });
+  it('has getLanguageFromPath helper', () => {
+    assert.ok(src.includes('getLanguageFromPath'), 'Should have getLanguageFromPath for AI prompts');
+  });
 });
 
 describe('EditorContextMenu.svelte: LSP actions section', () => {
@@ -60,6 +79,42 @@ describe('EditorContextMenu.svelte: LSP actions section', () => {
   });
   it('has "Find References" action', () => {
     assert.ok(src.includes('Find References'));
+  });
+  it('Find References is not disabled', () => {
+    assert.ok(src.includes('handleFindReferences'), 'Should have handleFindReferences handler');
+  });
+  it('has Shift+F12 shortcut for Find References', () => {
+    assert.ok(src.includes('Shift+F12'), 'Should show Shift+F12 shortcut');
+  });
+  it('has "Rename Symbol" action', () => {
+    assert.ok(src.includes('Rename Symbol'), 'Should have Rename Symbol');
+  });
+  it('has F2 shortcut for Rename Symbol', () => {
+    assert.ok(src.includes('F2'), 'Should show F2 shortcut');
+  });
+  it('has handleRenameSymbol handler', () => {
+    assert.ok(src.includes('handleRenameSymbol'), 'Should have handleRenameSymbol');
+  });
+  it('has "Quick Fix..." action', () => {
+    assert.ok(src.includes('Quick Fix...'), 'Should have Quick Fix');
+  });
+  it('has Ctrl+. shortcut for Quick Fix', () => {
+    assert.ok(src.includes('Ctrl+.'), 'Should show Ctrl+. shortcut');
+  });
+  it('has handleQuickFix handler', () => {
+    assert.ok(src.includes('handleQuickFix'), 'Should have handleQuickFix');
+  });
+  it('calls lsp.handleFindReferences directly', () => {
+    assert.ok(src.includes('lsp.handleFindReferences'), 'Should call lsp directly');
+  });
+  it('calls lsp.handleRenameSymbol directly', () => {
+    assert.ok(src.includes('lsp.handleRenameSymbol'), 'Should call lsp directly');
+  });
+  it('calls lsp.handleCodeActions for quick fix', () => {
+    assert.ok(src.includes('lsp.handleCodeActions'), 'Should call lsp directly');
+  });
+  it('calls onNavigateDefinition for go-to-definition', () => {
+    assert.ok(src.includes('onNavigateDefinition'), 'Should delegate definition navigation');
   });
 });
 
@@ -76,6 +131,21 @@ describe('EditorContextMenu.svelte: edit actions section', () => {
   it('has Select All button', () => {
     assert.ok(src.includes('Select All'));
   });
+  it('uses document.execCommand for cut/copy', () => {
+    assert.ok(src.includes('document.execCommand'), 'Should use execCommand for clipboard');
+  });
+  it('uses navigator.clipboard for paste', () => {
+    assert.ok(src.includes('navigator.clipboard'), 'Should use clipboard API for paste');
+  });
+  it('hides Cut for read-only files', () => {
+    assert.ok(src.includes('tab?.readOnly'), 'Should check tab.readOnly to hide Cut/Paste');
+  });
+  it('hides Rename Symbol for read-only files', () => {
+    // Rename is under the readOnly guard in the LSP section
+    const renameIdx = src.indexOf('Rename Symbol');
+    const before = src.slice(Math.max(0, renameIdx - 200), renameIdx);
+    assert.ok(before.includes('readOnly'), 'Rename Symbol should be gated by readOnly check');
+  });
 });
 
 describe('EditorContextMenu.svelte: folding actions section', () => {
@@ -91,6 +161,9 @@ describe('EditorContextMenu.svelte: folding actions section', () => {
   it('has "Unfold All" action', () => {
     assert.ok(src.includes('Unfold All'));
   });
+  it('dynamically imports @codemirror/language for folding', () => {
+    assert.ok(src.includes('@codemirror/language'), 'Should lazy-load folding functions');
+  });
 });
 
 describe('EditorContextMenu.svelte: file actions section', () => {
@@ -105,6 +178,12 @@ describe('EditorContextMenu.svelte: file actions section', () => {
   });
   it('has "Reveal in File Explorer" action', () => {
     assert.ok(src.includes('Reveal in File Explorer'));
+  });
+  it('imports revealInExplorer from API', () => {
+    assert.ok(src.includes('revealInExplorer'), 'Should import revealInExplorer');
+  });
+  it('imports projectStore for path resolution', () => {
+    assert.ok(src.includes('projectStore'), 'Should import projectStore');
   });
 });
 

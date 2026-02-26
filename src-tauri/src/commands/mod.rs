@@ -1,6 +1,7 @@
 pub mod ai;
 pub mod chat;
 pub mod config;
+pub mod dev_server;
 pub mod files;
 pub mod screenshot;
 pub mod shortcuts;
@@ -10,6 +11,7 @@ pub mod window;
 pub mod lens;
 pub mod shell;
 pub mod lsp;
+pub mod design;
 
 use serde_json::Value;
 

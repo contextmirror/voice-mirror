@@ -21,6 +21,9 @@ const editorTheme = EditorView.theme({
     color: 'var(--cm-foreground)',
     backgroundColor: 'var(--cm-background)',
   },
+  '.cm-scroller': {
+    scrollBehavior: 'auto',
+  },
   '.cm-content': {
     caretColor: 'var(--cm-cursor)',
     fontFamily: 'var(--font-mono)',
@@ -93,6 +96,18 @@ const editorTheme = EditorView.theme({
       backgroundColor: 'var(--cm-autocomplete-selected)',
       color: 'var(--cm-foreground)',
     },
+  },
+  // ── Minimap ──
+  '.cm-minimap': {
+    backgroundColor: 'var(--cm-background)',
+  },
+  '.cm-minimap-container': {
+    borderLeft: '1px solid var(--cm-gutter-bg, var(--border))',
+  },
+  '.cm-minimap .cm-minimap-overlay': {
+    background: 'var(--cm-selection)',
+    borderTop: '1px solid var(--cm-accent, var(--accent))',
+    borderBottom: '1px solid var(--cm-accent, var(--accent))',
   },
 }, { dark: true });
 

@@ -8,7 +8,7 @@
     "devUrl": "http://localhost:1420",
     "beforeBuildCommand": "npx vite build",
     "frontendDist": "../dist",
-    "features": ["native-ml"]
+    "features": ["native-ml", "cuda"]
   },
   "app": {
     "windows": [
@@ -23,7 +23,8 @@
         "transparent": true,
         "shadow": false,
         "center": true,
-        "visible": false
+        "visible": false,
+        "dragDropEnabled": false
       }
     ],
     "withGlobalTauri": true,

@@ -3,6 +3,9 @@
  *
  * Validates imports, state, UI structure, behavior, and styles of the
  * FileTree component by reading source text and asserting patterns.
+ *
+ * Tree node rendering is now in FileTreeNode.svelte.
+ * Git changes rendering is now in GitChangesPanel.svelte.
  */
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
@@ -28,6 +31,14 @@ describe('FileTree.svelte', () => {
     assert.ok(src.includes('getGitChanges'), 'Should import getGitChanges');
   });
 
+  it('imports FileTreeNode sub-component', () => {
+    assert.ok(src.includes("import FileTreeNode from './FileTreeNode.svelte'"), 'Should import FileTreeNode');
+  });
+
+  it('imports GitChangesPanel sub-component', () => {
+    assert.ok(src.includes("import GitChangesPanel from './GitChangesPanel.svelte'"), 'Should import GitChangesPanel');
+  });
+
   // ── Props ──
 
   it('accepts onFileClick prop via $props()', () => {
@@ -41,24 +52,6 @@ describe('FileTree.svelte', () => {
 
   it('accepts onChangeClick prop', () => {
     assert.ok(src.includes('onChangeClick'), 'Should have onChangeClick prop');
-  });
-
-  it('has ondblclick on file items', () => {
-    assert.ok(src.includes('ondblclick'), 'Should have double-click handler on files');
-  });
-
-  it('change items are clickable buttons', () => {
-    assert.ok(
-      src.includes('class="change-item"') && src.includes('<button'),
-      'Change items should be button elements'
-    );
-  });
-
-  it('calls onChangeClick when change item is clicked', () => {
-    assert.ok(
-      src.includes('onChangeClick(change)'),
-      'Should call onChangeClick with change object'
-    );
   });
 
   // ── State management ──
@@ -121,26 +114,17 @@ describe('FileTree.svelte', () => {
     assert.ok(src.includes('<StatusDropdown'), 'Should render StatusDropdown in header');
   });
 
-  // ── UI: Tree structure ──
+  // ── UI: Tree structure (delegated to FileTreeNode) ──
 
-  it('has chevron icons for expand/collapse', () => {
-    assert.ok(src.includes('tree-chevron'), 'Should have tree chevron class');
+  it('renders FileTreeNode for file tree', () => {
+    assert.ok(src.includes('<FileTreeNode'), 'Should render FileTreeNode component');
   });
 
-  it('renders tree items with folder and file types', () => {
-    assert.ok(src.includes('tree-item folder'), 'Should have folder tree items');
-    assert.ok(src.includes('tree-item file'), 'Should have file tree items');
-  });
-
-  it('renders recursively with depth via snippet', () => {
-    assert.ok(src.includes('treeNode'), 'Should have treeNode snippet');
-    assert.ok(src.includes('depth + 1'), 'Should recurse with incremented depth');
-    assert.ok(src.includes('depth * 16'), 'Should indent based on depth');
-  });
-
-  it('shows loading state for expanding directories', () => {
-    assert.ok(src.includes('tree-loading'), 'Should have loading class');
-    assert.ok(src.includes('loadingDirs'), 'Should track loading directories');
+  it('passes tree state to FileTreeNode', () => {
+    assert.ok(src.includes('entries={rootEntries}'), 'Should pass rootEntries to FileTreeNode');
+    assert.ok(src.includes('{expandedDirs}'), 'Should pass expandedDirs to FileTreeNode');
+    assert.ok(src.includes('{dirChildren}'), 'Should pass dirChildren to FileTreeNode');
+    assert.ok(src.includes('{loadingDirs}'), 'Should pass loadingDirs to FileTreeNode');
   });
 
   // ── Behavior ──
@@ -176,37 +160,22 @@ describe('FileTree.svelte', () => {
     assert.ok(src.includes('console.error'), 'Should log errors');
   });
 
-  // ── Git changes display ──
+  // ── Git changes display (delegated to GitChangesPanel) ──
 
-  it('shows status badges for changes (A/M/D)', () => {
-    assert.ok(src.includes('change-badge'), 'Should have change badge class');
-    assert.ok(src.includes("'A'"), 'Should show A for added');
-    assert.ok(src.includes("'D'"), 'Should show D for deleted');
-    assert.ok(src.includes("'M'"), 'Should show M for modified');
+  it('renders GitChangesPanel in changes tab', () => {
+    assert.ok(src.includes('<GitChangesPanel'), 'Should render GitChangesPanel component');
   });
 
-  it('has styled badges for added/modified/deleted', () => {
-    assert.ok(src.includes('class:added'), 'Should have added class');
-    assert.ok(src.includes('class:modified'), 'Should have modified class');
-    assert.ok(src.includes('class:deleted'), 'Should have deleted class');
+  it('passes git change data to GitChangesPanel', () => {
+    assert.ok(src.includes('{stagedChanges}'), 'Should pass stagedChanges to GitChangesPanel');
+    assert.ok(src.includes('{unstagedChanges}'), 'Should pass unstagedChanges to GitChangesPanel');
+    assert.ok(src.includes('{activeDiffPath}'), 'Should pass activeDiffPath to GitChangesPanel');
   });
 
   it('handles empty changes state', () => {
-    assert.ok(src.includes('No changes'), 'Should show empty state for no changes');
-    assert.ok(src.includes('changes-empty'), 'Should have empty state class');
-  });
-
-  it('shows change file path', () => {
-    assert.ok(src.includes('change-path'), 'Should have change-path class');
-    assert.ok(src.includes('change.path'), 'Should render change path');
-  });
-
-  // ── Ignored files ──
-
-  it('handles ignored files with dimmed style', () => {
-    assert.ok(src.includes('class:ignored'), 'Should have ignored class toggle');
-    assert.ok(src.includes('.tree-name.ignored'), 'Should style ignored files');
-    assert.ok(src.includes('opacity'), 'Should dim ignored files');
+    // The "No changes" text is now in GitChangesPanel, but FileTree still derives changes
+    assert.ok(src.includes('stagedChanges'), 'Should derive stagedChanges');
+    assert.ok(src.includes('unstagedChanges'), 'Should derive unstagedChanges');
   });
 
   // ── Styles ──
@@ -226,11 +195,6 @@ describe('FileTree.svelte', () => {
     assert.ok(src.includes('var(--font-mono)'), 'Should use monospace font');
   });
 
-  it('has hover styling for tree items', () => {
-    assert.ok(src.includes('.tree-item:hover'), 'Should style tree item hover');
-    assert.ok(src.includes('var(--bg-elevated)'), 'Should use elevated bg on hover');
-  });
-
   it('uses no-drag for frameless window compatibility', () => {
     assert.ok(src.includes('-webkit-app-region: no-drag'), 'Should have no-drag for interactivity');
   });
@@ -243,11 +207,6 @@ describe('FileTree.svelte', () => {
   it('has scrollable tree container', () => {
     assert.ok(src.includes('tree-scroll'), 'Should have tree-scroll class');
     assert.ok(src.includes('overflow-y: auto'), 'Should be scrollable');
-  });
-
-  it('has git change color coding', () => {
-    assert.ok(src.includes('var(--ok)'), 'Should use ok color for added');
-    assert.ok(src.includes('var(--danger)'), 'Should use danger color for deleted');
   });
 
   // ── Project store integration ──
@@ -282,10 +241,6 @@ describe('FileTree.svelte -- context menu', () => {
 
   it('has contextMenu state', () => {
     assert.ok(src.includes('contextMenu = $state('), 'Should have contextMenu state');
-  });
-
-  it('handles oncontextmenu on tree items', () => {
-    assert.ok(src.includes('oncontextmenu'), 'Should have contextmenu handlers');
   });
 
   it('has handleContextMenu function', () => {
@@ -473,16 +428,12 @@ describe('FileTree.svelte -- file watcher integration', () => {
   });
 
   it('uses $effect with cleanup return for listener lifecycle', () => {
-    // The listener setup should be inside a $effect that returns a cleanup function
-    const effectIdx = src.indexOf('$effect', src.indexOf('unlistenTree'));
-    // Check that there's a return statement in the effect for cleanup
     assert.ok(src.includes('return () =>'), 'Should return cleanup function from $effect');
   });
 
   it('reloads root when rootChanged flag is true', () => {
-    // handleTreeChanged should call loadRoot when root flag is set
     const handlerStart = src.indexOf('async function handleTreeChanged');
-    const handlerEnd = src.indexOf('async function handleGitChanged');
+    const handlerEnd = src.indexOf('function handleGitChanged');
     const handlerBody = src.slice(handlerStart, handlerEnd);
     assert.ok(handlerBody.includes('loadRoot'), 'Should call loadRoot when root changed');
   });
@@ -501,10 +452,64 @@ describe('FileTree.svelte -- tree refresh', () => {
   });
 
   it('refreshes git changes after mutations', () => {
-    // refreshParent should call loadGitChanges
     const refreshStart = src.indexOf('async function refreshParent');
     const refreshEnd = src.indexOf('}', src.indexOf('loadGitChanges', refreshStart));
     const refreshBody = src.slice(refreshStart, refreshEnd);
     assert.ok(refreshBody.includes('loadGitChanges'), 'Should refresh git changes');
+  });
+});
+
+describe('FileTree.svelte -- LSP diagnostic decorations', () => {
+  it('imports lspDiagnosticsStore', () => {
+    assert.ok(src.includes('lspDiagnosticsStore'), 'Should import lspDiagnosticsStore');
+    assert.ok(src.includes('lsp-diagnostics.svelte.js'), 'Should import from lsp-diagnostics.svelte.js');
+  });
+});
+
+describe('FileTree.svelte -- Changes tab parity with All Files', () => {
+  it('accepts onChangeDblClick prop', () => {
+    assert.ok(src.includes('onChangeDblClick'), 'Should have onChangeDblClick prop');
+  });
+
+  it('accepts activeDiffPath prop', () => {
+    assert.ok(src.includes('activeDiffPath'), 'Should have activeDiffPath prop');
+  });
+});
+
+describe('FileTree.svelte -- Outline tab', () => {
+  it('imports OutlinePanel', () => {
+    assert.ok(src.includes("import OutlinePanel from"), 'Should import OutlinePanel');
+  });
+
+  it('has Outline tab button', () => {
+    assert.ok(src.includes('Outline'), 'Should have Outline tab text');
+  });
+
+  it('tracks active tab with class:active for outline', () => {
+    assert.ok(src.includes("activeTab === 'outline'"), 'outline tab has active class check');
+  });
+
+  it('accepts activeFilePath prop', () => {
+    assert.ok(src.includes('activeFilePath'), 'Should accept activeFilePath prop');
+  });
+
+  it('accepts activeFileHasLsp prop', () => {
+    assert.ok(src.includes('activeFileHasLsp'), 'Should accept activeFileHasLsp prop');
+  });
+
+  it('accepts onSymbolClick prop', () => {
+    assert.ok(src.includes('onSymbolClick'), 'Should accept onSymbolClick prop');
+  });
+
+  it('renders OutlinePanel when outline tab is active', () => {
+    assert.ok(src.includes('<OutlinePanel'), 'Should render OutlinePanel component');
+  });
+
+  it('passes filePath to OutlinePanel', () => {
+    assert.ok(src.includes('filePath={activeFilePath}'), 'Should pass activeFilePath as filePath');
+  });
+
+  it('passes hasLsp to OutlinePanel', () => {
+    assert.ok(src.includes('hasLsp={activeFileHasLsp}'), 'Should pass activeFileHasLsp as hasLsp');
   });
 });

@@ -14,6 +14,7 @@ function createLayoutStore() {
     get showTerminal() { return showTerminal; },
     get showFileTree() { return showFileTree; },
 
+    setShowChat(v) { showChat = v; },
     toggleChat() { showChat = !showChat; },
     toggleTerminal() { showTerminal = !showTerminal; },
     toggleFileTree() { showFileTree = !showFileTree; },

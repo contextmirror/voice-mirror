@@ -16,7 +16,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
+
 use serde::Serialize;
 use serde_json::{json, Value};
 use tracing::warn;
@@ -31,8 +32,8 @@ const N8N_API_URL: &str = "http://localhost:5678";
 const API_KEY_CACHE_TTL_SECS: u64 = 300; // 5 minutes
 
 /// Cached API key with TTL.
-static API_KEY_CACHE: Lazy<Mutex<(Option<String>, Instant)>> =
-    Lazy::new(|| Mutex::new((None, Instant::now())));
+static API_KEY_CACHE: LazyLock<Mutex<(Option<String>, Instant)>> =
+    LazyLock::new(|| Mutex::new((None, Instant::now())));
 
 /// Get the n8n API key file path.
 fn api_key_file_path() -> PathBuf {
