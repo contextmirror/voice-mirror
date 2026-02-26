@@ -51,6 +51,7 @@
 <div class="output-panel">
   <div
     class="output-log"
+    class:no-wrap={!outputStore.wordWrap}
     bind:this={logContainer}
     onscroll={handleScroll}
   >
@@ -101,6 +102,15 @@
   .log-line {
     white-space: pre-wrap;
     word-break: break-all;
+  }
+
+  .output-log.no-wrap .log-line {
+    white-space: pre;
+    word-break: normal;
+  }
+
+  .output-log.no-wrap {
+    overflow-x: auto;
   }
 
   .log-time {

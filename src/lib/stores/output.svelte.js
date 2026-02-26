@@ -29,6 +29,8 @@ let entries = $state({
 let activeChannel = $state('app');
 let levelFilter = $state('trace'); // show all levels (MCP can still filter)
 let autoScroll = $state(true);
+let filterText = $state('');
+let wordWrap = $state(true);
 let listening = false;
 
 /** Level priority for filtering */
@@ -41,7 +43,37 @@ function levelPriority(level) {
 function getFilteredEntries() {
   const channelEntries = entries[activeChannel] || [];
   const minPriority = levelPriority(levelFilter);
-  return channelEntries.filter(e => levelPriority(e.level) >= minPriority);
+  let filtered = channelEntries.filter(e => levelPriority(e.level) >= minPriority);
+
+  // Apply text filter (supports !exclude and comma-separated patterns)
+  if (filterText.trim()) {
+    const patterns = filterText.split(',').map(p => p.trim()).filter(Boolean);
+    const includes = patterns.filter(p => !p.startsWith('!'));
+    const excludes = patterns.filter(p => p.startsWith('!')).map(p => p.slice(1).toLowerCase());
+
+    filtered = filtered.filter(e => {
+      const msg = e.message.toLowerCase();
+      // Exclude matches
+      if (excludes.some(ex => msg.includes(ex))) return false;
+      // Include matches (if any specified, at least one must match)
+      if (includes.length > 0) {
+        return includes.some(inc => msg.includes(inc.toLowerCase()));
+      }
+      return true;
+    });
+  }
+
+  return filtered;
+}
+
+/** Set filter text */
+function setFilterText(text) {
+  filterText = text;
+}
+
+/** Toggle word wrap */
+function toggleWordWrap() {
+  wordWrap = !wordWrap;
 }
 
 /** Start listening for output-log events */
@@ -105,6 +137,8 @@ export const outputStore = {
   get activeChannel() { return activeChannel; },
   get levelFilter() { return levelFilter; },
   get autoScroll() { return autoScroll; },
+  get filterText() { return filterText; },
+  get wordWrap() { return wordWrap; },
   get filteredEntries() { return getFilteredEntries(); },
   get channels() { return CHANNELS; },
   get channelLabels() { return CHANNEL_LABELS; },
@@ -112,5 +146,7 @@ export const outputStore = {
   setLevelFilter,
   clearChannel,
   setAutoScroll,
+  setFilterText,
+  toggleWordWrap,
   startListening,
 };

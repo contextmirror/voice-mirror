@@ -42,11 +42,22 @@ describe('OutputPanel.svelte', () => {
   it('uses entry.id as each key', () => {
     assert.ok(panelSrc.includes('(entry.id)'));
   });
+
+  it('supports word wrap toggle via CSS class', () => {
+    assert.ok(panelSrc.includes('no-wrap'));
+    assert.ok(panelSrc.includes('outputStore.wordWrap'));
+  });
 });
 
-describe('TerminalTabs output controls', () => {
+describe('TerminalTabs output controls (VS Code style)', () => {
   it('imports outputStore for output controls', () => {
     assert.ok(tabsSrc.includes("from '../../lib/stores/output.svelte.js'"));
+  });
+
+  it('has filter text input with placeholder', () => {
+    assert.ok(tabsSrc.includes('output-filter-input'));
+    assert.ok(tabsSrc.includes('Filter (e.g. text, !exclude)'));
+    assert.ok(tabsSrc.includes('outputStore.setFilterText'));
   });
 
   it('has custom channel dropdown (not native select)', () => {
@@ -55,8 +66,14 @@ describe('TerminalTabs output controls', () => {
     assert.ok(tabsSrc.includes('channelLabels'));
   });
 
-  it('dropdown opens downward', () => {
-    assert.ok(tabsSrc.includes('top: calc(100% + 4px)'));
+  it('has word wrap toggle button', () => {
+    assert.ok(tabsSrc.includes('outputStore.toggleWordWrap'));
+    assert.ok(tabsSrc.includes('word wrap'));
+  });
+
+  it('has lock scroll toggle button', () => {
+    assert.ok(tabsSrc.includes('scroll lock'));
+    assert.ok(tabsSrc.includes('outputStore.setAutoScroll'));
   });
 
   it('has clear output button', () => {

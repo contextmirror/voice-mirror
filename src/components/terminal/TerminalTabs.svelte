@@ -466,6 +466,21 @@
     {#if bottomPanelMode === 'output'}
       <!-- Output controls (right side of tab bar, VS Code style) -->
       <div class="output-controls">
+        <!-- Filter text input -->
+        <div class="output-filter-wrapper">
+          <input
+            class="output-filter-input"
+            type="text"
+            placeholder="Filter (e.g. text, !exclude)"
+            value={outputStore.filterText}
+            oninput={(e) => outputStore.setFilterText(e.target.value)}
+          />
+          <!-- Funnel icon (decorative, inside input) -->
+          <svg class="output-filter-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+          </svg>
+        </div>
+
         <!-- Custom channel dropdown -->
         <div class="channel-dropdown-wrapper">
           <button
@@ -498,13 +513,48 @@
           {/if}
         </div>
 
-        <!-- Clear output button -->
-        <button class="toolbar-btn" onclick={() => outputStore.clearChannel()} title="Clear output">
-          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/>
-            <line x1="18" y1="9" x2="12" y2="15"/><line x1="12" y1="9" x2="18" y2="15"/>
-          </svg>
-        </button>
+        <!-- Toolbar icon group (VS Code style) -->
+        <div class="toolbar-actions">
+          <!-- Word wrap toggle -->
+          <button
+            class="toolbar-btn"
+            class:toggled={outputStore.wordWrap}
+            onclick={() => outputStore.toggleWordWrap()}
+            title={outputStore.wordWrap ? 'Disable word wrap' : 'Enable word wrap'}
+          >
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M3 6h18"/><path d="M3 12h15a3 3 0 1 1 0 6h-4"/><polyline points="13 15 11 18 13 21"/><path d="M3 18h7"/>
+            </svg>
+          </button>
+
+          <!-- Lock scroll toggle -->
+          <button
+            class="toolbar-btn"
+            class:toggled={!outputStore.autoScroll}
+            onclick={() => outputStore.setAutoScroll(!outputStore.autoScroll)}
+            title={outputStore.autoScroll ? 'Turn on scroll lock' : 'Turn off scroll lock (auto-scroll)'}
+          >
+            {#if outputStore.autoScroll}
+              <!-- Unlocked (auto-scrolling) -->
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/>
+              </svg>
+            {:else}
+              <!-- Locked (scroll locked) -->
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+              </svg>
+            {/if}
+          </button>
+
+          <!-- Clear output -->
+          <button class="toolbar-btn" onclick={() => outputStore.clearChannel()} title="Clear output">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/>
+              <line x1="18" y1="9" x2="12" y2="15"/><line x1="12" y1="9" x2="18" y2="15"/>
+            </svg>
+          </button>
+        </div>
       </div>
     {:else}
       <!-- Terminal controls -->
@@ -864,6 +914,11 @@
     background: color-mix(in srgb, var(--text) 8%, transparent);
   }
 
+  .toolbar-btn.toggled {
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+
   .toolbar-btn:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 1px;
@@ -1033,6 +1088,45 @@
     display: flex;
     align-items: center;
     gap: 6px;
+  }
+
+  /* ── Output filter input ── */
+
+  .output-filter-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+
+  .output-filter-input {
+    width: 180px;
+    padding: 2px 8px 2px 24px;
+    background: color-mix(in srgb, var(--text) 6%, transparent);
+    border: 1px solid color-mix(in srgb, var(--border) 40%, transparent);
+    border-radius: 4px;
+    color: var(--text);
+    font-size: 11px;
+    font-family: var(--font-family);
+    outline: none;
+    transition: border-color 0.15s, background 0.15s;
+  }
+
+  .output-filter-input::placeholder {
+    color: var(--muted);
+    opacity: 0.7;
+  }
+
+  .output-filter-input:focus {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--text) 8%, transparent);
+  }
+
+  .output-filter-icon {
+    position: absolute;
+    left: 6px;
+    pointer-events: none;
+    color: var(--muted);
+    opacity: 0.6;
   }
 
   /* ── Custom channel dropdown ── */

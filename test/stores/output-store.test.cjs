@@ -55,4 +55,15 @@ describe('output.svelte.js store', () => {
   it('has auto-scroll state', () => {
     assert.ok(src.includes('autoScroll'));
   });
+
+  it('has text filter with include/exclude support', () => {
+    assert.ok(src.includes('filterText'));
+    assert.ok(src.includes('setFilterText'));
+    assert.ok(src.includes("startsWith('!')"));
+  });
+
+  it('has word wrap toggle', () => {
+    assert.ok(src.includes('wordWrap'));
+    assert.ok(src.includes('toggleWordWrap'));
+  });
 });
