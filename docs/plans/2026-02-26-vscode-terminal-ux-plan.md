@@ -354,7 +354,7 @@ git commit -m "refactor: simplify outer tab strip to 3 pinned tabs (Voice Agent,
 
 ---
 
-### Task 5: Terminal Group/Instance Store Model
+### Task 5: Terminal Group/Instance Store Model ✅ DONE (4179 tests pass)
 
 **Files:**
 - Modify: `src/lib/stores/terminal-tabs.svelte.js`
