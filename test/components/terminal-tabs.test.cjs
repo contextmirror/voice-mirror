@@ -11,8 +11,8 @@ describe('TerminalTabs.svelte -- imports', () => {
     assert.ok(src.includes("import AiTerminal from"), 'Should import AiTerminal');
   });
 
-  it('imports Terminal component', () => {
-    assert.ok(src.includes("import Terminal from"), 'Should import Terminal');
+  it('imports TerminalPanel component', () => {
+    assert.ok(src.includes("import TerminalPanel from"), 'Should import TerminalPanel');
   });
 
   it('imports terminalTabsStore', () => {
@@ -21,6 +21,14 @@ describe('TerminalTabs.svelte -- imports', () => {
 
   it('imports projectStore', () => {
     assert.ok(src.includes('projectStore'), 'Should import projectStore');
+  });
+
+  it('imports OutputPanel component', () => {
+    assert.ok(src.includes("import OutputPanel from"), 'Should import OutputPanel');
+  });
+
+  it('imports outputStore', () => {
+    assert.ok(src.includes('outputStore'), 'Should import outputStore');
   });
 });
 
@@ -42,105 +50,105 @@ describe('TerminalTabs.svelte -- structure', () => {
   });
 });
 
-describe('TerminalTabs.svelte -- tab bar', () => {
-  it('iterates tabs with each block', () => {
-    assert.ok(src.includes('{#each terminalTabsStore.tabs'), 'Should iterate tabs');
+describe('TerminalTabs.svelte -- 3 pinned tabs', () => {
+  it('has Voice Agent tab label', () => {
+    assert.ok(src.includes('Voice Agent'), 'Should have Voice Agent tab');
   });
 
-  it('has class:active directive', () => {
+  it('has Output tab label', () => {
+    assert.ok(src.includes('>Output<'), 'Should have Output tab');
+  });
+
+  it('has Terminal tab label', () => {
+    assert.ok(src.includes('>Terminal<'), 'Should have Terminal tab');
+  });
+
+  it('has bottomPanelMode state', () => {
+    assert.ok(src.includes('bottomPanelMode'), 'Should have bottomPanelMode');
+  });
+
+  it('supports ai mode', () => {
+    assert.ok(src.includes("'ai'"), 'Should support ai mode');
+  });
+
+  it('supports output mode', () => {
+    assert.ok(src.includes("'output'"), 'Should support output mode');
+  });
+
+  it('supports terminal mode', () => {
+    assert.ok(src.includes("'terminal'"), 'Should support terminal mode');
+  });
+
+  it('has class:active directive on tabs', () => {
     assert.ok(src.includes('class:active='), 'Should have active class binding');
   });
 
-  it('has class:exited directive', () => {
-    assert.ok(src.includes('class:exited='), 'Should have exited class binding');
+  it('has tab dividers between tabs', () => {
+    assert.ok(src.includes('tab-divider'), 'Should have tab dividers');
   });
 
-  it('has class:hidden directive', () => {
-    assert.ok(src.includes('class:hidden='), 'Should have hidden class binding');
+  it('does NOT have individual terminal tab loop', () => {
+    assert.ok(!src.includes("{#each terminalTabsStore.tabs.filter(t => t.type !== 'ai')"), 'Should NOT iterate shell tabs');
   });
 
-  it('has tab-close button for shell tabs', () => {
-    assert.ok(src.includes('tab-close'), 'Should have close button');
+  it('does NOT have tab-add button', () => {
+    assert.ok(!src.includes('tab-add'), 'Should NOT have add button');
   });
 
-  it('has tab-add button', () => {
-    assert.ok(src.includes('tab-add'), 'Should have add button');
+  it('does NOT have tab-close button', () => {
+    assert.ok(!src.includes('tab-close'), 'Should NOT have close button');
   });
 
-  it('uses stopPropagation on close button', () => {
-    assert.ok(src.includes('stopPropagation'), 'Should stop propagation on close');
+  it('does NOT have drag-to-reorder', () => {
+    assert.ok(!src.includes('handleTabMousedown'), 'Should NOT have drag handler');
+    assert.ok(!src.includes('dragTabId'), 'Should NOT have drag state');
+    assert.ok(!src.includes('drag-over'), 'Should NOT have drag-over class');
   });
 
-  it('has aria-label on add button', () => {
-    assert.ok(src.includes('aria-label="New terminal"'), 'Should have aria-label');
+  it('does NOT have inline rename', () => {
+    assert.ok(!src.includes('editingTabId'), 'Should NOT have editingTabId');
+    assert.ok(!src.includes('tab-rename-input'), 'Should NOT have rename input');
+    assert.ok(!src.includes('startRename'), 'Should NOT have startRename');
+    assert.ok(!src.includes('ondblclick'), 'Should NOT have double-click rename');
+  });
+
+  it('does NOT have handleAddTerminal', () => {
+    assert.ok(!src.includes('handleAddTerminal'), 'Should NOT have handleAddTerminal');
+  });
+
+  it('does NOT have close confirmation dialog', () => {
+    assert.ok(!src.includes('close-confirm-overlay'), 'Should NOT have close confirmation');
+    assert.ok(!src.includes('closeConfirmVisible'), 'Should NOT have close confirm state');
   });
 });
 
-describe('TerminalTabs.svelte -- terminal rendering', () => {
-  it('renders AiTerminal always', () => {
+describe('TerminalTabs.svelte -- content area rendering', () => {
+  it('renders AiTerminal component', () => {
     assert.ok(src.includes('<AiTerminal'), 'Should render AiTerminal component');
   });
 
-  it('renders Terminal with shellId prop', () => {
-    assert.ok(src.includes('shellId={tab.shellId}'), 'Should pass shellId prop');
+  it('renders TerminalPanel component', () => {
+    assert.ok(src.includes('<TerminalPanel'), 'Should render TerminalPanel component');
   });
 
-  it('passes visible prop to Terminal', () => {
-    assert.ok(src.includes('visible={'), 'Should pass visible prop');
+  it('renders OutputPanel component', () => {
+    assert.ok(src.includes('<OutputPanel'), 'Should render OutputPanel component');
   });
 
-  it('has handleAddTerminal function', () => {
-    assert.ok(src.includes('handleAddTerminal'), 'Should have handleAddTerminal');
+  it('hides AI panel when not in ai mode', () => {
+    assert.ok(src.includes("class:hidden={bottomPanelMode !== 'ai'}"), 'Should hide AI panel based on mode');
   });
 
-  it('uses keyed each block for tabs', () => {
-    assert.ok(src.includes('(tab.id)'), 'Should use keyed each block');
-  });
-});
-
-describe('TerminalTabs.svelte -- tab renaming', () => {
-  it('has editingTabId state', () => {
-    assert.ok(src.includes('editingTabId'), 'Should have editingTabId state');
+  it('conditionally renders Output panel', () => {
+    assert.ok(src.includes("bottomPanelMode === 'output'"), 'Should check for output mode');
   });
 
-  it('has startRename function', () => {
-    assert.ok(src.includes('startRename'), 'Should have startRename');
-  });
-
-  it('has saveRename function', () => {
-    assert.ok(src.includes('saveRename'), 'Should have saveRename');
-  });
-
-  it('has cancelRename function', () => {
-    assert.ok(src.includes('cancelRename'), 'Should have cancelRename');
-  });
-
-  it('has inline rename input', () => {
-    assert.ok(src.includes('tab-rename-input'), 'Should have rename input class');
-  });
-
-  it('triggers rename on double-click', () => {
-    assert.ok(src.includes('ondblclick'), 'Should have dblclick handler on tab label');
-  });
-
-  it('tab label does not have role="textbox" (semantically wrong)', () => {
-    assert.ok(!src.includes('role="textbox"'), 'Tab label should not have textbox role');
-  });
-
-  it('saves on Enter key', () => {
-    assert.ok(src.includes("e.key === 'Enter'"), 'Should save on Enter');
-  });
-
-  it('cancels on Escape key', () => {
-    assert.ok(src.includes("e.key === 'Escape'"), 'Should cancel on Escape');
-  });
-
-  it('has autofocus action for rename input', () => {
-    assert.ok(src.includes('use:autofocus'), 'Should auto-focus rename input');
+  it('conditionally renders Terminal panel', () => {
+    assert.ok(src.includes("bottomPanelMode === 'terminal'"), 'Should check for terminal mode');
   });
 });
 
-describe('TerminalTabs.svelte -- context menu', () => {
+describe('TerminalTabs.svelte -- Voice Agent context menu', () => {
   it('has context-menu class', () => {
     assert.ok(src.includes('context-menu'), 'Should have context menu element');
   });
@@ -153,20 +161,8 @@ describe('TerminalTabs.svelte -- context menu', () => {
     assert.ok(src.includes('oncontextmenu'), 'Should have contextmenu handler');
   });
 
-  it('has Rename menu item', () => {
-    assert.ok(src.includes('contextRename'), 'Should have rename action');
-  });
-
-  it('has Clear menu item', () => {
-    assert.ok(src.includes('contextClear'), 'Should have clear action');
-  });
-
-  it('has Close menu item for shell tabs', () => {
-    assert.ok(src.includes('contextClose'), 'Should have close action');
-  });
-
-  it('hides Close for AI tab', () => {
-    assert.ok(src.includes("contextMenu.tabId !== 'ai'"), 'Should hide close for AI tab');
+  it('has contextClear function', () => {
+    assert.ok(src.includes('contextClear'), 'Should have contextClear action');
   });
 
   it('closes on outside click', () => {
@@ -175,80 +171,6 @@ describe('TerminalTabs.svelte -- context menu', () => {
 
   it('uses fixed positioning', () => {
     assert.ok(src.includes('position: fixed'), 'Context menu should be fixed positioned');
-  });
-});
-
-describe('TerminalTabs.svelte -- drag-to-reorder', () => {
-  it('has data-tab-id attribute for pointer drag', () => {
-    assert.ok(src.includes('data-tab-id={tab.id}'), 'Should have data-tab-id attribute');
-  });
-
-  it('has drag-over class binding', () => {
-    assert.ok(src.includes('class:drag-over='), 'Should have drag-over class');
-  });
-
-  it('has dragging class binding', () => {
-    assert.ok(src.includes('class:dragging='), 'Should have dragging class');
-  });
-
-  it('has handleTabMousedown function', () => {
-    assert.ok(src.includes('handleTabMousedown'), 'Should have mousedown handler');
-  });
-
-  it('uses pointer-based drag with mousemove', () => {
-    assert.ok(src.includes("'mousemove'"), 'Should listen for mousemove during drag');
-  });
-
-  it('calls moveTab on drop', () => {
-    assert.ok(src.includes('moveTab(dragTabId'), 'Should call moveTab');
-  });
-
-  it('prevents dragging AI tab', () => {
-    assert.ok(src.includes("tabId === 'ai'") && src.includes('return'), 'Should prevent dragging AI tab');
-  });
-
-  it('has 5px movement threshold', () => {
-    assert.ok(src.includes('< 5'), 'Should have movement threshold before activating drag');
-  });
-});
-
-describe('TerminalTabs.svelte -- keyboard cycling', () => {
-  it('listens for Ctrl+Tab', () => {
-    assert.ok(src.includes("e.key === 'Tab'"), 'Should listen for Tab key');
-  });
-
-  it('checks ctrlKey modifier', () => {
-    assert.ok(src.includes('e.ctrlKey'), 'Should check ctrlKey');
-  });
-
-  it('calls nextTab on Ctrl+Tab', () => {
-    assert.ok(src.includes('nextTab()'), 'Should call nextTab');
-  });
-
-  it('calls prevTab on Ctrl+Shift+Tab', () => {
-    assert.ok(src.includes('prevTab()'), 'Should call prevTab');
-  });
-
-  it('uses capture phase for global keydown', () => {
-    assert.ok(src.includes("'keydown', handleKeydown, true"), 'Should use capture phase');
-  });
-
-  it('uses onMount instead of $effect for keyboard listener (no reactive deps)', () => {
-    // The keyboard shortcut setup has no reactive dependencies, so it should be onMount
-    assert.ok(src.includes("import { onMount } from 'svelte'"), 'Should import onMount');
-    // Verify onMount wraps the keyboard listener
-    const onMountBlock = src.split('onMount(')[1] || '';
-    assert.ok(onMountBlock.includes("e.key === 'Tab'"), 'onMount should contain the Tab key handler');
-  });
-});
-
-describe('TerminalTabs.svelte -- CSS', () => {
-  it('hides inactive panels with display none', () => {
-    assert.ok(src.includes('display: none'), 'Should hide inactive panels');
-  });
-
-  it('uses position absolute for panels', () => {
-    assert.ok(src.includes('position: absolute'), 'Should use absolute positioning');
   });
 });
 
@@ -334,5 +256,91 @@ describe('TerminalTabs.svelte -- provider switching context menu', () => {
 
   it('skips switch when clicking current provider', () => {
     assert.ok(src.includes('aiStatusStore.providerType') && src.includes('closeContextMenu'), 'Should no-op on same provider');
+  });
+});
+
+describe('TerminalTabs.svelte -- Output tab context menu', () => {
+  it('has showOutputContextMenu function', () => {
+    assert.ok(src.includes('showOutputContextMenu'), 'Should have showOutputContextMenu');
+  });
+
+  it('has Clear Output action', () => {
+    assert.ok(src.includes('outputContextClear'), 'Should have clear output action');
+  });
+
+  it('has Copy All action', () => {
+    assert.ok(src.includes('outputContextCopyAll'), 'Should have copy all action');
+  });
+
+  it('has Word Wrap toggle', () => {
+    assert.ok(src.includes('outputContextToggleWrap'), 'Should have word wrap toggle');
+  });
+
+  it('has Scroll Lock toggle', () => {
+    assert.ok(src.includes('outputContextToggleScrollLock'), 'Should have scroll lock toggle');
+  });
+});
+
+describe('TerminalTabs.svelte -- toolbar', () => {
+  it('shows output controls when in output mode', () => {
+    assert.ok(src.includes("bottomPanelMode === 'output'"), 'Should check for output mode in toolbar');
+  });
+
+  it('shows AI controls when in ai mode', () => {
+    assert.ok(src.includes("bottomPanelMode === 'ai'"), 'Should check for ai mode in toolbar');
+  });
+
+  it('has output filter input', () => {
+    assert.ok(src.includes('output-filter-input'), 'Should have filter input');
+  });
+
+  it('has channel dropdown', () => {
+    assert.ok(src.includes('channel-dropdown-trigger'), 'Should have channel dropdown');
+  });
+
+  it('has voice button for AI mode', () => {
+    assert.ok(src.includes('voice-btn'), 'Should have voice button');
+  });
+
+  it('has clear, copy, paste buttons for AI mode', () => {
+    assert.ok(src.includes('handleClear'), 'Should have clear handler');
+    assert.ok(src.includes('handleCopy'), 'Should have copy handler');
+    assert.ok(src.includes('handlePaste'), 'Should have paste handler');
+  });
+});
+
+describe('TerminalTabs.svelte -- keyboard cycling', () => {
+  it('listens for Ctrl+Tab', () => {
+    assert.ok(src.includes("e.key === 'Tab'"), 'Should listen for Tab key');
+  });
+
+  it('checks ctrlKey modifier', () => {
+    assert.ok(src.includes('e.ctrlKey'), 'Should check ctrlKey');
+  });
+
+  it('cycles through panelOrder', () => {
+    assert.ok(src.includes('panelOrder'), 'Should use panelOrder array');
+  });
+
+  it('uses capture phase for global keydown', () => {
+    assert.ok(src.includes("'keydown', handleKeydown, true"), 'Should use capture phase');
+  });
+
+  it('uses onMount for keyboard listener', () => {
+    assert.ok(src.includes("import { onMount } from 'svelte'"), 'Should import onMount');
+  });
+});
+
+describe('TerminalTabs.svelte -- CSS', () => {
+  it('hides inactive panels with display none', () => {
+    assert.ok(src.includes('display: none'), 'Should hide inactive panels');
+  });
+
+  it('uses position absolute for panels', () => {
+    assert.ok(src.includes('position: absolute'), 'Should use absolute positioning');
+  });
+
+  it('has terminal-panel-container style', () => {
+    assert.ok(src.includes('terminal-panel-container'), 'Should have terminal panel container');
   });
 });

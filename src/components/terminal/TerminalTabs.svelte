@@ -1,18 +1,16 @@
 <script>
   /**
-   * TerminalTabs.svelte -- Tabbed terminal container with unified tab bar.
+   * TerminalTabs.svelte -- Bottom panel with 3 pinned tabs.
    *
    * Features:
-   * - Single bar: tabs (left) + toolbar actions (right)
-   * - Double-click tab to rename (inline input)
-   * - Right-click context menu (rename, clear, close)
-   * - Drag-to-reorder terminal tabs (AI tab pinned at index 0)
-   * - Ctrl+Tab / Ctrl+Shift+Tab to cycle tabs
-   * - Smart terminal numbering (fills gaps)
+   * - 3 permanent tabs: Voice Agent, Output, Terminal
+   * - Right-click context menus for Voice Agent and Output
+   * - Toolbar actions on the right side of the tab bar
+   * - Content area routing based on bottomPanelMode
    */
   import { onMount } from 'svelte';
   import AiTerminal from './AiTerminal.svelte';
-  import Terminal from './Terminal.svelte';
+  import TerminalPanel from './TerminalPanel.svelte';
   import { terminalTabsStore } from '../../lib/stores/terminal-tabs.svelte.js';
   import { devServerManager } from '../../lib/stores/dev-server-manager.svelte.js';
   import { projectStore } from '../../lib/stores/project.svelte.js';
@@ -25,8 +23,8 @@
   import OutputPanel from '../lens/OutputPanel.svelte';
   import { outputStore } from '../../lib/stores/output.svelte.js';
 
-  // ---- Bottom panel mode: terminal vs output ----
-  let bottomPanelMode = $state('terminal'); // 'terminal' | 'output'
+  // ---- Bottom panel mode: ai | output | terminal ----
+  let bottomPanelMode = $state('ai');
 
   // ---- Output channel dropdown (custom, theme-aware) ----
   let channelDropdownOpen = $state(false);
@@ -58,15 +56,15 @@
   let termActions = {};
 
   function handleClear() {
-    termActions[terminalTabsStore.activeTabId]?.clear();
+    termActions['ai']?.clear();
   }
 
   function handleCopy() {
-    termActions[terminalTabsStore.activeTabId]?.copy();
+    termActions['ai']?.copy();
   }
 
   function handlePaste() {
-    termActions[terminalTabsStore.activeTabId]?.paste();
+    termActions['ai']?.paste();
   }
 
   // ---- Voice button (AI tab only, CLI provider only) ----
@@ -78,7 +76,7 @@
   );
 
   let showVoiceButton = $derived(
-    terminalTabsStore.activeTabId === 'ai' &&
+    bottomPanelMode === 'ai' &&
     aiStatusStore.running && aiStatusStore.isCliProvider
   );
 
@@ -104,109 +102,7 @@
     }
   }
 
-  // ---- Terminal tab management ----
-
-  async function handleAddTerminal() {
-    const cwd = projectStore.activeProject?.path || null;
-    await terminalTabsStore.addTerminalTab({ cwd });
-  }
-
-  // ---- Close confirmation for dev-server tabs ----
-
-  let closeConfirmVisible = $state(false);
-  let closeConfirmTab = $state(null);
-
-  /**
-   * Attempt to close a tab. If it's a running dev-server tab, show confirmation.
-   * Otherwise close immediately.
-   * @param {string} tabId
-   */
-  function requestCloseTab(tabId) {
-    if (tabId === 'ai') return;
-    const tab = terminalTabsStore.tabs.find(t => t.id === tabId);
-    if (tab && tab.type === 'dev-server' && tab.running) {
-      closeConfirmTab = tab;
-      closeConfirmVisible = true;
-    } else {
-      terminalTabsStore.closeTab(tabId);
-    }
-  }
-
-  /** Stop server, then close the tab */
-  async function confirmStopAndClose() {
-    const tab = closeConfirmTab;
-    closeConfirmVisible = false;
-    closeConfirmTab = null;
-    if (!tab) return;
-    const current = terminalTabsStore.tabs.find(t => t.id === tab.id);
-    if (!current) return;
-    if (tab.projectPath) {
-      try {
-        await devServerManager.stopServer(tab.projectPath);
-      } catch (err) {
-        console.error('[TerminalTabs] stopServer failed:', err);
-      }
-    }
-    terminalTabsStore.closeTab(tab.id);
-  }
-
-  /** Hide tab (keep process alive) */
-  function confirmHideTab() {
-    const tab = closeConfirmTab;
-    closeConfirmVisible = false;
-    closeConfirmTab = null;
-    if (!tab) return;
-    terminalTabsStore.hideTab(tab.id);
-  }
-
-  /** Cancel close confirmation */
-  function cancelCloseConfirm() {
-    closeConfirmVisible = false;
-    closeConfirmTab = null;
-  }
-
-  // ---- Tab renaming (double-click) ----
-
-  let editingTabId = $state(null);
-  let editValue = $state('');
-
-  function startRename(tabId) {
-    const tab = terminalTabsStore.tabs.find(t => t.id === tabId);
-    if (!tab) return;
-    editValue = tab.title;
-    editingTabId = tabId;
-  }
-
-  function saveRename() {
-    if (!editingTabId) return;
-    const trimmed = editValue.trim();
-    if (trimmed && trimmed !== terminalTabsStore.tabs.find(t => t.id === editingTabId)?.title) {
-      terminalTabsStore.renameTab(editingTabId, trimmed);
-    }
-    editingTabId = null;
-  }
-
-  function cancelRename() {
-    editingTabId = null;
-  }
-
-  function handleRenameKeydown(e) {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      saveRename();
-    } else if (e.key === 'Escape') {
-      e.preventDefault();
-      cancelRename();
-    }
-  }
-
-  /** Svelte action: auto-focus and select input text on mount */
-  function autofocus(node) {
-    node.focus();
-    node.select();
-  }
-
-  // ---- Right-click context menu ----
+  // ---- Right-click context menu (Voice Agent tab) ----
 
   let contextMenu = $state({ visible: false, x: 0, y: 0, tabId: null });
 
@@ -222,20 +118,8 @@
     contextMenu = { ...contextMenu, visible: false };
   }
 
-  function contextRename() {
-    startRename(contextMenu.tabId);
-    closeContextMenu();
-  }
-
   function contextClear() {
     termActions[contextMenu.tabId]?.clear();
-    closeContextMenu();
-  }
-
-  function contextClose() {
-    if (contextMenu.tabId !== 'ai') {
-      requestCloseTab(contextMenu.tabId);
-    }
     closeContextMenu();
   }
 
@@ -345,112 +229,51 @@
     closeOutputContextMenu();
   }
 
-  // ---- Drag-to-reorder (pointer-based) ----
+  // ---- Keyboard: Ctrl+Tab / Ctrl+Shift+Tab to cycle panels ----
 
-  let dragTabId = $state(null);
-  let dragOverTabId = $state(null);
-  let dragStartX = 0;
-  let dragActive = false;
-
-  function handleTabMousedown(e, tabId) {
-    // Only left-click, only terminal/dev-server tabs
-    if (e.button !== 0 || tabId === 'ai') return;
-    dragStartX = e.clientX;
-    dragActive = false;
-
-    const onMousemove = (/** @type {MouseEvent} */ moveEvt) => {
-      // 5px threshold before activating drag
-      if (!dragActive && Math.abs(moveEvt.clientX - dragStartX) < 5) return;
-      if (!dragActive) {
-        dragActive = true;
-        dragTabId = tabId;
-      }
-
-      // Find the tab element being hovered over
-      const els = document.elementsFromPoint(moveEvt.clientX, moveEvt.clientY);
-      const tabEl = els.find(el => el.closest?.('[data-tab-id]'));
-      const hoverTabEl = tabEl?.closest?.('[data-tab-id]') || tabEl;
-      const hoverId = hoverTabEl?.getAttribute?.('data-tab-id') || null;
-
-      if (hoverId && hoverId !== 'ai' && hoverId !== tabId) {
-        dragOverTabId = hoverId;
-      } else {
-        dragOverTabId = null;
-      }
-    };
-
-    const onMouseup = () => {
-      window.removeEventListener('mousemove', onMousemove);
-      window.removeEventListener('mouseup', onMouseup);
-
-      if (dragActive && dragOverTabId) {
-        terminalTabsStore.moveTab(dragTabId, dragOverTabId);
-      }
-      dragTabId = null;
-      dragOverTabId = null;
-      dragActive = false;
-    };
-
-    window.addEventListener('mousemove', onMousemove);
-    window.addEventListener('mouseup', onMouseup);
-  }
-
-  // ---- Keyboard tab cycling (Ctrl+Tab / Ctrl+Shift+Tab) ----
+  const panelOrder = ['ai', 'output', 'terminal'];
 
   onMount(() => {
     function handleKeydown(e) {
       if (e.ctrlKey && e.key === 'Tab') {
         e.preventDefault();
         e.stopPropagation();
+        const idx = panelOrder.indexOf(bottomPanelMode);
         if (e.shiftKey) {
-          terminalTabsStore.prevTab();
+          bottomPanelMode = panelOrder[(idx - 1 + panelOrder.length) % panelOrder.length];
         } else {
-          terminalTabsStore.nextTab();
+          bottomPanelMode = panelOrder[(idx + 1) % panelOrder.length];
         }
       }
     }
     window.addEventListener('keydown', handleKeydown, true);
-
-    // Spawn a default terminal tab on startup (Voice Agent | Output | Terminal are the staples)
-    const hasTerminal = terminalTabsStore.tabs.some(t => t.type === 'terminal');
-    if (!hasTerminal) {
-      const cwd = projectStore.activeProject?.path || null;
-      terminalTabsStore.addTerminalTab({ cwd }).then(() => {
-        // Keep Voice Agent as the active tab on startup
-        terminalTabsStore.setActive('ai');
-      });
-    }
 
     return () => window.removeEventListener('keydown', handleKeydown, true);
   });
 </script>
 
 <div class="terminal-tabs-container">
-  <!-- Unified tab bar: tabs (left) + toolbar actions (right) -->
+  <!-- Unified tab bar: 3 pinned tabs (left) + toolbar actions (right) -->
   <div class="terminal-tab-bar">
-    <!-- AI terminal tab (pinned left) -->
-    {#each terminalTabsStore.tabs.filter(t => t.type === 'ai') as tab (tab.id)}
-      <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <div
-        class="terminal-tab"
-        class:active={terminalTabsStore.activeTabId === tab.id && bottomPanelMode === 'terminal'}
-        role="tab"
-        tabindex="0"
-        aria-selected={terminalTabsStore.activeTabId === tab.id && bottomPanelMode === 'terminal'}
-        data-tab-id={tab.id}
-        onclick={() => { bottomPanelMode = 'terminal'; terminalTabsStore.setActive(tab.id); }}
-        oncontextmenu={(e) => showContextMenu(e, tab.id)}
-        onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { bottomPanelMode = 'terminal'; terminalTabsStore.setActive(tab.id); } }}
-        title={tab.title}
-      >
-        <svg class="tab-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
-          <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/><circle cx="9" cy="16" r="1" fill="currentColor"/><circle cx="15" cy="16" r="1" fill="currentColor"/>
-        </svg>
-        <span class="tab-label">{tab.title}</span>
-      </div>
-    {/each}
+    <!-- Voice Agent tab (pinned) -->
+    <div
+      class="terminal-tab"
+      class:active={bottomPanelMode === 'ai'}
+      role="tab"
+      tabindex="0"
+      aria-selected={bottomPanelMode === 'ai'}
+      onclick={() => bottomPanelMode = 'ai'}
+      oncontextmenu={(e) => showContextMenu(e, 'ai')}
+      onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') bottomPanelMode = 'ai'; }}
+      title="Voice Agent"
+    >
+      <svg class="tab-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/><circle cx="9" cy="16" r="1" fill="currentColor"/><circle cx="15" cy="16" r="1" fill="currentColor"/>
+      </svg>
+      <span class="tab-label">Voice Agent</span>
+    </div>
 
-    <!-- Output panel tab (pinned after Voice Agent) -->
+    <!-- Output tab (pinned) -->
     <div class="tab-divider"></div>
     <div
       class="terminal-tab"
@@ -468,64 +291,22 @@
       <span class="tab-label">Output</span>
     </div>
 
-    <!-- Shell/dev-server tabs (right of Output) -->
-    {#each terminalTabsStore.tabs.filter(t => t.type !== 'ai') as tab (tab.id)}
-      <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <div
-        class="terminal-tab"
-        class:active={terminalTabsStore.activeTabId === tab.id && bottomPanelMode === 'terminal'}
-        class:exited={!tab.running}
-        class:drag-over={dragOverTabId === tab.id && dragTabId !== tab.id}
-        class:dragging={dragTabId === tab.id}
-        role="tab"
-        tabindex="0"
-        aria-selected={terminalTabsStore.activeTabId === tab.id && bottomPanelMode === 'terminal'}
-        data-tab-id={tab.id}
-        onclick={() => { bottomPanelMode = 'terminal'; terminalTabsStore.setActive(tab.id); }}
-        oncontextmenu={(e) => showContextMenu(e, tab.id)}
-        onmousedown={(e) => handleTabMousedown(e, tab.id)}
-        onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { bottomPanelMode = 'terminal'; terminalTabsStore.setActive(tab.id); } }}
-        title={tab.title}
-      >
-        <svg class="tab-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
-          <polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>
-        </svg>
-
-        {#if editingTabId === tab.id}
-          <input
-            class="tab-rename-input"
-            type="text"
-            bind:value={editValue}
-            onkeydown={handleRenameKeydown}
-            onblur={saveRename}
-            onclick={(e) => e.stopPropagation()}
-            use:autofocus
-          />
-        {:else}
-          <!-- svelte-ignore a11y_no_static_element_interactions -->
-          <span
-            class="tab-label"
-            ondblclick={(e) => { e.preventDefault(); startRename(tab.id); }}
-          >{tab.title}</span>
-        {/if}
-
-        <button
-          class="tab-close"
-          onclick={(e) => { e.stopPropagation(); requestCloseTab(tab.id); }}
-          title="Close terminal"
-        >
-          <svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.5">
-            <line x1="2" y1="2" x2="10" y2="10"/><line x1="10" y1="2" x2="2" y2="10"/>
-          </svg>
-        </button>
-      </div>
-    {/each}
-
-    <button class="tab-add" onclick={handleAddTerminal} title="New terminal" aria-label="New terminal">
-      <svg viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5">
-        <line x1="6" y1="1" x2="6" y2="11"/><line x1="1" y1="6" x2="11" y2="6"/>
+    <!-- Terminal tab (pinned) -->
+    <div class="tab-divider"></div>
+    <div
+      class="terminal-tab"
+      class:active={bottomPanelMode === 'terminal'}
+      role="tab"
+      tabindex="0"
+      aria-selected={bottomPanelMode === 'terminal'}
+      onclick={() => bottomPanelMode = 'terminal'}
+      onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') bottomPanelMode = 'terminal'; }}
+    >
+      <svg class="tab-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>
       </svg>
-    </button>
+      <span class="tab-label">Terminal</span>
+    </div>
 
     <!-- Spacer pushes toolbar actions to the right -->
     <div class="tab-bar-spacer"></div>
@@ -623,9 +404,9 @@
           </button>
         </div>
       </div>
-    {:else}
-      <!-- Terminal controls -->
-      <!-- Voice button (only on AI tab with running CLI provider) -->
+    {:else if bottomPanelMode === 'ai'}
+      <!-- AI terminal controls -->
+      <!-- Voice button (only with running CLI provider) -->
       {#if showVoiceButton}
         <button
           class="voice-btn"
@@ -671,21 +452,16 @@
         </button>
       </div>
     {/if}
+    <!-- Terminal mode: no toolbar (TerminalPanel has its own action bar) -->
   </div>
 
-  <!-- Context menu -->
+  <!-- Voice Agent context menu -->
   {#if contextMenu.visible}
     <div
       class="context-menu"
       class:wide={contextMenu.tabId === 'ai'}
       style="left: {contextMenu.x}px; top: {contextMenu.y}px;"
     >
-      <button class="context-menu-item" onclick={contextRename}>
-        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
-        </svg>
-        Rename
-      </button>
       <button class="context-menu-item" onclick={contextClear}>
         <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/>
@@ -734,14 +510,6 @@
             Stop Provider
           </button>
         {/if}
-      {:else}
-        <div class="context-menu-divider"></div>
-        <button class="context-menu-item danger" onclick={contextClose}>
-          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
-          Close
-        </button>
       {/if}
     </div>
   {/if}
@@ -791,55 +559,25 @@
     </div>
   {/if}
 
-  <!-- Close confirmation dialog for dev-server tabs -->
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div
-    class="close-confirm-overlay"
-    class:close-confirm-hidden={!closeConfirmVisible}
-    onkeydown={(e) => { if (e.key === 'Escape') cancelCloseConfirm(); }}
-  >
-    <div class="close-confirm-dialog" role="alertdialog" aria-modal="true" aria-label="Close dev server confirmation">
-      <div class="close-confirm-title">Dev server running</div>
-      <div class="close-confirm-message">
-        {closeConfirmTab?.framework || 'Server'}{closeConfirmTab?.port ? ` on :${closeConfirmTab.port}` : ''} is still running.
-      </div>
-      <div class="close-confirm-actions">
-        <button class="close-confirm-btn stop" type="button" onclick={confirmStopAndClose} aria-label="Stop server and close tab">
-          Stop Server
-        </button>
-        <button class="close-confirm-btn hide" type="button" onclick={confirmHideTab} aria-label="Hide tab but keep server running">
-          Hide Tab
-        </button>
-        <button class="close-confirm-btn cancel" type="button" onclick={cancelCloseConfirm} aria-label="Cancel closing">
-          Cancel
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Terminal panels (hidden when Output is active) -->
-  <div class="terminal-panels" class:hidden={bottomPanelMode === 'output'}>
-    <!-- AI terminal (always mounted) -->
-    <div class="terminal-panel" class:hidden={terminalTabsStore.activeTabId !== 'ai'}>
+  <!-- Content panels -->
+  <!-- AI terminal (always mounted, hidden when not active) -->
+  <div class="terminal-panels" class:hidden={bottomPanelMode !== 'ai'}>
+    <div class="terminal-panel">
       <AiTerminal onRegisterActions={(actions) => { termActions['ai'] = actions; }} />
     </div>
-
-    <!-- Terminal + dev-server terminals (mounted when tab exists, hidden when inactive) -->
-    {#each terminalTabsStore.tabs.filter(t => t.type === 'terminal' || t.type === 'dev-server') as tab (tab.id)}
-      <div class="terminal-panel" class:hidden={terminalTabsStore.activeTabId !== tab.id}>
-        <Terminal
-          shellId={tab.shellId}
-          visible={terminalTabsStore.activeTabId === tab.id}
-          onRegisterActions={(actions) => { termActions[tab.id] = actions; }}
-        />
-      </div>
-    {/each}
   </div>
 
-  <!-- Output panel (shown when Output mode is active) -->
+  <!-- Output panel -->
   {#if bottomPanelMode === 'output'}
     <div class="output-panel-container">
       <OutputPanel />
+    </div>
+  {/if}
+
+  <!-- Terminal panel -->
+  {#if bottomPanelMode === 'terminal'}
+    <div class="terminal-panel-container">
+      <TerminalPanel />
     </div>
   {/if}
 </div>
@@ -853,7 +591,7 @@
     position: relative;
   }
 
-  /* ── Unified tab bar ── */
+  /* -- Unified tab bar -- */
 
   .terminal-tab-bar {
     display: flex;
@@ -876,7 +614,7 @@
     min-width: 8px;
   }
 
-  /* ── Tabs ── */
+  /* -- Tabs -- */
 
   .terminal-tab {
     display: flex;
@@ -908,19 +646,6 @@
     font-weight: 500;
   }
 
-  .terminal-tab.exited {
-    opacity: 0.5;
-  }
-
-  .terminal-tab.dragging {
-    opacity: 0.4;
-  }
-
-  .terminal-tab.drag-over {
-    border-left: 2px solid var(--accent);
-    padding-left: 8px;
-  }
-
   .tab-icon {
     flex-shrink: 0;
   }
@@ -931,46 +656,6 @@
     cursor: inherit;
   }
 
-  /* ── Inline rename input ── */
-
-  .tab-rename-input {
-    background: var(--bg);
-    border: 1px solid var(--accent);
-    border-radius: 3px;
-    color: var(--text);
-    font-size: 12px;
-    font-family: var(--font-family);
-    padding: 1px 4px;
-    width: 80px;
-    outline: none;
-  }
-
-  .tab-close {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 16px;
-    height: 16px;
-    background: transparent;
-    border: none;
-    color: var(--muted);
-    cursor: pointer;
-    padding: 0;
-    border-radius: 4px;
-    margin-left: 2px;
-    opacity: 0;
-    transition: opacity 0.1s, color 0.15s, background 0.15s;
-  }
-
-  .terminal-tab:hover .tab-close {
-    opacity: 1;
-  }
-
-  .tab-close:hover {
-    background: color-mix(in srgb, var(--danger) 20%, transparent);
-    color: var(--danger);
-  }
-
   .tab-divider {
     width: 1px;
     height: 16px;
@@ -979,28 +664,7 @@
     flex-shrink: 0;
   }
 
-  .tab-add {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 24px;
-    height: 24px;
-    border: none;
-    border-radius: 6px;
-    background: transparent;
-    color: var(--muted);
-    cursor: pointer;
-    flex-shrink: 0;
-    margin-left: 2px;
-    transition: background 0.12s ease, color 0.12s ease;
-  }
-
-  .tab-add:hover {
-    background: color-mix(in srgb, var(--text) 8%, transparent);
-    color: var(--text);
-  }
-
-  /* ── Toolbar actions (right side) ── */
+  /* -- Toolbar actions (right side) -- */
 
   .toolbar-actions {
     display: flex;
@@ -1036,7 +700,7 @@
     outline-offset: 1px;
   }
 
-  /* ── Voice button ── */
+  /* -- Voice button -- */
 
   .voice-btn {
     display: inline-flex;
@@ -1090,7 +754,7 @@
     50% { opacity: 0.4; }
   }
 
-  /* ── Context menu ── */
+  /* -- Context menu -- */
 
   .context-menu {
     position: fixed;
@@ -1194,7 +858,7 @@
     flex-shrink: 0;
   }
 
-  /* ── Output controls (in tab bar, right side) ── */
+  /* -- Output controls (in tab bar, right side) -- */
 
   .output-controls {
     display: flex;
@@ -1202,7 +866,7 @@
     gap: 6px;
   }
 
-  /* ── Output filter input ── */
+  /* -- Output filter input -- */
 
   .output-filter-wrapper {
     position: relative;
@@ -1241,7 +905,7 @@
     opacity: 0.6;
   }
 
-  /* ── Custom channel dropdown ── */
+  /* -- Custom channel dropdown -- */
 
   .channel-dropdown-wrapper {
     position: relative;
@@ -1310,7 +974,7 @@
     flex-shrink: 0;
   }
 
-  /* ── Output panel container ── */
+  /* -- Output panel container -- */
 
   .output-panel-container {
     flex: 1;
@@ -1318,7 +982,15 @@
     min-height: 0;
   }
 
-  /* ── Terminal panels ── */
+  /* -- Terminal panel container -- */
+
+  .terminal-panel-container {
+    flex: 1;
+    overflow: hidden;
+    min-height: 0;
+  }
+
+  /* -- Terminal panels -- */
 
   .terminal-panels {
     flex: 1;
@@ -1338,87 +1010,6 @@
 
   .terminal-panel.hidden {
     display: none;
-  }
-
-  /* ── Close confirmation dialog ── */
-
-  .close-confirm-overlay {
-    position: absolute;
-    inset: 0;
-    z-index: 100;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(0, 0, 0, 0.5);
-  }
-
-  .close-confirm-overlay.close-confirm-hidden {
-    display: none !important;
-  }
-
-  .close-confirm-dialog {
-    background: var(--bg-elevated);
-    border: 1px solid var(--border, rgba(255,255,255,0.1));
-    border-radius: 8px;
-    padding: 16px;
-    min-width: 260px;
-    max-width: 340px;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
-  }
-
-  .close-confirm-title {
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--text);
-    margin-bottom: 6px;
-  }
-
-  .close-confirm-message {
-    font-size: 12px;
-    color: var(--muted);
-    margin-bottom: 12px;
-  }
-
-  .close-confirm-actions {
-    display: flex;
-    gap: 6px;
-  }
-
-  .close-confirm-btn {
-    flex: 1;
-    padding: 5px 10px;
-    font-size: 11px;
-    font-weight: 500;
-    font-family: var(--font-family);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    background: transparent;
-    cursor: pointer;
-    transition: background 0.15s;
-    -webkit-app-region: no-drag;
-  }
-
-  .close-confirm-btn.stop {
-    color: var(--danger, #ef4444);
-    border-color: color-mix(in srgb, var(--danger, #ef4444) 40%, transparent);
-  }
-  .close-confirm-btn.stop:hover {
-    background: color-mix(in srgb, var(--danger, #ef4444) 12%, transparent);
-  }
-
-  .close-confirm-btn.hide {
-    color: var(--accent);
-    border-color: color-mix(in srgb, var(--accent) 40%, transparent);
-  }
-  .close-confirm-btn.hide:hover {
-    background: color-mix(in srgb, var(--accent) 12%, transparent);
-  }
-
-  .close-confirm-btn.cancel {
-    color: var(--muted);
-  }
-  .close-confirm-btn.cancel:hover {
-    background: rgba(255,255,255,0.06);
   }
 
   @media (prefers-reduced-motion: reduce) {
