@@ -20,7 +20,6 @@
   import { browserTabsStore } from '../../lib/stores/browser-tabs.svelte.js';
   import { lensSetVisible, startFileWatching, stopFileWatching, lensCapturePreview } from '../../lib/api.js';
   import { attachmentsStore } from '../../lib/stores/attachments.svelte.js';
-  import { chatStore } from '../../lib/stores/chat.svelte.js';
   import { projectStore } from '../../lib/stores/project.svelte.js';
   import { lspDiagnosticsStore } from '../../lib/stores/lsp-diagnostics.svelte.js';
   import { LSP_EXTENSIONS } from '../../lib/editor-lsp.svelte.js';
@@ -163,26 +162,26 @@
     lensStore.setDesignMode(false);
   }
 
-  /** Handle element selection from design toolbar — send element screenshot + context to chat. */
+  /** Handle element selection from design toolbar — queue screenshot + context as pending attachment. */
   function handleElementSend({ imageDataUrl, contextText, name }) {
-    // Build the image attachment
-    const imageAttachment = {
+    // Queue the element capture as a pending attachment with hidden context
+    attachmentsStore.add({
       path: 'element-capture',
       dataUrl: imageDataUrl,
       type: 'image/png',
       name: name || 'Selected Element',
-    };
+      context: contextText,
+    });
 
-    // Auto-send a user message with the image attachment and context as body text
-    chatStore.addMessage('user', contextText, { attachments: [imageAttachment] });
-
-    // Ensure chat panel is visible so the user sees the message
+    // Ensure chat panel is visible and focus the input
     layoutStore.setShowChat(true);
-
-    // Route the message to the AI provider
-    onSend(contextText, [imageAttachment]);
-
     lensStore.setDesignMode(false);
+
+    // Focus the chat input so the user can immediately type their instruction
+    requestAnimationFrame(() => {
+      const textarea = document.querySelector('.chat-input-bar textarea');
+      if (textarea) textarea.focus();
+    });
   }
 
   // Start/stop LSP diagnostics store listener on project switch

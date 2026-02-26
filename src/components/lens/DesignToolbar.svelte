@@ -110,12 +110,28 @@
       );
       console.log('[DesignToolbar] Cropped screenshot length:', croppedDataUrl?.length);
 
+      // Format parent chain
+      const parentLines = (elem.parentChain || []).map(p => {
+        const id = p.id ? '#' + p.id : '';
+        const cls = p.classes ? '.' + p.classes.split(' ').join('.') : '';
+        const childInfo = p.children ? ` (${p.childCount} children: ${p.children.join(', ')})` : '';
+        const styles = Object.entries(p.styles || {})
+          .filter(([, v]) => v && v !== 'static' && v !== 'visible' && v !== 'none' && v !== 'normal')
+          .map(([k, v]) => `${k}: ${v}`)
+          .join('; ');
+        return `  ${p.tagName}${id}${cls}${childInfo}\n    ${styles}`;
+      }).join('\n');
+
+      // Format pseudo-class rules
+      const pseudoLines = (elem.pseudoRules || []).map(r => `  ${r.css}`).join('\n');
+
       const styleLines = Object.entries(elem.styles || {})
         .map(([k, v]) => `  ${k}: ${v};`)
         .join('\n');
 
-      const classes = typeof elem.classes === 'string' ? elem.classes : '';
-      const contextText = [
+      const classes = typeof elem.classes === 'string' ? elem.classes : (Array.isArray(elem.classes) ? elem.classes.join(' ') : '');
+
+      let contextText = [
         `Selected element: ${elem.tagName}${elem.id ? '#' + elem.id : ''}${classes ? '.' + classes.split(' ').join('.') : ''}`,
         `Selector: ${elem.selector}`,
         `Size: ${elem.bounds.width} x ${elem.bounds.height}px`,
@@ -123,10 +139,19 @@
         '',
         'HTML:',
         elem.html,
+        parentLines ? '\nParent chain:' : null,
+        parentLines || null,
+        pseudoLines ? '\nPseudo-class rules:' : null,
+        pseudoLines || null,
         '',
         'Computed styles:',
         styleLines
-      ].filter(Boolean).join('\n');
+      ].filter(v => v !== null && v !== undefined).join('\n');
+
+      // Cap total context at 8000 characters
+      if (contextText.length > 8000) {
+        contextText = contextText.substring(0, 7980) + '\n[...truncated]';
+      }
 
       console.log('[DesignToolbar] Calling onElementSend with context length:', contextText.length);
       onElementSend({

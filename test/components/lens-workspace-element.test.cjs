@@ -8,7 +8,7 @@ const workspaceSrc = fs.readFileSync(
   'utf-8'
 );
 
-describe('LensWorkspace.svelte — element selection', () => {
+describe('LensWorkspace.svelte — element selection v2', () => {
   it('has handleElementSend function', () => {
     assert.ok(workspaceSrc.includes('function handleElementSend'));
   });
@@ -17,28 +17,30 @@ describe('LensWorkspace.svelte — element selection', () => {
     assert.ok(workspaceSrc.includes('onElementSend={handleElementSend}'));
   });
 
-  it('adds image attachment for element capture', () => {
-    assert.ok(workspaceSrc.includes("path: 'element-capture'"));
-    assert.ok(workspaceSrc.includes("type: 'image/png'"));
+  it('queues attachment with context field', () => {
+    assert.ok(workspaceSrc.includes("context:"), 'Should set context on attachment');
+    assert.ok(workspaceSrc.includes('attachmentsStore.add'), 'Should add to pending attachments');
   });
 
-  it('auto-sends to chat via chatStore.addMessage', () => {
-    assert.ok(workspaceSrc.includes('chatStore.addMessage'));
+  it('does NOT auto-send via chatStore.addMessage in handleElementSend', () => {
+    const fnStart = workspaceSrc.indexOf('function handleElementSend');
+    const fnEnd = workspaceSrc.indexOf('\n  }', fnStart);
+    const fnBody = workspaceSrc.substring(fnStart, fnEnd);
+    assert.ok(!fnBody.includes('chatStore.addMessage'), 'Should not auto-send message');
   });
 
-  it('imports chatStore for auto-send', () => {
-    assert.ok(workspaceSrc.includes("import { chatStore }"));
-  });
-
-  it('ensures chat panel is visible on send', () => {
+  it('ensures chat panel is visible', () => {
     assert.ok(workspaceSrc.includes('layoutStore.setShowChat(true)'));
   });
 
-  it('routes message to AI provider via onSend', () => {
-    assert.ok(workspaceSrc.includes('onSend(contextText'));
+  it('focuses chat input after queuing', () => {
+    const fnStart = workspaceSrc.indexOf('function handleElementSend');
+    const fnEnd = workspaceSrc.indexOf('\n  }', fnStart);
+    const fnBody = workspaceSrc.substring(fnStart, fnEnd);
+    assert.ok(fnBody.includes('focus'), 'Should focus chat input');
   });
 
-  it('exits design mode after element send', () => {
+  it('exits design mode after queuing', () => {
     assert.ok(workspaceSrc.includes('setDesignMode(false)'));
   });
 });

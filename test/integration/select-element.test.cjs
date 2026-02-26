@@ -73,22 +73,32 @@ describe('Select Element — End-to-End Wiring', () => {
 
   });
 
-  describe('Data Flow: Toolbar Send -> Chat Auto-Send', () => {
-    it('LensWorkspace has handleElementSend that auto-sends to chat', () => {
+  describe('Data Flow: Toolbar Send -> Queue Attachment', () => {
+    it('LensWorkspace has handleElementSend that queues attachment', () => {
       assert.ok(workspaceSrc.includes('function handleElementSend'));
-      assert.ok(workspaceSrc.includes('chatStore.addMessage'));
+      assert.ok(workspaceSrc.includes('attachmentsStore.add'));
+    });
+
+    it('LensWorkspace queues attachment with context field', () => {
+      assert.ok(workspaceSrc.includes('context:'));
     });
 
     it('LensWorkspace ensures chat panel is visible on element send', () => {
       assert.ok(workspaceSrc.includes('layoutStore.setShowChat(true)'));
     });
 
-    it('LensWorkspace routes message to AI provider via onSend', () => {
-      assert.ok(workspaceSrc.includes('onSend(contextText'));
+    it('LensWorkspace focuses chat input after queuing', () => {
+      const fnStart = workspaceSrc.indexOf('function handleElementSend');
+      const fnEnd = workspaceSrc.indexOf('\n  }', fnStart);
+      const fnBody = workspaceSrc.substring(fnStart, fnEnd);
+      assert.ok(fnBody.includes('focus'), 'Should focus chat input');
     });
 
-    it('LensWorkspace imports chatStore for auto-send', () => {
-      assert.ok(workspaceSrc.includes("import { chatStore }"));
+    it('LensWorkspace does not auto-send via chatStore.addMessage', () => {
+      const fnStart = workspaceSrc.indexOf('function handleElementSend');
+      const fnEnd = workspaceSrc.indexOf('\n  }', fnStart);
+      const fnBody = workspaceSrc.substring(fnStart, fnEnd);
+      assert.ok(!fnBody.includes('chatStore.addMessage'), 'Should not auto-send');
     });
   });
 
@@ -216,9 +226,9 @@ describe('Select Element — End-to-End Wiring', () => {
       assert.ok(workspaceSrc.includes("path: 'element-capture'"));
     });
 
-    it('workspace auto-sends message to chat with context text', () => {
-      assert.ok(workspaceSrc.includes('chatStore.addMessage'));
-      assert.ok(workspaceSrc.includes('onSend(contextText'));
+    it('workspace queues attachment with context for hidden context', () => {
+      assert.ok(workspaceSrc.includes('attachmentsStore.add'));
+      assert.ok(workspaceSrc.includes('context:'));
     });
 
     it('toolbar formats context with selector, HTML, and styles', () => {

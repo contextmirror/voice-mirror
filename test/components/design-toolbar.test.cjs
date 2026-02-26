@@ -59,3 +59,25 @@ describe('DesignToolbar.svelte — select element', () => {
     assert.ok(src.includes('devicePixelRatio'));
   });
 });
+
+const toolbarSrc = src;
+
+describe('DesignToolbar — enriched context', () => {
+  it('formats parent chain in context text', () => {
+    assert.ok(toolbarSrc.includes('parentChain'), 'Should reference parentChain');
+    assert.ok(toolbarSrc.includes('Parent chain'), 'Should have Parent chain section header');
+  });
+
+  it('formats pseudo-class rules in context text', () => {
+    assert.ok(toolbarSrc.includes('pseudoRules'), 'Should reference pseudoRules');
+    assert.ok(toolbarSrc.includes('Pseudo-class rules'), 'Should have Pseudo-class rules section header');
+  });
+
+  it('caps total context at 8000 characters', () => {
+    assert.ok(toolbarSrc.includes('8000'), 'Should cap context at 8000 chars');
+  });
+
+  it('handles classes as string or array', () => {
+    assert.ok(toolbarSrc.includes('Array.isArray(elem.classes)'), 'Should handle array classes');
+  });
+});
