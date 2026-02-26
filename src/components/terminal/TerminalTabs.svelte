@@ -22,6 +22,10 @@
   import { configStore, updateConfig } from '../../lib/stores/config.svelte.js';
   import { toastStore } from '../../lib/stores/toast.svelte.js';
   import { PROVIDER_GROUPS, PROVIDER_ICONS, PROVIDER_NAMES } from '../../lib/providers.js';
+  import OutputPanel from '../lens/OutputPanel.svelte';
+
+  // ---- Bottom panel mode: terminal vs output ----
+  let bottomPanelMode = $state('terminal'); // 'terminal' | 'output'
 
   // ---- Terminal action registration ----
   let termActions = {};
@@ -357,7 +361,7 @@
         tabindex="0"
         aria-selected={terminalTabsStore.activeTabId === tab.id}
         data-tab-id={tab.id}
-        onclick={() => terminalTabsStore.setActive(tab.id)}
+        onclick={() => { bottomPanelMode = 'terminal'; terminalTabsStore.setActive(tab.id); }}
         oncontextmenu={(e) => showContextMenu(e, tab.id)}
         onmousedown={(e) => handleTabMousedown(e, tab.id)}
         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') terminalTabsStore.setActive(tab.id); }}
@@ -405,6 +409,23 @@
         {/if}
       </div>
     {/each}
+
+    <!-- Output panel tab (always visible, separated by divider) -->
+    <div class="tab-divider"></div>
+    <div
+      class="terminal-tab"
+      class:active={bottomPanelMode === 'output'}
+      role="tab"
+      tabindex="0"
+      aria-selected={bottomPanelMode === 'output'}
+      onclick={() => bottomPanelMode = 'output'}
+      onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') bottomPanelMode = 'output'; }}
+    >
+      <svg class="tab-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+      </svg>
+      <span class="tab-label">Output</span>
+    </div>
 
     <button class="tab-add" onclick={handleAddShell} title="New shell terminal" aria-label="New terminal">
       <svg viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -561,8 +582,8 @@
     </div>
   </div>
 
-  <!-- Terminal panels -->
-  <div class="terminal-panels">
+  <!-- Terminal panels (hidden when Output is active) -->
+  <div class="terminal-panels" class:hidden={bottomPanelMode === 'output'}>
     <!-- AI terminal (always mounted) -->
     <div class="terminal-panel" class:hidden={terminalTabsStore.activeTabId !== 'ai'}>
       <Terminal onRegisterActions={(actions) => { termActions['ai'] = actions; }} />
@@ -579,6 +600,13 @@
       </div>
     {/each}
   </div>
+
+  <!-- Output panel (shown when Output mode is active) -->
+  {#if bottomPanelMode === 'output'}
+    <div class="output-panel-container">
+      <OutputPanel />
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -706,6 +734,14 @@
   .tab-close:hover {
     background: color-mix(in srgb, var(--danger) 20%, transparent);
     color: var(--danger);
+  }
+
+  .tab-divider {
+    width: 1px;
+    height: 16px;
+    background: color-mix(in srgb, var(--border) 30%, transparent);
+    margin: 0 4px;
+    flex-shrink: 0;
   }
 
   .tab-add {
@@ -916,6 +952,14 @@
     color: var(--muted);
     font-style: italic;
     flex-shrink: 0;
+  }
+
+  /* ── Output panel container ── */
+
+  .output-panel-container {
+    flex: 1;
+    overflow: hidden;
+    min-height: 0;
   }
 
   /* ── Terminal panels ── */
