@@ -316,4 +316,58 @@ describe('Select Element — End-to-End Wiring', () => {
       assert.ok(apiSrc.includes("invoke('design_get_element')"));
     });
   });
+
+  describe('v2: Enriched Element Data', () => {
+    it('overlay captures parent chain via _getParentChain', () => {
+      assert.ok(designOverlaySrc.includes('function _getParentChain'));
+      assert.ok(designOverlaySrc.includes('parentChain:'));
+    });
+
+    it('overlay extracts pseudo-class CSS rules via _getPseudoClassRules', () => {
+      assert.ok(designOverlaySrc.includes('function _getPseudoClassRules'));
+      assert.ok(designOverlaySrc.includes('pseudoRules:'));
+    });
+
+    it('toolbar formats parent chain and pseudo-class rules in context', () => {
+      assert.ok(toolbarSrc.includes('Parent chain'));
+      assert.ok(toolbarSrc.includes('Pseudo-class rules'));
+      assert.ok(toolbarSrc.includes('parentChain'));
+      assert.ok(toolbarSrc.includes('pseudoRules'));
+    });
+
+    it('toolbar caps context at 8000 characters', () => {
+      assert.ok(toolbarSrc.includes('8000'));
+      assert.ok(toolbarSrc.includes('[...truncated]'));
+    });
+
+    it('attachment typedef supports context field', () => {
+      const attachSrc = fs.readFileSync(
+        path.join(__dirname, '../../src/lib/stores/attachments.svelte.js'), 'utf-8'
+      );
+      assert.ok(attachSrc.includes('context?: string'));
+    });
+  });
+
+  describe('v2: Hidden Context Pipeline', () => {
+    it('App.svelte handleChatSend reads context and wraps in delimiters', () => {
+      const appSrc = fs.readFileSync(path.join(__dirname, '../../src/App.svelte'), 'utf-8');
+      assert.ok(appSrc.includes('[Element Context]'));
+      assert.ok(appSrc.includes('[/Element Context]'));
+    });
+
+    it('App.svelte handleChatSend passes imageDataUrl to providers', () => {
+      const appSrc = fs.readFileSync(path.join(__dirname, '../../src/App.svelte'), 'utf-8');
+      const fn = appSrc.substring(appSrc.indexOf('function handleChatSend'));
+      assert.ok(fn.includes('imageDataUrl'));
+    });
+
+    it('api.js aiPtyInput accepts imageDataUrl parameter', () => {
+      assert.ok(apiSrc.includes('function aiPtyInput(data, imagePath, imageDataUrl)'));
+    });
+
+    it('api.js writeUserMessage accepts imageDataUrl parameter', () => {
+      const fn = apiSrc.substring(apiSrc.indexOf('export async function writeUserMessage'));
+      assert.ok(fn.includes('imageDataUrl'));
+    });
+  });
 });
