@@ -156,7 +156,7 @@
     <div class="settings-group">
       <Toggle
         label="Debug Mode"
-        description="Enable debug logging"
+        description="Capture DEBUG and TRACE level logs in the Output panel"
         checked={debugMode}
         onChange={(v) => (debugMode = v)}
       />
