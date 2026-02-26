@@ -1220,6 +1220,10 @@
     inset: 0;
   }
 
+  .terminal-panels.hidden {
+    display: none;
+  }
+
   .terminal-panel.hidden {
     display: none;
   }
