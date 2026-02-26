@@ -68,7 +68,8 @@ impl PipeRouter {
     async fn dispatch(&self, msg: AppToMcp) {
         match &msg {
             AppToMcp::BrowserResponse { request_id, .. }
-            | AppToMcp::CaptureResponse { request_id, .. } => {
+            | AppToMcp::CaptureResponse { request_id, .. }
+            | AppToMcp::LogEntries { request_id, .. } => {
                 let mut waiters = self.browser_waiters.lock().await;
                 if let Some(tx) = waiters.remove(request_id) {
                     let _ = tx.send(msg);

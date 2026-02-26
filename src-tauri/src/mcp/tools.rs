@@ -525,6 +525,33 @@ fn build_all_groups() -> HashMap<String, ToolGroupDef> {
                         "required": ["instance_id"]
                     }),
                 },
+                ToolDef {
+                    name: "get_logs".into(),
+                    description: "Query Voice Mirror's structured output logs. Without a channel, returns a summary of all channels with entry counts. With a channel, returns the actual log lines. Use this to diagnose issues with the CLI provider, voice pipeline, MCP server, or browser bridge.".into(),
+                    input_schema: json!({
+                        "type": "object",
+                        "properties": {
+                            "channel": {
+                                "type": "string",
+                                "enum": ["app", "cli", "voice", "mcp", "browser"],
+                                "description": "Which log channel to query. Omit for a summary of all channels."
+                            },
+                            "level": {
+                                "type": "string",
+                                "enum": ["error", "warn", "info", "debug", "trace"],
+                                "description": "Minimum log level to include (default: info)"
+                            },
+                            "last": {
+                                "type": "number",
+                                "description": "Return the last N entries (default: 100)"
+                            },
+                            "search": {
+                                "type": "string",
+                                "description": "Case-insensitive text filter on log messages"
+                            }
+                        }
+                    }),
+                },
             ],
         },
     );
@@ -759,8 +786,8 @@ mod tests {
     fn test_list_tools_default() {
         let reg = ToolRegistry::new();
         let tools = reg.list_tools();
-        // Should have core (4) + capture (2) = 6 always-loaded tools
-        assert_eq!(tools.len(), 6);
+        // Should have core (5) + capture (2) = 7 always-loaded tools
+        assert_eq!(tools.len(), 7);
     }
 
     #[test]

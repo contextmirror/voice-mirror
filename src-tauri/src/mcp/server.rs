@@ -358,6 +358,7 @@ async fn route_tool_call(
         }
         "voice_listen" => handlers::core::handle_voice_listen(args, data_dir, router).await,
         "voice_status" => handlers::core::handle_voice_status(args, data_dir).await,
+        "get_logs" => handlers::core::handle_get_logs(args, data_dir, router).await,
 
         // ---- Memory tools ----
         "memory_search" => handlers::memory::handle_memory_search(args, data_dir).await,
@@ -496,8 +497,8 @@ mod tests {
         let resp = handle_tools_list(json!(1), &state);
         let result = resp.result.unwrap();
         let tools = result["tools"].as_array().unwrap();
-        // Default: core (4) + capture (2) = 6 always-loaded tools
-        assert_eq!(tools.len(), 6);
+        // Default: core (5) + capture (2) = 7 always-loaded tools
+        assert_eq!(tools.len(), 7);
     }
 
     #[test]
@@ -512,16 +513,16 @@ mod tests {
     fn test_enabled_groups_loads_tools_at_startup() {
         // BUG-005 Fix 1: ENABLED_GROUPS should pre-load tool groups
         let mut registry = ToolRegistry::new();
-        // Default: always-loaded groups = core (4) + capture (2) = 6
-        assert_eq!(registry.list_tools().len(), 6);
+        // Default: always-loaded groups = core (5) + capture (2) = 7
+        assert_eq!(registry.list_tools().len(), 7);
 
         // Apply enabled groups (simulating ENABLED_GROUPS env var)
         // always_loaded groups (core, capture) are always included
         registry.apply_enabled_groups("core,memory");
         let tools = registry.list_tools();
 
-        // Should have core (4) + memory (6) + capture (2) = 12
-        assert_eq!(tools.len(), 12);
+        // Should have core (5) + memory (6) + capture (2) = 13
+        assert_eq!(tools.len(), 13);
         let tool_names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
         assert!(tool_names.contains(&"memory_search"));
         assert!(tool_names.contains(&"capture_window"));
@@ -542,8 +543,8 @@ mod tests {
         let resp = handle_tools_list(json!(1), &state);
         let result = resp.result.unwrap();
         let tools = result["tools"].as_array().unwrap();
-        // core (4) + capture (2) + browser (16) = 22
-        assert!(tools.len() > 6, "Should have more than default 6 tools");
+        // core (5) + capture (2) + browser (16) = 23
+        assert!(tools.len() > 7, "Should have more than default 7 tools");
         let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
         assert!(names.contains(&"browser_start"));
     }

@@ -918,6 +918,66 @@ fn format_time(iso: &str) -> String {
     iso.to_string()
 }
 
+/// `get_logs` -- Query output channel logs via named pipe.
+pub async fn handle_get_logs(
+    args: &Value,
+    _data_dir: &Path,
+    router: Option<&Arc<PipeRouter>>,
+) -> McpToolResult {
+    let router = match router {
+        Some(r) => r,
+        None => return McpToolResult::error("Named pipe not connected — cannot query logs"),
+    };
+
+    let request_id = generate_request_id_for_logs();
+    let channel = args.get("channel").and_then(|v| v.as_str()).map(String::from);
+    let level = args.get("level").and_then(|v| v.as_str()).map(String::from);
+    let last = args.get("last").and_then(|v| v.as_u64()).map(|n| n as usize);
+    let search = args.get("search").and_then(|v| v.as_str()).map(String::from);
+
+    // Register waiter BEFORE sending (same pattern as browser/capture tools)
+    let rx = router.wait_for_browser_response(&request_id).await;
+
+    let msg = McpToApp::GetLogs {
+        request_id: request_id.clone(),
+        channel,
+        level,
+        last,
+        search,
+    };
+
+    if let Err(e) = router.send(&msg).await {
+        router.remove_waiter(&request_id).await;
+        return McpToolResult::error(format!("Failed to send log request: {}", e));
+    }
+
+    // Wait for response with 5s timeout
+    match tokio::time::timeout(Duration::from_secs(5), rx).await {
+        Ok(Ok(AppToMcp::LogEntries { text, .. })) => {
+            McpToolResult::text(text)
+        }
+        Ok(Ok(_)) => McpToolResult::error("Unexpected response type from app"),
+        Ok(Err(_)) => McpToolResult::error("Log response channel closed unexpectedly"),
+        Err(_) => {
+            router.remove_waiter(&request_id).await;
+            McpToolResult::error("Log query timed out after 5 seconds")
+        }
+    }
+}
+
+/// Generate a unique request ID for log queries (same pattern as browser/capture).
+fn generate_request_id_for_logs() -> String {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::time::SystemTime;
+    static LOGS_REQUEST_COUNTER: AtomicU64 = AtomicU64::new(0);
+    let ts = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+    let n = LOGS_REQUEST_COUNTER.fetch_add(1, Ordering::Relaxed);
+    format!("logs-{}-{}", ts, n)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
