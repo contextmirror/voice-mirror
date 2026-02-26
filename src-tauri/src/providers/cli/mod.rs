@@ -381,6 +381,12 @@ impl Provider for CliProvider {
             cmd.env("VOICE_MIRROR_SESSION", "true");
         }
 
+        // Remove Claude Code nesting detection env vars.
+        // When Voice Mirror is launched FROM a Claude Code session, these vars
+        // are inherited and cause the child Claude Code to refuse to start.
+        cmd.env_remove("CLAUDECODE");
+        cmd.env_remove("CLAUDE_CODE_ENTRYPOINT");
+
         // Spawn the child process in the PTY
         let child = pty_pair
             .slave
