@@ -756,6 +756,78 @@
     }
 
     /**
+     * Extract lightweight accessibility data from an element.
+     * Returns: { role, ariaAttributes, htmlStates, inputType }
+     */
+    function _getAccessibility(el) {
+        // --- Implicit role lookup ---
+        var tagRoles = {
+            'button': 'button', 'textarea': 'textbox',
+            'select': 'combobox', 'img': 'img', 'table': 'table',
+            'nav': 'navigation', 'main': 'main', 'header': 'banner',
+            'footer': 'contentinfo', 'aside': 'complementary',
+            'form': 'form', 'section': 'region', 'article': 'article',
+            'dialog': 'dialog', 'details': 'group', 'summary': 'button',
+            'progress': 'progressbar', 'meter': 'meter', 'output': 'status',
+            'option': 'option', 'fieldset': 'group', 'hr': 'separator',
+            'ul': 'list', 'ol': 'list', 'li': 'listitem',
+            'h1': 'heading', 'h2': 'heading', 'h3': 'heading',
+            'h4': 'heading', 'h5': 'heading', 'h6': 'heading'
+        };
+
+        var inputTypeRoles = {
+            'checkbox': 'checkbox', 'radio': 'radio',
+            'range': 'slider', 'number': 'spinbutton',
+            'text': 'textbox', 'search': 'searchbox',
+            'email': 'textbox', 'tel': 'textbox', 'url': 'textbox',
+            'password': 'textbox'
+        };
+
+        var tag = el.tagName.toLowerCase();
+
+        // Explicit role attribute wins
+        var role = el.getAttribute('role') || null;
+        if (!role) {
+            if (tag === 'input' && el.type) {
+                role = inputTypeRoles[el.type] || null;
+            } else if (tag === 'a' && el.hasAttribute('href')) {
+                role = 'link';
+            } else {
+                role = tagRoles[tag] || null;
+            }
+        }
+
+        // Collect all aria-* attributes
+        var ariaAttributes = {};
+        var attrs = el.attributes;
+        for (var i = 0; i < attrs.length; i++) {
+            var name = attrs[i].name;
+            if (name.indexOf('aria-') === 0) {
+                ariaAttributes[name] = attrs[i].value;
+            }
+        }
+
+        // Check truthy HTML state attributes
+        var stateNames = ['disabled', 'required', 'checked', 'readonly', 'hidden', 'contenteditable'];
+        var htmlStates = [];
+        for (var j = 0; j < stateNames.length; j++) {
+            if (el.hasAttribute(stateNames[j])) {
+                htmlStates.push(stateNames[j]);
+            }
+        }
+
+        // Input type (only for INPUT elements)
+        var inputType = el.tagName.toUpperCase() === 'INPUT' ? (el.type || null) : null;
+
+        return {
+            role: role,
+            ariaAttributes: ariaAttributes,
+            htmlStates: htmlStates,
+            inputType: inputType
+        };
+    }
+
+    /**
      * Collect CSS rules that use pseudo-class selectors (:hover, :focus, etc.)
      * and apply to the given element when the pseudo-class is stripped.
      * Returns up to 20 matching rule objects: { selector, css }.
@@ -876,7 +948,8 @@
             text: text,
             styles: styles,
             parentChain: _getParentChain(el),
-            pseudoRules: _getPseudoClassRules(el)
+            pseudoRules: _getPseudoClassRules(el),
+            accessibility: _getAccessibility(el)
         };
     }
 

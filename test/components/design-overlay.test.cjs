@@ -798,3 +798,81 @@ describe('design-overlay.js: listener references', () => {
     });
   });
 });
+
+// =========================================================================
+// Accessibility extraction
+// =========================================================================
+
+describe('design-overlay.js: _getAccessibility helper', () => {
+  it('defines _getAccessibility function', () => {
+    assert.ok(src.includes('function _getAccessibility(el)'), 'Should define _getAccessibility');
+  });
+
+  it('checks for explicit role attribute first', () => {
+    assert.ok(src.includes("el.getAttribute('role')"), 'Should check explicit role attr');
+  });
+
+  it('has implicit role lookup table for semantic HTML tags', () => {
+    assert.ok(src.includes("'button': 'button'"), 'button -> button');
+    assert.ok(src.includes("'nav': 'navigation'"), 'nav -> navigation');
+    assert.ok(src.includes("'main': 'main'"), 'main -> main');
+    assert.ok(src.includes("'aside': 'complementary'"), 'aside -> complementary');
+    assert.ok(src.includes("'header': 'banner'"), 'header -> banner');
+    assert.ok(src.includes("'footer': 'contentinfo'"), 'footer -> contentinfo');
+    assert.ok(src.includes("'textarea': 'textbox'"), 'textarea -> textbox');
+    assert.ok(src.includes("'select': 'combobox'"), 'select -> combobox');
+    assert.ok(src.includes("'table': 'table'"), 'table -> table');
+    assert.ok(src.includes("'img': 'img'"), 'img -> img');
+    assert.ok(src.includes("'dialog': 'dialog'"), 'dialog -> dialog');
+    assert.ok(src.includes("'article': 'article'"), 'article -> article');
+    assert.ok(src.includes("'progress': 'progressbar'"), 'progress -> progressbar');
+  });
+
+  it('has implicit roles for heading tags', () => {
+    assert.ok(src.includes("'h1': 'heading'"), 'h1 -> heading');
+    assert.ok(src.includes("'h6': 'heading'"), 'h6 -> heading');
+  });
+
+  it('has implicit roles for list tags', () => {
+    assert.ok(src.includes("'ul': 'list'"), 'ul -> list');
+    assert.ok(src.includes("'ol': 'list'"), 'ol -> list');
+    assert.ok(src.includes("'li': 'listitem'"), 'li -> listitem');
+  });
+
+  it('has input type to role mapping', () => {
+    assert.ok(src.includes("'checkbox': 'checkbox'"), 'checkbox input -> checkbox');
+    assert.ok(src.includes("'radio': 'radio'"), 'radio input -> radio');
+    assert.ok(src.includes("'range': 'slider'"), 'range input -> slider');
+    assert.ok(src.includes("'number': 'spinbutton'"), 'number input -> spinbutton');
+  });
+
+  it('collects all aria-* attributes from the element', () => {
+    assert.ok(src.includes("'aria-'"), 'Should check for aria- prefix');
+    assert.ok(src.includes('el.attributes'), 'Should iterate el.attributes');
+  });
+
+  it('checks truthy HTML state attributes', () => {
+    var states = ['disabled', 'required', 'checked', 'readonly', 'hidden', 'contenteditable'];
+    states.forEach(function (state) {
+      assert.ok(src.includes("'" + state + "'"), 'Should check for ' + state + ' state');
+    });
+  });
+
+  it('captures input type for INPUT elements', () => {
+    assert.ok(src.includes('el.type'), 'Should read el.type for input elements');
+    assert.ok(src.includes("'INPUT'"), 'Should check for INPUT tagName');
+  });
+
+  it('returns object with role, ariaAttributes, htmlStates, inputType', () => {
+    assert.ok(src.includes('role:'), 'Should return role field');
+    assert.ok(src.includes('ariaAttributes:'), 'Should return ariaAttributes field');
+    assert.ok(src.includes('htmlStates:'), 'Should return htmlStates field');
+    assert.ok(src.includes('inputType:'), 'Should return inputType field');
+  });
+});
+
+describe('design-overlay.js: _serializeElement includes accessibility', () => {
+  it('calls _getAccessibility and includes result', () => {
+    assert.ok(src.includes('accessibility: _getAccessibility(el)'), 'Should include accessibility in serialized output');
+  });
+});
