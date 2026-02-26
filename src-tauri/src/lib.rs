@@ -23,6 +23,7 @@ use commands::shell as shell_cmds;
 use commands::dev_server as dev_server_cmds;
 use commands::lsp as lsp_cmds;
 use commands::design as design_cmds;
+use commands::output as output_cmds;
 
 use providers::manager::AiManager;
 use providers::ProviderEvent;
@@ -345,6 +346,8 @@ pub fn run() {
             // Design canvas overlay
             design_cmds::design_command,
             design_cmds::design_get_element,
+            // Output / diagnostics
+            output_cmds::get_output_logs,
         ])
         .setup(|app| {
             // Migrate data from old Electron directory before anything reads it

@@ -12,6 +12,7 @@ pub mod lens;
 pub mod shell;
 pub mod lsp;
 pub mod design;
+pub mod output;
 
 use serde_json::Value;
 
