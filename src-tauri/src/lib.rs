@@ -353,6 +353,12 @@ pub fn run() {
             // Migrate data from old Electron directory before anything reads it
             migrate_electron_data();
 
+            // Set app handle on OutputStore for live event emission
+            {
+                let output_store = app.state::<std::sync::Arc<crate::services::output::OutputStore>>();
+                output_store.set_app_handle(app.handle().clone());
+            }
+
             // Initialize LSP manager state (needs AppHandle)
             app.manage(lsp::LspManagerState::new(app.handle().clone()));
 

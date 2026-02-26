@@ -4,6 +4,7 @@ use std::sync::RwLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
+use tauri::{AppHandle, Emitter};
 use tracing::field::{Field, Visit};
 use tracing::Subscriber;
 use tracing_subscriber::layer::Context;
@@ -234,6 +235,7 @@ pub struct ChannelSummary {
 /// Central store holding ring buffers for all channels.
 pub struct OutputStore {
     buffers: RwLock<Vec<ChannelBuffer>>,
+    app_handle: RwLock<Option<AppHandle>>,
 }
 
 impl OutputStore {
@@ -242,6 +244,23 @@ impl OutputStore {
         let buffers: Vec<ChannelBuffer> = Channel::ALL.iter().map(|_| ChannelBuffer::new()).collect();
         Self {
             buffers: RwLock::new(buffers),
+            app_handle: RwLock::new(None),
+        }
+    }
+
+    /// Set the app handle for Tauri event emission (called once during setup).
+    pub fn set_app_handle(&self, handle: AppHandle) {
+        if let Ok(mut ah) = self.app_handle.write() {
+            *ah = Some(handle);
+        }
+    }
+
+    /// Emit a Tauri event with the log entry (best-effort, non-blocking).
+    fn emit_entry(&self, entry: &LogEntry) {
+        if let Ok(ah) = self.app_handle.read() {
+            if let Some(handle) = ah.as_ref() {
+                let _ = handle.emit("output-log", entry);
+            }
         }
     }
 
@@ -260,7 +279,9 @@ impl OutputStore {
     pub fn push(&self, entry: LogEntry) {
         let idx = Self::idx(entry.channel);
         let mut bufs = self.buffers.write().unwrap();
-        bufs[idx].push(entry);
+        bufs[idx].push(entry.clone());
+        drop(bufs); // Release write lock before emitting
+        self.emit_entry(&entry);
     }
 
     /// Create and push a log entry from parts.
