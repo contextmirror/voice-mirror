@@ -1,5 +1,6 @@
 use std::collections::VecDeque;
 use std::fmt;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::RwLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -88,9 +89,14 @@ impl fmt::Display for Channel {
 // LogEntry
 // ---------------------------------------------------------------------------
 
+/// Monotonic ID counter for unique log entry identification.
+static NEXT_ENTRY_ID: AtomicU64 = AtomicU64::new(1);
+
 /// A single log entry stored in the ring buffer.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LogEntry {
+    /// Unique monotonic ID for keying in UI lists.
+    pub id: u64,
     /// Milliseconds since UNIX epoch.
     pub timestamp: u64,
     /// Log level (ERROR, WARN, INFO, DEBUG, TRACE).
@@ -278,7 +284,8 @@ impl OutputStore {
     /// Push an already-constructed `LogEntry`.
     pub fn push(&self, entry: LogEntry) {
         let idx = Self::idx(entry.channel);
-        let mut bufs = self.buffers.write().unwrap();
+        // Recover from poison — a panicked writer shouldn't block all logging.
+        let mut bufs = self.buffers.write().unwrap_or_else(|e| e.into_inner());
         bufs[idx].push(entry.clone());
         drop(bufs); // Release write lock before emitting
         self.emit_entry(&entry);
@@ -292,6 +299,7 @@ impl OutputStore {
             .as_millis() as u64;
 
         self.push(LogEntry {
+            id: NEXT_ENTRY_ID.fetch_add(1, Ordering::Relaxed),
             timestamp,
             level: level.to_ascii_uppercase(),
             channel,
@@ -307,13 +315,13 @@ impl OutputStore {
         last: Option<usize>,
         search: Option<&str>,
     ) -> (Vec<LogEntry>, usize) {
-        let bufs = self.buffers.read().unwrap();
+        let bufs = self.buffers.read().unwrap_or_else(|e| e.into_inner());
         bufs[Self::idx(channel)].query(min_level, last, search)
     }
 
     /// Get a summary of all channels.
     pub fn summary(&self) -> Vec<ChannelSummary> {
-        let bufs = self.buffers.read().unwrap();
+        let bufs = self.buffers.read().unwrap_or_else(|e| e.into_inner());
         Channel::ALL
             .iter()
             .map(|&ch| {
@@ -418,6 +426,7 @@ impl<S: Subscriber> Layer<S> for OutputLayer {
             .as_millis() as u64;
 
         self.store.push(LogEntry {
+            id: NEXT_ENTRY_ID.fetch_add(1, Ordering::Relaxed),
             timestamp,
             level: level.to_string(),
             channel,
@@ -505,6 +514,7 @@ mod tests {
 
         for i in 0..2500 {
             store.push(LogEntry {
+                id: i as u64,
                 timestamp: i as u64,
                 level: "INFO".to_string(),
                 channel: Channel::App,
@@ -530,18 +540,21 @@ mod tests {
         let store = OutputStore::new();
 
         store.push(LogEntry {
+            id: 1,
             timestamp: 1,
             level: "ERROR".to_string(),
             channel: Channel::App,
             message: "an error".to_string(),
         });
         store.push(LogEntry {
+            id: 2,
             timestamp: 2,
             level: "INFO".to_string(),
             channel: Channel::App,
             message: "some info".to_string(),
         });
         store.push(LogEntry {
+            id: 3,
             timestamp: 3,
             level: "DEBUG".to_string(),
             channel: Channel::App,
@@ -567,18 +580,21 @@ mod tests {
         let store = OutputStore::new();
 
         store.push(LogEntry {
+            id: 1,
             timestamp: 1,
             level: "INFO".to_string(),
             channel: Channel::Cli,
             message: "PTY opened for claude".to_string(),
         });
         store.push(LogEntry {
+            id: 2,
             timestamp: 2,
             level: "INFO".to_string(),
             channel: Channel::Cli,
             message: "Provider started".to_string(),
         });
         store.push(LogEntry {
+            id: 3,
             timestamp: 3,
             level: "INFO".to_string(),
             channel: Channel::Cli,
@@ -638,6 +654,7 @@ mod tests {
     #[test]
     fn test_format_line() {
         let entry = LogEntry {
+            id: 1,
             // 2024-01-01 13:45:30 UTC => 13*3600 + 45*60 + 30 = 49530 seconds
             // 49530 * 1000 = 49530000 ms
             timestamp: 49530000,
@@ -649,6 +666,7 @@ mod tests {
 
         // Check zero-padding
         let entry2 = LogEntry {
+            id: 2,
             // 01:02:03 UTC => (1*3600 + 2*60 + 3) * 1000 = 3723000
             timestamp: 3723000,
             level: "ERROR".to_string(),

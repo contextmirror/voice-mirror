@@ -68,8 +68,12 @@ async function startListening() {
 
     const arr = entries[entry.channel];
     arr.push(entry);
+    // Reassign to guarantee Svelte 5 reactivity triggers.
+    // When over cap, slice also handles reassignment.
     if (arr.length > MAX_ENTRIES) {
       entries[entry.channel] = arr.slice(arr.length - MAX_ENTRIES);
+    } else {
+      entries[entry.channel] = arr;
     }
   });
 }

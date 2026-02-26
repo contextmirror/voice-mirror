@@ -103,7 +103,7 @@
     bind:this={logContainer}
     onscroll={handleScroll}
   >
-    {#each outputStore.filteredEntries as entry (entry.timestamp + entry.message)}
+    {#each outputStore.filteredEntries as entry (entry.id)}
       <div class="log-line {levelClass(entry.level)}">
         <span class="log-time">{formatTime(entry.timestamp)}</span>
         <span class="log-level">[{entry.level}]</span>
