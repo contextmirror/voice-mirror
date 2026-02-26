@@ -59,7 +59,7 @@ describe('TerminalTabs.svelte -- pinned tab strip (no individual tabs)', () => {
   });
 });
 
-describe('TerminalPanel.svelte -- placeholder', () => {
+describe('TerminalPanel.svelte -- full implementation', () => {
   it('exists as a file', () => {
     assert.ok(panelSrc.length > 0, 'TerminalPanel.svelte should exist');
   });
@@ -68,8 +68,10 @@ describe('TerminalPanel.svelte -- placeholder', () => {
     assert.ok(panelSrc.includes('terminal-panel-inner'), 'Should have terminal-panel-inner class');
   });
 
-  it('has placeholder text', () => {
-    assert.ok(panelSrc.includes('coming soon'), 'Should have placeholder text');
+  it('is no longer a placeholder', () => {
+    assert.ok(!panelSrc.includes('coming soon'), 'Should NOT have placeholder text');
+    assert.ok(panelSrc.includes('terminalTabsStore'), 'Should import store');
+    assert.ok(panelSrc.includes('<Terminal'), 'Should render Terminal component');
   });
 
   it('uses flex column layout', () => {
