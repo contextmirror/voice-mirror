@@ -110,6 +110,13 @@ describe('shortcuts: IN_APP_SHORTCUTS entries', () => {
     { id: 'close-panel', keys: 'Escape', label: 'Close current panel/modal' },
     { id: 'open-file-search', keys: 'F1', label: 'Search files and commands' },
     { id: 'open-text-search', keys: 'Ctrl+Shift+F', label: 'Search in files' },
+    { id: 'new-terminal', keys: "Ctrl+Shift+'", label: 'New terminal' },
+    { id: 'split-terminal', keys: 'Ctrl+Shift+5', label: 'Split terminal' },
+    { id: 'toggle-terminal', keys: 'Ctrl+`', label: 'Toggle terminal panel' },
+    { id: 'focus-prev-pane', keys: 'Alt+Left', label: 'Focus previous terminal pane' },
+    { id: 'focus-next-pane', keys: 'Alt+Right', label: 'Focus next terminal pane' },
+    { id: 'kill-terminal', keys: 'Delete', label: 'Kill terminal' },
+    { id: 'rename-terminal', keys: 'F2', label: 'Rename terminal' },
   ];
 
   for (const { id, keys, label } of expectedInApp) {
@@ -293,6 +300,69 @@ describe('shortcuts: setupInAppShortcuts', () => {
       'Should call event.preventDefault() on matched shortcuts'
     );
   });
+
+  it('handles Ctrl+Shift+\' for new-terminal', () => {
+    assert.ok(
+      src.includes("event.key === \"'\"") || src.includes("event.key === '\\''"),
+      'Should handle Ctrl+Shift+\' for new-terminal'
+    );
+    assert.ok(
+      src.includes("actionHandlers['new-terminal']"),
+      'Should dispatch to new-terminal action handler'
+    );
+  });
+
+  it('handles Ctrl+Shift+5 for split-terminal', () => {
+    assert.ok(
+      src.includes("event.key === '5'"),
+      'Should handle Ctrl+Shift+5 for split-terminal'
+    );
+    assert.ok(
+      src.includes("actionHandlers['split-terminal']"),
+      'Should dispatch to split-terminal action handler'
+    );
+  });
+
+  it('handles Ctrl+` for toggle-terminal', () => {
+    assert.ok(
+      src.includes("event.key === '`'"),
+      'Should handle Ctrl+` for toggle-terminal'
+    );
+    assert.ok(
+      src.includes("actionHandlers['toggle-terminal']"),
+      'Should dispatch to toggle-terminal action handler'
+    );
+  });
+
+  it('handles Alt+Left for focus-prev-pane', () => {
+    assert.ok(
+      src.includes('event.altKey') && src.includes("event.key === 'ArrowLeft'"),
+      'Should handle Alt+Left for focus-prev-pane'
+    );
+    assert.ok(
+      src.includes("actionHandlers['focus-prev-pane']"),
+      'Should dispatch to focus-prev-pane action handler'
+    );
+  });
+
+  it('handles Alt+Right for focus-next-pane', () => {
+    assert.ok(
+      src.includes('event.altKey') && src.includes("event.key === 'ArrowRight'"),
+      'Should handle Alt+Right for focus-next-pane'
+    );
+    assert.ok(
+      src.includes("actionHandlers['focus-next-pane']"),
+      'Should dispatch to focus-next-pane action handler'
+    );
+  });
+
+  it('Alt+Left/Right requires no Ctrl modifier to avoid chord conflicts', () => {
+    // The Alt+Arrow handlers should check !ctrl to avoid conflict with Ctrl+K chord
+    assert.ok(
+      src.includes("event.altKey && !ctrl") || src.includes("altKey && !ctrl"),
+      'Alt+Arrow handlers should require no Ctrl modifier'
+    );
+  });
 });
 
 // ============ Handler registration ============
@@ -323,6 +393,17 @@ describe('shortcuts: handler registration', () => {
     assert.ok(
       src.includes('return actionHandlers[id]'),
       'getActionHandler should return from actionHandlers'
+    );
+  });
+
+  it('setActionHandler accepts null to unregister a handler', () => {
+    assert.ok(
+      src.includes('handler === null') || src.includes('handler === undefined'),
+      'setActionHandler should accept null/undefined for unregistration'
+    );
+    assert.ok(
+      src.includes('delete actionHandlers[id]'),
+      'Should delete the handler entry when null is passed'
     );
   });
 });

@@ -14,6 +14,7 @@
    */
   import { onMount } from 'svelte';
   import { terminalTabsStore } from '../../lib/stores/terminal-tabs.svelte.js';
+  import { setActionHandler } from '../../lib/stores/shortcuts.svelte.js';
   import Terminal from './Terminal.svelte';
   import SplitPanel from '../shared/SplitPanel.svelte';
   import TerminalTabStrip from './TerminalTabStrip.svelte';
@@ -21,11 +22,25 @@
   import TerminalSidebar from './TerminalSidebar.svelte';
   import TerminalContextMenu from './TerminalContextMenu.svelte';
 
-  // Auto-spawn first terminal if no groups exist
+  // Auto-spawn first terminal if no groups exist + register keyboard shortcuts
   onMount(() => {
     if (terminalTabsStore.groups.length === 0) {
       terminalTabsStore.addGroup();
     }
+
+    // Register terminal shortcut handlers
+    setActionHandler('new-terminal', () => terminalTabsStore.addGroup());
+    setActionHandler('split-terminal', () => terminalTabsStore.splitInstance());
+    setActionHandler('focus-prev-pane', () => terminalTabsStore.focusPreviousPane());
+    setActionHandler('focus-next-pane', () => terminalTabsStore.focusNextPane());
+
+    return () => {
+      // Cleanup: unregister handlers
+      setActionHandler('new-terminal', null);
+      setActionHandler('split-terminal', null);
+      setActionHandler('focus-prev-pane', null);
+      setActionHandler('focus-next-pane', null);
+    };
   });
 
   // Derived state

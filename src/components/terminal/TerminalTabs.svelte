@@ -20,6 +20,7 @@
   import { configStore, updateConfig } from '../../lib/stores/config.svelte.js';
   import { toastStore } from '../../lib/stores/toast.svelte.js';
   import { PROVIDER_GROUPS, PROVIDER_ICONS, PROVIDER_NAMES } from '../../lib/providers.js';
+  import { setActionHandler } from '../../lib/stores/shortcuts.svelte.js';
   import OutputPanel from '../lens/OutputPanel.svelte';
   import { outputStore } from '../../lib/stores/output.svelte.js';
 
@@ -248,7 +249,19 @@
     }
     window.addEventListener('keydown', handleKeydown, true);
 
-    return () => window.removeEventListener('keydown', handleKeydown, true);
+    // Register toggle-terminal shortcut handler (Ctrl+`)
+    setActionHandler('toggle-terminal', () => {
+      if (bottomPanelMode === 'terminal') {
+        bottomPanelMode = 'ai';
+      } else {
+        bottomPanelMode = 'terminal';
+      }
+    });
+
+    return () => {
+      window.removeEventListener('keydown', handleKeydown, true);
+      setActionHandler('toggle-terminal', null);
+    };
   });
 </script>
 

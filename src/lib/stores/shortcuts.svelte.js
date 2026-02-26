@@ -147,6 +147,41 @@ export const IN_APP_SHORTCUTS = {
     label: 'Go to symbol in editor',
     category: 'in-app',
   },
+  'new-terminal': {
+    keys: "Ctrl+Shift+'",
+    label: 'New terminal',
+    category: 'in-app',
+  },
+  'split-terminal': {
+    keys: 'Ctrl+Shift+5',
+    label: 'Split terminal',
+    category: 'in-app',
+  },
+  'toggle-terminal': {
+    keys: 'Ctrl+`',
+    label: 'Toggle terminal panel',
+    category: 'in-app',
+  },
+  'focus-prev-pane': {
+    keys: 'Alt+Left',
+    label: 'Focus previous terminal pane',
+    category: 'in-app',
+  },
+  'focus-next-pane': {
+    keys: 'Alt+Right',
+    label: 'Focus next terminal pane',
+    category: 'in-app',
+  },
+  'kill-terminal': {
+    keys: 'Delete',
+    label: 'Kill terminal',
+    category: 'in-app',
+  },
+  'rename-terminal': {
+    keys: 'F2',
+    label: 'Rename terminal',
+    category: 'in-app',
+  },
 };
 
 // ============ Action Handlers ============
@@ -398,6 +433,10 @@ export const shortcutsStore = createShortcutsStore();
  * @param {Function} handler - Action function to call when the shortcut fires.
  */
 export function setActionHandler(id, handler) {
+  if (handler === null || handler === undefined) {
+    delete actionHandlers[id];
+    return;
+  }
   if (typeof handler !== 'function') {
     console.warn('[shortcuts] Handler must be a function for:', id);
     return;
@@ -482,6 +521,41 @@ export function setupInAppShortcuts() {
     // Non-chord key pressed — cancel any pending chord
     if (chordPending && !ctrl) {
       clearChord();
+    }
+
+    // Ctrl+Shift+' -> New Terminal
+    if (ctrl && event.shiftKey && event.key === "'") {
+      event.preventDefault();
+      actionHandlers['new-terminal']?.();
+      return;
+    }
+
+    // Ctrl+Shift+5 -> Split Terminal
+    if (ctrl && event.shiftKey && event.key === '5') {
+      event.preventDefault();
+      actionHandlers['split-terminal']?.();
+      return;
+    }
+
+    // Ctrl+` -> Toggle Terminal Panel
+    if (ctrl && event.key === '`') {
+      event.preventDefault();
+      actionHandlers['toggle-terminal']?.();
+      return;
+    }
+
+    // Alt+Left -> Focus Previous Terminal Pane (no Ctrl to avoid Ctrl+K chord conflicts)
+    if (event.altKey && !ctrl && !event.shiftKey && event.key === 'ArrowLeft') {
+      event.preventDefault();
+      actionHandlers['focus-prev-pane']?.();
+      return;
+    }
+
+    // Alt+Right -> Focus Next Terminal Pane (no Ctrl to avoid Ctrl+K chord conflicts)
+    if (event.altKey && !ctrl && !event.shiftKey && event.key === 'ArrowRight') {
+      event.preventDefault();
+      actionHandlers['focus-next-pane']?.();
+      return;
     }
 
     // Ctrl+Shift+F -> Search in files (works from any context including inputs)

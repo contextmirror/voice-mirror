@@ -28,6 +28,9 @@ describe('TerminalPanel.svelte -- imports', () => {
   it('imports TerminalContextMenu', () => {
     assert.ok(src.includes("import TerminalContextMenu from './TerminalContextMenu.svelte'"), 'Should import TerminalContextMenu');
   });
+  it('imports setActionHandler from shortcuts store', () => {
+    assert.ok(src.includes('setActionHandler'), 'Should import setActionHandler');
+  });
 });
 
 describe('TerminalPanel.svelte -- uses sub-components', () => {
@@ -96,6 +99,26 @@ describe('TerminalPanel.svelte -- auto-spawn', () => {
   it('auto-spawns on mount if no groups', () => {
     assert.ok(src.includes('onMount') || src.includes('$effect'), 'Should auto-spawn');
     assert.ok(src.includes('addGroup'), 'Should call addGroup');
+  });
+});
+
+describe('TerminalPanel.svelte -- keyboard shortcut handlers', () => {
+  it('registers new-terminal handler', () => {
+    assert.ok(src.includes("'new-terminal'"), 'Should register new-terminal handler');
+  });
+  it('registers split-terminal handler', () => {
+    assert.ok(src.includes("'split-terminal'"), 'Should register split-terminal handler');
+  });
+  it('registers focus-prev-pane handler', () => {
+    assert.ok(src.includes("'focus-prev-pane'"), 'Should register focus-prev-pane handler');
+  });
+  it('registers focus-next-pane handler', () => {
+    assert.ok(src.includes("'focus-next-pane'"), 'Should register focus-next-pane handler');
+  });
+  it('unregisters handlers on cleanup with null', () => {
+    // Count occurrences of setActionHandler calls with null for cleanup
+    const nullCalls = src.match(/setActionHandler\([^)]+,\s*null\)/g);
+    assert.ok(nullCalls && nullCalls.length >= 4, 'Should unregister at least 4 handlers with null');
   });
 });
 

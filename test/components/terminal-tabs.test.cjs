@@ -30,6 +30,10 @@ describe('TerminalTabs.svelte -- imports', () => {
   it('imports outputStore', () => {
     assert.ok(src.includes('outputStore'), 'Should import outputStore');
   });
+
+  it('imports setActionHandler from shortcuts store', () => {
+    assert.ok(src.includes('setActionHandler'), 'Should import setActionHandler');
+  });
 });
 
 describe('TerminalTabs.svelte -- structure', () => {
@@ -328,6 +332,26 @@ describe('TerminalTabs.svelte -- keyboard cycling', () => {
 
   it('uses onMount for keyboard listener', () => {
     assert.ok(src.includes("import { onMount } from 'svelte'"), 'Should import onMount');
+  });
+});
+
+describe('TerminalTabs.svelte -- toggle-terminal shortcut', () => {
+  it('registers toggle-terminal handler', () => {
+    assert.ok(src.includes("'toggle-terminal'"), 'Should register toggle-terminal handler');
+  });
+
+  it('toggle-terminal handler toggles between terminal and ai modes', () => {
+    assert.ok(
+      src.includes("bottomPanelMode === 'terminal'") && src.includes("bottomPanelMode = 'ai'"),
+      'Should toggle between terminal and ai mode'
+    );
+  });
+
+  it('unregisters toggle-terminal handler on cleanup', () => {
+    assert.ok(
+      src.includes("setActionHandler('toggle-terminal', null)"),
+      'Should unregister toggle-terminal handler with null'
+    );
   });
 });
 
