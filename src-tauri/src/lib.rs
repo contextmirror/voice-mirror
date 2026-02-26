@@ -106,8 +106,8 @@ fn position_fits_monitor(window: &tauri::WebviewWindow, x: i32, y: i32, w: u32, 
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // Initialize structured logging (file + console)
-    services::logger::init();
+    // Initialize structured logging (file + console + output ring buffers)
+    let output_store = services::logger::init();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_decorum::init())
@@ -197,6 +197,7 @@ pub fn run() {
         .manage(shell_cmds::ShellManagerState(std::sync::Mutex::new(
             crate::shell::ShellManager::new(),
         )))
+        .manage(output_store)
         .invoke_handler(tauri::generate_handler![
             // Config
             config_cmds::get_config,
