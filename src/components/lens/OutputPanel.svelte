@@ -62,7 +62,7 @@
       </div>
     {/each}
     {#if outputStore.filteredEntries.length === 0}
-      <div class="log-empty">No log entries{outputStore.levelFilter !== 'trace' ? ` at ${outputStore.levelFilter} level or above` : ''}</div>
+      <div class="log-empty">No log entries</div>
     {/if}
   </div>
 

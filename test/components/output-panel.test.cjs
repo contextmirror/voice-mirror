@@ -55,11 +55,8 @@ describe('TerminalTabs output controls', () => {
     assert.ok(tabsSrc.includes('channelLabels'));
   });
 
-  it('has level filter buttons with readable labels', () => {
-    assert.ok(tabsSrc.includes('output-level-btn'));
-    assert.ok(tabsSrc.includes('Errors'));
-    assert.ok(tabsSrc.includes('Warnings'));
-    assert.ok(tabsSrc.includes('Verbose'));
+  it('dropdown opens downward', () => {
+    assert.ok(tabsSrc.includes('top: calc(100% + 4px)'));
   });
 
   it('has clear output button', () => {

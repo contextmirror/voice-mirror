@@ -27,7 +27,7 @@ let entries = $state({
 });
 
 let activeChannel = $state('app');
-let levelFilter = $state('info'); // minimum level shown
+let levelFilter = $state('trace'); // show all levels (MCP can still filter)
 let autoScroll = $state(true);
 let listening = false;
 

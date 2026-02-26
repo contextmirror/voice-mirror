@@ -53,13 +53,6 @@
     };
   });
 
-  const OUTPUT_LEVELS = [
-    { key: 'error', label: 'Errors' },
-    { key: 'warn', label: 'Warnings' },
-    { key: 'info', label: 'Info' },
-    { key: 'debug', label: 'Debug' },
-    { key: 'trace', label: 'Verbose' },
-  ];
 
   // ---- Terminal action registration ----
   let termActions = {};
@@ -473,22 +466,6 @@
     {#if bottomPanelMode === 'output'}
       <!-- Output controls (right side of tab bar, VS Code style) -->
       <div class="output-controls">
-        <!-- Level filter buttons -->
-        <div class="output-level-filters">
-          {#each OUTPUT_LEVELS as lvl}
-            <button
-              class="output-level-btn"
-              class:active={OUTPUT_LEVELS.findIndex(l => l.key === outputStore.levelFilter) <= OUTPUT_LEVELS.findIndex(l => l.key === lvl.key)}
-              class:is-error={lvl.key === 'error'}
-              class:is-warn={lvl.key === 'warn'}
-              onclick={() => outputStore.setLevelFilter(lvl.key)}
-              title="Show {lvl.label.toLowerCase()} and above"
-            >
-              {lvl.label}
-            </button>
-          {/each}
-        </div>
-
         <!-- Custom channel dropdown -->
         <div class="channel-dropdown-wrapper">
           <button
@@ -1058,42 +1035,6 @@
     gap: 6px;
   }
 
-  .output-level-filters {
-    display: flex;
-    gap: 1px;
-  }
-
-  .output-level-btn {
-    padding: 2px 7px;
-    border: none;
-    border-radius: 3px;
-    background: transparent;
-    color: var(--muted);
-    font-size: 10px;
-    font-weight: 500;
-    font-family: var(--font-family);
-    cursor: pointer;
-    transition: background 0.1s, color 0.1s;
-    opacity: 0.45;
-    white-space: nowrap;
-  }
-
-  .output-level-btn.active {
-    opacity: 1;
-    background: color-mix(in srgb, var(--text) 10%, transparent);
-    color: var(--text);
-  }
-
-  .output-level-btn.is-error.active {
-    color: var(--danger);
-    background: color-mix(in srgb, var(--danger) 15%, transparent);
-  }
-
-  .output-level-btn.is-warn.active {
-    color: var(--warn);
-    background: color-mix(in srgb, var(--warn) 15%, transparent);
-  }
-
   /* ── Custom channel dropdown ── */
 
   .channel-dropdown-wrapper {
@@ -1124,7 +1065,7 @@
   .channel-dropdown-menu {
     position: absolute;
     right: 0;
-    bottom: calc(100% + 4px);
+    top: calc(100% + 4px);
     min-width: 160px;
     background: var(--bg-elevated);
     border: 1px solid var(--border, rgba(255,255,255,0.1));
