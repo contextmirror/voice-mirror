@@ -15,7 +15,7 @@
 
 ## Phase 1: Rename Shell → Terminal
 
-### Task 1: Rename Rust Backend (shell → terminal)
+### Task 1: Rename Rust Backend (shell → terminal) ✅ DONE (commit 99440e8c)
 
 **Files:**
 - Rename: `src-tauri/src/shell/mod.rs` → `src-tauri/src/terminal/mod.rs`
@@ -87,7 +87,7 @@ git commit -m "refactor: rename shell module to terminal (Rust backend)"
 
 ---
 
-### Task 2: Rename Frontend API and Store
+### Task 2: Rename Frontend API and Store ✅ DONE (commit 521f6475)
 
 **Files:**
 - Modify: `src/lib/api.js`
@@ -165,7 +165,7 @@ git commit -m "refactor: rename shell to terminal (frontend API, stores, compone
 
 ---
 
-### Task 3: Rename Component Files and Update All Tests
+### Task 3: Rename Component Files and Update All Tests ✅ DONE (commit b931da6f)
 
 **Files:**
 - Rename: `src/components/terminal/Terminal.svelte` → `src/components/terminal/AiTerminal.svelte`
