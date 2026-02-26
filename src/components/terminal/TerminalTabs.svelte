@@ -23,9 +23,43 @@
   import { toastStore } from '../../lib/stores/toast.svelte.js';
   import { PROVIDER_GROUPS, PROVIDER_ICONS, PROVIDER_NAMES } from '../../lib/providers.js';
   import OutputPanel from '../lens/OutputPanel.svelte';
+  import { outputStore } from '../../lib/stores/output.svelte.js';
 
   // ---- Bottom panel mode: terminal vs output ----
   let bottomPanelMode = $state('terminal'); // 'terminal' | 'output'
+
+  // ---- Output channel dropdown (custom, theme-aware) ----
+  let channelDropdownOpen = $state(false);
+
+  function toggleChannelDropdown() {
+    channelDropdownOpen = !channelDropdownOpen;
+  }
+
+  function selectChannel(ch) {
+    outputStore.switchChannel(ch);
+    channelDropdownOpen = false;
+  }
+
+  // Close dropdown on outside click
+  $effect(() => {
+    if (!channelDropdownOpen) return;
+    function handleClick() { channelDropdownOpen = false; }
+    const timer = setTimeout(() => {
+      window.addEventListener('click', handleClick);
+    }, 0);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('click', handleClick);
+    };
+  });
+
+  const OUTPUT_LEVELS = [
+    { key: 'error', label: 'Errors' },
+    { key: 'warn', label: 'Warnings' },
+    { key: 'info', label: 'Info' },
+    { key: 'debug', label: 'Debug' },
+    { key: 'trace', label: 'Verbose' },
+  ];
 
   // ---- Terminal action registration ----
   let termActions = {};
@@ -436,51 +470,113 @@
     <!-- Spacer pushes toolbar actions to the right -->
     <div class="tab-bar-spacer"></div>
 
-    <!-- Voice button (only on AI tab with running CLI provider) -->
-    {#if showVoiceButton}
-      <button
-        class="voice-btn"
-        class:active={voiceActive}
-        onclick={handleStartVoice}
-        disabled={voiceLoading}
-        title={voiceActive ? 'Voice loop is active' : 'Start voice loop'}
-      >
-        {#if voiceActive}
-          <span class="voice-dot"></span>
-          <span class="voice-label">Voice</span>
-        {:else}
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
-            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-            <line x1="12" y1="19" x2="12" y2="23"/>
-            <line x1="8" y1="23" x2="16" y2="23"/>
-          </svg>
-          <span class="voice-label">{voiceLoading ? '...' : 'Voice'}</span>
-        {/if}
-      </button>
-    {/if}
+    {#if bottomPanelMode === 'output'}
+      <!-- Output controls (right side of tab bar, VS Code style) -->
+      <div class="output-controls">
+        <!-- Level filter buttons -->
+        <div class="output-level-filters">
+          {#each OUTPUT_LEVELS as lvl}
+            <button
+              class="output-level-btn"
+              class:active={OUTPUT_LEVELS.findIndex(l => l.key === outputStore.levelFilter) <= OUTPUT_LEVELS.findIndex(l => l.key === lvl.key)}
+              class:is-error={lvl.key === 'error'}
+              class:is-warn={lvl.key === 'warn'}
+              onclick={() => outputStore.setLevelFilter(lvl.key)}
+              title="Show {lvl.label.toLowerCase()} and above"
+            >
+              {lvl.label}
+            </button>
+          {/each}
+        </div>
 
-    <!-- Toolbar actions -->
-    <div class="toolbar-actions">
-      <button class="toolbar-btn" onclick={handleClear} title="Clear terminal">
-        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/>
-          <line x1="18" y1="9" x2="12" y2="15"/><line x1="12" y1="9" x2="18" y2="15"/>
-        </svg>
-      </button>
-      <button class="toolbar-btn" onclick={handleCopy} title="Copy selection (Ctrl+C)">
-        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
-          <rect x="9" y="9" width="13" height="13" rx="2"/>
-          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-        </svg>
-      </button>
-      <button class="toolbar-btn" onclick={handlePaste} title="Paste (Ctrl+V)">
-        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
-          <rect x="8" y="2" width="8" height="4" rx="1"/>
-        </svg>
-      </button>
-    </div>
+        <!-- Custom channel dropdown -->
+        <div class="channel-dropdown-wrapper">
+          <button
+            class="channel-dropdown-trigger"
+            onclick={(e) => { e.stopPropagation(); toggleChannelDropdown(); }}
+            title="Select output channel"
+          >
+            <span>{outputStore.channelLabels[outputStore.activeChannel]}</span>
+            <svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.5">
+              <polyline points="3 4.5 6 7.5 9 4.5"/>
+            </svg>
+          </button>
+          {#if channelDropdownOpen}
+            <div class="channel-dropdown-menu">
+              {#each outputStore.channels as ch}
+                <button
+                  class="channel-dropdown-item"
+                  class:active={outputStore.activeChannel === ch}
+                  onclick={(e) => { e.stopPropagation(); selectChannel(ch); }}
+                >
+                  {outputStore.channelLabels[ch]}
+                  {#if outputStore.activeChannel === ch}
+                    <svg class="channel-check" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5">
+                      <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                  {/if}
+                </button>
+              {/each}
+            </div>
+          {/if}
+        </div>
+
+        <!-- Clear output button -->
+        <button class="toolbar-btn" onclick={() => outputStore.clearChannel()} title="Clear output">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/>
+            <line x1="18" y1="9" x2="12" y2="15"/><line x1="12" y1="9" x2="18" y2="15"/>
+          </svg>
+        </button>
+      </div>
+    {:else}
+      <!-- Terminal controls -->
+      <!-- Voice button (only on AI tab with running CLI provider) -->
+      {#if showVoiceButton}
+        <button
+          class="voice-btn"
+          class:active={voiceActive}
+          onclick={handleStartVoice}
+          disabled={voiceLoading}
+          title={voiceActive ? 'Voice loop is active' : 'Start voice loop'}
+        >
+          {#if voiceActive}
+            <span class="voice-dot"></span>
+            <span class="voice-label">Voice</span>
+          {:else}
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
+              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+              <line x1="12" y1="19" x2="12" y2="23"/>
+              <line x1="8" y1="23" x2="16" y2="23"/>
+            </svg>
+            <span class="voice-label">{voiceLoading ? '...' : 'Voice'}</span>
+          {/if}
+        </button>
+      {/if}
+
+      <!-- Toolbar actions -->
+      <div class="toolbar-actions">
+        <button class="toolbar-btn" onclick={handleClear} title="Clear terminal">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/>
+            <line x1="18" y1="9" x2="12" y2="15"/><line x1="12" y1="9" x2="18" y2="15"/>
+          </svg>
+        </button>
+        <button class="toolbar-btn" onclick={handleCopy} title="Copy selection (Ctrl+C)">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="9" y="9" width="13" height="13" rx="2"/>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+          </svg>
+        </button>
+        <button class="toolbar-btn" onclick={handlePaste} title="Paste (Ctrl+V)">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+            <rect x="8" y="2" width="8" height="4" rx="1"/>
+          </svg>
+        </button>
+      </div>
+    {/if}
   </div>
 
   <!-- Context menu -->
@@ -951,6 +1047,119 @@
     font-size: 10px;
     color: var(--muted);
     font-style: italic;
+    flex-shrink: 0;
+  }
+
+  /* ── Output controls (in tab bar, right side) ── */
+
+  .output-controls {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .output-level-filters {
+    display: flex;
+    gap: 1px;
+  }
+
+  .output-level-btn {
+    padding: 2px 7px;
+    border: none;
+    border-radius: 3px;
+    background: transparent;
+    color: var(--muted);
+    font-size: 10px;
+    font-weight: 500;
+    font-family: var(--font-family);
+    cursor: pointer;
+    transition: background 0.1s, color 0.1s;
+    opacity: 0.45;
+    white-space: nowrap;
+  }
+
+  .output-level-btn.active {
+    opacity: 1;
+    background: color-mix(in srgb, var(--text) 10%, transparent);
+    color: var(--text);
+  }
+
+  .output-level-btn.is-error.active {
+    color: var(--danger);
+    background: color-mix(in srgb, var(--danger) 15%, transparent);
+  }
+
+  .output-level-btn.is-warn.active {
+    color: var(--warn);
+    background: color-mix(in srgb, var(--warn) 15%, transparent);
+  }
+
+  /* ── Custom channel dropdown ── */
+
+  .channel-dropdown-wrapper {
+    position: relative;
+  }
+
+  .channel-dropdown-trigger {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    background: color-mix(in srgb, var(--text) 6%, transparent);
+    border: 1px solid color-mix(in srgb, var(--border) 40%, transparent);
+    border-radius: 4px;
+    color: var(--text);
+    font-size: 11px;
+    font-family: var(--font-family);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: border-color 0.15s, background 0.15s;
+  }
+
+  .channel-dropdown-trigger:hover {
+    background: color-mix(in srgb, var(--text) 10%, transparent);
+    border-color: color-mix(in srgb, var(--border) 60%, transparent);
+  }
+
+  .channel-dropdown-menu {
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 4px);
+    min-width: 160px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border, rgba(255,255,255,0.1));
+    border-radius: 6px;
+    padding: 4px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+    z-index: 10000;
+  }
+
+  .channel-dropdown-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 6px 10px;
+    background: none;
+    border: none;
+    border-radius: 4px;
+    color: var(--text);
+    font-size: 12px;
+    font-family: var(--font-family);
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+
+  .channel-dropdown-item:hover {
+    background: color-mix(in srgb, var(--text) 8%, transparent);
+  }
+
+  .channel-dropdown-item.active {
+    color: var(--accent);
+  }
+
+  .channel-check {
+    color: var(--accent);
     flex-shrink: 0;
   }
 
