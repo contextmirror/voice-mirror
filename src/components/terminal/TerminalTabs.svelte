@@ -369,6 +369,17 @@
       }
     }
     window.addEventListener('keydown', handleKeydown, true);
+
+    // Spawn a default shell tab on startup (Voice Agent | Output | Shell are the staples)
+    const hasShell = terminalTabsStore.tabs.some(t => t.type === 'shell');
+    if (!hasShell) {
+      const cwd = projectStore.activeProject?.path || null;
+      terminalTabsStore.addShellTab({ cwd }).then(() => {
+        // Keep Voice Agent as the active tab on startup
+        terminalTabsStore.setActive('ai');
+      });
+    }
+
     return () => window.removeEventListener('keydown', handleKeydown, true);
   });
 </script>
