@@ -376,36 +376,69 @@
 <div class="terminal-tabs-container">
   <!-- Unified tab bar: tabs (left) + toolbar actions (right) -->
   <div class="terminal-tab-bar">
-    {#each terminalTabsStore.tabs as tab (tab.id)}
+    <!-- AI terminal tab (pinned left) -->
+    {#each terminalTabsStore.tabs.filter(t => t.type === 'ai') as tab (tab.id)}
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
         class="terminal-tab"
-        class:active={terminalTabsStore.activeTabId === tab.id}
+        class:active={terminalTabsStore.activeTabId === tab.id && bottomPanelMode === 'terminal'}
+        role="tab"
+        tabindex="0"
+        aria-selected={terminalTabsStore.activeTabId === tab.id && bottomPanelMode === 'terminal'}
+        data-tab-id={tab.id}
+        onclick={() => { bottomPanelMode = 'terminal'; terminalTabsStore.setActive(tab.id); }}
+        oncontextmenu={(e) => showContextMenu(e, tab.id)}
+        onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { bottomPanelMode = 'terminal'; terminalTabsStore.setActive(tab.id); } }}
+        title={tab.title}
+      >
+        <svg class="tab-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/><circle cx="9" cy="16" r="1" fill="currentColor"/><circle cx="15" cy="16" r="1" fill="currentColor"/>
+        </svg>
+        <span class="tab-label">{tab.title}</span>
+      </div>
+    {/each}
+
+    <!-- Output panel tab (pinned after Voice Agent) -->
+    <div class="tab-divider"></div>
+    <div
+      class="terminal-tab"
+      class:active={bottomPanelMode === 'output'}
+      role="tab"
+      tabindex="0"
+      aria-selected={bottomPanelMode === 'output'}
+      onclick={() => bottomPanelMode = 'output'}
+      onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') bottomPanelMode = 'output'; }}
+    >
+      <svg class="tab-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+      </svg>
+      <span class="tab-label">Output</span>
+    </div>
+
+    <!-- Shell/dev-server tabs (right of Output) -->
+    {#each terminalTabsStore.tabs.filter(t => t.type !== 'ai') as tab (tab.id)}
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div
+        class="terminal-tab"
+        class:active={terminalTabsStore.activeTabId === tab.id && bottomPanelMode === 'terminal'}
         class:exited={!tab.running}
         class:drag-over={dragOverTabId === tab.id && dragTabId !== tab.id}
         class:dragging={dragTabId === tab.id}
         role="tab"
         tabindex="0"
-        aria-selected={terminalTabsStore.activeTabId === tab.id}
+        aria-selected={terminalTabsStore.activeTabId === tab.id && bottomPanelMode === 'terminal'}
         data-tab-id={tab.id}
         onclick={() => { bottomPanelMode = 'terminal'; terminalTabsStore.setActive(tab.id); }}
         oncontextmenu={(e) => showContextMenu(e, tab.id)}
         onmousedown={(e) => handleTabMousedown(e, tab.id)}
-        onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') terminalTabsStore.setActive(tab.id); }}
+        onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { bottomPanelMode = 'terminal'; terminalTabsStore.setActive(tab.id); } }}
         title={tab.title}
       >
-        {#if tab.type === 'ai'}
-          <svg class="tab-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/><circle cx="9" cy="16" r="1" fill="currentColor"/><circle cx="15" cy="16" r="1" fill="currentColor"/>
-          </svg>
-        {:else}
-          <svg class="tab-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>
-          </svg>
-        {/if}
+        <svg class="tab-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>
+        </svg>
 
         {#if editingTabId === tab.id}
-          <!-- Inline rename input -->
           <input
             class="tab-rename-input"
             type="text"
@@ -423,36 +456,17 @@
           >{tab.title}</span>
         {/if}
 
-        {#if (tab.type === 'shell' || tab.type === 'dev-server') && editingTabId !== tab.id}
-          <button
-            class="tab-close"
-            onclick={(e) => { e.stopPropagation(); requestCloseTab(tab.id); }}
-            title="Close terminal"
-          >
-            <svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.5">
-              <line x1="2" y1="2" x2="10" y2="10"/><line x1="10" y1="2" x2="2" y2="10"/>
-            </svg>
-          </button>
-        {/if}
+        <button
+          class="tab-close"
+          onclick={(e) => { e.stopPropagation(); requestCloseTab(tab.id); }}
+          title="Close terminal"
+        >
+          <svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.5">
+            <line x1="2" y1="2" x2="10" y2="10"/><line x1="10" y1="2" x2="2" y2="10"/>
+          </svg>
+        </button>
       </div>
     {/each}
-
-    <!-- Output panel tab (always visible, separated by divider) -->
-    <div class="tab-divider"></div>
-    <div
-      class="terminal-tab"
-      class:active={bottomPanelMode === 'output'}
-      role="tab"
-      tabindex="0"
-      aria-selected={bottomPanelMode === 'output'}
-      onclick={() => bottomPanelMode = 'output'}
-      onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') bottomPanelMode = 'output'; }}
-    >
-      <svg class="tab-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
-      </svg>
-      <span class="tab-label">Output</span>
-    </div>
 
     <button class="tab-add" onclick={handleAddShell} title="New shell terminal" aria-label="New terminal">
       <svg viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5">
