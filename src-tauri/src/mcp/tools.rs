@@ -534,7 +534,7 @@ fn build_all_groups() -> HashMap<String, ToolGroupDef> {
                             "channel": {
                                 "type": "string",
                                 "enum": ["app", "cli", "voice", "mcp", "browser"],
-                                "description": "Which log channel to query. Omit for a summary of all channels."
+                                "description": "Which log channel to query: app (Voice Mirror core), cli (CLI Provider), voice (Voice Pipeline), mcp (MCP Server), browser (Browser Bridge). Omit for a summary of all channels."
                             },
                             "level": {
                                 "type": "string",

@@ -11,7 +11,7 @@ import { getOutputLogs } from '../api.js';
 const MAX_ENTRIES = 2000;
 const CHANNELS = ['app', 'cli', 'voice', 'mcp', 'browser'];
 const CHANNEL_LABELS = {
-  app: 'App',
+  app: 'Voice Mirror',
   cli: 'CLI Provider',
   voice: 'Voice Pipeline',
   mcp: 'MCP Server',
