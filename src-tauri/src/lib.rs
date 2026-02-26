@@ -380,6 +380,7 @@ pub fn run() {
             terminal_cmds::terminal_resize,
             terminal_cmds::terminal_kill,
             terminal_cmds::terminal_list,
+            terminal_cmds::terminal_detect_profiles,
             // File watcher
             services::file_watcher::start_file_watching,
             services::file_watcher::stop_file_watching,

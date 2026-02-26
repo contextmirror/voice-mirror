@@ -26,21 +26,35 @@ macro_rules! lock_terminal {
 /// Spawn a new terminal PTY session.
 ///
 /// Returns `{ "id": "terminal-1" }` on success.
+/// If `profile_id` is provided, spawns using the matching shell profile.
 #[tauri::command]
 pub fn terminal_spawn(
     state: State<'_, TerminalManagerState>,
     cols: Option<u16>,
     rows: Option<u16>,
     cwd: Option<String>,
+    profile_id: Option<String>,
 ) -> IpcResponse {
     let mut manager = lock_terminal!(state);
     let cols = cols.unwrap_or(80);
     let rows = rows.unwrap_or(24);
 
-    match manager.spawn(cols, rows, cwd) {
+    match manager.spawn(cols, rows, cwd, profile_id) {
         Ok(id) => IpcResponse::ok(json!({ "id": id })),
         Err(e) => IpcResponse::err(e),
     }
+}
+
+/// Detect available terminal profiles (shells) on the system.
+///
+/// Returns a list of `TerminalProfile` objects.
+#[tauri::command]
+pub fn terminal_detect_profiles(
+    state: State<'_, TerminalManagerState>,
+) -> IpcResponse {
+    let manager = lock_terminal!(state);
+    let profiles = manager.detect_profiles();
+    IpcResponse::ok(serde_json::to_value(profiles).unwrap_or_default())
 }
 
 /// Send input data to a terminal session.

@@ -16,6 +16,19 @@ use tracing::{info, warn};
 
 use crate::util::find_project_root;
 
+/// A detected terminal profile (shell) available on the system.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct TerminalProfile {
+    pub id: String,
+    pub name: String,
+    pub path: String,
+    pub args: Vec<String>,
+    pub icon: String,
+    pub color: Option<String>,
+    pub is_default: bool,
+    pub is_builtin: bool,
+}
+
 /// Event emitted by a terminal session (sent to the frontend via Tauri events).
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct TerminalEvent {
@@ -116,10 +129,137 @@ impl TerminalManager {
         self.event_rx.take()
     }
 
+    /// Detect available terminal profiles (shells) on the system.
+    pub fn detect_profiles(&self) -> Vec<TerminalProfile> {
+        let mut profiles = Vec::new();
+
+        #[cfg(target_os = "windows")]
+        {
+            // Git Bash
+            if let Some(bash_path) = find_git_bash() {
+                profiles.push(TerminalProfile {
+                    id: "git-bash".to_string(),
+                    name: "Git Bash".to_string(),
+                    path: bash_path,
+                    args: vec!["--login".to_string(), "-i".to_string()],
+                    icon: "terminal-bash".to_string(),
+                    color: None,
+                    is_default: true,
+                    is_builtin: true,
+                });
+            }
+
+            // PowerShell Core (pwsh)
+            if let Ok(output) = std::process::Command::new("where").arg("pwsh.exe").output() {
+                if output.status.success() {
+                    let stdout = String::from_utf8_lossy(&output.stdout);
+                    if let Some(path) = stdout.lines().next() {
+                        profiles.push(TerminalProfile {
+                            id: "powershell-core".to_string(),
+                            name: "PowerShell".to_string(),
+                            path: path.trim().to_string(),
+                            args: vec![],
+                            icon: "terminal-powershell".to_string(),
+                            color: None,
+                            is_default: profiles.is_empty(),
+                            is_builtin: true,
+                        });
+                    }
+                }
+            }
+
+            // Windows PowerShell (fallback — only if no PowerShell Core found)
+            if !profiles.iter().any(|p| p.id.starts_with("powershell")) {
+                if let Ok(output) = std::process::Command::new("where").arg("powershell.exe").output() {
+                    if output.status.success() {
+                        let stdout = String::from_utf8_lossy(&output.stdout);
+                        if let Some(path) = stdout.lines().next() {
+                            profiles.push(TerminalProfile {
+                                id: "powershell".to_string(),
+                                name: "Windows PowerShell".to_string(),
+                                path: path.trim().to_string(),
+                                args: vec![],
+                                icon: "terminal-powershell".to_string(),
+                                color: None,
+                                is_default: profiles.is_empty(),
+                                is_builtin: true,
+                            });
+                        }
+                    }
+                }
+            }
+
+            // Command Prompt
+            if let Some(comspec) = std::env::var_os("COMSPEC") {
+                profiles.push(TerminalProfile {
+                    id: "cmd".to_string(),
+                    name: "Command Prompt".to_string(),
+                    path: comspec.to_string_lossy().to_string(),
+                    args: vec![],
+                    icon: "terminal-cmd".to_string(),
+                    color: None,
+                    is_default: profiles.is_empty(),
+                    is_builtin: true,
+                });
+            }
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            let default_shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".to_string());
+
+            // Default shell
+            let shell_name = std::path::Path::new(&default_shell)
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string();
+            profiles.push(TerminalProfile {
+                id: shell_name.clone(),
+                name: shell_name.clone(),
+                path: default_shell.clone(),
+                args: vec!["--login".to_string(), "-i".to_string()],
+                icon: format!("terminal-{}", shell_name),
+                color: None,
+                is_default: true,
+                is_builtin: true,
+            });
+
+            // Read /etc/shells for additional shells
+            if let Ok(shells_content) = std::fs::read_to_string("/etc/shells") {
+                for line in shells_content.lines() {
+                    let line = line.trim();
+                    if line.is_empty() || line.starts_with('#') { continue; }
+                    if line == default_shell { continue; } // already added
+                    let name = std::path::Path::new(line)
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .to_string();
+                    // Skip duplicates by name
+                    if profiles.iter().any(|p| p.name == name) { continue; }
+                    profiles.push(TerminalProfile {
+                        id: name.clone(),
+                        name: name.clone(),
+                        path: line.to_string(),
+                        args: vec![],
+                        icon: format!("terminal-{}", name),
+                        color: None,
+                        is_default: false,
+                        is_builtin: true,
+                    });
+                }
+            }
+        }
+
+        profiles
+    }
+
     /// Spawn a new terminal PTY session.
     ///
     /// Returns the session ID (e.g. "terminal-1") on success.
-    pub fn spawn(&mut self, cols: u16, rows: u16, cwd: Option<String>) -> Result<String, String> {
+    /// If `profile_id` is given, uses the matching profile's shell and args.
+    pub fn spawn(&mut self, cols: u16, rows: u16, cwd: Option<String>, profile_id: Option<String>) -> Result<String, String> {
         let id = format!("terminal-{}", self.next_id);
         self.next_id += 1;
 
@@ -134,33 +274,60 @@ impl TerminalManager {
             })
             .map_err(|e| format!("Failed to open PTY: {}", e))?;
 
-        // Determine the shell command based on platform.
-        // Windows: prefer Git Bash (like OpenCode), fall back to PowerShell.
-        // macOS: use $SHELL (default zsh).
-        // Linux: use $SHELL (default bash).
-        let shell = if cfg!(target_os = "windows") {
-            #[cfg(target_os = "windows")]
-            {
-                find_git_bash().unwrap_or_else(|| "powershell.exe".to_string())
+        // Determine the shell command and args.
+        // If a profile_id is provided, look it up; otherwise use platform defaults.
+        let (shell, shell_args) = if let Some(ref pid) = profile_id {
+            let profiles = self.detect_profiles();
+            if let Some(prof) = profiles.iter().find(|p| p.id == *pid) {
+                (prof.path.clone(), prof.args.clone())
+            } else {
+                // Fall back to default platform detection
+                let default_shell = if cfg!(target_os = "windows") {
+                    #[cfg(target_os = "windows")]
+                    { find_git_bash().unwrap_or_else(|| "powershell.exe".to_string()) }
+                    #[cfg(not(target_os = "windows"))]
+                    { unreachable!() }
+                } else if cfg!(target_os = "macos") {
+                    std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string())
+                } else {
+                    std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".to_string())
+                };
+                let default_lower = default_shell.to_lowercase();
+                let args = if default_lower.contains("bash") || default_lower.contains("zsh") {
+                    vec!["--login".to_string(), "-i".to_string()]
+                } else {
+                    vec![]
+                };
+                (default_shell, args)
             }
-            #[cfg(not(target_os = "windows"))]
-            {
-                unreachable!()
-            }
-        } else if cfg!(target_os = "macos") {
-            std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string())
         } else {
-            std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".to_string())
+            // No profile — use platform defaults
+            let default_shell = if cfg!(target_os = "windows") {
+                #[cfg(target_os = "windows")]
+                { find_git_bash().unwrap_or_else(|| "powershell.exe".to_string()) }
+                #[cfg(not(target_os = "windows"))]
+                { unreachable!() }
+            } else if cfg!(target_os = "macos") {
+                std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string())
+            } else {
+                std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".to_string())
+            };
+            let default_lower = default_shell.to_lowercase();
+            let args = if default_lower.contains("bash") || default_lower.contains("zsh") {
+                vec!["--login".to_string(), "-i".to_string()]
+            } else {
+                vec![]
+            };
+            (default_shell, args)
         };
 
         let mut cmd = CommandBuilder::new(&shell);
 
-        // Pass login + interactive flags for bash/zsh shells
-        let shell_lower = shell.to_lowercase();
-        if shell_lower.contains("bash") || shell_lower.contains("zsh") {
-            cmd.arg("--login");
-            cmd.arg("-i");
+        // Apply shell args from profile or default detection
+        for arg in &shell_args {
+            cmd.arg(arg);
         }
+        let shell_lower = shell.to_lowercase();
 
         // Set working directory: explicit cwd > project root > home directory
         let work_dir = cwd
