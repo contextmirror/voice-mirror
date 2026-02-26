@@ -131,10 +131,24 @@
 
       const classes = typeof elem.classes === 'string' ? elem.classes : (Array.isArray(elem.classes) ? elem.classes.join(' ') : '');
 
+      // Format accessibility info
+      const a11y = elem.accessibility || {};
+      const roleLine = a11y.role ? `Role: ${a11y.role}` : null;
+      const ariaEntries = Object.entries(a11y.ariaAttributes || {});
+      const ariaLine = ariaEntries.length > 0
+        ? `ARIA: ${ariaEntries.map(([k, v]) => `${k}="${v}"`).join('; ')}`
+        : null;
+      const statesLine = (a11y.htmlStates || []).length > 0
+        ? `States: ${a11y.htmlStates.join(', ')}`
+        : null;
+
       let contextText = [
         `Selected element: ${elem.tagName}${elem.id ? '#' + elem.id : ''}${classes ? '.' + classes.split(' ').join('.') : ''}`,
         `Selector: ${elem.selector}`,
         `Size: ${elem.bounds.width} x ${elem.bounds.height}px`,
+        roleLine,
+        ariaLine,
+        statesLine,
         elem.text ? `Text: "${elem.text}"` : null,
         '',
         'HTML:',

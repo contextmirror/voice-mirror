@@ -81,3 +81,24 @@ describe('DesignToolbar — enriched context', () => {
     assert.ok(toolbarSrc.includes('Array.isArray(elem.classes)'), 'Should handle array classes');
   });
 });
+
+describe('DesignToolbar — accessibility context formatting', () => {
+  it('formats accessibility role in context text', () => {
+    assert.ok(toolbarSrc.includes('.accessibility'), 'Should reference accessibility field');
+    assert.ok(toolbarSrc.includes('Role:'), 'Should have Role: label in context');
+  });
+
+  it('formats ARIA attributes in context text', () => {
+    assert.ok(toolbarSrc.includes('ariaAttributes'), 'Should reference ariaAttributes');
+    assert.ok(toolbarSrc.includes('ARIA:'), 'Should have ARIA: label in context');
+  });
+
+  it('formats HTML states in context text', () => {
+    assert.ok(toolbarSrc.includes('htmlStates'), 'Should reference htmlStates');
+    assert.ok(toolbarSrc.includes('States:'), 'Should have States: label in context');
+  });
+
+  it('only includes accessibility lines when data is present', () => {
+    assert.ok(toolbarSrc.includes('.role'), 'Should check role exists');
+  });
+});
