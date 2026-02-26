@@ -252,7 +252,7 @@ git commit -m "refactor: rename component files and update all tests (shell → 
 
 ## Phase 2: Terminal Panel Architecture
 
-### Task 4: Simplify Outer Tab Strip to 3 Pinned Tabs
+### Task 4: Simplify Outer Tab Strip to 3 Pinned Tabs ✅ DONE (commit in 61ac854c..HEAD)
 
 **Files:**
 - Modify: `src/components/terminal/TerminalTabs.svelte`

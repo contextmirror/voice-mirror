@@ -80,11 +80,11 @@ describe('terminal-tabs.svelte.js -- methods', () => {
 
 describe('terminal-tabs.svelte.js -- tab cycling', () => {
   it('nextTab wraps around with modulo', () => {
-    assert.ok(src.includes('% tabs.length'), 'nextTab should wrap around');
+    assert.ok(src.includes('% groups.length'), 'nextTab should wrap around through groups');
   });
 
-  it('prevTab wraps to last tab', () => {
-    assert.ok(src.includes('tabs.length - 1'), 'prevTab should wrap to end');
+  it('prevTab wraps to last group', () => {
+    assert.ok(src.includes('groups.length - 1'), 'prevTab should wrap to end');
   });
 });
 
