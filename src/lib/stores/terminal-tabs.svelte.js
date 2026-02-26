@@ -2,12 +2,12 @@
  * terminal-tabs.svelte.js -- Svelte 5 reactive store for terminal tab management.
  *
  * Manages terminal tabs in the bottom panel: AI tab (always present, unclosable)
- * + shell tabs (user-created, closable).
+ * + terminal tabs (user-created, closable).
  *
  * The AI tab uses the existing ai-output event system.
- * Shell tabs use the shell-output event system with session IDs.
+ * Terminal tabs use the terminal-output event system with session IDs.
  */
-import { shellSpawn, shellKill } from '../api.js';
+import { terminalSpawn, terminalKill } from '../api.js';
 
 function createTerminalTabsStore() {
   // AI tab is always present, cannot be closed
@@ -18,13 +18,13 @@ function createTerminalTabsStore() {
   let hiddenTabs = $state([]);
 
   /**
-   * Find the next available shell number, filling gaps.
-   * If Shell 1 and Shell 3 exist, returns 2.
+   * Find the next available terminal number, filling gaps.
+   * If Terminal 1 and Terminal 3 exist, returns 2.
    */
-  function nextShellNumber() {
+  function nextTerminalNumber() {
     const existing = new Set(
-      tabs.filter(t => t.type === 'shell').map(t => {
-        const match = t.title.match(/^Shell (\d+)$/);
+      tabs.filter(t => t.type === 'terminal').map(t => {
+        const match = t.title.match(/^Terminal (\d+)$/);
         return match ? parseInt(match[1]) : null;
       }).filter(n => n !== null)
     );
@@ -96,27 +96,27 @@ function createTerminalTabsStore() {
     },
 
     /**
-     * Add a new shell tab. Spawns a PTY on the backend.
-     * Uses smart numbering that fills gaps (e.g. Shell 1, Shell 3 → next is Shell 2).
+     * Add a new terminal tab. Spawns a PTY on the backend.
+     * Uses smart numbering that fills gaps (e.g. Terminal 1, Terminal 3 → next is Terminal 2).
      * @param {Object} [options]
      * @param {number} [options.cols]
      * @param {number} [options.rows]
      * @param {string} [options.cwd]
      * @returns {Promise<string|null>} The tab ID, or null on failure.
      */
-    async addShellTab(options = {}) {
+    async addTerminalTab(options = {}) {
       try {
-        const result = await shellSpawn(options);
+        const result = await terminalSpawn(options);
         if (!result?.success || !result?.data?.id) {
-          console.error('[terminal-tabs] Failed to spawn shell:', result?.error);
+          console.error('[terminal-tabs] Failed to spawn terminal:', result?.error);
           return null;
         }
         const shellId = result.data.id;
-        const tabNum = nextShellNumber();
+        const tabNum = nextTerminalNumber();
         const tab = {
           id: shellId,
-          type: 'shell',
-          title: `Shell ${tabNum}`,
+          type: 'terminal',
+          title: `Terminal ${tabNum}`,
           shellId,
           running: true,
         };
@@ -124,7 +124,7 @@ function createTerminalTabsStore() {
         activeTabId = tab.id;
         return tab.id;
       } catch (err) {
-        console.error('[terminal-tabs] Shell spawn error:', err);
+        console.error('[terminal-tabs] Terminal spawn error:', err);
         return null;
       }
     },
@@ -157,7 +157,7 @@ function createTerminalTabsStore() {
     },
 
     /**
-     * Close a shell tab. Cannot close the AI tab.
+     * Close a terminal tab. Cannot close the AI tab.
      * Kills the backend PTY process.
      * @param {string} id
      */
@@ -171,9 +171,9 @@ function createTerminalTabsStore() {
       // Kill the backend PTY
       if (tab.shellId && tab.running) {
         try {
-          await shellKill(tab.shellId);
+          await terminalKill(tab.shellId);
         } catch (err) {
-          console.warn('[terminal-tabs] Failed to kill shell:', err);
+          console.warn('[terminal-tabs] Failed to kill terminal:', err);
         }
       }
 

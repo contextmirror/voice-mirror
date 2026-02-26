@@ -6,9 +6,9 @@
    * - Single bar: tabs (left) + toolbar actions (right)
    * - Double-click tab to rename (inline input)
    * - Right-click context menu (rename, clear, close)
-   * - Drag-to-reorder shell tabs (AI tab pinned at index 0)
+   * - Drag-to-reorder terminal tabs (AI tab pinned at index 0)
    * - Ctrl+Tab / Ctrl+Shift+Tab to cycle tabs
-   * - Smart shell numbering (fills gaps)
+   * - Smart terminal numbering (fills gaps)
    */
   import { onMount } from 'svelte';
   import Terminal from './Terminal.svelte';
@@ -104,11 +104,11 @@
     }
   }
 
-  // ---- Shell tab management ----
+  // ---- Terminal tab management ----
 
-  async function handleAddShell() {
+  async function handleAddTerminal() {
     const cwd = projectStore.activeProject?.path || null;
-    await terminalTabsStore.addShellTab({ cwd });
+    await terminalTabsStore.addTerminalTab({ cwd });
   }
 
   // ---- Close confirmation for dev-server tabs ----
@@ -353,7 +353,7 @@
   let dragActive = false;
 
   function handleTabMousedown(e, tabId) {
-    // Only left-click, only shell tabs
+    // Only left-click, only terminal/dev-server tabs
     if (e.button !== 0 || tabId === 'ai') return;
     dragStartX = e.clientX;
     dragActive = false;
@@ -411,11 +411,11 @@
     }
     window.addEventListener('keydown', handleKeydown, true);
 
-    // Spawn a default shell tab on startup (Voice Agent | Output | Shell are the staples)
-    const hasShell = terminalTabsStore.tabs.some(t => t.type === 'shell');
-    if (!hasShell) {
+    // Spawn a default terminal tab on startup (Voice Agent | Output | Terminal are the staples)
+    const hasTerminal = terminalTabsStore.tabs.some(t => t.type === 'terminal');
+    if (!hasTerminal) {
       const cwd = projectStore.activeProject?.path || null;
-      terminalTabsStore.addShellTab({ cwd }).then(() => {
+      terminalTabsStore.addTerminalTab({ cwd }).then(() => {
         // Keep Voice Agent as the active tab on startup
         terminalTabsStore.setActive('ai');
       });
@@ -521,7 +521,7 @@
       </div>
     {/each}
 
-    <button class="tab-add" onclick={handleAddShell} title="New shell terminal" aria-label="New terminal">
+    <button class="tab-add" onclick={handleAddTerminal} title="New terminal" aria-label="New terminal">
       <svg viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5">
         <line x1="6" y1="1" x2="6" y2="11"/><line x1="1" y1="6" x2="11" y2="6"/>
       </svg>
@@ -824,8 +824,8 @@
       <Terminal onRegisterActions={(actions) => { termActions['ai'] = actions; }} />
     </div>
 
-    <!-- Shell + dev-server terminals (mounted when tab exists, hidden when inactive) -->
-    {#each terminalTabsStore.tabs.filter(t => t.type === 'shell' || t.type === 'dev-server') as tab (tab.id)}
+    <!-- Terminal + dev-server terminals (mounted when tab exists, hidden when inactive) -->
+    {#each terminalTabsStore.tabs.filter(t => t.type === 'terminal' || t.type === 'dev-server') as tab (tab.id)}
       <div class="terminal-panel" class:hidden={terminalTabsStore.activeTabId !== tab.id}>
         <ShellTerminal
           shellId={tab.shellId}

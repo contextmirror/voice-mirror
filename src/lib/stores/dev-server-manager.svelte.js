@@ -6,7 +6,7 @@
  * to cap concurrent running servers.
  */
 
-import { shellSpawn, shellInput, shellKill, probePort, lensNavigate, killPortProcess } from '../api.js';
+import { terminalSpawn, terminalInput, terminalKill, probePort, lensNavigate, killPortProcess } from '../api.js';
 import { terminalTabsStore } from './terminal-tabs.svelte.js';
 import { lensStore } from './lens.svelte.js';
 import { toastStore } from './toast.svelte.js';
@@ -212,7 +212,7 @@ function createDevServerManager() {
 
     // Spawn PTY
     try {
-      const result = await shellSpawn({ cwd: projectPath });
+      const result = await terminalSpawn({ cwd: projectPath });
       if (!result?.success || !result?.data?.id) {
         updateState(projectPath, { status: 'stopped' });
         toastStore.addToast({
@@ -246,7 +246,7 @@ function createDevServerManager() {
       }
 
       // Send start command
-      await shellInput(shellId, startCommand + '\n');
+      await terminalInput(shellId, startCommand + '\n');
 
       // Poll port (may be cancelled via cancelPoll)
       let ready = false;
@@ -302,7 +302,7 @@ function createDevServerManager() {
     });
 
     try {
-      await shellKill(shellId);
+      await terminalKill(shellId);
     } catch (err) {
       console.warn('[dev-server-manager] Kill failed:', err);
     }

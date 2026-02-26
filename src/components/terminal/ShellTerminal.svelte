@@ -4,11 +4,11 @@
    *
    * Simplified version of Terminal.svelte that connects to a shell PTY
    * session instead of the AI provider. Each instance is tied to a shellId
-   * and filters shell-output events by that ID.
+   * and filters terminal-output events by that ID.
    */
   import { init, Terminal, FitAddon } from 'ghostty-web';
   import { listen } from '@tauri-apps/api/event';
-  import { shellInput, shellResize } from '../../lib/api.js';
+  import { terminalInput, terminalResize } from '../../lib/api.js';
   import { currentThemeName } from '../../lib/stores/theme.svelte.js';
   import { terminalTabsStore } from '../../lib/stores/terminal-tabs.svelte.js';
   import { devServerManager } from '../../lib/stores/dev-server-manager.svelte.js';
@@ -89,7 +89,7 @@
     if (term.cols === lastPtyCols && term.rows === lastPtyRows) return;
     lastPtyCols = term.cols;
     lastPtyRows = term.rows;
-    shellResize(shellId, term.cols, term.rows).catch((err) => {
+    terminalResize(shellId, term.cols, term.rows).catch((err) => {
       console.warn('[ShellTerminal] PTY resize failed:', err);
     });
   }
@@ -131,7 +131,7 @@
     try {
       const text = await navigator.clipboard.readText();
       if (text) {
-        shellInput(shellId, text).catch((err) => {
+        terminalInput(shellId, text).catch((err) => {
           console.warn('[ShellTerminal] Paste failed:', err);
         });
       }
@@ -149,7 +149,7 @@
   // ---- Shell output handler ----
 
   /**
-   * Process a single shell-output event payload.
+   * Process a single terminal-output event payload.
    * Filters by shellId and handles stdout/exit events.
    * @param {{ id: string, event_type?: string, type?: string, text?: string, code?: number }} data
    */
@@ -211,7 +211,7 @@
 
       // Keyboard input -> shell PTY
       ghosttyTerm.onData((data) => {
-        shellInput(shellId, data).catch((err) => {
+        terminalInput(shellId, data).catch((err) => {
           console.warn('[ShellTerminal] PTY input failed:', err);
         });
       });
@@ -243,13 +243,13 @@
         if (cols === lastPtyCols && rows === lastPtyRows) return;
         lastPtyCols = cols;
         lastPtyRows = rows;
-        shellResize(shellId, cols, rows).catch((err) => {
+        terminalResize(shellId, cols, rows).catch((err) => {
           console.warn('[ShellTerminal] PTY resize failed:', err);
         });
       });
 
       // Listen for shell output events from Tauri backend
-      const unlisten = await listen('shell-output', (event) => {
+      const unlisten = await listen('terminal-output', (event) => {
         if (!term) return;
         if (!initialized) {
           // Buffer events until terminal is fully initialized
@@ -363,12 +363,12 @@
   });
 </script>
 
-<div class="shell-terminal-view">
-  <div class="shell-terminal-container" bind:this={containerEl}></div>
+<div class="terminal-view">
+  <div class="terminal-container" bind:this={containerEl}></div>
 </div>
 
 <style>
-  .shell-terminal-view {
+  .terminal-view {
     display: flex;
     flex-direction: column;
     height: 100%;
@@ -379,7 +379,7 @@
     padding: 4px;
   }
 
-  .shell-terminal-container {
+  .terminal-container {
     flex: 1;
     overflow: hidden;
     min-height: 0;
@@ -387,12 +387,12 @@
     contain: strict;
   }
 
-  .shell-terminal-container :global(canvas) {
+  .terminal-container :global(canvas) {
     display: block;
   }
 
-  .shell-terminal-container :global(.ghostty-web),
-  .shell-terminal-container :global(.xterm) {
+  .terminal-container :global(.ghostty-web),
+  .terminal-container :global(.xterm) {
     overflow: hidden !important;
   }
 </style>

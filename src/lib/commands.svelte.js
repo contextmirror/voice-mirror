@@ -498,10 +498,10 @@ commandRegistry.registerMany([
 // Terminal (4)
 commandRegistry.registerMany([
   {
-    id: 'terminal.newShell',
-    label: 'New Shell Terminal',
+    id: 'terminal.newTerminal',
+    label: 'New Terminal',
     category: 'Terminal',
-    execute: () => terminalTabsStore.addShellTab(),
+    execute: () => terminalTabsStore.addTerminalTab(),
   },
   {
     id: 'terminal.nextTab',

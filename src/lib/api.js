@@ -577,18 +577,18 @@ export async function stopFileWatching() {
   return invoke('stop_file_watching');
 }
 
-// ============ Shell Terminals ============
+// ============ Terminal ============
 
 /**
- * Spawn a new shell terminal session.
+ * Spawn a new terminal session.
  * @param {Object} [options]
  * @param {number} [options.cols] - Terminal columns.
  * @param {number} [options.rows] - Terminal rows.
  * @param {string} [options.cwd] - Working directory.
  * @returns {Promise<Object>}
  */
-export async function shellSpawn(options = {}) {
-  return invoke('shell_spawn', {
+export async function terminalSpawn(options = {}) {
+  return invoke('terminal_spawn', {
     cols: options.cols || null,
     rows: options.rows || null,
     cwd: options.cwd || null,
@@ -596,33 +596,33 @@ export async function shellSpawn(options = {}) {
 }
 
 /**
- * Send raw input to a shell terminal session.
- * @param {string} id - Shell session ID.
+ * Send raw input to a terminal session.
+ * @param {string} id - Terminal session ID.
  * @param {string} data - Raw input data.
  * @returns {Promise<Object>}
  */
-export async function shellInput(id, data) {
-  return invoke('shell_input', { id, data });
+export async function terminalInput(id, data) {
+  return invoke('terminal_input', { id, data });
 }
 
 /**
- * Resize a shell terminal session's PTY.
- * @param {string} id - Shell session ID.
+ * Resize a terminal session's PTY.
+ * @param {string} id - Terminal session ID.
  * @param {number} cols - New column count.
  * @param {number} rows - New row count.
  * @returns {Promise<Object>}
  */
-export async function shellResize(id, cols, rows) {
-  return invoke('shell_resize', { id, cols, rows });
+export async function terminalResize(id, cols, rows) {
+  return invoke('terminal_resize', { id, cols, rows });
 }
 
 /**
- * Kill a shell terminal session.
- * @param {string} id - Shell session ID.
+ * Kill a terminal session.
+ * @param {string} id - Terminal session ID.
  * @returns {Promise<Object>}
  */
-export async function shellKill(id) {
-  return invoke('shell_kill', { id });
+export async function terminalKill(id) {
+  return invoke('terminal_kill', { id });
 }
 
 // ============ LSP ============
