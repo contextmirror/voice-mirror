@@ -270,11 +270,11 @@ describe('api.js -- exported async functions', () => {
     'gitCommit',
     'gitDiscard',
     'gitPush',
-    // Shell Terminals
-    'shellSpawn',
-    'shellInput',
-    'shellResize',
-    'shellKill',
+    // Terminals
+    'terminalSpawn',
+    'terminalInput',
+    'terminalResize',
+    'terminalKill',
     // LSP
     'lspOpenFile',
     'lspCloseFile',
@@ -317,7 +317,7 @@ describe('api.js -- exported async functions', () => {
 });
 
 describe('api.js -- section organization', () => {
-  const sections = ['Config', 'Window', 'Voice', 'AI', 'Inbox', 'Chat', 'Screenshot', 'Tools', 'Shortcuts', 'Performance Stats', 'Config Migration', 'Design Overlay', 'Lens', 'Browser Tabs', 'Dev Server', 'GPU / Model Management', 'Files', 'Shell Terminals', 'LSP', 'Output / Diagnostics'];
+  const sections = ['Config', 'Window', 'Voice', 'AI', 'Inbox', 'Chat', 'Screenshot', 'Tools', 'Shortcuts', 'Performance Stats', 'Config Migration', 'Design Overlay', 'Lens', 'Browser Tabs', 'Dev Server', 'GPU / Model Management', 'Files', 'Terminal', 'LSP', 'Output / Diagnostics'];
 
   for (const section of sections) {
     it(`has "${section}" section comment`, () => {

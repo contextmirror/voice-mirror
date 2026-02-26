@@ -11,8 +11,8 @@
    * - Smart terminal numbering (fills gaps)
    */
   import { onMount } from 'svelte';
+  import AiTerminal from './AiTerminal.svelte';
   import Terminal from './Terminal.svelte';
-  import ShellTerminal from './ShellTerminal.svelte';
   import { terminalTabsStore } from '../../lib/stores/terminal-tabs.svelte.js';
   import { devServerManager } from '../../lib/stores/dev-server-manager.svelte.js';
   import { projectStore } from '../../lib/stores/project.svelte.js';
@@ -821,13 +821,13 @@
   <div class="terminal-panels" class:hidden={bottomPanelMode === 'output'}>
     <!-- AI terminal (always mounted) -->
     <div class="terminal-panel" class:hidden={terminalTabsStore.activeTabId !== 'ai'}>
-      <Terminal onRegisterActions={(actions) => { termActions['ai'] = actions; }} />
+      <AiTerminal onRegisterActions={(actions) => { termActions['ai'] = actions; }} />
     </div>
 
     <!-- Terminal + dev-server terminals (mounted when tab exists, hidden when inactive) -->
     {#each terminalTabsStore.tabs.filter(t => t.type === 'terminal' || t.type === 'dev-server') as tab (tab.id)}
       <div class="terminal-panel" class:hidden={terminalTabsStore.activeTabId !== tab.id}>
-        <ShellTerminal
+        <Terminal
           shellId={tab.shellId}
           visible={terminalTabsStore.activeTabId === tab.id}
           onRegisterActions={(actions) => { termActions[tab.id] = actions; }}

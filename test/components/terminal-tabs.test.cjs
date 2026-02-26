@@ -7,12 +7,12 @@ const SRC_PATH = path.join(__dirname, '../../src/components/terminal/TerminalTab
 const src = fs.readFileSync(SRC_PATH, 'utf-8');
 
 describe('TerminalTabs.svelte -- imports', () => {
-  it('imports Terminal component', () => {
-    assert.ok(src.includes("import Terminal from"), 'Should import Terminal');
+  it('imports AiTerminal component', () => {
+    assert.ok(src.includes("import AiTerminal from"), 'Should import AiTerminal');
   });
 
-  it('imports ShellTerminal component', () => {
-    assert.ok(src.includes("import ShellTerminal from"), 'Should import ShellTerminal');
+  it('imports Terminal component', () => {
+    assert.ok(src.includes("import Terminal from"), 'Should import Terminal');
   });
 
   it('imports terminalTabsStore', () => {
@@ -77,20 +77,20 @@ describe('TerminalTabs.svelte -- tab bar', () => {
 });
 
 describe('TerminalTabs.svelte -- terminal rendering', () => {
-  it('renders AI Terminal always', () => {
-    assert.ok(src.includes('<Terminal'), 'Should render Terminal component');
+  it('renders AiTerminal always', () => {
+    assert.ok(src.includes('<AiTerminal'), 'Should render AiTerminal component');
   });
 
-  it('renders ShellTerminal with shellId prop', () => {
+  it('renders Terminal with shellId prop', () => {
     assert.ok(src.includes('shellId={tab.shellId}'), 'Should pass shellId prop');
   });
 
-  it('passes visible prop to ShellTerminal', () => {
+  it('passes visible prop to Terminal', () => {
     assert.ok(src.includes('visible={'), 'Should pass visible prop');
   });
 
-  it('has handleAddShell function', () => {
-    assert.ok(src.includes('handleAddShell'), 'Should have handleAddShell');
+  it('has handleAddTerminal function', () => {
+    assert.ok(src.includes('handleAddTerminal'), 'Should have handleAddTerminal');
   });
 
   it('uses keyed each block for tabs', () => {

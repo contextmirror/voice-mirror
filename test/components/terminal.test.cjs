@@ -3,20 +3,20 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const SRC_PATH = path.join(__dirname, '../../src/components/terminal/ShellTerminal.svelte');
+const SRC_PATH = path.join(__dirname, '../../src/components/terminal/Terminal.svelte');
 const src = fs.readFileSync(SRC_PATH, 'utf-8');
 
-describe('ShellTerminal.svelte -- imports', () => {
+describe('Terminal.svelte -- imports', () => {
   it('imports ghostty-web Terminal and FitAddon', () => {
     assert.ok(src.includes("import { init, Terminal, FitAddon } from 'ghostty-web'"), 'Should import ghostty-web');
   });
 
-  it('imports shellInput from api', () => {
-    assert.ok(src.includes('shellInput'), 'Should import shellInput');
+  it('imports terminalInput from api', () => {
+    assert.ok(src.includes('terminalInput'), 'Should import terminalInput');
   });
 
-  it('imports shellResize from api', () => {
-    assert.ok(src.includes('shellResize'), 'Should import shellResize');
+  it('imports terminalResize from api', () => {
+    assert.ok(src.includes('terminalResize'), 'Should import terminalResize');
   });
 
   it('imports listen from tauri events', () => {
@@ -33,7 +33,7 @@ describe('ShellTerminal.svelte -- imports', () => {
   });
 });
 
-describe('ShellTerminal.svelte -- crash detection wiring', () => {
+describe('Terminal.svelte -- crash detection wiring', () => {
   it('calls devServerManager.handleShellExit on exit event', () => {
     const exitBlock = src.split("case 'exit':")[1]?.split('break')[0] || '';
     assert.ok(exitBlock.includes('devServerManager.handleShellExit(shellId, data.code)'), 'Should call handleShellExit with shellId and exit code');
@@ -48,7 +48,7 @@ describe('ShellTerminal.svelte -- crash detection wiring', () => {
   });
 });
 
-describe('ShellTerminal.svelte -- props', () => {
+describe('Terminal.svelte -- props', () => {
   it('accepts shellId prop', () => {
     assert.ok(src.includes('shellId'), 'Should accept shellId prop');
   });
@@ -62,9 +62,9 @@ describe('ShellTerminal.svelte -- props', () => {
   });
 });
 
-describe('ShellTerminal.svelte -- event handling', () => {
-  it('listens to shell-output event', () => {
-    assert.ok(src.includes("'shell-output'"), 'Should listen to shell-output');
+describe('Terminal.svelte -- event handling', () => {
+  it('listens to terminal-output event', () => {
+    assert.ok(src.includes("'terminal-output'"), 'Should listen to terminal-output');
   });
 
   it('filters events by shellId', () => {
@@ -75,16 +75,16 @@ describe('ShellTerminal.svelte -- event handling', () => {
     assert.ok(src.includes('markExited'), 'Should call markExited');
   });
 
-  it('sends input via shellInput', () => {
-    assert.ok(src.includes('shellInput(shellId'), 'Should call shellInput with shellId');
+  it('sends input via terminalInput', () => {
+    assert.ok(src.includes('terminalInput(shellId'), 'Should call terminalInput with shellId');
   });
 
-  it('sends resize via shellResize', () => {
-    assert.ok(src.includes('shellResize(shellId'), 'Should call shellResize with shellId');
+  it('sends resize via terminalResize', () => {
+    assert.ok(src.includes('terminalResize(shellId'), 'Should call terminalResize with shellId');
   });
 });
 
-describe('ShellTerminal.svelte -- terminal setup', () => {
+describe('Terminal.svelte -- terminal setup', () => {
   it('initializes ghostty-web with init()', () => {
     assert.ok(src.includes('await init()'), 'Should initialize WASM');
   });
@@ -106,7 +106,7 @@ describe('ShellTerminal.svelte -- terminal setup', () => {
   });
 });
 
-describe('ShellTerminal.svelte -- toolbar', () => {
+describe('Terminal.svelte -- toolbar', () => {
   it('has clear button', () => {
     assert.ok(src.includes('handleClear'), 'Should have clear handler');
   });
@@ -120,19 +120,19 @@ describe('ShellTerminal.svelte -- toolbar', () => {
   });
 });
 
-describe('ShellTerminal.svelte -- visibility', () => {
+describe('Terminal.svelte -- visibility', () => {
   it('re-fits on visible change', () => {
     assert.ok(src.includes('if (visible && fitAddon && term)'), 'Should re-fit when visible');
   });
 });
 
-describe('ShellTerminal.svelte -- CSS', () => {
-  it('has shell-terminal-view class', () => {
-    assert.ok(src.includes('shell-terminal-view'), 'Should have view class');
+describe('Terminal.svelte -- CSS', () => {
+  it('has terminal-view class', () => {
+    assert.ok(src.includes('terminal-view'), 'Should have view class');
   });
 
-  it('has shell-terminal-container class', () => {
-    assert.ok(src.includes('shell-terminal-container'), 'Should have container class');
+  it('has terminal-container class', () => {
+    assert.ok(src.includes('terminal-container'), 'Should have container class');
   });
 
   it('uses contain strict', () => {

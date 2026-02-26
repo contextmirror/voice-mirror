@@ -80,7 +80,7 @@ describe('commands.svelte.js', () => {
       'file.save',
       'lsp.formatDocument',
       'git.push',
-      'terminal.newShell',
+      'terminal.newTerminal',
       'chat.newChat',
       'voice.toggle',
       'system.reloadWindow',

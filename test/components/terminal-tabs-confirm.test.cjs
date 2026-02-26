@@ -141,10 +141,10 @@ describe('TerminalTabs.svelte -- dev-server terminal rendering', () => {
     assert.ok(src.includes("t.type === 'dev-server'"), 'Should filter dev-server tabs for rendering');
   });
 
-  it('uses ShellTerminal for dev-server tabs', () => {
-    // dev-server tabs are rendered alongside shell tabs using ShellTerminal
+  it('uses Terminal for dev-server tabs', () => {
+    // dev-server tabs are rendered alongside terminal tabs using Terminal
     const panelBlock = src.split('terminal-panels')[1] || '';
-    assert.ok(panelBlock.includes('ShellTerminal'), 'Should use ShellTerminal for dev-server tabs');
+    assert.ok(panelBlock.includes('<Terminal'), 'Should use Terminal for dev-server tabs');
   });
 });
 
