@@ -326,20 +326,26 @@
    */
   function handleChatSend(text, attachments = []) {
     // In dictation-only mode, there's no AI to route to.
-    // The message is already added to the chat store by ChatInput.
-    // (Voice transcriptions are injected via injectText in voice.svelte.js)
     if (aiStatusStore.isDictationProvider) {
       return;
     }
 
-    const imagePath = attachments.length > 0 ? attachments[0].path : null;
+    const att = attachments.length > 0 ? attachments[0] : null;
+    const imagePath = att?.path || null;
+    const imageDataUrl = att?.dataUrl || null;
+    const hiddenContext = att?.context || null;
+
+    // Prepend hidden element context to the message text (invisible to user, visible to AI)
+    const fullText = hiddenContext
+      ? `[Element Context]\n${hiddenContext}\n[/Element Context]\n\n${text}`
+      : text;
 
     if (aiStatusStore.isApiProvider) {
-      aiPtyInput(text, imagePath).catch((err) => {
+      aiPtyInput(fullText, imagePath, imageDataUrl).catch((err) => {
         console.warn('[chat] Failed to send message to API provider:', err);
       });
     } else {
-      writeUserMessage(text, null, null, imagePath).catch((err) => {
+      writeUserMessage(fullText, null, null, imagePath, imageDataUrl).catch((err) => {
         console.warn('[chat] Failed to write user message to inbox:', err);
       });
     }
