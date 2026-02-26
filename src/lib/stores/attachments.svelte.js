@@ -6,7 +6,7 @@
  * (routeTranscriptionToAI) so attachments are included regardless
  * of how the message is sent.
  *
- * @typedef {{ path: string, dataUrl?: string, type: string, name: string }} Attachment
+ * @typedef {{ path: string, dataUrl?: string, type: string, name: string, context?: string }} Attachment
  */
 
 function createAttachmentsStore() {
