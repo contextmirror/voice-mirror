@@ -290,8 +290,8 @@
 
   // Close context menu on outside click
   $effect(() => {
-    if (!contextMenu.visible) return;
-    function handleClick() { closeContextMenu(); }
+    if (!contextMenu.visible && !outputContextMenu.visible) return;
+    function handleClick() { closeContextMenu(); closeOutputContextMenu(); }
     // Delay so the right-click itself doesn't close it
     const timer = setTimeout(() => {
       window.addEventListener('click', handleClick);
@@ -303,6 +303,47 @@
       window.removeEventListener('contextmenu', handleClick);
     };
   });
+
+  // ---- Output tab context menu ----
+
+  let outputContextMenu = $state({ visible: false, x: 0, y: 0 });
+
+  function showOutputContextMenu(e) {
+    e.preventDefault();
+    const estimatedHeight = 140;
+    const maxY = window.innerHeight - estimatedHeight;
+    const y = Math.min(e.clientY, Math.max(0, maxY));
+    outputContextMenu = { visible: true, x: e.clientX, y };
+  }
+
+  function closeOutputContextMenu() {
+    outputContextMenu = { ...outputContextMenu, visible: false };
+  }
+
+  function outputContextClear() {
+    outputStore.clearChannel();
+    closeOutputContextMenu();
+  }
+
+  function outputContextCopyAll() {
+    const lines = outputStore.filteredEntries.map(e => {
+      const d = new Date(e.timestamp);
+      const time = d.toTimeString().slice(0, 8);
+      return `${time} [${e.level}] ${e.message}`;
+    });
+    navigator.clipboard.writeText(lines.join('\n')).catch(() => {});
+    closeOutputContextMenu();
+  }
+
+  function outputContextToggleWrap() {
+    outputStore.toggleWordWrap();
+    closeOutputContextMenu();
+  }
+
+  function outputContextToggleScrollLock() {
+    outputStore.setAutoScroll(!outputStore.autoScroll);
+    closeOutputContextMenu();
+  }
 
   // ---- Drag-to-reorder (pointer-based) ----
 
@@ -418,6 +459,7 @@
       tabindex="0"
       aria-selected={bottomPanelMode === 'output'}
       onclick={() => bottomPanelMode = 'output'}
+      oncontextmenu={showOutputContextMenu}
       onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') bottomPanelMode = 'output'; }}
     >
       <svg class="tab-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
@@ -701,6 +743,51 @@
           Close
         </button>
       {/if}
+    </div>
+  {/if}
+
+  <!-- Output tab context menu -->
+  {#if outputContextMenu.visible}
+    <div
+      class="context-menu"
+      style="left: {outputContextMenu.x}px; top: {outputContextMenu.y}px;"
+    >
+      <button class="context-menu-item" onclick={outputContextClear}>
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/>
+          <line x1="18" y1="9" x2="12" y2="15"/><line x1="12" y1="9" x2="18" y2="15"/>
+        </svg>
+        Clear Output
+      </button>
+      <button class="context-menu-item" onclick={outputContextCopyAll}>
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+        </svg>
+        Copy All
+      </button>
+      <div class="context-menu-divider"></div>
+      <button class="context-menu-item" onclick={outputContextToggleWrap}>
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M3 6h18M3 12h15a3 3 0 1 1 0 6h-4"/><polyline points="16 16 14 18 16 20"/><path d="M3 18h7"/>
+        </svg>
+        Word Wrap
+        {#if outputStore.wordWrap}
+          <svg class="ctx-check" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+        {/if}
+      </button>
+      <button class="context-menu-item" onclick={outputContextToggleScrollLock}>
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+        </svg>
+        Scroll Lock
+        {#if !outputStore.autoScroll}
+          <svg class="ctx-check" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+        {/if}
+      </button>
     </div>
   {/if}
 
