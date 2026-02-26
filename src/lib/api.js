@@ -694,3 +694,9 @@ export async function lspRequestFormatting(path, tabSize, insertSpaces, projectR
 export async function lspRequestRangeFormatting(path, rangeStartLine, rangeStartChar, rangeEndLine, rangeEndChar, tabSize, insertSpaces, projectRoot) {
   return invoke('lsp_request_range_formatting', { path, rangeStartLine, rangeStartChar, rangeEndLine, rangeEndChar, tabSize, insertSpaces, projectRoot });
 }
+
+// ============ Output / Diagnostics ============
+
+export async function getOutputLogs(params) {
+  return invoke('get_output_logs', { params });
+}
