@@ -709,21 +709,32 @@ describe('design-overlay.js: parent chain capture', () => {
     assert.ok(src.includes('function _getParentChain'), 'Should define _getParentChain');
   });
 
-  it('walks up to 3 ancestor levels', () => {
-    assert.ok(src.includes('parentElement'), 'Should walk parentElement');
-  });
-
-  it('captures layout-relevant styles per ancestor', () => {
+  it('walks up to 3 ancestor levels with depth limit', () => {
     var fn = src.substring(src.indexOf('function _getParentChain'));
-    assert.ok(fn.includes('flex-direction'), 'Should capture flex-direction');
-    assert.ok(fn.includes('grid-template-columns'), 'Should capture grid styles');
-    assert.ok(fn.includes('justify-content'), 'Should capture justify-content');
+    assert.ok(fn.includes('parentElement'), 'Should walk parentElement');
+    assert.ok(fn.includes('depth < 3') || fn.includes('depth<3'), 'Should limit to 3 levels');
   });
 
-  it('captures sibling summary for immediate parent', () => {
+  it('captures all 15 layout-relevant styles per ancestor', () => {
+    var fn = src.substring(src.indexOf('function _getParentChain'));
+    var required = ['display', 'flex-direction', 'flex-wrap', 'gap', 'align-items',
+      'justify-content', 'grid-template-columns', 'grid-template-rows', 'position',
+      'width', 'height', 'max-width', 'padding', 'margin', 'overflow'];
+    required.forEach(function(prop) {
+      assert.ok(fn.includes(prop), 'Should capture ' + prop);
+    });
+  });
+
+  it('limits classes to first 5', () => {
+    var fn = src.substring(src.indexOf('function _getParentChain'));
+    assert.ok(fn.includes('slice(0, 5)') || fn.includes('slice(0,5)'), 'Should cap classes at 5');
+  });
+
+  it('captures sibling summary for immediate parent with max 10 children', () => {
     var fn = src.substring(src.indexOf('function _getParentChain'));
     assert.ok(fn.includes('children'), 'Should enumerate children');
     assert.ok(fn.includes('childCount'), 'Should include childCount');
+    assert.ok(fn.includes('10'), 'Should cap children at 10');
   });
 
   it('stops at body or html', () => {
