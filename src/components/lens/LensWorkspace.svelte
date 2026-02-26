@@ -32,9 +32,10 @@
   let lensPreviewRef;
 
   // Split ratios (will be persisted to config later)
-  let verticalRatio = $state(0.75);   // main area vs terminal
-  let chatRatio = $state(0.18);       // chat vs center+right
-  let previewRatio = $state(0.78);    // preview vs file tree
+  let chatRatio = $state(0.18);             // left column vs center+right
+  let chatVerticalRatio = $state(0.80);     // chat vs pixel agents placeholder
+  let centerRatio = $state(0.75);           // editor/preview vs terminal
+  let previewRatio = $state(0.78);          // center column vs file tree
 
   // Browser is a fixed UI element, not a tab — follows the first (leftmost) group
   let showBrowser = $state(false);
@@ -276,19 +277,37 @@
 
 <div class="lens-workspace" ondragover={(e) => { if (fileTreeDragging) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; } }}>
   <div class="workspace-content">
-    <!-- Vertical split: main panels (top) | terminal (bottom) -->
-    <SplitPanel direction="vertical" bind:ratio={verticalRatio} minA={200} minB={80} collapseB={!layoutStore.showTerminal}>
+    <!-- Horizontal split: left-column (chat) | center+right -->
+    <SplitPanel direction="horizontal" bind:ratio={chatRatio} minA={180} minB={400} collapseA={!layoutStore.showChat}>
       {#snippet panelA()}
-        <!-- Horizontal split: chat (left) | center+right -->
-        <SplitPanel direction="horizontal" bind:ratio={chatRatio} minA={180} minB={400} collapseA={!layoutStore.showChat}>
+        <!-- Left column: chat (top) | pixel agents placeholder (bottom) -->
+        <SplitPanel direction="vertical" bind:ratio={chatVerticalRatio} minA={200} minB={60}>
           {#snippet panelA()}
             <div class="chat-area">
               <ChatPanel {onSend} />
             </div>
           {/snippet}
           {#snippet panelB()}
-            <!-- Horizontal split: preview (center) | file tree (right) -->
-            <SplitPanel direction="horizontal" bind:ratio={previewRatio} minA={300} minB={140} collapseB={!layoutStore.showFileTree}>
+            <div class="placeholder-area">
+              <div class="placeholder-content">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="24" height="24">
+                  <rect x="2" y="3" width="20" height="14" rx="2" />
+                  <circle cx="8" cy="10" r="2" />
+                  <circle cx="16" cy="10" r="2" />
+                  <path d="M9 14h6" />
+                </svg>
+                <span>Pixel Agents</span>
+              </div>
+            </div>
+          {/snippet}
+        </SplitPanel>
+      {/snippet}
+      {#snippet panelB()}
+        <!-- Horizontal split: center-column | file tree -->
+        <SplitPanel direction="horizontal" bind:ratio={previewRatio} minA={300} minB={140} collapseB={!layoutStore.showFileTree}>
+          {#snippet panelA()}
+            <!-- Center column: editor/preview (top) | terminal (bottom) -->
+            <SplitPanel direction="vertical" bind:ratio={centerRatio} minA={200} minB={80} collapseB={!layoutStore.showTerminal}>
               {#snippet panelA()}
                 <div class="preview-area">
                   <!-- Editor Grid: always visible so GroupTabBar stays accessible -->
@@ -322,29 +341,29 @@
                 </div>
               {/snippet}
               {#snippet panelB()}
-                <FileTree
-                  onFileClick={(entry) => { showBrowser = false; tabsStore.openFile(entry, editorGroupsStore.focusedGroupId); }}
-                  onFileDblClick={(entry) => tabsStore.pinTab(entry.path)}
-                  onChangeClick={(change) => tabsStore.openDiff(change)}
-                  onChangeDblClick={(change) => tabsStore.pinTab(`diff:${change.path}`)}
-                  activeFilePath={isFile ? activeTab?.path : null}
-                  activeDiffPath={isDiff ? activeTab?.path : null}
-                  activeFileHasLsp={isFile && LSP_EXTENSIONS.has(activeExt)}
-                  onSymbolClick={({ line, character }) => {
-                    const gId = editorGroupsStore.focusedGroupId;
-                    const event = new CustomEvent(`lens-goto-position-${gId}`, { detail: { line, character } });
-                    window.dispatchEvent(event);
-                  }}
-                />
+                <div class="terminal-area">
+                  <TerminalTabs />
+                </div>
               {/snippet}
             </SplitPanel>
           {/snippet}
+          {#snippet panelB()}
+            <FileTree
+              onFileClick={(entry) => { showBrowser = false; tabsStore.openFile(entry, editorGroupsStore.focusedGroupId); }}
+              onFileDblClick={(entry) => tabsStore.pinTab(entry.path)}
+              onChangeClick={(change) => tabsStore.openDiff(change)}
+              onChangeDblClick={(change) => tabsStore.pinTab(`diff:${change.path}`)}
+              activeFilePath={isFile ? activeTab?.path : null}
+              activeDiffPath={isDiff ? activeTab?.path : null}
+              activeFileHasLsp={isFile && LSP_EXTENSIONS.has(activeExt)}
+              onSymbolClick={({ line, character }) => {
+                const gId = editorGroupsStore.focusedGroupId;
+                const event = new CustomEvent(`lens-goto-position-${gId}`, { detail: { line, character } });
+                window.dispatchEvent(event);
+              }}
+            />
+          {/snippet}
         </SplitPanel>
-      {/snippet}
-      {#snippet panelB()}
-        <div class="terminal-area">
-          <TerminalTabs />
-        </div>
       {/snippet}
     </SplitPanel>
   </div>
@@ -477,7 +496,6 @@
     overflow: hidden;
     background: var(--bg);
     border-right: 1px solid var(--border);
-    border-radius: var(--radius-lg) 0 0 0;
   }
 
   /* -- Terminal Panel -- */
@@ -489,5 +507,33 @@
     overflow: hidden;
     background: var(--bg);
     border-top: 1px solid var(--border);
+  }
+
+  /* -- Pixel Agents Placeholder -- */
+
+  .placeholder-area {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg);
+    border-top: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+  }
+
+  .placeholder-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    color: var(--muted);
+    font-size: 12px;
+    opacity: 0.5;
+    user-select: none;
+  }
+
+  .placeholder-content svg {
+    opacity: 0.6;
   }
 </style>

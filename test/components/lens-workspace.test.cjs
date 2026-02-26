@@ -49,9 +49,10 @@ describe('LensWorkspace.svelte', () => {
     assert.ok(count >= 2, 'Should have at least 2 horizontal splits');
   });
   it('has split ratio state variables', () => {
-    assert.ok(src.includes('verticalRatio'));
+    assert.ok(src.includes('centerRatio'));
     assert.ok(src.includes('chatRatio'));
     assert.ok(src.includes('previewRatio'));
+    assert.ok(src.includes('chatVerticalRatio'));
   });
 
   // Tab system
@@ -107,6 +108,10 @@ describe('LensWorkspace.svelte', () => {
   it('has terminal area wrapper with TerminalTabs', () => {
     assert.ok(src.includes('terminal-area'));
     assert.ok(src.includes('<TerminalTabs'));
+  });
+
+  it('has pixel agents placeholder area', () => {
+    assert.ok(src.includes('placeholder-area'), 'Should have placeholder-area div');
   });
 
   // Files panel (FileTree component)
