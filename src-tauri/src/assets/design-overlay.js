@@ -756,6 +756,79 @@
     }
 
     /**
+     * Collect CSS rules that use pseudo-class selectors (:hover, :focus, etc.)
+     * and apply to the given element when the pseudo-class is stripped.
+     * Returns up to 20 matching rule objects: { selector, css }.
+     */
+    function _getPseudoClassRules(el) {
+        var results = [];
+        var pseudos = [':hover', ':focus', ':active', ':focus-visible', ':disabled'];
+        var sheets = document.styleSheets;
+
+        for (var s = 0; s < sheets.length; s++) {
+            var rules;
+            try {
+                rules = sheets[s].cssRules || sheets[s].rules;
+            } catch (e) {
+                // Cross-origin sheets throw SecurityError — skip
+                continue;
+            }
+            if (!rules) continue;
+
+            for (var r = 0; r < rules.length; r++) {
+                if (results.length >= 20) return results;
+
+                var rule = rules[r];
+                // Only CSSStyleRule (type 1)
+                if (rule.type !== 1) continue;
+
+                var selectorText = rule.selectorText || '';
+
+                // Check if any pseudo-class keyword is present
+                var hasPseudo = false;
+                for (var p = 0; p < pseudos.length; p++) {
+                    if (selectorText.indexOf(pseudos[p]) !== -1) {
+                        hasPseudo = true;
+                        break;
+                    }
+                }
+                if (!hasPseudo) continue;
+
+                // Handle comma-separated selectors
+                var parts = selectorText.split(',');
+                var matched = false;
+                for (var k = 0; k < parts.length; k++) {
+                    var part = parts[k].trim();
+                    // Strip all pseudo-class keywords from this selector part
+                    var stripped = part;
+                    for (var q = 0; q < pseudos.length; q++) {
+                        while (stripped.indexOf(pseudos[q]) !== -1) {
+                            stripped = stripped.replace(pseudos[q], '');
+                        }
+                    }
+                    stripped = stripped.trim();
+                    if (!stripped) continue;
+
+                    try {
+                        if (el.matches(stripped)) {
+                            matched = true;
+                            break;
+                        }
+                    } catch (ex) {
+                        // Invalid selector after stripping — skip
+                    }
+                }
+
+                if (matched) {
+                    results.push({ selector: selectorText, css: rule.cssText });
+                }
+            }
+        }
+
+        return results;
+    }
+
+    /**
      * Serialize a DOM element into a structured object for the host.
      */
     function _serializeElement(el) {
@@ -802,7 +875,8 @@
             html: html,
             text: text,
             styles: styles,
-            parentChain: _getParentChain(el)
+            parentChain: _getParentChain(el),
+            pseudoRules: _getPseudoClassRules(el)
         };
     }
 

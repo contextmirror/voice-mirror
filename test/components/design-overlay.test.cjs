@@ -733,6 +733,48 @@ describe('design-overlay.js: parent chain capture', () => {
 });
 
 // =========================================================================
+// Pseudo-class CSS rule extraction
+// =========================================================================
+
+describe('design-overlay.js: pseudo-class CSS rule extraction', () => {
+  it('has _getPseudoClassRules function', () => {
+    assert.ok(src.includes('function _getPseudoClassRules'), 'Should define _getPseudoClassRules');
+  });
+
+  it('iterates document.styleSheets', () => {
+    var fn = src.substring(src.indexOf('function _getPseudoClassRules'));
+    assert.ok(fn.includes('styleSheets'), 'Should access styleSheets');
+  });
+
+  it('catches SecurityError for cross-origin sheets', () => {
+    var fn = src.substring(src.indexOf('function _getPseudoClassRules'));
+    assert.ok(fn.includes('catch') && fn.includes('try'), 'Should try/catch for cross-origin');
+  });
+
+  it('checks for pseudo-class keywords', () => {
+    var fn = src.substring(src.indexOf('function _getPseudoClassRules'));
+    assert.ok(fn.includes(':hover'), 'Should check :hover');
+    assert.ok(fn.includes(':focus'), 'Should check :focus');
+    assert.ok(fn.includes(':active'), 'Should check :active');
+  });
+
+  it('uses el.matches to verify rule applies to element', () => {
+    var fn = src.substring(src.indexOf('function _getPseudoClassRules'));
+    assert.ok(fn.includes('.matches('), 'Should use el.matches');
+  });
+
+  it('caps at 20 matching rules', () => {
+    var fn = src.substring(src.indexOf('function _getPseudoClassRules'));
+    assert.ok(fn.includes('20'), 'Should cap at 20 rules');
+  });
+
+  it('_serializeElement includes pseudoRules in return object', () => {
+    var serializeFn = src.substring(src.indexOf('function _serializeElement'));
+    assert.ok(serializeFn.includes('pseudoRules:'), 'Should return pseudoRules');
+  });
+});
+
+// =========================================================================
 // Listener cleanup
 // =========================================================================
 
