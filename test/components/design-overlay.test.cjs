@@ -695,6 +695,47 @@ describe('design-overlay.js: layering', () => {
 // Listener cleanup
 // =========================================================================
 
+// =========================================================================
+// Parent chain capture
+// =========================================================================
+
+describe('design-overlay.js: parent chain capture', () => {
+  it('_serializeElement includes parentChain in return object', () => {
+    var serializeFn = src.substring(src.indexOf('function _serializeElement'));
+    assert.ok(serializeFn.includes('parentChain:'), 'Should return parentChain');
+  });
+
+  it('has _getParentChain function', () => {
+    assert.ok(src.includes('function _getParentChain'), 'Should define _getParentChain');
+  });
+
+  it('walks up to 3 ancestor levels', () => {
+    assert.ok(src.includes('parentElement'), 'Should walk parentElement');
+  });
+
+  it('captures layout-relevant styles per ancestor', () => {
+    var fn = src.substring(src.indexOf('function _getParentChain'));
+    assert.ok(fn.includes('flex-direction'), 'Should capture flex-direction');
+    assert.ok(fn.includes('grid-template-columns'), 'Should capture grid styles');
+    assert.ok(fn.includes('justify-content'), 'Should capture justify-content');
+  });
+
+  it('captures sibling summary for immediate parent', () => {
+    var fn = src.substring(src.indexOf('function _getParentChain'));
+    assert.ok(fn.includes('children'), 'Should enumerate children');
+    assert.ok(fn.includes('childCount'), 'Should include childCount');
+  });
+
+  it('stops at body or html', () => {
+    var fn = src.substring(src.indexOf('function _getParentChain'));
+    assert.ok(fn.includes('BODY') || fn.includes('HTML'), 'Should stop walking at body/html');
+  });
+});
+
+// =========================================================================
+// Listener cleanup
+// =========================================================================
+
 describe('design-overlay.js: listener references', () => {
   var listeners = ['_onMouseDown', '_onMouseMove', '_onMouseUp', '_onKeyDown', '_onKeyUp', '_onResize'];
 

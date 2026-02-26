@@ -696,6 +696,66 @@
     }
 
     /**
+     * Walk up to 3 ancestor elements capturing layout-relevant styles.
+     * Stops at BODY or HTML (does not include them).
+     */
+    function _getParentChain(el) {
+        var chain = [];
+        var cur = el.parentElement;
+        var depth = 0;
+        var layoutProps = [
+            'display', 'flex-direction', 'flex-wrap', 'gap',
+            'align-items', 'justify-content',
+            'grid-template-columns', 'grid-template-rows',
+            'position', 'width', 'height', 'max-width',
+            'padding', 'margin', 'overflow'
+        ];
+
+        while (cur && depth < 3) {
+            var tn = cur.tagName.toUpperCase();
+            if (tn === 'BODY' || tn === 'HTML') break;
+
+            var cs = window.getComputedStyle(cur);
+            var styles = {};
+            for (var i = 0; i < layoutProps.length; i++) {
+                var v = cs.getPropertyValue(layoutProps[i]);
+                if (v) styles[layoutProps[i]] = v;
+            }
+
+            var classes = '';
+            if (cur.className && typeof cur.className === 'string') {
+                var parts = cur.className.trim().split(/\s+/);
+                classes = parts.slice(0, 5).join(' ');
+            }
+
+            var ancestor = {
+                tagName: cur.tagName.toLowerCase(),
+                id: cur.id || '',
+                classes: classes,
+                styles: styles
+            };
+
+            // For immediate parent only (depth 0), capture children summary
+            if (depth === 0) {
+                var kids = cur.children;
+                var childTags = [];
+                var limit = kids.length < 10 ? kids.length : 10;
+                for (var j = 0; j < limit; j++) {
+                    childTags.push(kids[j].tagName.toLowerCase());
+                }
+                ancestor.children = childTags;
+                ancestor.childCount = kids.length;
+            }
+
+            chain.push(ancestor);
+            cur = cur.parentElement;
+            depth++;
+        }
+
+        return chain;
+    }
+
+    /**
      * Serialize a DOM element into a structured object for the host.
      */
     function _serializeElement(el) {
@@ -741,7 +801,8 @@
             },
             html: html,
             text: text,
-            styles: styles
+            styles: styles,
+            parentChain: _getParentChain(el)
         };
     }
 
