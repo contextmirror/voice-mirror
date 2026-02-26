@@ -6,7 +6,7 @@ pub mod providers;
 pub mod services;
 pub mod util;
 pub mod voice;
-pub mod shell;
+pub mod terminal;
 pub mod lsp;
 
 use commands::ai as ai_cmds;
@@ -19,7 +19,7 @@ use commands::voice as voice_cmds;
 use commands::window as window_cmds;
 use commands::files as files_cmds;
 use commands::lens as lens_cmds;
-use commands::shell as shell_cmds;
+use commands::terminal as terminal_cmds;
 use commands::dev_server as dev_server_cmds;
 use commands::lsp as lsp_cmds;
 use commands::design as design_cmds;
@@ -258,8 +258,8 @@ pub fn run() {
         .manage(services::file_watcher::FileWatcherState {
             handle: std::sync::Mutex::new(None),
         })
-        .manage(shell_cmds::ShellManagerState(std::sync::Mutex::new(
-            crate::shell::ShellManager::new(),
+        .manage(terminal_cmds::TerminalManagerState(std::sync::Mutex::new(
+            crate::terminal::TerminalManager::new(),
         )))
         .manage(output_store)
         .invoke_handler(tauri::generate_handler![
@@ -374,12 +374,12 @@ pub fn run() {
             files_cmds::git_commit,
             files_cmds::git_discard,
             files_cmds::git_push,
-            // Shell terminals
-            shell_cmds::shell_spawn,
-            shell_cmds::shell_input,
-            shell_cmds::shell_resize,
-            shell_cmds::shell_kill,
-            shell_cmds::shell_list,
+            // Terminal sessions
+            terminal_cmds::terminal_spawn,
+            terminal_cmds::terminal_input,
+            terminal_cmds::terminal_resize,
+            terminal_cmds::terminal_kill,
+            terminal_cmds::terminal_list,
             // File watcher
             services::file_watcher::start_file_watching,
             services::file_watcher::stop_file_watching,
@@ -514,29 +514,29 @@ pub fn run() {
                 warn!("AI manager event receiver was already taken — event forwarding not started");
             }
 
-            // Shell terminal event forwarding loop
+            // Terminal event forwarding loop
             {
-                let shell_state = app.state::<shell_cmds::ShellManagerState>();
-                let shell_event_rx = {
-                    let mut manager = shell_state
+                let terminal_state = app.state::<terminal_cmds::TerminalManagerState>();
+                let terminal_event_rx = {
+                    let mut manager = terminal_state
                         .0
                         .lock()
-                        .map_err(|e| format!("Failed to lock shell manager during setup: {}", e))?;
+                        .map_err(|e| format!("Failed to lock terminal manager during setup: {}", e))?;
                     manager.take_event_rx()
                 };
 
-                if let Some(mut rx) = shell_event_rx {
-                    let app_handle_shell = app.handle().clone();
-                    info!("Starting shell event forwarding loop");
+                if let Some(mut rx) = terminal_event_rx {
+                    let app_handle_terminal = app.handle().clone();
+                    info!("Starting terminal event forwarding loop");
 
                     tauri::async_runtime::spawn(async move {
                         while let Some(event) = rx.recv().await {
-                            if app_handle_shell.emit("shell-output", &event).is_err() {
-                                warn!("Failed to emit shell-output event, stopping loop");
+                            if app_handle_terminal.emit("terminal-output", &event).is_err() {
+                                warn!("Failed to emit terminal-output event, stopping loop");
                                 break;
                             }
                         }
-                        info!("Shell event forwarding loop ended");
+                        info!("Terminal event forwarding loop ended");
                     });
                 }
             }
@@ -696,8 +696,8 @@ pub fn run() {
             // Mode-aware: dashboard saves to dashboardX/Y + panelWidth/Height,
             // orb saves to orbX/Y only (preserving dashboard dimensions).
             if let tauri::WindowEvent::CloseRequested { .. } = event {
-                // Kill all shell terminal sessions
-                if let Some(state) = _window.try_state::<shell_cmds::ShellManagerState>() {
+                // Kill all terminal sessions
+                if let Some(state) = _window.try_state::<terminal_cmds::TerminalManagerState>() {
                     if let Ok(mut manager) = state.0.lock() {
                         manager.kill_all();
                     }

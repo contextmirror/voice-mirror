@@ -1,9 +1,9 @@
-//! Shell PTY management — independent terminal sessions for tabbed shell support.
+//! Terminal PTY management — independent terminal sessions for tabbed terminal support.
 //!
-//! Each shell session owns a PTY pair (via `portable-pty`), a reader thread that
-//! forwards stdout chunks as `ShellEvent`s, and a shared writer for sending input.
-//! The `ShellManager` holds all active sessions and an async channel that the Tauri
-//! setup hook drains into frontend events (`shell-output`).
+//! Each terminal session owns a PTY pair (via `portable-pty`), a reader thread that
+//! forwards stdout chunks as `TerminalEvent`s, and a shared writer for sending input.
+//! The `TerminalManager` holds all active sessions and an async channel that the Tauri
+//! setup hook drains into frontend events (`terminal-output`).
 
 use std::collections::HashMap;
 use std::io::{Read, Write as IoWrite};
@@ -16,10 +16,10 @@ use tracing::{info, warn};
 
 use crate::util::find_project_root;
 
-/// Event emitted by a shell session (sent to the frontend via Tauri events).
+/// Event emitted by a terminal session (sent to the frontend via Tauri events).
 #[derive(Debug, Clone, serde::Serialize)]
-pub struct ShellEvent {
-    /// The session ID this event belongs to (e.g. "shell-1").
+pub struct TerminalEvent {
+    /// The session ID this event belongs to (e.g. "terminal-1").
     pub id: String,
     /// Event type: "stdout" for output data, "exit" for process termination.
     #[serde(rename = "type")]
@@ -32,9 +32,9 @@ pub struct ShellEvent {
     pub code: Option<i32>,
 }
 
-/// A single shell PTY session.
-struct ShellSession {
-    /// Shared PTY writer for sending input to the shell.
+/// A single terminal PTY session.
+struct TerminalSession {
+    /// Shared PTY writer for sending input to the terminal.
     writer: Arc<Mutex<Box<dyn IoWrite + Send>>>,
     /// Handle to the child process (for killing).
     child: Option<Box<dyn portable_pty::Child + Send>>,
@@ -46,14 +46,14 @@ struct ShellSession {
     _reader_handle: Option<std::thread::JoinHandle<()>>,
 }
 
-/// Manages multiple independent shell terminal sessions.
-pub struct ShellManager {
+/// Manages multiple independent terminal sessions.
+pub struct TerminalManager {
     /// Active sessions keyed by ID.
-    sessions: HashMap<String, ShellSession>,
+    sessions: HashMap<String, TerminalSession>,
     /// Sender side of the event channel (cloned per session reader thread).
-    event_tx: mpsc::UnboundedSender<ShellEvent>,
+    event_tx: mpsc::UnboundedSender<TerminalEvent>,
     /// Receiver side — taken once during Tauri setup for the forwarding loop.
-    event_rx: Option<mpsc::UnboundedReceiver<ShellEvent>>,
+    event_rx: Option<mpsc::UnboundedReceiver<TerminalEvent>>,
     /// Monotonic counter for generating unique session IDs.
     next_id: u64,
 }
@@ -98,8 +98,8 @@ fn find_git_bash() -> Option<String> {
     None
 }
 
-impl ShellManager {
-    /// Create a new ShellManager with a fresh event channel.
+impl TerminalManager {
+    /// Create a new TerminalManager with a fresh event channel.
     pub fn new() -> Self {
         let (tx, rx) = mpsc::unbounded_channel();
         Self {
@@ -112,15 +112,15 @@ impl ShellManager {
 
     /// Take the event receiver. Called once during Tauri `.setup()` to start the
     /// forwarding loop. Returns `None` on subsequent calls.
-    pub fn take_event_rx(&mut self) -> Option<mpsc::UnboundedReceiver<ShellEvent>> {
+    pub fn take_event_rx(&mut self) -> Option<mpsc::UnboundedReceiver<TerminalEvent>> {
         self.event_rx.take()
     }
 
-    /// Spawn a new shell PTY session.
+    /// Spawn a new terminal PTY session.
     ///
-    /// Returns the session ID (e.g. "shell-1") on success.
+    /// Returns the session ID (e.g. "terminal-1") on success.
     pub fn spawn(&mut self, cols: u16, rows: u16, cwd: Option<String>) -> Result<String, String> {
-        let id = format!("shell-{}", self.next_id);
+        let id = format!("terminal-{}", self.next_id);
         self.next_id += 1;
 
         // Create the PTY pair
@@ -219,12 +219,12 @@ impl ShellManager {
             loop {
                 match reader.read(&mut buf) {
                     Ok(0) => {
-                        // EOF — shell exited
+                        // EOF — terminal exited
                         break;
                     }
                     Ok(n) => {
                         let text = String::from_utf8_lossy(&buf[..n]).to_string();
-                        let _ = event_tx.send(ShellEvent {
+                        let _ = event_tx.send(TerminalEvent {
                             id: session_id.clone(),
                             event_type: "stdout".to_string(),
                             text: Some(text),
@@ -233,7 +233,7 @@ impl ShellManager {
                     }
                     Err(e) => {
                         if thread_running.load(Ordering::SeqCst) {
-                            warn!("Shell {} PTY read error: {}", session_id, e);
+                            warn!("Terminal {} PTY read error: {}", session_id, e);
                         }
                         break;
                     }
@@ -242,17 +242,17 @@ impl ShellManager {
 
             // Emit exit event
             thread_running.store(false, Ordering::SeqCst);
-            let _ = event_tx.send(ShellEvent {
+            let _ = event_tx.send(TerminalEvent {
                 id: session_id.clone(),
                 event_type: "exit".to_string(),
                 text: None,
                 code: Some(0),
             });
 
-            info!("Shell {} reader thread ended", session_id);
+            info!("Terminal {} reader thread ended", session_id);
         });
 
-        let session = ShellSession {
+        let session = TerminalSession {
             writer: shared_writer,
             child: Some(child),
             running,
@@ -260,17 +260,17 @@ impl ShellManager {
             _reader_handle: Some(reader_handle),
         };
 
-        info!("Spawned shell session '{}' (shell={}, cols={}, rows={})", id, shell, cols, rows);
+        info!("Spawned terminal session '{}' (shell={}, cols={}, rows={})", id, shell, cols, rows);
         self.sessions.insert(id.clone(), session);
         Ok(id)
     }
 
-    /// Send raw input bytes to a shell session.
+    /// Send raw input bytes to a terminal session.
     pub fn send_input(&mut self, id: &str, data: &[u8]) -> Result<(), String> {
         let session = self
             .sessions
             .get(id)
-            .ok_or_else(|| format!("Shell session '{}' not found", id))?;
+            .ok_or_else(|| format!("Terminal session '{}' not found", id))?;
 
         let mut writer = session
             .writer
@@ -287,12 +287,12 @@ impl ShellManager {
         Ok(())
     }
 
-    /// Resize a shell session's PTY.
+    /// Resize a terminal session's PTY.
     pub fn resize(&mut self, id: &str, cols: u16, rows: u16) -> Result<(), String> {
         let session = self
             .sessions
             .get(id)
-            .ok_or_else(|| format!("Shell session '{}' not found", id))?;
+            .ok_or_else(|| format!("Terminal session '{}' not found", id))?;
 
         if let Some(ref master) = session.master {
             master
@@ -308,12 +308,12 @@ impl ShellManager {
         Ok(())
     }
 
-    /// Kill a shell session and remove it from the manager.
+    /// Kill a terminal session and remove it from the manager.
     pub fn kill(&mut self, id: &str) -> Result<(), String> {
         let mut session = self
             .sessions
             .remove(id)
-            .ok_or_else(|| format!("Shell session '{}' not found", id))?;
+            .ok_or_else(|| format!("Terminal session '{}' not found", id))?;
 
         session.running.store(false, Ordering::SeqCst);
 
@@ -347,7 +347,7 @@ impl ShellManager {
                         std::thread::sleep(std::time::Duration::from_millis(50));
                     }
                     _ => {
-                        warn!("Shell '{}' did not exit within 3s, abandoning wait", id);
+                        warn!("Terminal '{}' did not exit within 3s, abandoning wait", id);
                         break;
                     }
                 }
@@ -356,27 +356,27 @@ impl ShellManager {
 
         session._reader_handle = None;
 
-        info!("Killed shell session '{}'", id);
+        info!("Killed terminal session '{}'", id);
         Ok(())
     }
 
-    /// Kill all active shell sessions.
+    /// Kill all active terminal sessions.
     pub fn kill_all(&mut self) {
         let ids: Vec<String> = self.sessions.keys().cloned().collect();
         for id in ids {
             if let Err(e) = self.kill(&id) {
-                warn!("Failed to kill shell session '{}': {}", id, e);
+                warn!("Failed to kill terminal session '{}': {}", id, e);
             }
         }
     }
 
-    /// List IDs of all active shell sessions.
+    /// List IDs of all active terminal sessions.
     pub fn list(&self) -> Vec<String> {
         self.sessions.keys().cloned().collect()
     }
 }
 
-impl Default for ShellManager {
+impl Default for TerminalManager {
     fn default() -> Self {
         Self::new()
     }
