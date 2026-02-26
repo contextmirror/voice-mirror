@@ -122,7 +122,15 @@ pub(crate) struct PipelineShared {
     /// Whether the pipeline is running.
     pub(crate) running: AtomicBool,
     /// Cancellation flag for TTS playback.
+    /// Used to signal the current speak() call to stop. Also checked by
+    /// the synthesis loop. External callers (barge-in, stop_speaking) set
+    /// this flag, and speak() propagates it to the per-request cancel token.
     pub(crate) tts_cancel: AtomicBool,
+    /// Per-request cancel token for the currently active TTS playback thread.
+    /// This token is owned by the active speak() call and passed to the
+    /// playback thread. When a new speak() cancels the old one, the old
+    /// token stays true so the old playback thread stops draining.
+    pub(crate) active_playback_cancel: Mutex<Option<Arc<AtomicBool>>>,
     /// Force-stop recording flag (PTT release / Toggle stop).
     /// When set, the processing loop immediately transitions Recording -> Processing.
     force_stop_recording: AtomicBool,
@@ -249,6 +257,7 @@ impl VoicePipeline {
             mode: std::sync::Mutex::new(config.mode),
             running: AtomicBool::new(true),
             tts_cancel: AtomicBool::new(false),
+            active_playback_cancel: Mutex::new(None),
             force_stop_recording: AtomicBool::new(false),
             app_handle: app_handle.clone(),
             ring_producer: Mutex::new(Some(producer)),
@@ -312,6 +321,11 @@ impl VoicePipeline {
         tracing::info!("Stopping voice pipeline");
         self.shared.running.store(false, Ordering::SeqCst);
         self.shared.tts_cancel.store(true, Ordering::SeqCst);
+        if let Ok(guard) = self.shared.active_playback_cancel.lock() {
+            if let Some(ref cancel) = *guard {
+                cancel.store(true, Ordering::SeqCst);
+            }
+        }
 
         let _ = self
             .shared
@@ -388,6 +402,12 @@ impl VoicePipeline {
                 // Barge-in: interrupt TTS and start recording immediately
                 tracing::info!("Barge-in: interrupting TTS to start recording");
                 self.shared.tts_cancel.store(true, Ordering::SeqCst);
+                // Also cancel the per-request playback token
+                if let Ok(guard) = self.shared.active_playback_cancel.lock() {
+                    if let Some(ref cancel) = *guard {
+                        cancel.store(true, Ordering::SeqCst);
+                    }
+                }
                 self.begin_recording();
             }
             _ => {
@@ -437,6 +457,12 @@ impl VoicePipeline {
     /// Interrupt TTS playback.
     pub fn stop_speaking(&self) {
         self.shared.tts_cancel.store(true, Ordering::SeqCst);
+        // Also cancel the per-request playback token
+        if let Ok(guard) = self.shared.active_playback_cancel.lock() {
+            if let Some(ref cancel) = *guard {
+                cancel.store(true, Ordering::SeqCst);
+            }
+        }
         tracing::info!("TTS playback interrupted");
     }
 

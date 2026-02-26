@@ -97,6 +97,14 @@ pub trait Provider: Send {
         self.send_input(data);
     }
 
+    /// Send text input with a pre-encoded image data URL (no file read needed).
+    ///
+    /// Default: ignores the image and sends text only via `send_input`.
+    /// API providers override this to build multimodal content arrays.
+    fn send_input_with_image_data_url(&mut self, data: &str, _data_url: &str) {
+        self.send_input(data);
+    }
+
     /// Send the voice listen loop command.
     ///
     /// Default: sends the voice loop prompt via `send_input`.

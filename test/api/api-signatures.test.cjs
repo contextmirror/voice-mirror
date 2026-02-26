@@ -357,6 +357,18 @@ describe('api.js -- parameter passing', () => {
     );
   });
 
+  it('aiPtyInput passes imageDataUrl parameter', () => {
+    assert.ok(
+      src.includes("invoke('ai_pty_input', { data, imagePath:") && src.includes('imageDataUrl'),
+      'aiPtyInput should pass imageDataUrl'
+    );
+  });
+
+  it('writeUserMessage passes imageDataUrl parameter', () => {
+    const fn = src.substring(src.indexOf('export async function writeUserMessage'));
+    assert.ok(fn.includes('imageDataUrl'), 'writeUserMessage should accept imageDataUrl');
+  });
+
   it('chatLoad passes id', () => {
     assert.ok(
       src.includes("invoke('chat_load', { id })"),

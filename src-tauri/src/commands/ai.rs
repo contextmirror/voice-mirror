@@ -97,8 +97,15 @@ pub fn ai_pty_input(
     state: State<'_, AiManagerState>,
     data: String,
     image_path: Option<String>,
+    image_data_url: Option<String>,
 ) -> IpcResponse {
     let mut manager = lock_manager!(state);
+    // Prefer pre-encoded data URL over file path (avoids file I/O)
+    if let Some(ref data_url) = image_data_url {
+        if manager.send_input_with_image_data_url(&data, data_url) {
+            return IpcResponse::ok_empty();
+        }
+    }
     if let Some(ref path) = image_path {
         if manager.send_input_with_image(&data, path) {
             return IpcResponse::ok_empty();
@@ -356,6 +363,7 @@ pub async fn write_user_message(
     from: Option<String>,
     thread_id: Option<String>,
     image_path: Option<String>,
+    image_data_url: Option<String>,
     pipe_state: State<'_, crate::ipc::pipe_server::PipeServerState>,
 ) -> Result<IpcResponse, ()> {
     let sender = from.unwrap_or_else(|| {
@@ -366,23 +374,29 @@ pub async fn write_user_message(
     });
     let tid = thread_id.clone().unwrap_or_else(|| "voice-mirror".to_string());
 
-    // Build data URL for image if present (used by both pipe and inbox paths)
-    let image_data_url = image_path.as_deref().and_then(|p| {
-        tracing::info!("[write_user_message] Image path: {}", p);
-        match std::fs::read(p) {
-            Ok(bytes) => {
-                tracing::info!("[write_user_message] Image file read OK, {} bytes", bytes.len());
-                let b64 = crate::voice::tts::crypto::base64_encode(&bytes);
-                let url = format!("data:image/png;base64,{}", b64);
-                tracing::info!("[write_user_message] Data URL generated, {} chars", url.len());
-                Some(url)
-            }
-            Err(e) => {
-                tracing::error!("[write_user_message] Failed to read image file: {}", e);
-                None
-            }
+    // Prefer pre-encoded data URL; fall back to reading from disk
+    let image_data_url = match image_data_url {
+        Some(url) => {
+            tracing::info!("[write_user_message] Using inline image data URL, {} chars", url.len());
+            Some(url)
         }
-    });
+        None => image_path.as_deref().and_then(|p| {
+            tracing::info!("[write_user_message] Image path: {}", p);
+            match std::fs::read(p) {
+                Ok(bytes) => {
+                    tracing::info!("[write_user_message] Image file read OK, {} bytes", bytes.len());
+                    let b64 = crate::voice::tts::crypto::base64_encode(&bytes);
+                    let url = format!("data:image/png;base64,{}", b64);
+                    tracing::info!("[write_user_message] Data URL generated, {} chars", url.len());
+                    Some(url)
+                }
+                Err(e) => {
+                    tracing::error!("[write_user_message] Failed to read image file: {}", e);
+                    None
+                }
+            }
+        }),
+    };
     if image_path.is_some() && image_data_url.is_none() {
         tracing::warn!("[write_user_message] Image path provided but data URL is None — image will be lost");
     }

@@ -156,3 +156,75 @@ v1 auto-sends the message immediately. v2 changes to queue-then-send:
 | `src-tauri/src/commands/ai.rs` | Accept `image_data_url` param |
 | `src-tauri/src/providers/api.rs` | Support inline data URL |
 | `src-tauri/src/providers/cli.rs` | Pass `image_data_url` to MCP |
+
+## Real-World Testing Results (2026-02-26)
+
+First live test of Select Element v2 with Claude Code (Opus 4.6) in voice mode, testing against two sites:
+
+### Test 1: contextmirror.com (localhost:4321, Astro + Tailwind)
+
+**Element**: "Get Started" button (`a.glow-hover`)
+
+**Results**: Excellent. Full data captured:
+- Selector path: accurate, navigable CSS selector through section → div → a
+- HTML: clean anchor tag with SVG arrow icon
+- Parent chain: 3 levels — flex container (gap 16px), block wrapper (padding-top 80px), 2-column grid (gap 48px, 592px columns)
+- Pseudo-class rules: ✅ Captured `.glow-hover:hover` with `box-shadow` and `border-color` — this is a Tailwind `@layer` rule and it was successfully extracted
+- Computed styles: all 20+ properties present — border-radius (pill), padding, font, colors
+
+**AI assessment**: Could recreate this element at ~95-100% fidelity from the captured data alone. The pseudo-class hover data was especially valuable — provides the full glow effect specification.
+
+### Test 2: stripe.com (production, custom design system "hds")
+
+**Element**: "Get started" button (`a.hds-button.hds-button--primary`)
+
+**Results**: Very good, with one notable gap:
+- Selector path: accurate, includes Stripe's BEM-style class names
+- HTML: anchor with SVG hover-arrow icon, `data-analytics-label` attribute
+- Parent chain: 3 levels — flex button group (gap 8px), 12-column grid (twelve 88px columns, interesting responsive grid), centered container (max-width 1266px)
+- Pseudo-class rules: ❌ **None captured** — Stripe likely uses CSS-in-JS or scoped/constructed stylesheets that `document.styleSheets` iteration can't access
+- Computed styles: complete — purple background (rgb 83, 58, 253), sohne-var font, 4px border-radius, asymmetric padding (15.5px top, 16.5px bottom for optical centering)
+
+**AI assessment**: Could recreate at ~90% fidelity. Missing hover/active/focus states. The 12-column grid parent chain data was particularly useful for understanding Stripe's layout system.
+
+### Key Findings
+
+| Aspect | contextmirror | stripe.com | Notes |
+|--------|--------------|------------|-------|
+| Selector accuracy | ✅ | ✅ | Both produced navigable, unique selectors |
+| HTML capture | ✅ | ✅ | Clean, includes inline SVGs |
+| Parent chain | ✅ 3 levels | ✅ 3 levels | Grid template data was especially useful |
+| Pseudo-class rules | ✅ Captured | ❌ Missing | Stripe's CSS-in-JS defeats `document.styleSheets` scan |
+| Computed styles | ✅ Complete | ✅ Complete | ~20 properties each, sufficient for recreation |
+| AI recreation confidence | 95-100% | ~90% | Gap is hover/transition states |
+
+### Gaps Identified
+
+1. **CSS-in-JS / Constructed Stylesheets**: Sites using styled-components, Emotion, or native `CSSStyleSheet()` (adopted stylesheets) may not expose rules through `document.styleSheets`. Stripe is a likely example. **Fix**: Also check `document.adoptedStyleSheets` and shadow DOM `adoptedStyleSheets`.
+
+2. **Transition/Animation Properties**: Neither capture included `transition`, `animation`, `transform`, or `will-change` in the computed styles list. These are critical for recreating interactive feel. **Fix**: Add to the computed style property list in `_serializeElement()`.
+
+3. **Font Files**: The AI knows the font name (`sohne-var`, `Inter`) but not whether it's a web font, system font, or variable font. **Fix**: Check `document.fonts` API for the matched font face and include `@font-face` src if available.
+
+4. **Hover State Capture**: No way to capture the element in its hovered state. The pseudo-class CSS extraction works for stylesheet rules, but misses JavaScript-driven hover effects. **Potential fix**: Programmatically dispatch `mouseenter`/`mouseover` events, capture computed styles, then dispatch `mouseleave` — comparing before/after to surface JS-driven hover changes.
+
+5. **Responsive Behavior**: Only captures styles at current viewport width. Cannot infer how the element adapts. **Fix**: See v3 `@media` rule extraction below.
+
+## Potential v3 Enhancements
+
+Ideas surfaced from real-world testing with Claude Code:
+
+### Accessibility Attributes
+Capture `aria-*`, `role`, `tabindex`, `alt`, and `lang` attributes on the selected element. These are lightweight to extract (already available on the DOM node) and would let the AI suggest accessibility improvements alongside visual changes. Implementation: add an `accessibility` object to `_serializeElement()` return value.
+
+### Responsive Breakpoint Behavior
+Scan `document.styleSheets` for `@media` rules that match the selected element, similar to the pseudo-class extraction. This would tell the AI how the element adapts across screen sizes (e.g., `@media (max-width: 768px) { .hero { flex-direction: column; } }`). Implementation: extend `_getPseudoClassRules` pattern to also walk `CSSMediaRule` → `CSSStyleRule` children, testing `el.matches()` on each.
+
+### Adopted Stylesheets Support
+Check `document.adoptedStyleSheets` and shadow root `adoptedStyleSheets` for CSS-in-JS frameworks that use constructed stylesheets. This would close the Stripe-style gap where pseudo-class rules were missing.
+
+### Transition & Animation Capture
+Add `transition`, `animation`, `transform`, `will-change`, and `animation-*` properties to the computed style extraction list. These are essential for recreating interactive behavior.
+
+### Hover State Diff
+Programmatically trigger hover state, capture computed styles, compare with resting state, and include only the changed properties as a "hover diff." This would catch JavaScript-driven hover effects that CSS rule scanning misses.
