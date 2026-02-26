@@ -93,6 +93,68 @@ fn migrate_electron_data() {
     }
 }
 
+/// Rotate the current log session directory to a timestamped archive,
+/// then prune archives beyond the retention limit.
+fn rotate_log_sessions() {
+    let logs_dir = services::platform::get_log_dir();
+    let current_dir = logs_dir.join("current");
+
+    // If current/ exists and has files, rotate it
+    if current_dir.exists() {
+        let has_files = std::fs::read_dir(&current_dir)
+            .map(|mut d| d.next().is_some())
+            .unwrap_or(false);
+
+        if has_files {
+            // Use epoch seconds for a unique, sortable archive name
+            let epoch_secs = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+
+            let archive_name = format!("session-{}", epoch_secs);
+            let archive_dir = logs_dir.join(&archive_name);
+
+            if let Err(e) = std::fs::rename(&current_dir, &archive_dir) {
+                warn!("Failed to rotate log session: {}", e);
+            } else {
+                info!("Rotated log session to {}", archive_name);
+            }
+        }
+    }
+
+    // Create fresh current/
+    let _ = std::fs::create_dir_all(&current_dir);
+
+    // Prune old sessions (keep 5 most recent)
+    let max_sessions = 5;
+    let mut sessions: Vec<_> = std::fs::read_dir(&logs_dir)
+        .into_iter()
+        .flatten()
+        .filter_map(|e| e.ok())
+        .filter(|e| {
+            e.file_name()
+                .to_str()
+                .map(|n| n.starts_with("session-"))
+                .unwrap_or(false)
+        })
+        .collect();
+
+    // Sort by name (epoch seconds sort lexicographically)
+    sessions.sort_by_key(|e| e.file_name());
+
+    if sessions.len() > max_sessions {
+        let to_remove = sessions.len() - max_sessions;
+        for entry in &sessions[..to_remove] {
+            if let Err(e) = std::fs::remove_dir_all(entry.path()) {
+                warn!("Failed to prune old log session {:?}: {}", entry.file_name(), e);
+            } else {
+                info!("Pruned old log session: {:?}", entry.file_name());
+            }
+        }
+    }
+}
+
 /// Check if a window at (x, y) with given dimensions fits entirely within any monitor.
 fn position_fits_monitor(window: &tauri::WebviewWindow, x: i32, y: i32, w: u32, h: u32) -> bool {
     window.available_monitors().unwrap_or_default().iter().any(|m| {
@@ -109,6 +171,7 @@ fn position_fits_monitor(window: &tauri::WebviewWindow, x: i32, y: i32, w: u32, 
 pub fn run() {
     // Initialize structured logging (file + console + output ring buffers)
     let output_store = services::logger::init();
+    rotate_log_sessions();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_decorum::init())
