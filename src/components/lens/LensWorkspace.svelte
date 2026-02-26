@@ -33,7 +33,7 @@
 
   // Split ratios (will be persisted to config later)
   let chatRatio = $state(0.18);             // left column vs center+right
-  let chatVerticalRatio = $state(0.80);     // chat vs pixel agents placeholder
+  // chatVerticalRatio removed — pixel agents placeholder removed, chat is full height
   let centerRatio = $state(0.75);           // editor/preview vs terminal
   let previewRatio = $state(0.78);          // center column vs file tree
 
@@ -280,27 +280,10 @@
     <!-- Horizontal split: left-column (chat) | center+right -->
     <SplitPanel direction="horizontal" bind:ratio={chatRatio} minA={180} minB={400} collapseA={!layoutStore.showChat}>
       {#snippet panelA()}
-        <!-- Left column: chat (top) | pixel agents placeholder (bottom) -->
-        <SplitPanel direction="vertical" bind:ratio={chatVerticalRatio} minA={200} minB={60}>
-          {#snippet panelA()}
-            <div class="chat-area">
-              <ChatPanel {onSend} />
-            </div>
-          {/snippet}
-          {#snippet panelB()}
-            <div class="placeholder-area">
-              <div class="placeholder-content">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="24" height="24">
-                  <rect x="2" y="3" width="20" height="14" rx="2" />
-                  <circle cx="8" cy="10" r="2" />
-                  <circle cx="16" cy="10" r="2" />
-                  <path d="M9 14h6" />
-                </svg>
-                <span>Pixel Agents</span>
-              </div>
-            </div>
-          {/snippet}
-        </SplitPanel>
+        <!-- Left column: chat (full height) -->
+        <div class="chat-area">
+          <ChatPanel {onSend} />
+        </div>
       {/snippet}
       {#snippet panelB()}
         <!-- Horizontal split: center-column | file tree -->
@@ -509,31 +492,4 @@
     border-top: 1px solid var(--border);
   }
 
-  /* -- Pixel Agents Placeholder -- */
-
-  .placeholder-area {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    height: 100%;
-    overflow: hidden;
-    background: var(--bg);
-    border-top: 1px solid var(--border);
-    border-right: 1px solid var(--border);
-  }
-
-  .placeholder-content {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 8px;
-    color: var(--muted);
-    font-size: 12px;
-    opacity: 0.5;
-    user-select: none;
-  }
-
-  .placeholder-content svg {
-    opacity: 0.6;
-  }
 </style>

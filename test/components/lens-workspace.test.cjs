@@ -110,8 +110,9 @@ describe('LensWorkspace.svelte', () => {
     assert.ok(src.includes('<TerminalTabs'));
   });
 
-  it('has pixel agents placeholder area', () => {
-    assert.ok(src.includes('placeholder-area'), 'Should have placeholder-area div');
+  it('has chat area at full height (no pixel agents placeholder)', () => {
+    assert.ok(src.includes('chat-area'), 'Should have chat-area div');
+    assert.ok(!src.includes('placeholder-area'), 'Pixel agents placeholder removed');
   });
 
   // Files panel (FileTree component)
