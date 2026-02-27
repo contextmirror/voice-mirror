@@ -40,7 +40,7 @@ What's missing is everything that makes a "real IDE" feel seamless — the gaps 
 | Debug adapter (DAP) | Full | Partial | None | Low priority |
 | Extensions/plugins | Massive | Growing | None | Not planned |
 | Command palette (commands) | Full | Full | 48 commands, 4 modes, MRU | **Feature Compete** |
-| Terminal | Full | Partial | Rich (tabs, AI, dev-server) | Minor gaps — see §14 |
+| Terminal | Full | Partial | Rich (tabs, splits, search, links, persistence) | Minor gaps — see §14 |
 | Minimap | Full | Full | Diff only | Low |
 | Breadcrumbs | Full | Full | None | Low |
 | Find & replace (in file) | Full | Full | Full | **Feature Compete** |
@@ -466,7 +466,12 @@ Voice Mirror's extension story is: "Add an MCP server" — not "install a VS Cod
 |---------|--------|
 | PTY spawn/kill/resize | ✅ |
 | Shell profile detection | ✅ |
-| Split panes (horizontal, max 2) | ✅ |
+| Grid splits (H + V, recursive tree, up to ~8 panes) | ✅ |
+| Tab close button (hover X, middle-click) | ✅ |
+| Find in terminal (Ctrl+F, regex, case toggle) | ✅ |
+| Clickable URL detection (balanced parens, trailing punct) | ✅ |
+| File path detection (Unix/Windows, :line:col) | ✅ |
+| Terminal persistence (layout, names, colors, icons) | ✅ |
 | Sidebar tree with drag-to-reorder | ✅ |
 | Tab coloring (9 colors) + icons (15) | ✅ |
 | Tab renaming, context menus | ✅ |
@@ -475,17 +480,21 @@ Voice Mirror's extension story is: "Add an MCP server" — not "install a VS Cod
 | ghostty-web WASM renderer | ✅ |
 | 5000-line scrollback | ✅ |
 
-#### Top 5 Terminal Gaps
+#### Recently Closed Terminal Gaps (2026-02-27)
 
-| # | Gap | VS Code | Priority | Effort |
-|---|-----|---------|----------|--------|
-| 1 | **Find in terminal (Ctrl+F)** | Full search widget with highlighting, match count, regex | **High** | Medium |
-| 2 | **Clickable URLs and file paths** | Auto-detect, click to open browser/editor at line:col | **High** | Medium |
-| 3 | **Terminal persistence across restarts** | Save/restore groups, splits, names, colors, icons | **High** | Large |
-| 4 | **Unlimited splits** | N panes per group (we cap at 2) | **High** | Medium |
-| 5 | **Tab close button** | X button on each tab (we require context menu) | **High** | Small |
+All 5 high-priority terminal gaps from the gap analysis have been implemented:
 
-See `docs/design/TERMINAL-GAP-ANALYSIS.md` for the complete 33-item gap list with 5 priority tiers and recommended implementation order.
+| # | Feature | Implementation | Tests |
+|---|---------|---------------|-------|
+| 1 | **Tab close button** | Hover-reveal X button, middle-click, last-group safety, dev-server confirmation | 12 tests |
+| 2 | **Grid splits (H + V)** | Recursive split tree (`split-tree.js`), Split Right / Split Down, max depth 3 (~8 panes) | 23 unit + 16 source-inspection |
+| 3 | **Terminal persistence** | Layout saved to config (debounced 500ms), fresh PTYs on restore, profile fallback | 8 unit + 11 source-inspection |
+| 4 | **Find in terminal** | `terminal-search.js` + `TerminalSearch.svelte`, Ctrl+F, regex, case toggle, match navigation | 19 unit + 52 source-inspection |
+| 5 | **Clickable links** | `terminal-links.js` — URL detection (balanced parens) + file path detection (Unix/Windows, :line:col) | 23 unit |
+
+#### Remaining Terminal Gaps
+
+See `docs/design/TERMINAL-GAP-ANALYSIS.md` for the complete 33-item gap list. The top 5 high-priority items are now closed. Remaining gaps are medium/low priority (shell integration, broadcast input, font zoom, etc.).
 
 ---
 
@@ -545,6 +554,11 @@ See `docs/design/TERMINAL-GAP-ANALYSIS.md` for the complete 33-item gap list wit
 | Command palette | Editor | 48 commands, 4 modes, fuzzy search, MRU |
 | Git decorations in file tree | File Tree | Color-coded added/modified/deleted with folder propagation |
 | Dynamic sync button | Source Control | Zed-style Pull N / Push N / Fetch / Publish |
+| Tab close button | Terminal | Hover X, middle-click, last-group safety, dev-server confirm |
+| Grid splits (H + V) | Terminal | Recursive split tree, Split Right/Down, max ~8 panes |
+| Find in terminal (Ctrl+F) | Terminal | Search with regex, case toggle, match navigation |
+| Clickable URLs/file paths | Terminal | URL detection + file path detection (Unix/Windows, :line:col) |
+| Terminal persistence | Terminal | Layout/names/colors/icons saved to config, fresh PTYs on restore |
 
 ### Open Gaps — Ranked by Impact
 
@@ -552,23 +566,20 @@ See `docs/design/TERMINAL-GAP-ANALYSIS.md` for the complete 33-item gap list wit
 |------|---------|----------|--------|--------|-----------|
 | 1 | **Inline gutter change indicators** | Editor + Git | High | Medium | Green/blue/red bars in editor gutter. Visual feedback while editing. §11, §15 |
 | 2 | **Hunk-level staging** | Source Control + Diff | High | Medium | Stage individual chunks, not whole files. Power-user expectation. §11, §12 |
-| 3 | **Find in terminal (Ctrl+F)** | Terminal | High | Medium | Search command output. Used constantly. §14 |
-| 4 | **Clickable URLs/file paths in terminal** | Terminal | High | Medium | Click to open browser or editor at line:col. §14 |
-| 5 | **Terminal persistence across restarts** | Terminal | High | Large | Save/restore groups, splits, names, colors. §14 |
-| 6 | **Keyboard tree navigation** | File Tree | Medium | Medium | Arrow keys to navigate file tree. §13 |
-| 7 | **Merge conflict resolution** | Source Control | Medium | Large | 3-way merge or inline markers. §11 |
-| 8 | **Commit history / log** | Source Control | Medium | Medium | View past commits. §11 |
-| 9 | **Inline blame (git blame)** | Source Control | Medium | Medium | Per-line author/date annotations. §11 |
-| 10 | **Stash support** | Source Control | Medium | Small | Stash/pop/apply from UI. §11 |
-| 11 | **Drag-to-move files in tree** | File Tree | Medium | Medium | Drag files between folders. §13 |
-| 12 | **Indent guides** | Editor | Medium | Small | Colored lines showing nesting depth. §15 |
-| 13 | **Navigate to next/prev diff file** | Diff | Medium | Small | Alt+F5 cycle through changed files. §12 |
-| 14 | **Interactive diff minimap** | Diff | Low | Small | Click minimap to jump to chunk. §12 |
-| 15 | **Workspace symbols** | LSP | Medium | Medium | Cross-project symbol search in command palette |
-| 16 | **Inlay hints** | LSP | Medium | Medium | Inline type annotations for TS/Rust |
-| 17 | **Breadcrumbs** | Editor | Low | Small | File path segments above editor |
-| 18 | **Code minimap** | Editor | Low | Large | Outline panel is a good substitute |
-| 19 | **Debug adapter (DAP)** | Editor | Low | Massive | AI terminal handles debugging better |
+| 3 | **Keyboard tree navigation** | File Tree | Medium | Medium | Arrow keys to navigate file tree. §13 |
+| 4 | **Merge conflict resolution** | Source Control | Medium | Large | 3-way merge or inline markers. §11 |
+| 5 | **Commit history / log** | Source Control | Medium | Medium | View past commits. §11 |
+| 6 | **Inline blame (git blame)** | Source Control | Medium | Medium | Per-line author/date annotations. §11 |
+| 7 | **Stash support** | Source Control | Medium | Small | Stash/pop/apply from UI. §11 |
+| 8 | **Drag-to-move files in tree** | File Tree | Medium | Medium | Drag files between folders. §13 |
+| 9 | **Indent guides** | Editor | Medium | Small | Colored lines showing nesting depth. §15 |
+| 10 | **Navigate to next/prev diff file** | Diff | Medium | Small | Alt+F5 cycle through changed files. §12 |
+| 11 | **Interactive diff minimap** | Diff | Low | Small | Click minimap to jump to chunk. §12 |
+| 12 | **Workspace symbols** | LSP | Medium | Medium | Cross-project symbol search in command palette |
+| 13 | **Inlay hints** | LSP | Medium | Medium | Inline type annotations for TS/Rust |
+| 14 | **Breadcrumbs** | Editor | Low | Small | File path segments above editor |
+| 15 | **Code minimap** | Editor | Low | Large | Outline panel is a good substitute |
+| 16 | **Debug adapter (DAP)** | Editor | Low | Massive | AI terminal handles debugging better |
 | -- | **Extensions / Plugins** | System | None | Massive | MCP servers are our extension model |
 
 ---
@@ -585,6 +596,6 @@ The gap list above looks daunting, but Voice Mirror doesn't need to close every 
 
 The strategy: close the top gaps so Lens is **comfortable enough** for real coding, then double down on the voice+AI features no one else has.
 
-**Done:** find/replace ✓, multi-cursor ✓, global search ✓, git stage+commit+push ✓, branch management ✓, dynamic sync ✓, document formatting ✓, signature help ✓, split editor ✓, command palette ✓, file tree git decorations ✓, LSP diagnostics in tree ✓.
+**Done:** find/replace ✓, multi-cursor ✓, global search ✓, git stage+commit+push ✓, branch management ✓, dynamic sync ✓, document formatting ✓, signature help ✓, split editor ✓, command palette ✓, file tree git decorations ✓, LSP diagnostics in tree ✓, terminal tab close ✓, terminal grid splits (H+V) ✓, terminal find (Ctrl+F) ✓, clickable terminal links ✓, terminal persistence ✓.
 
-**Next wave:** inline gutter change indicators, hunk-level staging, terminal find, clickable terminal links, terminal persistence. These are the gaps that separate "usable" from "daily driver."
+**Next wave:** inline gutter change indicators, hunk-level staging. These are the remaining high-impact gaps that separate "usable" from "daily driver." The terminal is now feature-compete with VS Code for core workflows.
