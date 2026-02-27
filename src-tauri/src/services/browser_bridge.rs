@@ -1345,53 +1345,9 @@ pub async fn handle_browser_action(
                 return Err("tabId is required for tab_switch".into());
             }
 
-            // Verify tab exists and get the old active tab's webview label
-            let old_label = {
-                let tabs = state.tabs.lock().map_err(|e| format!("Lock error: {}", e))?;
-                if !tabs.contains_key(tab_id) {
-                    return Err(format!("Tab {} not found", tab_id));
-                }
-                let active = state.active_tab_id.lock()
-                    .map(|g| g.clone()).unwrap_or(None);
-                active.and_then(|aid| tabs.get(&aid).map(|t| t.webview_label.clone()))
-            };
-
-            // Update active tab on the Rust side so get_webview() targets the right tab
-            {
-                let mut active = state.active_tab_id.lock()
-                    .map_err(|e| format!("Lock error: {}", e))?;
-                *active = Some(tab_id.to_string());
-            }
-
-            // Hide old tab's native webview, show new tab's webview at current bounds
-            {
-                use tauri::{LogicalPosition, LogicalSize, Position, Size};
-                let tabs = state.tabs.lock().map_err(|e| format!("Lock error: {}", e))?;
-
-                // Hide old
-                if let Some(ref old_lbl) = old_label {
-                    if let Some(new_tab) = tabs.get(tab_id) {
-                        if *old_lbl != new_tab.webview_label {
-                            if let Some(old_wv) = app.get_webview(old_lbl) {
-                                let _ = old_wv.hide();
-                            }
-                        }
-                    }
-                }
-
-                // Show + position new
-                if let Some(tab) = tabs.get(tab_id) {
-                    if let Some(webview) = app.get_webview(&tab.webview_label) {
-                        if let Ok(bounds_guard) = state.bounds.lock() {
-                            if let Some((bx, by, bw, bh)) = *bounds_guard {
-                                let _ = webview.set_position(Position::Logical(LogicalPosition::new(bx, by)));
-                                let _ = webview.set_size(Size::Logical(LogicalSize::new(bw, bh)));
-                            }
-                        }
-                        let _ = webview.show();
-                    }
-                }
-            }
+            // Use the shared switch_tab_impl which runs hide/show/position
+            // on the same code path as the Tauri command (lens_switch_tab).
+            crate::commands::lens::switch_tab_impl(app, tab_id, &state)?;
 
             // Notify frontend to update tab bar UI
             let _ = app.emit("lens-focus-tab", json!({ "tabId": tab_id }));

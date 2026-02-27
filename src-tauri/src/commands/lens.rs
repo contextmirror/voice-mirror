@@ -396,32 +396,26 @@ pub fn lens_close_tab(
     IpcResponse::ok_empty()
 }
 
-/// Switch to a different browser tab. Hides the old active webview, shows the new one.
-#[tauri::command]
-pub fn lens_switch_tab(
-    app: AppHandle,
-    tab_id: String,
-    state: tauri::State<'_, LensState>,
-) -> IpcResponse {
+/// Core tab switching logic — hides old webview, shows new one, updates active ID.
+/// Callable from both Tauri commands and the browser bridge.
+pub fn switch_tab_impl(
+    app: &AppHandle,
+    tab_id: &str,
+    state: &LensState,
+) -> Result<(), String> {
     info!("[lens] Switching to tab {}", tab_id);
 
     // Get old active and verify new tab exists
     let (old_label, new_label) = {
-        let tabs = match state.tabs.lock() {
-            Ok(g) => g,
-            Err(e) => return IpcResponse::err(format!("Lock error: {}", e)),
-        };
-
-        let new_tab = match tabs.get(&tab_id) {
-            Some(t) => t,
-            None => return IpcResponse::err(format!("Tab {} not found", tab_id)),
-        };
+        let tabs = state.tabs.lock()
+            .map_err(|e| format!("Lock error: {}", e))?;
+        let new_tab = tabs.get(tab_id)
+            .ok_or_else(|| format!("Tab {} not found", tab_id))?;
         let new_label = new_tab.webview_label.clone();
 
         let active_id = state.active_tab_id.lock()
             .map(|g| g.clone())
             .unwrap_or(None);
-
         let old_label = active_id.and_then(|aid| {
             tabs.get(&aid).map(|t| t.webview_label.clone())
         });
@@ -451,14 +445,25 @@ pub fn lens_switch_tab(
 
     // Update active tab ID
     {
-        let mut active = match state.active_tab_id.lock() {
-            Ok(g) => g,
-            Err(e) => return IpcResponse::err(format!("Lock error: {}", e)),
-        };
-        *active = Some(tab_id);
+        let mut active = state.active_tab_id.lock()
+            .map_err(|e| format!("Lock error: {}", e))?;
+        *active = Some(tab_id.to_string());
     }
 
-    IpcResponse::ok_empty()
+    Ok(())
+}
+
+/// Switch to a different browser tab. Hides the old active webview, shows the new one.
+#[tauri::command]
+pub fn lens_switch_tab(
+    app: AppHandle,
+    tab_id: String,
+    state: tauri::State<'_, LensState>,
+) -> IpcResponse {
+    match switch_tab_impl(&app, &tab_id, &state) {
+        Ok(()) => IpcResponse::ok_empty(),
+        Err(e) => IpcResponse::err(e),
+    }
 }
 
 /// Close all browser tabs and their WebView2 instances. Called on component unmount.

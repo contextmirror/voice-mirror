@@ -14,6 +14,7 @@
   let unlistenUrl = null;
   let unlistenOpenTab = null;
   let unlistenTitle = null;
+  let unlistenFocusTab = null;
   let setupDone = false;
   const LOADING_TIMEOUT_MS = 15000;
   let loadingTimer = null;
@@ -349,6 +350,15 @@
       }
     });
 
+    // Listen for MCP-initiated tab switches (browser_action tab_switch)
+    unlistenFocusTab = await listen('lens-focus-tab', (event) => {
+      const tabId = event.payload?.tabId;
+      if (tabId) {
+        // Update frontend tab bar to reflect the active tab
+        browserTabsStore.setActiveTabDirect(tabId);
+      }
+    });
+
     // Observe container resize — this serves two purposes:
     // 1. Sync webview bounds when the panel is resized
     // 2. Trigger first tab creation when the container becomes visible
@@ -390,6 +400,10 @@
     if (unlistenTitle) {
       unlistenTitle();
       unlistenTitle = null;
+    }
+    if (unlistenFocusTab) {
+      unlistenFocusTab();
+      unlistenFocusTab = null;
     }
     lensCloseAllTabs().catch(() => {});
     browserTabsStore.clearAll();

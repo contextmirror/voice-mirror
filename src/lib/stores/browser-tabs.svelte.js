@@ -123,6 +123,16 @@ function createBrowserTabsStore() {
     },
 
     /**
+     * Set active tab directly (from MCP-initiated tab switch, no backend call needed).
+     * @param {string} id
+     */
+    setActiveTabDirect(id) {
+      if (tabs.find(t => t.id === id)) {
+        activeTabId = id;
+      }
+    },
+
+    /**
      * Update a tab's URL (from navigation events).
      * @param {string} tabId
      * @param {string} url
