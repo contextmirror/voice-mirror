@@ -53,31 +53,39 @@ describe('OutlinePanel.svelte: symbol kinds', () => {
     assert.ok(src.includes('symbolIcon'), 'Should have symbolIcon function');
   });
 
-  it('maps class/struct to C', () => {
-    assert.ok(src.includes("5: 'C'"), 'Should map class to C');
-    assert.ok(src.includes("23: 'C'"), 'Should map struct to C');
+  it('maps class/struct to C with display name', () => {
+    assert.ok(src.includes("5: ['C', 'Class']"), 'Should map class to C');
+    assert.ok(src.includes("23: ['C', 'Struct']"), 'Should map struct to C');
   });
 
-  it('maps method/function to F', () => {
-    assert.ok(src.includes("6: 'F'"), 'Should map method to F');
-    assert.ok(src.includes("12: 'F'"), 'Should map function to F');
+  it('maps method/function to F with display name', () => {
+    assert.ok(src.includes("6: ['F', 'Method']"), 'Should map method to F');
+    assert.ok(src.includes("12: ['F', 'Function']"), 'Should map function to F');
   });
 
-  it('maps variable/constant to V', () => {
-    assert.ok(src.includes("13: 'V'"), 'Should map variable to V');
-    assert.ok(src.includes("14: 'V'"), 'Should map constant to V');
+  it('maps variable/constant to V with display name', () => {
+    assert.ok(src.includes("13: ['V', 'Variable']"), 'Should map variable to V');
+    assert.ok(src.includes("14: ['V', 'Constant']"), 'Should map constant to V');
   });
 
   it('maps enum to E', () => {
-    assert.ok(src.includes("10: 'E'"), 'Should map enum to E');
+    assert.ok(src.includes("10: ['E', 'Enum']"), 'Should map enum to E');
   });
 
   it('maps interface to I', () => {
-    assert.ok(src.includes("11: 'I'"), 'Should map interface to I');
+    assert.ok(src.includes("11: ['I', 'Interface']"), 'Should map interface to I');
   });
 
   it('maps type parameter to T', () => {
-    assert.ok(src.includes("26: 'T'"), 'Should map type parameter to T');
+    assert.ok(src.includes("26: ['T', 'Type Parameter']"), 'Should map type parameter to T');
+  });
+
+  it('has symbolKindName function for tooltips', () => {
+    assert.ok(src.includes('symbolKindName'), 'Should have symbolKindName function');
+  });
+
+  it('shows kind name as tooltip on icon', () => {
+    assert.ok(src.includes('title={symbolKindName('), 'Should show kind name as tooltip');
   });
 });
 

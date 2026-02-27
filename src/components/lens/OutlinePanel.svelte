@@ -7,38 +7,42 @@
   let symbols = $state([]);
   let loading = $state(false);
 
-  // Symbol kind number -> icon letter
+  // Symbol kind number -> [icon letter, display name]
   const SYMBOL_KINDS = {
-    1: 'F',   // File
-    2: 'M',   // Module
-    3: 'N',   // Namespace
-    4: 'P',   // Package
-    5: 'C',   // Class
-    6: 'F',   // Method
-    7: 'P',   // Property
-    8: 'P',   // Field
-    9: 'F',   // Constructor
-    10: 'E',  // Enum
-    11: 'I',  // Interface
-    12: 'F',  // Function
-    13: 'V',  // Variable
-    14: 'V',  // Constant
-    15: 'S',  // String
-    16: '#',  // Number
-    17: 'B',  // Boolean
-    18: 'A',  // Array
-    19: 'O',  // Object
-    20: 'K',  // Key
-    21: 'N',  // Null
-    22: 'E',  // EnumMember
-    23: 'C',  // Struct
-    24: 'E',  // Event
-    25: 'O',  // Operator
-    26: 'T',  // TypeParameter
+    1: ['F', 'File'],
+    2: ['M', 'Module'],
+    3: ['N', 'Namespace'],
+    4: ['P', 'Package'],
+    5: ['C', 'Class'],
+    6: ['F', 'Method'],
+    7: ['P', 'Property'],
+    8: ['P', 'Field'],
+    9: ['F', 'Constructor'],
+    10: ['E', 'Enum'],
+    11: ['I', 'Interface'],
+    12: ['F', 'Function'],
+    13: ['V', 'Variable'],
+    14: ['V', 'Constant'],
+    15: ['S', 'String'],
+    16: ['#', 'Number'],
+    17: ['B', 'Boolean'],
+    18: ['A', 'Array'],
+    19: ['O', 'Object'],
+    20: ['K', 'Key'],
+    21: ['N', 'Null'],
+    22: ['E', 'Enum Member'],
+    23: ['C', 'Struct'],
+    24: ['E', 'Event'],
+    25: ['O', 'Operator'],
+    26: ['T', 'Type Parameter'],
   };
 
   function symbolIcon(kind) {
-    return SYMBOL_KINDS[kind] || '?';
+    return (SYMBOL_KINDS[kind] || ['?', 'Unknown'])[0];
+  }
+
+  function symbolKindName(kind) {
+    return (SYMBOL_KINDS[kind] || ['?', 'Unknown'])[1];
   }
 
   async function fetchSymbols(path) {
@@ -88,7 +92,7 @@
             style="padding-left: {8 + depth * 16}px"
             onclick={() => handleClick(symbol)}
           >
-            <span class="symbol-icon">{symbolIcon(symbol.kind)}</span>
+            <span class="symbol-icon" title={symbolKindName(symbol.kind)}>{symbolIcon(symbol.kind)}</span>
             <span class="symbol-name">{symbol.name}</span>
             {#if symbol.detail}
               <span class="symbol-detail">{symbol.detail}</span>
