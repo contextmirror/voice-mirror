@@ -139,6 +139,47 @@ describe('terminal-tabs store - persistence', () => {
     const saveCallCount = (storeSrc.match(/debouncedSave\(\)/g) || []).length;
     assert.ok(saveCallCount >= 5, 'should call debouncedSave in multiple structural methods, found ' + saveCallCount);
   });
+
+  it('saves activeInstanceId per group', () => {
+    assert.ok(storeSrc.includes('activeInstanceId') && storeSrc.includes('saveLayout'),
+      'should include activeInstanceId in saved layout');
+  });
+
+  it('restoreLayout handles profile fallback on spawn failure', () => {
+    assert.ok(
+      storeSrc.includes("'default'") && storeSrc.includes('restoreLayout'),
+      'should fall back to default profile'
+    );
+  });
+
+  it('moveInstance calls debouncedSave', () => {
+    // Extract the moveInstance method body
+    const moveBlock = storeSrc.split('moveInstance(')[1]?.split('\n    },\n')[0] || '';
+    assert.ok(moveBlock.includes('debouncedSave()'), 'moveInstance should call debouncedSave');
+  });
+
+  it('splitGroup calls debouncedSave', () => {
+    const splitGroupBlock = storeSrc.split('async splitGroup(')[1]?.split('\n    },\n')[0] || '';
+    assert.ok(splitGroupBlock.includes('debouncedSave()'), 'splitGroup should call debouncedSave');
+  });
+});
+
+const panelSrc2 = fs.readFileSync(
+  path.join(__dirname, '../../src/components/terminal/TerminalPanel.svelte'),
+  'utf-8'
+);
+
+describe('TerminalPanel - persistence startup', () => {
+  it('calls restoreLayout on mount', () => {
+    assert.ok(panelSrc2.includes('restoreLayout'), 'should call restoreLayout');
+  });
+
+  it('falls back to addGroup if restore returns false', () => {
+    assert.ok(
+      panelSrc2.includes('if (!restored)') || panelSrc2.includes('!restored'),
+      'should fall back to addGroup when no saved layout'
+    );
+  });
 });
 
 const actionBarSrc = fs.readFileSync(

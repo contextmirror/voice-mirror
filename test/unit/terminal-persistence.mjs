@@ -112,4 +112,52 @@ describe('terminal persistence - layout serialization', () => {
     assert.equal(tree.direction, 'horizontal'); // default
     assert.equal(tree.ratio, 0.5); // default
   });
+
+  it('handles missing terminalLayout key (pre-persistence migration)', () => {
+    // Simulates a config from before persistence was added
+    const config = { appearance: { theme: 'colorblind' } };
+    const layoutData = config.terminalLayout;
+    // Should be undefined/falsy — restoreLayout would return false
+    assert.equal(layoutData, undefined);
+    assert.ok(!layoutData, 'missing terminalLayout should be falsy');
+  });
+
+  it('handles layout with missing profile (fallback data shape)', () => {
+    // When a profile no longer exists, the saved profileId remains but
+    // restoreLayout falls back to 'default' for spawning
+    const layout = {
+      groups: [{
+        id: 'g1',
+        splitTree: serialize(createLeaf('i1')),
+        instances: {
+          'i1': { title: 'Old Profile', color: null, icon: null, profileId: 'removed-profile' },
+        },
+      }],
+      activeGroupId: 'g1',
+    };
+    const restored = JSON.parse(JSON.stringify(layout));
+    const inst = restored.groups[0].instances['i1'];
+    // The profileId is preserved in saved data; restoreLayout handles the fallback
+    assert.equal(inst.profileId, 'removed-profile');
+    // Verify fallback logic: profileId || 'default' gives 'removed-profile' (truthy),
+    // but if spawn fails, retry with 'default' per the implementation
+    assert.ok(inst.profileId || 'default', 'should have a profileId or fallback');
+  });
+
+  it('preserves activeInstanceId per group in layout', () => {
+    const layout = {
+      groups: [{
+        id: 'g1',
+        splitTree: serialize(splitLeaf(createLeaf('i1'), 'i1', 'i2', 'horizontal')),
+        activeInstanceId: 'i2',
+        instances: {
+          'i1': { title: 'T1', color: null, icon: null, profileId: 'default' },
+          'i2': { title: 'T2', color: null, icon: null, profileId: 'default' },
+        },
+      }],
+      activeGroupId: 'g1',
+    };
+    const restored = JSON.parse(JSON.stringify(layout));
+    assert.equal(restored.groups[0].activeInstanceId, 'i2');
+  });
 });

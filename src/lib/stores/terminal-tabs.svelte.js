@@ -116,6 +116,7 @@ function createTerminalTabsStore() {
         groups: groups.map(g => ({
           id: g.id,
           splitTree: serialize(g.splitTree),
+          activeInstanceId: (activeGroupId === g.id) ? activeInstanceId : g.instanceIds[0] || null,
           instances: Object.fromEntries(
             g.instanceIds.map(instId => {
               const inst = instances[instId];
@@ -145,6 +146,9 @@ function createTerminalTabsStore() {
         return false; // No saved layout
       }
 
+      // Track saved active instance per group (keyed by group ID)
+      const savedActiveInstances = {};
+
       for (const savedGroup of layoutData.groups) {
         const tree = deserialize(savedGroup.splitTree);
         if (!tree) continue;
@@ -158,7 +162,12 @@ function createTerminalTabsStore() {
         for (const oldId of leafIds) {
           const savedInst = savedInstances[oldId] || {};
           try {
-            const result = await terminalSpawn({ profileId: savedInst.profileId || 'default' });
+            let result = await terminalSpawn({ profileId: savedInst.profileId || 'default' });
+            // If profile-specific spawn fails, retry with default
+            if (!result?.success && savedInst.profileId && savedInst.profileId !== 'default') {
+              console.warn('[terminal-tabs] Profile', savedInst.profileId, 'unavailable, falling back to default');
+              result = await terminalSpawn({ profileId: 'default' });
+            }
             if (result?.success && result?.data?.id) {
               const shellId = result.data.id;
               idMap[oldId] = shellId;
@@ -199,6 +208,11 @@ function createTerminalTabsStore() {
         const remappedTree = remapTree(tree);
         if (!remappedTree) continue;
 
+        // Track remapped active instance for this group
+        if (savedGroup.activeInstanceId && idMap[savedGroup.activeInstanceId]) {
+          savedActiveInstances[groupId] = idMap[savedGroup.activeInstanceId];
+        }
+
         // Adjust nextGroupNum to avoid collisions
         const num = parseInt(groupId.replace('group-', ''), 10);
         if (!isNaN(num) && num >= nextGroupNum) {
@@ -216,7 +230,9 @@ function createTerminalTabsStore() {
         } else {
           activeGroupId = groups[0].id;
         }
-        activeInstanceId = groups.find(g => g.id === activeGroupId)?.instanceIds[0] || null;
+        // Restore active instance (prefer saved, fall back to first)
+        activeInstanceId = savedActiveInstances[activeGroupId]
+          || groups.find(g => g.id === activeGroupId)?.instanceIds[0] || null;
         syncLegacyTabs();
         return true;
       }
@@ -606,6 +622,7 @@ function createTerminalTabsStore() {
         activeGroupId = groupId;
         activeInstanceId = shellId;
         syncLegacyTabs();
+        debouncedSave();
         return shellId;
       } catch (err) {
         console.error('[terminal-tabs] Terminal split error:', err);
@@ -679,6 +696,7 @@ function createTerminalTabsStore() {
 
       groups = [...groups]; // trigger reactivity
       syncLegacyTabs();
+      debouncedSave();
     },
 
     /**

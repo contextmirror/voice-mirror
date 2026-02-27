@@ -20,10 +20,13 @@
   import TerminalSidebar from './TerminalSidebar.svelte';
   import TerminalContextMenu from './TerminalContextMenu.svelte';
 
-  // Auto-spawn first terminal if no groups exist + register keyboard shortcuts
-  onMount(() => {
+  // Restore saved layout on mount, or spawn first terminal if nothing saved
+  onMount(async () => {
     if (terminalTabsStore.groups.length === 0) {
-      terminalTabsStore.addGroup();
+      const restored = await terminalTabsStore.restoreLayout();
+      if (!restored) {
+        terminalTabsStore.addGroup();
+      }
     }
 
     // Register terminal shortcut handlers

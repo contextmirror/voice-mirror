@@ -85,6 +85,85 @@ describe('editor-git-gutter.js -- CM6 gutter extension', () => {
   });
 });
 
+// ── Peek widget ──
+
+describe('editor-git-gutter.js -- peek widget', () => {
+  const src = fs.readFileSync(SRC_PATH, 'utf-8');
+
+  it('defines PeekWidget class extending WidgetType', () => {
+    assert.ok(src.includes('class PeekWidget extends WidgetType'));
+  });
+
+  it('peek widget has Revert button', () => {
+    assert.ok(src.includes('Revert'));
+  });
+
+  it('peek widget shows original content lines as removed', () => {
+    assert.ok(src.includes("'cm-git-peek-line removed'"));
+  });
+
+  it('peek widget has prev/next navigation', () => {
+    assert.ok(src.includes('prev-change'));
+    assert.ok(src.includes('next-change'));
+  });
+
+  it('peek widget has close button', () => {
+    assert.ok(src.includes('peek-close'));
+  });
+
+  it('defines showPeekWidget function', () => {
+    assert.ok(src.includes('function showPeekWidget'));
+  });
+
+  it('defines closePeekWidget function', () => {
+    assert.ok(src.includes('function closePeekWidget'));
+  });
+
+  it('defines revertChange function', () => {
+    assert.ok(src.includes('function revertChange'));
+  });
+
+  it('uses Decoration.widget with block: true', () => {
+    assert.ok(src.includes('Decoration.widget'));
+    assert.ok(src.includes('block: true') || src.includes('block:true'));
+  });
+
+  it('has Escape key handler for closing peek', () => {
+    assert.ok(src.includes("'Escape'") || src.includes('"Escape"'));
+  });
+
+  it('defines peekWidgetField StateField', () => {
+    assert.ok(src.includes('peekWidgetField'));
+  });
+
+  it('closes peek on document change', () => {
+    assert.ok(src.includes('Decoration.none'));
+  });
+
+  it('has getOriginalLinesForChange helper', () => {
+    assert.ok(src.includes('function getOriginalLinesForChange'));
+  });
+
+  it('peekWidgetField provides decorations to EditorView', () => {
+    assert.ok(src.includes('EditorView.decorations.from'));
+  });
+
+  it('revertChange handles all three change types', () => {
+    assert.ok(src.includes("change.type === 'deleted'"));
+    assert.ok(src.includes("change.type === 'added'"));
+    assert.ok(src.includes("change.type === 'modified'"));
+  });
+
+  it('PeekWidget constructor stores view reference', () => {
+    assert.ok(src.includes('this.view = view'));
+  });
+
+  it('shows Change N of M label in header', () => {
+    assert.ok(src.includes('changeIndex + 1'));
+    assert.ok(src.includes('totalChanges'));
+  });
+});
+
 // ── editor-theme.js git gutter styles ──
 
 describe('editor-theme.js -- git gutter styles', () => {
