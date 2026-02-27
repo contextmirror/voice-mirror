@@ -426,12 +426,12 @@
     height: 36px;
     flex-shrink: 0;
     background: var(--bg);
-    border-bottom: 1px solid color-mix(in srgb, var(--border) 40%, transparent);
+    border-bottom: 1px solid color-mix(in srgb, var(--text) 12%, var(--bg));
     -webkit-app-region: no-drag;
   }
 
   .group-tab-bar.focused {
-    border-bottom: 1px solid var(--accent);
+    border-bottom: 1px solid color-mix(in srgb, var(--text) 12%, var(--bg));
   }
 
   /* Browser: permanent fixed tab on the far left */
