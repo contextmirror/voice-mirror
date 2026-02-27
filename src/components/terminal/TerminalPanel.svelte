@@ -57,6 +57,28 @@
   // Split ratio for 2-pane splits
   let splitRatio = $state(0.5);
 
+  // ---- Transition blanking ----
+  // When instance count or active group changes, Svelte tears down and
+  // recreates Terminal components. During teardown, ghostty-web disposal
+  // artifacts flash as garbled text. Hide the content area during transitions.
+  let transitioning = $state(false);
+  let prevInstanceKey = $state('');
+
+  $effect(() => {
+    // Build a key from group ID + instance IDs so any layout change triggers blanking
+    const key = (activeGroup?.id || '') + ':' + activeInstances.map(i => i.shellId).join(',');
+    if (prevInstanceKey !== '' && key !== prevInstanceKey) {
+      transitioning = true;
+      // Reveal after terminals have had time to initialize (double-rAF)
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          transitioning = false;
+        });
+      });
+    }
+    prevInstanceKey = key;
+  });
+
   // Context menu state (triggered from sidebar or tab strip right-click)
   let ctxMenu = $state({ visible: false, x: 0, y: 0, instanceId: null });
 
@@ -95,7 +117,7 @@
 <div class="terminal-panel-inner">
   <!-- Body: terminal content + optional sidebar -->
   <div class="terminal-body">
-    <div class="terminal-content">
+    <div class="terminal-content" class:transitioning>
       {#if activeInstances.length === 1}
         <Terminal shellId={activeInstances[0].shellId} visible={true} />
       {:else if activeInstances.length === 2}
@@ -165,6 +187,10 @@
     flex: 1;
     min-width: 0;
     overflow: hidden;
+  }
+
+  .terminal-content.transitioning {
+    visibility: hidden;
   }
 
   /* Empty sidebar context menu */
