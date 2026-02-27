@@ -190,7 +190,7 @@ const SKIP_ROLES: &[&str] = &[
 /// - Content roles get a ref only if they have a non-empty name.
 /// - Duplicate role+name pairs are disambiguated with `nth` (0, 1, 2, …).
 /// - Structural / invisible roles are skipped.
-pub fn parse_ax_tree(cdp_response: &Value) -> (String, HashMap<String, RefEntry>) {
+pub fn parse_ax_tree(cdp_response: &Value, interactive_only: bool) -> (String, HashMap<String, RefEntry>) {
     let empty_arr = Vec::new();
     let nodes = cdp_response
         .get("nodes")
@@ -234,13 +234,19 @@ pub fn parse_ax_tree(cdp_response: &Value) -> (String, HashMap<String, RefEntry>
         let interactive = is_interactive_role(role);
         let content = is_content_role(role);
 
-        if interactive || (content && !name.is_empty()) {
+        if interactive {
             candidates.push(Candidate {
                 role: role.to_string(),
                 name,
                 backend_node_id,
             });
-        } else if !name.is_empty() {
+        } else if !interactive_only && content && !name.is_empty() {
+            candidates.push(Candidate {
+                role: role.to_string(),
+                name,
+                backend_node_id,
+            });
+        } else if !interactive_only && !name.is_empty() {
             // Named but neither interactive nor content — include in tree
             // text without a ref.
             candidates.push(Candidate {
@@ -355,7 +361,7 @@ mod tests {
             ]
         });
 
-        let (tree, refs) = parse_ax_tree(&response);
+        let (tree, refs) = parse_ax_tree(&response, false);
 
         assert_eq!(refs.len(), 3, "Expected 3 refs, got {}", refs.len());
 
@@ -440,7 +446,7 @@ mod tests {
             ]
         });
 
-        let (_tree, refs) = parse_ax_tree(&response);
+        let (_tree, refs) = parse_ax_tree(&response, false);
 
         assert_eq!(refs.len(), 2, "Expected 2 refs for duplicate buttons");
 
@@ -460,8 +466,53 @@ mod tests {
     #[test]
     fn test_parse_empty_tree() {
         let response = json!({ "nodes": [] });
-        let (tree, refs) = parse_ax_tree(&response);
+        let (tree, refs) = parse_ax_tree(&response, false);
         assert!(refs.is_empty(), "Empty tree should produce no refs");
         assert!(tree.is_empty(), "Empty tree should produce empty text");
+    }
+
+    #[test]
+    fn test_interactive_only_filters_content() {
+        let response = json!({
+            "nodes": [
+                {
+                    "nodeId": "1",
+                    "role": { "type": "role", "value": "heading" },
+                    "name": { "type": "computedString", "value": "Title" },
+                    "backendDOMNodeId": 10,
+                    "childIds": []
+                },
+                {
+                    "nodeId": "2",
+                    "role": { "type": "role", "value": "button" },
+                    "name": { "type": "computedString", "value": "Click" },
+                    "backendDOMNodeId": 20,
+                    "childIds": []
+                },
+                {
+                    "nodeId": "3",
+                    "role": { "type": "role", "value": "article" },
+                    "name": { "type": "computedString", "value": "Long article" },
+                    "backendDOMNodeId": 30,
+                    "childIds": []
+                }
+            ]
+        });
+
+        // interactive_only = true: only button should appear
+        let (tree, refs) = parse_ax_tree(&response, true);
+        assert_eq!(refs.len(), 1, "Expected 1 ref (button only), got {}", refs.len());
+        let e1 = refs.get("e1").expect("e1 missing");
+        assert_eq!(e1.role, "button");
+        assert!(tree.contains("button"), "tree should contain button");
+        assert!(!tree.contains("heading"), "tree should not contain heading");
+        assert!(!tree.contains("article"), "tree should not contain article");
+
+        // interactive_only = false: all three should appear
+        let (tree_full, refs_full) = parse_ax_tree(&response, false);
+        assert_eq!(refs_full.len(), 3, "Expected 3 refs, got {}", refs_full.len());
+        assert!(tree_full.contains("heading"), "full tree should contain heading");
+        assert!(tree_full.contains("button"), "full tree should contain button");
+        assert!(tree_full.contains("article"), "full tree should contain article");
     }
 }

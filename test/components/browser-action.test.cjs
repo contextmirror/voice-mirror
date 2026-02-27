@@ -63,6 +63,34 @@ describe('browser_action MCP tool', () => {
     it('has annotate parameter for screenshots', () => {
       assert.ok(toolsSrc.includes('"annotate"'));
     });
+
+    it('action enum includes fill_rich_editor', () => {
+      assert.ok(
+        toolsSrc.includes('"fill_rich_editor"'),
+        'Missing fill_rich_editor in action enum'
+      );
+    });
+
+    it('action enum includes waitforstable', () => {
+      assert.ok(
+        toolsSrc.includes('"waitforstable"'),
+        'Missing waitforstable in action enum'
+      );
+    });
+
+    it('has interactiveOnly parameter for snapshot filtering', () => {
+      assert.ok(
+        toolsSrc.includes('"interactiveOnly"'),
+        'Missing interactiveOnly parameter'
+      );
+    });
+
+    it('has stableMs parameter for waitforstable', () => {
+      assert.ok(
+        toolsSrc.includes('"stableMs"'),
+        'Missing stableMs parameter for waitforstable'
+      );
+    });
   });
 
   describe('server dispatch (server.rs)', () => {
@@ -121,6 +149,24 @@ describe('browser_action MCP tool', () => {
       assert.ok(bridgeSrc.includes('"waitforloadstate"'));
     });
 
+    it('handles fill_rich_editor action with contenteditable support', () => {
+      assert.ok(bridgeSrc.includes('"fill_rich_editor"'), 'Missing fill_rich_editor action');
+      assert.ok(bridgeSrc.includes('isContentEditable'), 'Should check isContentEditable');
+      assert.ok(bridgeSrc.includes('InputEvent'), 'Should dispatch InputEvent for rich editors');
+    });
+
+    it('handles waitforstable action with MutationObserver', () => {
+      assert.ok(bridgeSrc.includes('"waitforstable"'), 'Missing waitforstable action');
+      assert.ok(bridgeSrc.includes('MutationObserver'), 'Should use MutationObserver for DOM stability');
+    });
+
+    it('snapshot action supports interactiveOnly filtering', () => {
+      assert.ok(
+        bridgeSrc.includes('interactiveOnly') || bridgeSrc.includes('interactive_only'),
+        'snapshot should read interactiveOnly param'
+      );
+    });
+
     it('handles auth actions', () => {
       assert.ok(bridgeSrc.includes('"auth_save"'));
       assert.ok(bridgeSrc.includes('"auth_login"'));
@@ -162,6 +208,13 @@ describe('browser_action MCP tool', () => {
       assert.ok(cdpSrc.includes('#[cfg(test)]'));
       assert.ok(cdpSrc.includes('test_parse_ax_nodes_basic'));
       assert.ok(cdpSrc.includes('test_duplicate_role_name_gets_nth'));
+    });
+
+    it('parse_ax_tree accepts interactive_only parameter', () => {
+      assert.ok(
+        cdpSrc.includes('interactive_only'),
+        'parse_ax_tree should support interactive_only filtering'
+      );
     });
   });
 
@@ -226,6 +279,13 @@ describe('browser_action MCP tool', () => {
 
     it('has updated long action list', () => {
       assert.ok(handlerSrc.includes('"waitforurl"') || handlerSrc.includes('waitforurl'));
+    });
+
+    it('includes waitforstable in long action list', () => {
+      assert.ok(
+        handlerSrc.includes('"waitforstable"'),
+        'waitforstable should be a long action'
+      );
     });
   });
 });

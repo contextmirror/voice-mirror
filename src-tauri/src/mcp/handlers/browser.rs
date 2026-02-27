@@ -38,7 +38,7 @@ fn generate_request_id() -> String {
 
 /// Actions that need longer timeouts (60s instead of 30s).
 fn is_long_action(action: &str) -> bool {
-    matches!(action, "screenshot" | "snapshot" | "wait" | "waitforurl" | "waitforloadstate" | "auth_login")
+    matches!(action, "screenshot" | "snapshot" | "wait" | "waitforurl" | "waitforloadstate" | "waitforstable" | "auth_login")
 }
 
 /// Send a browser request through the named pipe and wait for the response.

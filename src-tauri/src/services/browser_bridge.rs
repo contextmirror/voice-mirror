@@ -566,12 +566,15 @@ pub async fn handle_browser_action(
 
         "snapshot" => {
             let webview = get_webview(app, &state)?;
+            let interactive_only = args.get("interactiveOnly")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
 
             // Call CDP for full accessibility tree
             let cdp_result = call_cdp_method(&webview, "Accessibility.getFullAXTree", "{}").await?;
 
             // Parse into tree + ref map
-            let (tree_text, new_refs) = cdp::parse_ax_tree(&cdp_result);
+            let (tree_text, new_refs) = cdp::parse_ax_tree(&cdp_result, interactive_only);
             let ref_count = new_refs.len();
 
             // Update shared ref map
@@ -615,7 +618,7 @@ pub async fn handle_browser_action(
                 let ref_count = REF_MAP.read().map(|m| m.len()).unwrap_or(0);
                 if ref_count == 0 {
                     let cdp_result = call_cdp_method(&webview, "Accessibility.getFullAXTree", "{}").await?;
-                    let (_, new_refs) = cdp::parse_ax_tree(&cdp_result);
+                    let (_, new_refs) = cdp::parse_ax_tree(&cdp_result, false);
                     if let Ok(mut map) = REF_MAP.write() {
                         *map = new_refs;
                     }
@@ -863,6 +866,33 @@ pub async fn handle_browser_action(
                     el.dispatchEvent(new Event('input', {{ bubbles: true }}));
                     el.dispatchEvent(new Event('change', {{ bubbles: true }}));
                     return JSON.stringify({{ ok: true, action: 'fill' }});
+                }})()"#
+            );
+            evaluate_js_with_result(app, &webview, &js, std::time::Duration::from_secs(10)).await
+        }
+
+        "fill_rich_editor" => {
+            let webview = get_webview(app, &state)?;
+            let target = resolve_element_target(args)?;
+            let value = args.get("value").and_then(|v| v.as_str()).unwrap_or("");
+            let value_json = serde_json::to_string(value).unwrap_or_default();
+            let js = format!(
+                r#"(function() {{
+                    var el = {target};
+                    if (!el) return JSON.stringify({{ error: 'Element not found' }});
+                    var val = {value_json};
+                    el.focus();
+                    if (el.isContentEditable) {{
+                        el.textContent = '';
+                        el.textContent = val;
+                        el.dispatchEvent(new InputEvent('input', {{ bubbles: true, inputType: 'insertText', data: val }}));
+                        el.dispatchEvent(new Event('change', {{ bubbles: true }}));
+                        return JSON.stringify({{ ok: true, action: 'fill_rich_editor', contentEditable: true }});
+                    }}
+                    el.value = val;
+                    el.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                    el.dispatchEvent(new Event('change', {{ bubbles: true }}));
+                    return JSON.stringify({{ ok: true, action: 'fill_rich_editor', contentEditable: false }});
                 }})()"#
             );
             evaluate_js_with_result(app, &webview, &js, std::time::Duration::from_secs(10)).await
@@ -1299,6 +1329,89 @@ pub async fn handle_browser_action(
 
                 if start.elapsed() >= deadline {
                     return Err(format!("waitforloadstate: page did not reach '{}' within {}ms", load_state, timeout_ms));
+                }
+
+                tokio::time::sleep(std::time::Duration::from_millis(poll_ms)).await;
+            }
+        }
+
+        "waitforstable" => {
+            let webview = get_webview(app, &state)?;
+            let timeout_ms = args.get("timeout").and_then(|v| v.as_u64()).unwrap_or(30000);
+            let stable_ms = args.get("stableMs").and_then(|v| v.as_u64()).unwrap_or(2000);
+            let poll_ms = args.get("poll").and_then(|v| v.as_u64()).unwrap_or(500);
+
+            // Install MutationObserver to track last DOM mutation time
+            let setup_js = format!(
+                r#"(function() {{
+                    if (window.__vm_stability) {{
+                        window.__vm_stability.observer.disconnect();
+                    }}
+                    var state = {{ lastMutation: Date.now(), stableMs: {stable_ms} }};
+                    state.observer = new MutationObserver(function() {{
+                        state.lastMutation = Date.now();
+                    }});
+                    state.observer.observe(document.body, {{
+                        childList: true, subtree: true, characterData: true, attributes: true
+                    }});
+                    window.__vm_stability = state;
+                    return JSON.stringify({{ ok: true, setup: true }});
+                }})()"#
+            );
+            evaluate_js_with_result(app, &webview, &setup_js, std::time::Duration::from_secs(5)).await?;
+
+            let start = std::time::Instant::now();
+            let deadline = std::time::Duration::from_millis(timeout_ms);
+
+            loop {
+                let check_js = r#"(function() {
+                    var s = window.__vm_stability;
+                    if (!s) return JSON.stringify({ error: 'No stability observer' });
+                    var elapsed = Date.now() - s.lastMutation;
+                    var stable = elapsed >= s.stableMs;
+                    if (stable) {
+                        s.observer.disconnect();
+                        delete window.__vm_stability;
+                    }
+                    return JSON.stringify({ stable: stable, silenceMs: elapsed });
+                })()"#;
+
+                if let Ok(result) = evaluate_js_with_result(
+                    app,
+                    &webview,
+                    check_js,
+                    std::time::Duration::from_secs(5),
+                )
+                .await
+                {
+                    let parsed = unwrap_js_result(result);
+                    if parsed.get("stable").and_then(|v| v.as_bool()).unwrap_or(false) {
+                        return Ok(json!({
+                            "ok": true,
+                            "action": "waitforstable",
+                            "elapsed_ms": start.elapsed().as_millis() as u64,
+                            "silence_ms": parsed.get("silenceMs")
+                        }));
+                    }
+                }
+
+                if start.elapsed() >= deadline {
+                    // Clean up observer on timeout
+                    let cleanup_js = r#"(function() {
+                        if (window.__vm_stability) {
+                            window.__vm_stability.observer.disconnect();
+                            delete window.__vm_stability;
+                        }
+                        return JSON.stringify({ ok: true });
+                    })()"#;
+                    let _ = evaluate_js_with_result(
+                        app,
+                        &webview,
+                        cleanup_js,
+                        std::time::Duration::from_secs(5),
+                    )
+                    .await;
+                    return Err(format!("waitforstable: DOM not stable within {}ms", timeout_ms));
                 }
 
                 tokio::time::sleep(std::time::Duration::from_millis(poll_ms)).await;

@@ -661,7 +661,7 @@ fn build_all_groups() -> HashMap<String, ToolGroupDef> {
             tools: vec![
                 ToolDef {
                     name: "browser_action".into(),
-                    description: "Control the browser. Use 'snapshot' to get @eN element refs, then interact by ref. Actions: navigate, back, forward, reload | click, dblclick, fill, type, hover, focus, scroll, select, check, uncheck | screenshot (annotate=true for numbered overlays), snapshot (@eN refs), gettext, content, boundingbox, isvisible, url, title | evaluate, addscript | tab_new, tab_list, tab_switch, tab_close | wait, waitforurl, waitforloadstate | cookies_get/set/clear, storage_get/set | auth_save/login/list/delete | search, fetch".into(),
+                    description: "Control the browser. Use 'snapshot' to get @eN element refs, then interact by ref. Actions: navigate, back, forward, reload | click, dblclick, fill, fill_rich_editor (for contenteditable/ProseMirror), type, hover, focus, scroll, select, check, uncheck | screenshot (annotate=true for numbered overlays), snapshot (@eN refs, interactiveOnly=true to filter), gettext, content, boundingbox, isvisible, url, title | evaluate, addscript | tab_new, tab_list, tab_switch, tab_close | wait, waitforurl, waitforloadstate, waitforstable (DOM mutation silence) | cookies_get/set/clear, storage_get/set | auth_save/login/list/delete | search, fetch".into(),
                     input_schema: json!({
                         "type": "object",
                         "properties": {
@@ -669,13 +669,13 @@ fn build_all_groups() -> HashMap<String, ToolGroupDef> {
                                 "type": "string",
                                 "enum": [
                                     "navigate", "back", "forward", "reload",
-                                    "click", "dblclick", "fill", "type", "hover", "focus",
+                                    "click", "dblclick", "fill", "fill_rich_editor", "type", "hover", "focus",
                                     "scroll", "select", "check", "uncheck",
                                     "screenshot", "snapshot", "gettext", "content",
                                     "boundingbox", "isvisible", "url", "title",
                                     "evaluate", "addscript",
                                     "tab_new", "tab_list", "tab_switch", "tab_close",
-                                    "wait", "waitforurl", "waitforloadstate",
+                                    "wait", "waitforurl", "waitforloadstate", "waitforstable",
                                     "cookies_get", "cookies_set", "cookies_clear",
                                     "storage_get", "storage_set",
                                     "auth_save", "auth_login", "auth_list", "auth_delete",
@@ -727,6 +727,8 @@ fn build_all_groups() -> HashMap<String, ToolGroupDef> {
                             "password": { "type": "string", "description": "Password for auth_save" },
                             "key": { "type": "string", "description": "Key for storage/cookies operations" },
                             "timeout": { "type": "number", "description": "Timeout in ms for wait actions" },
+                            "stableMs": { "type": "number", "description": "For waitforstable: milliseconds of DOM silence required (default 2000)" },
+                            "interactiveOnly": { "type": "boolean", "description": "For snapshot: only include interactive elements (buttons, links, inputs). Reduces output size for pages with lots of static content." },
                             "tabId": { "type": "string", "description": "Tab ID for tab_switch/tab_close" },
                             "x": { "type": "number", "description": "X offset for scroll" },
                             "y": { "type": "number", "description": "Y offset for scroll" }
