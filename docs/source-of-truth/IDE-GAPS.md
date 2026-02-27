@@ -27,7 +27,7 @@ What's missing is everything that makes a "real IDE" feel seamless — the gaps 
 | Feature | VS Code | Zed | Voice Mirror | Status |
 |---------|---------|-----|-------------|--------|
 | Editor (syntax, save) | Full | Full | Full | **Feature Compete** |
-| LSP (diagnostics, hover, completion) | Full (29/29) | Full (26/29) | 12/29 features | See LSP table below |
+| LSP (diagnostics, hover, completion) | Full (29/29) | Full (26/29) | 11/29 features | See LSP table below |
 | Go-to-definition | Full | Full | Full | **Feature Compete** |
 | Find references | Full | Full | Full | **Feature Compete** |
 | Rename symbol | Full | Full | Full | **Feature Compete** |
@@ -41,7 +41,7 @@ What's missing is everything that makes a "real IDE" feel seamless — the gaps 
 | Extensions/plugins | Massive | Growing | None | Not planned |
 | Command palette (commands) | Full | Full | 48 commands, 4 modes, MRU | **Feature Compete** |
 | Terminal | Full | Partial | Rich (tabs, splits, search, links, persistence) | Minor gaps — see §14 |
-| Minimap | Full | Full | Diff only | Low |
+| Minimap | Full | Full | Full (@replit/codemirror-minimap + diff minimap) | **Feature Compete** |
 | Breadcrumbs | Full | Full | None | Low |
 | Find & replace (in file) | Full | Full | Full | **Feature Compete** |
 
@@ -99,7 +99,7 @@ What's missing is everything that makes a "real IDE" feel seamless — the gaps 
 
 | Category | VS Code | Zed | Cursor | Voice Mirror |
 |----------|---------|-----|--------|-------------|
-| **Features implemented** | 29/29 | 26/29 | 29/29 | 12/29 |
+| **Features implemented** | 29/29 | 26/29 | 29/29 | 11/29 |
 | **Core editing** | Complete | Complete | Complete | Complete |
 | **Navigation** | Complete | Near-complete | Complete | Tier 1 done |
 | **Inline assistance** | Complete | Complete | Complete | Signature help done |
@@ -140,7 +140,7 @@ What's missing is everything that makes a "real IDE" feel seamless — the gaps 
 
 **Status:** Fully implemented. Ctrl+Shift+F opens Search tab in FileTree panel.
 
-**Backend:** `search_content` command in `files.rs` — uses `ignore::WalkBuilder` (gitignore-aware) + `regex::Regex` for content search. Supports case sensitivity, regex mode, whole-word matching, include/exclude glob filters. Caps at 200 files / 5000 matches.
+**Backend:** `search_content` command in `files/search.rs` — uses `ignore::WalkBuilder` (gitignore-aware) + `regex::Regex` for content search. Supports case sensitivity, regex mode, whole-word matching, include/exclude glob filters. Caps at 200 files / 5000 matches.
 
 **Frontend:** `SearchPanel.svelte` in FileTree's 4th tab — search input, Aa/regex/word toggles, include/exclude filters, results grouped by file with icons, match highlighting via `<mark>`, 300ms debounce. Click result navigates to file + line.
 
@@ -204,7 +204,7 @@ What's missing is everything that makes a "real IDE" feel seamless — the gaps 
 
 ### 4. Multi-Cursor Editing — DONE ✓
 
-**Status:** Fully working. `basicSetup` bundles `searchKeymap` which includes `selectNextOccurrence` and `selectSelectionMatches`. Custom vertical cursor keybindings added in FileEditor.svelte.
+**Status:** Fully working. `basicSetup` bundles `searchKeymap` which includes `selectNextOccurrence` and `selectSelectionMatches`. Custom vertical cursor keybindings added in `editor-extensions.js`.
 
 **Keybindings:**
 - **Ctrl+D** → select next occurrence (via `searchKeymap`)
@@ -296,24 +296,13 @@ Voice Mirror's extension story is: "Add an MCP server" — not "install a VS Cod
 
 ### 9. Terminal — SEE §14 FOR FULL ANALYSIS
 
-**Status:** Rich terminal system with split panes, sidebar tree, tab coloring/icons, dev-server integration, AI terminal, shell profiles, and drag-to-reorder. See §14 below and `docs/design/TERMINAL-GAP-ANALYSIS.md` for the full 33-item gap analysis.
+**Status:** Rich terminal system with split panes, sidebar tree, tab coloring/icons, dev-server integration, AI terminal, shell profiles, and drag-to-reorder. See §14 below and `docs/archive/TERMINAL-GAP-ANALYSIS.md` for the full 33-item gap analysis.
 
 ---
 
-### 10. Code Minimap — LOW
+### 10. Code Minimap — DONE ✓
 
-**What real IDEs have:** A miniature overview of the entire file on the right side of the editor. Shows your position. Clickable to jump to a section. Highlighted search results, git changes, errors.
-
-**What we have:** `DiffMinimap.svelte` — but only in the diff viewer, showing change locations. No minimap in the regular editor.
-
-**Why it matters:** Helpful for orientation in large files (500+ lines). Less important with AI navigation ("go to the save function").
-
-**What's needed:**
-- CodeMirror doesn't have a built-in minimap (unlike Monaco/VS Code)
-- Would need a custom extension or canvas-based renderer
-- Alternative: use document outline (already implemented) for navigation
-
-**Estimated scope:** Large for a proper minimap. Skip in favor of the existing outline panel.
+**Status:** Fully implemented. The regular file editor uses `@replit/codemirror-minimap` (^0.5.2) applied unconditionally in `editor-extensions.js`. The diff viewer also has its own `DiffMinimap.svelte` showing change locations with proportional chunk markers.
 
 ---
 
@@ -331,7 +320,7 @@ Voice Mirror's extension story is: "Add an MCP server" — not "install a VS Cod
 | Stage / unstage per file | ✅ | Hover-reveal +/- buttons |
 | Stage all / unstage all | ✅ | Group header buttons |
 | Discard changes (per file) | ✅ | With confirmation dialog, hidden for untracked |
-| Status badges (A/M/D/R) | ✅ | Color-coded, with hover tooltips |
+| Status badges (A/M/D/R) | ✅ | Color-coded (A=green, M=accent, D=red; R uses default), with hover tooltips |
 | File type icons | ✅ | SVG sprite (chooseIconName) |
 | Commit with message | ✅ | Textarea, Ctrl+Enter shortcut |
 | Commit & Push | ✅ | Single button for combined action |
@@ -341,7 +330,7 @@ Voice Mirror's extension story is: "Add an MCP server" — not "install a VS Cod
 | Fetch / Pull / Push dropdown | ✅ | 5 operations including Pull (Rebase) and Force Push (with confirm) |
 | Ahead/behind tracking | ✅ | Queries upstream, auto-refreshes on branch change |
 | Click to view diff | ✅ | Single-click opens diff in editor |
-| Context menu on changes | ✅ | Stage/unstage/discard/reveal/copy path |
+| Context menu on changes | ✅ | Open Diff, Copy Path, Copy Relative Path, Reveal in File Explorer |
 
 #### Gaps vs VS Code / Zed
 
@@ -424,7 +413,7 @@ Voice Mirror's extension story is: "Add an MCP server" — not "install a VS Cod
 | Delete file/folder | ✅ | Context menu with confirmation |
 | Reveal in Explorer | ✅ | Context menu |
 | Copy path / relative path | ✅ | Context menu |
-| File type icons | ✅ | SVG sprite (500+ mappings from OpenCode) |
+| File type icons | ✅ | SVG sprite (~216 JS mappings, 1089 symbols in sprite, from OpenCode) |
 | Git status decorations | ✅ | Color-coded: green (added), yellow (modified), red+strikethrough (deleted) |
 | Git status propagation to folders | ✅ | VS Code rules: deleted doesn't propagate, modified wins over added |
 | LSP diagnostic decorations | ✅ | Error (red) / warning (yellow) text + badge counts |
@@ -458,7 +447,7 @@ Voice Mirror's extension story is: "Add an MCP server" — not "install a VS Cod
 
 ### 14. Terminal — DETAILED ANALYSIS
 
-> Full terminal gap analysis lives in `docs/design/TERMINAL-GAP-ANALYSIS.md` (373 lines, 15 categories).
+> Full terminal gap analysis lives in `docs/archive/TERMINAL-GAP-ANALYSIS.md` (373 lines, 15 categories).
 
 #### Summary of What We Have
 
@@ -486,15 +475,15 @@ All 5 high-priority terminal gaps from the gap analysis have been implemented:
 
 | # | Feature | Implementation | Tests |
 |---|---------|---------------|-------|
-| 1 | **Tab close button** | Hover-reveal X button, middle-click, last-group safety, dev-server confirmation | 12 tests |
-| 2 | **Grid splits (H + V)** | Recursive split tree (`split-tree.js`), Split Right / Split Down, max depth 3 (~8 panes) | 23 unit + 16 source-inspection |
-| 3 | **Terminal persistence** | Layout saved to config (debounced 500ms), fresh PTYs on restore, profile fallback | 8 unit + 11 source-inspection |
-| 4 | **Find in terminal** | `terminal-search.js` + `TerminalSearch.svelte`, Ctrl+F, regex, case toggle, match navigation | 19 unit + 52 source-inspection |
+| 1 | **Tab close button** | Hover-reveal X button, middle-click, last-group safety, dev-server confirmation | 30 source-inspection |
+| 2 | **Grid splits (H + V)** | Recursive split tree (`split-tree.js`), Split Right / Split Down, max depth 3 (~8 panes) | 23 unit + 33 source-inspection |
+| 3 | **Terminal persistence** | Layout saved to config (debounced 500ms), fresh PTYs on restore, profile fallback | 11 unit + source-inspection in split tests |
+| 4 | **Find in terminal** | `terminal-search.js` + `TerminalSearch.svelte`, Ctrl+F, regex, case toggle, match navigation | 19 unit + 64 source-inspection |
 | 5 | **Clickable links** | `terminal-links.js` — URL detection (balanced parens) + file path detection (Unix/Windows, :line:col) | 23 unit |
 
 #### Remaining Terminal Gaps
 
-See `docs/design/TERMINAL-GAP-ANALYSIS.md` for the complete 33-item gap list. The top 5 high-priority items are now closed. Remaining gaps are medium/low priority (shell integration, broadcast input, font zoom, etc.).
+See `docs/archive/TERMINAL-GAP-ANALYSIS.md` for the complete 33-item gap list. The top 5 high-priority items are now closed. Remaining gaps are medium/low priority (shell integration, broadcast input, font zoom, etc.).
 
 ---
 
@@ -510,7 +499,7 @@ See `docs/design/TERMINAL-GAP-ANALYSIS.md` for the complete 33-item gap list. Th
 | Autocomplete (activateOnTyping) | ✅ |
 | Find & replace (Ctrl+F, Ctrl+H) | ✅ |
 | Multi-cursor (Ctrl+D, Ctrl+Shift+L, Ctrl+Alt+Up/Down) | ✅ |
-| Word wrap toggle | ✅ |
+| Word wrap toggle | ❌ (only in DiffViewer + OutputPanel, not in file editor) |
 | Go-to-line (Ctrl+G) | ✅ |
 | Bracket matching | ✅ |
 | Auto-indent | ✅ |
@@ -526,6 +515,7 @@ See `docs/design/TERMINAL-GAP-ANALYSIS.md` for the complete 33-item gap list. Th
 | Feature | VS Code | Zed | Voice Mirror | Priority |
 |---------|---------|-----|-------------|----------|
 | **Inline gutter change indicators** | ✅ Green/blue/red bars (add/modify/delete) | ✅ | ✅ Green/blue/red bars + peek + revert | Done ✓ |
+| **Word wrap toggle** | ✅ Toggle line wrapping | ✅ | ❌ (only in DiffViewer + OutputPanel) | Small |
 | **Indent guides** | ✅ Colored lines showing nesting depth | ✅ | ❌ | Medium |
 | **Bracket pair colorization** | ✅ Rainbow brackets | ✅ | ❌ | Low |
 | **Sticky scroll** | ✅ Pin scope headers (function/class) at top | ✅ | ❌ | Low |
@@ -534,7 +524,7 @@ See `docs/design/TERMINAL-GAP-ANALYSIS.md` for the complete 33-item gap list. Th
 | **Snippet system** | ✅ User-defined snippets | ✅ | ❌ | Low |
 | **Image preview in editor** | ✅ | ✅ | ❌ | Very low |
 
-**Assessment:** Core editing is feature-complete. Inline gutter change indicators are now implemented (green/blue/red bars + peek widget + hunk revert). The next biggest editor gaps are indent guides and bracket pair colorization.
+**Assessment:** Core editing is feature-complete. Inline gutter change indicators are now implemented (green/blue/red bars + peek widget + hunk revert). The file editor is missing a word wrap toggle (exists in DiffViewer and OutputPanel but not the main editor). The next biggest editor gaps are word wrap toggle, indent guides, and bracket pair colorization.
 
 ---
 
@@ -555,6 +545,7 @@ See `docs/design/TERMINAL-GAP-ANALYSIS.md` for the complete 33-item gap list. Th
 | Git decorations in file tree | File Tree | Color-coded added/modified/deleted with folder propagation |
 | Dynamic sync button | Source Control | Zed-style Pull N / Push N / Fetch / Publish |
 | Inline gutter change indicators | Editor + Git | Green/blue/red bars + peek widget + hunk revert |
+| Code minimap | Editor | `@replit/codemirror-minimap` in file editor + `DiffMinimap.svelte` |
 | Tab close button | Terminal | Hover X, middle-click, last-group safety, dev-server confirm |
 | Grid splits (H + V) | Terminal | Recursive split tree, Split Right/Down, max ~8 panes |
 | Find in terminal (Ctrl+F) | Terminal | Search with regex, case toggle, match navigation |
@@ -579,7 +570,7 @@ See `docs/design/TERMINAL-GAP-ANALYSIS.md` for the complete 33-item gap list. Th
 | 12 | **Workspace symbols** | LSP | Medium | Medium | Cross-project symbol search in command palette |
 | 13 | **Inlay hints** | LSP | Medium | Medium | Inline type annotations for TS/Rust |
 | 14 | **Breadcrumbs** | Editor | Low | Small | File path segments above editor |
-| 15 | **Code minimap** | Editor | Low | Large | Outline panel is a good substitute |
+| ~~15~~ | ~~**Code minimap**~~ | ~~Editor~~ | ~~Low~~ | ~~Large~~ | ✅ Done — `@replit/codemirror-minimap` in file editor + `DiffMinimap.svelte` |
 | 16 | **Debug adapter (DAP)** | Editor | Low | Massive | AI terminal handles debugging better |
 | -- | **Extensions / Plugins** | System | None | Massive | MCP servers are our extension model |
 
@@ -597,6 +588,6 @@ The gap list above looks daunting, but Voice Mirror doesn't need to close every 
 
 The strategy: close the top gaps so Lens is **comfortable enough** for real coding, then double down on the voice+AI features no one else has.
 
-**Done:** find/replace ✓, multi-cursor ✓, global search ✓, git stage+commit+push ✓, branch management ✓, dynamic sync ✓, document formatting ✓, signature help ✓, split editor ✓, command palette ✓, file tree git decorations ✓, LSP diagnostics in tree ✓, terminal tab close ✓, terminal grid splits (H+V) ✓, terminal find (Ctrl+F) ✓, clickable terminal links ✓, terminal persistence ✓, inline gutter change indicators ✓.
+**Done:** find/replace ✓, multi-cursor ✓, global search ✓, git stage+commit+push ✓, branch management ✓, dynamic sync ✓, document formatting ✓, signature help ✓, split editor ✓, command palette ✓, file tree git decorations ✓, LSP diagnostics in tree ✓, code minimap ✓, terminal tab close ✓, terminal grid splits (H+V) ✓, terminal find (Ctrl+F) ✓, clickable terminal links ✓, terminal persistence ✓, inline gutter change indicators ✓.
 
 **Next wave:** hunk-level staging (stage individual diff chunks from the gutter). This is the remaining high-impact gap that separates "usable" from "daily driver." The terminal is now feature-compete with VS Code for core workflows.
