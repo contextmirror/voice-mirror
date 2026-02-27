@@ -2,7 +2,7 @@
 
 > Internal doc. Tracks what Voice Mirror's Lens workspace has vs what VS Code / Zed / Cursor offer.
 >
-> Last updated: 2026-02-25
+> Last updated: 2026-02-27
 
 ---
 
@@ -33,14 +33,14 @@ What's missing is everything that makes a "real IDE" feel seamless — the gaps 
 | Rename symbol | Full | Full | Full | **Feature Compete** |
 | Code actions | Full | Full | Full | **Feature Compete** |
 | Document outline | Full | Full | Full | **Feature Compete** |
-| Git status + diff | Full | Full | Stage/Commit/Push + AI | Minor gaps |
+| Git status + diff | Full | Full | Stage/Commit/Push/Pull + AI | Minor gaps — see §11-13 |
 | Global text search | Full | Full | Full | **Feature Compete** |
 | Split editor | Full (40+ commands) | Full | 20+ features, drag-to-split + seam splits | **Feature Compete** |
 | Multi-cursor | Full | Full | Full | **Feature Compete** |
 | Debug adapter (DAP) | Full | Partial | None | Low priority |
 | Extensions/plugins | Massive | Growing | None | Not planned |
-| Command palette (commands) | Full | Full | 6 commands | Medium gap |
-| Terminal | Full | Partial | Rich (tabs, AI, dev-server) | Minor gaps |
+| Command palette (commands) | Full | Full | 48 commands, 4 modes, MRU | **Feature Compete** |
+| Terminal | Full | Partial | Rich (tabs, AI, dev-server) | Minor gaps — see §14 |
 | Minimap | Full | Full | Diff only | Low |
 | Breadcrumbs | Full | Full | None | Low |
 | Find & replace (in file) | Full | Full | Full | **Feature Compete** |
@@ -216,15 +216,20 @@ What's missing is everything that makes a "real IDE" feel seamless — the gaps 
 
 ---
 
-### 5. Git Integration (Stage + Commit + Push) — DONE ✓
+### 5. Git Integration — DONE ✓ (core workflow complete)
 
-**Status:** Core git workflow implemented. Changes tab shows staged/unstaged groups with stage/unstage/discard actions, commit panel with branch indicator, and push support.
+**Status:** Full staging/commit/push/pull cycle implemented with branch management and remote sync.
 
-**Backend:** 7 Rust commands (`git_stage`, `git_unstage`, `git_stage_all`, `git_unstage_all`, `git_commit`, `git_discard`, `git_push`). Modified `get_git_changes` to parse staged vs unstaged status separately + return branch name.
+**Backend:** 14 Rust commands — `git_stage`, `git_unstage`, `git_stage_all`, `git_unstage_all`, `git_commit`, `git_discard`, `git_push`, `git_ahead_behind`, `git_fetch`, `git_pull`, `git_force_push`, `git_list_branches`, `git_checkout_branch`, `get_git_changes`.
 
-**Frontend:** `GitCommitPanel.svelte` with branch indicator (read-only), commit textarea, Commit and Commit & Push buttons. FileTree Changes tab overhauled with staged/unstaged groups and hover-reveal action buttons.
+**Frontend:**
+- `GitCommitPanel.svelte` — commit textarea, Commit / Commit & Push buttons, Ctrl+Enter shortcut
+- Branch picker dropdown — local + remote branches, filterable, keyboard navigable, checkout with confirmation
+- Dynamic sync button — "Pull N" / "Push N" / "Fetch" / "Publish" based on `git_ahead_behind` counts
+- Zed-style fetch dropdown — Fetch, Pull, Pull (Rebase), Push, Force Push (with confirmation)
+- `GitChangesPanel.svelte` — staged/unstaged groups, per-file stage/unstage/discard, status badges (A/M/D/R) with tooltips
 
-**Still missing (future):** Branch switching (clickable branch indicator → dropdown picker, needs `git branch --list`, dirty worktree warnings, file tree refresh), pull, merge conflict resolution, inline blame, commit history, hunk staging.
+**Remaining gaps:** See §11 (Source Control), §12 (Diff Viewer), §13 (File Tree) for detailed gap analysis.
 
 ---
 
@@ -289,26 +294,9 @@ Voice Mirror's extension story is: "Add an MCP server" — not "install a VS Cod
 
 ---
 
-### 9. Terminal Gaps — MINOR
+### 9. Terminal — SEE §14 FOR FULL ANALYSIS
 
-**What real IDEs have:** Split terminals (side by side), search in scrollback, drag-to-reorder tabs, send text to terminal programmatically, terminal profiles (bash, zsh, PowerShell), link detection (clickable URLs/file paths).
-
-**What we have (solid):**
-- Multiple terminal tabs (AI + shell + dev-server)
-- Rename tabs
-- Close tabs
-- Reorder tabs (`.moveTab()`)
-- Dev-server tabs with framework metadata
-- 5000-line scrollback
-- Full PTY support via ghostty-web WASM
-
-**What's missing:**
-- Split terminals (two side by side) — would need layout work
-- Search in scrollback (Ctrl+Shift+F in terminal)
-- Clickable links/file paths
-- Terminal profiles (let user pick default shell)
-
-**Estimated scope:** Small to medium per feature. None are critical.
+**Status:** Rich terminal system with split panes, sidebar tree, tab coloring/icons, dev-server integration, AI terminal, shell profiles, and drag-to-reorder. See §14 below and `docs/design/TERMINAL-GAP-ANALYSIS.md` for the full 33-item gap analysis.
 
 ---
 
@@ -329,21 +317,259 @@ Voice Mirror's extension story is: "Add an MCP server" — not "install a VS Cod
 
 ---
 
+## Detailed Gap Analysis by Category
+
+### 11. Source Control (Changes Panel + Commit + Remote Ops)
+
+> Compared against VS Code's Source Control panel and Zed's Git Panel.
+
+#### What We Have
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Staged / unstaged groups | ✅ | Two sections with file counts |
+| Stage / unstage per file | ✅ | Hover-reveal +/- buttons |
+| Stage all / unstage all | ✅ | Group header buttons |
+| Discard changes (per file) | ✅ | With confirmation dialog, hidden for untracked |
+| Status badges (A/M/D/R) | ✅ | Color-coded, with hover tooltips |
+| File type icons | ✅ | SVG sprite (chooseIconName) |
+| Commit with message | ✅ | Textarea, Ctrl+Enter shortcut |
+| Commit & Push | ✅ | Single button for combined action |
+| Branch display | ✅ | Current branch name with icon |
+| Branch switching | ✅ | Filterable dropdown, local + remote, checkout with confirmation |
+| Dynamic sync button | ✅ | "Pull N" / "Push N" / "Fetch" / "Publish" (Zed-style) |
+| Fetch / Pull / Push dropdown | ✅ | 5 operations including Pull (Rebase) and Force Push (with confirm) |
+| Ahead/behind tracking | ✅ | Queries upstream, auto-refreshes on branch change |
+| Click to view diff | ✅ | Single-click opens diff in editor |
+| Context menu on changes | ✅ | Stage/unstage/discard/reveal/copy path |
+
+#### Gaps vs VS Code / Zed
+
+| Feature | VS Code | Zed | Voice Mirror | Priority |
+|---------|---------|-----|-------------|----------|
+| **Hunk-level staging** | ✅ Stage individual hunks in diff gutter | ✅ Via diff hunks | ❌ Whole-file only | **High** |
+| **Inline change indicators (editor gutter)** | ✅ Green/blue/red bars showing add/modify/delete | ✅ Same | ❌ | **High** |
+| **Commit history / log** | ✅ Git Graph extension, Timeline view | ✅ Basic log | ❌ | Medium |
+| **Stash support** | ✅ Stash/pop/apply from SCM panel | ❌ | ❌ | Medium |
+| **Merge conflict resolution** | ✅ 3-way merge editor | ✅ Inline markers | ❌ | Medium |
+| **Inline blame (git blame)** | ✅ Via GitLens extension | ✅ Native inline blame | ❌ | Medium |
+| **Amend last commit** | ✅ Checkbox in commit panel | ✅ | ❌ | Low |
+| **Sign-off / GPG signing** | ✅ | ❌ | ❌ | Low |
+| **Multi-select files for batch stage** | ✅ Shift/Ctrl+click | ❌ | ❌ | Low |
+| **Tree view for changes** | ✅ Toggle between flat list and tree | ✅ | ❌ Flat list only | Low |
+| **Undo last commit** | ✅ `git reset HEAD~1` from UI | ❌ | ❌ | Low |
+| **Cherry-pick / rebase UI** | ✅ | ❌ | ❌ | Very low |
+
+**Highest-value next steps:**
+1. Hunk-level staging (stage individual diff chunks) — this is what power users expect
+2. Editor gutter change indicators (green/blue/red bars) — instant visual feedback while editing
+
+---
+
+### 12. Diff Viewer
+
+> Compared against VS Code's diff editor and Zed's buffer diff.
+
+#### What We Have
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Unified diff view | ✅ | CodeMirror `unifiedMergeView` |
+| Side-by-side (split) diff | ✅ | CodeMirror `MergeView`, toggle on toolbar |
+| Syntax highlighting in diff | ✅ | Same language packs as editor |
+| Collapsed unchanged regions | ✅ | Click to expand, 3-line context margin |
+| Chunk navigation (prev/next) | ✅ | Toolbar arrows + Alt+Up/Down keyboard shortcuts |
+| Chunk counter ("X of N") | ✅ | In toolbar |
+| Word wrap toggle | ✅ | Toolbar button |
+| Whitespace normalization | ✅ | Toggle to trim trailing whitespace |
+| Addition/deletion stats (+N / -N) | ✅ | Shown in tab bar and toolbar |
+| Diff minimap | ✅ | Vertical strip with proportional chunk markers |
+| Binary file detection | ✅ | Shows placeholder for binary files |
+| Context menu | ✅ | Copy, Select All, Open File, Copy Path, Reveal |
+| Added/deleted file support | ✅ | Empty string for missing side |
+| Word-level inline highlights | ✅ | Green/red word-level diff within changed lines |
+
+#### Gaps vs VS Code / Zed
+
+| Feature | VS Code | Zed | Voice Mirror | Priority |
+|---------|---------|-----|-------------|----------|
+| **Hunk-level stage/unstage buttons** | ✅ Gutter buttons per hunk in diff | ✅ | ❌ | **High** |
+| **Inline gutter +/- indicators** | ✅ Red/green markers per line in diff gutter | ✅ | ❌ | Medium |
+| **3-way merge diff** | ✅ Current/incoming/result panes | ❌ | ❌ | Medium |
+| **Navigate to next/prev file in diff** | ✅ Alt+F5 cycle through changed files | ✅ | ❌ | Medium |
+| **Clickable minimap** | ✅ Click minimap to jump to chunk | ❌ | ❌ Decorative only (`pointer-events: none`) | Low |
+| **Inline comments / review** | ✅ Via PR extension | ❌ | ❌ | Low |
+| **Ignore whitespace in diff** | ✅ Robust (ignores leading/trailing/all) | ✅ | ⚠️ Trim trailing only | Low |
+| **Move to unchanged region** | ✅ Jump to next/prev collapsed region | ❌ | ❌ | Low |
+| **Compare with clipboard** | ✅ | ❌ | ❌ | Very low |
+| **Compare arbitrary files** | ✅ | ❌ | ❌ | Very low |
+
+**Assessment:** Our diff viewer is solid — unified + split modes, chunk navigation, stats, minimap, word-level highlighting, and keyboard shortcuts. The main gap is hunk-level staging (shared with §11) and interactive minimap.
+
+---
+
+### 13. File Tree
+
+> Compared against VS Code's Explorer and Zed's Project Panel.
+
+#### What We Have
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Lazy directory expansion | ✅ | Load children on first expand |
+| Collapse all | ✅ | Toolbar button |
+| Refresh | ✅ | Toolbar button |
+| New file / new folder | ✅ | Toolbar buttons + context menu, inline input |
+| Inline rename | ✅ | Context menu or F2, pre-selects name without extension |
+| Delete file/folder | ✅ | Context menu with confirmation |
+| Reveal in Explorer | ✅ | Context menu |
+| Copy path / relative path | ✅ | Context menu |
+| File type icons | ✅ | SVG sprite (500+ mappings from OpenCode) |
+| Git status decorations | ✅ | Color-coded: green (added), yellow (modified), red+strikethrough (deleted) |
+| Git status propagation to folders | ✅ | VS Code rules: deleted doesn't propagate, modified wins over added |
+| LSP diagnostic decorations | ✅ | Error (red) / warning (yellow) text + badge counts |
+| LSP overrides git colors | ✅ | Diagnostics take priority over git status |
+| Search tab (Ctrl+Shift+F) | ✅ | Full content search with regex, case, word, include/exclude |
+| Outline tab | ✅ | LSP document symbols with kind badges |
+| Changes tab | ✅ | Staged/unstaged groups with commit panel |
+| Drag file to editor | ✅ | Opens file in editor, supports drop zones for splits |
+| Live filesystem watcher | ✅ | Auto-reloads affected directories on fs changes |
+| Live git status refresh | ✅ | Auto-refreshes on `fs-git-changed` event |
+| Double-click header | ✅ | Reveals project folder in system explorer |
+
+#### Gaps vs VS Code / Zed
+
+| Feature | VS Code | Zed | Voice Mirror | Priority |
+|---------|---------|-----|-------------|----------|
+| **Drag to reorder / move files** | ✅ Drag files between folders | ✅ | ❌ Drag only opens in editor | Medium |
+| **Multi-select files** | ✅ Shift/Ctrl+click for batch operations | ✅ | ❌ | Medium |
+| **Keyboard navigation (arrow keys)** | ✅ Full tree keyboard nav (up/down/left/right) | ✅ | ❌ Click only | Medium |
+| **Filter / focus mode** | ✅ Type to filter visible tree | ✅ Quick filter | ❌ | Low |
+| **Tree view vs flat list toggle** | ✅ Toggle in Changes panel | ❌ | ❌ | Low |
+| **Compact folders** | ✅ Collapse single-child folders (a/b/c → a/b/c) | ✅ | ❌ | Low |
+| **Custom file nesting rules** | ✅ `.ts` nests under `.js`, etc. | ❌ | ❌ | Low |
+| **File decorations (badges)** | ✅ Extensions add custom badges | ❌ | ❌ N/A (no extensions) | N/A |
+| **Breadcrumbs above editor** | ✅ File path segments, click to navigate | ✅ | ❌ | Low |
+| **Sticky scroll (tree headers)** | ✅ Parent folders stick to top | ❌ | ❌ | Very low |
+
+**Assessment:** Our file tree is comprehensive — 4-tab layout (files/changes/outline/search), full CRUD, git + LSP decorations, drag-to-editor, live watchers. The main gaps are keyboard-only navigation and drag-to-move files between folders.
+
+---
+
+### 14. Terminal — DETAILED ANALYSIS
+
+> Full terminal gap analysis lives in `docs/design/TERMINAL-GAP-ANALYSIS.md` (373 lines, 15 categories).
+
+#### Summary of What We Have
+
+| Feature | Status |
+|---------|--------|
+| PTY spawn/kill/resize | ✅ |
+| Shell profile detection | ✅ |
+| Split panes (horizontal, max 2) | ✅ |
+| Sidebar tree with drag-to-reorder | ✅ |
+| Tab coloring (9 colors) + icons (15) | ✅ |
+| Tab renaming, context menus | ✅ |
+| Dev server integration (framework detection, crash protection) | ✅ |
+| AI terminal (dedicated Claude Code PTY) | ✅ |
+| ghostty-web WASM renderer | ✅ |
+| 5000-line scrollback | ✅ |
+
+#### Top 5 Terminal Gaps
+
+| # | Gap | VS Code | Priority | Effort |
+|---|-----|---------|----------|--------|
+| 1 | **Find in terminal (Ctrl+F)** | Full search widget with highlighting, match count, regex | **High** | Medium |
+| 2 | **Clickable URLs and file paths** | Auto-detect, click to open browser/editor at line:col | **High** | Medium |
+| 3 | **Terminal persistence across restarts** | Save/restore groups, splits, names, colors, icons | **High** | Large |
+| 4 | **Unlimited splits** | N panes per group (we cap at 2) | **High** | Medium |
+| 5 | **Tab close button** | X button on each tab (we require context menu) | **High** | Small |
+
+See `docs/design/TERMINAL-GAP-ANALYSIS.md` for the complete 33-item gap list with 5 priority tiers and recommended implementation order.
+
+---
+
+### 15. Editor (CodeMirror)
+
+> Non-LSP editor features compared against VS Code and Zed.
+
+#### What We Have
+
+| Feature | Status |
+|---------|--------|
+| Syntax highlighting (8 languages) | ✅ |
+| Autocomplete (activateOnTyping) | ✅ |
+| Find & replace (Ctrl+F, Ctrl+H) | ✅ |
+| Multi-cursor (Ctrl+D, Ctrl+Shift+L, Ctrl+Alt+Up/Down) | ✅ |
+| Word wrap toggle | ✅ |
+| Go-to-line (Ctrl+G) | ✅ |
+| Bracket matching | ✅ |
+| Auto-indent | ✅ |
+| Dirty tracking + conflict detection | ✅ |
+| Read-only mode for external files | ✅ |
+| Markdown preview/edit toggle | ✅ |
+| Custom theme (synced with app theme) | ✅ |
+| Format document (Shift+Alt+F) | ✅ |
+| Format on save | ✅ |
+
+#### Gaps
+
+| Feature | VS Code | Zed | Voice Mirror | Priority |
+|---------|---------|-----|-------------|----------|
+| **Inline gutter change indicators** | ✅ Green/blue/red bars (add/modify/delete) | ✅ | ❌ | **High** |
+| **Indent guides** | ✅ Colored lines showing nesting depth | ✅ | ❌ | Medium |
+| **Bracket pair colorization** | ✅ Rainbow brackets | ✅ | ❌ | Low |
+| **Sticky scroll** | ✅ Pin scope headers (function/class) at top | ✅ | ❌ | Low |
+| **Code folding UI** | ✅ Gutter fold markers, fold/unfold all | ✅ | ⚠️ CM has folding but no visible gutter markers | Low |
+| **Emmet abbreviation expansion** | ✅ HTML/CSS shorthand | ❌ | ❌ | Low |
+| **Snippet system** | ✅ User-defined snippets | ✅ | ❌ | Low |
+| **Image preview in editor** | ✅ | ✅ | ❌ | Very low |
+
+**Assessment:** Core editing is feature-complete. The biggest gap is inline gutter change indicators (green/blue/red bars showing which lines are added/modified/deleted since last commit) — this is both an editor and a git feature, shared with §11.
+
+---
+
 ## Priority Ranking
 
-| Priority | Feature | Impact | Effort | Rationale |
-|----------|---------|--------|--------|-----------|
-| ~~1~~ | ~~Find & Replace (in-file)~~ | ~~High~~ | ~~Tiny~~ | ~~Already works via basicSetup.~~ ✓ |
-| ~~1~~ | ~~Multi-cursor~~ | ~~High~~ | ~~Small~~ | ~~Done. Ctrl+D, Ctrl+Shift+L, Ctrl+Alt+Up/Down.~~ ✓ |
-| ~~2~~ | ~~Global text search~~ | ~~Critical~~ | ~~Medium~~ | ~~Done. Ctrl+Shift+F, Rust regex backend, SearchPanel in FileTree.~~ ✓ |
-| 3 | Command palette expansion | Medium | Medium | Discovery mechanism for all features. |
-| ~~4~~ | ~~Split editor~~ | ~~High~~ | ~~Large~~ | ~~Feature compete. Full grid, drag-to-split, seam splits, maximize, even sizes.~~ ✓ |
-| ~~5~~ | ~~Git stage + commit~~ | ~~Medium~~ | ~~Medium~~ | ~~Done. Stage/unstage, commit, push, AI commit messages.~~ ✓ |
-| 6 | Terminal search | Low | Small | Nice-to-have for scrollback. |
-| 7 | Breadcrumbs | Low | Small | File path context in editor. |
-| 8 | Code minimap | Low | Large | Outline panel is a good substitute. |
-| 9 | Debug adapter | Low | Massive | AI terminal handles this better. |
-| -- | Extensions | None | Massive | MCP servers are our extension model. |
+### Completed ✓
+
+| Feature | Category | Notes |
+|---------|----------|-------|
+| Find & Replace (in-file) | Editor | Via `basicSetup` |
+| Multi-cursor | Editor | Ctrl+D, Ctrl+Shift+L, Ctrl+Alt+Up/Down |
+| Global text search | File Tree | Ctrl+Shift+F, regex, SearchPanel |
+| Split editor | Editor | Full grid, drag-to-split, seam splits, maximize |
+| Git stage + commit + push | Source Control | Stage/unstage, commit, push, branch switch, sync |
+| Document formatting | LSP | Shift+Alt+F + format on save |
+| Signature help | LSP | Auto on `(` `,` + Ctrl+Shift+Space |
+| Command palette | Editor | 48 commands, 4 modes, fuzzy search, MRU |
+| Git decorations in file tree | File Tree | Color-coded added/modified/deleted with folder propagation |
+| Dynamic sync button | Source Control | Zed-style Pull N / Push N / Fetch / Publish |
+
+### Open Gaps — Ranked by Impact
+
+| Rank | Feature | Category | Impact | Effort | Rationale |
+|------|---------|----------|--------|--------|-----------|
+| 1 | **Inline gutter change indicators** | Editor + Git | High | Medium | Green/blue/red bars in editor gutter. Visual feedback while editing. §11, §15 |
+| 2 | **Hunk-level staging** | Source Control + Diff | High | Medium | Stage individual chunks, not whole files. Power-user expectation. §11, §12 |
+| 3 | **Find in terminal (Ctrl+F)** | Terminal | High | Medium | Search command output. Used constantly. §14 |
+| 4 | **Clickable URLs/file paths in terminal** | Terminal | High | Medium | Click to open browser or editor at line:col. §14 |
+| 5 | **Terminal persistence across restarts** | Terminal | High | Large | Save/restore groups, splits, names, colors. §14 |
+| 6 | **Keyboard tree navigation** | File Tree | Medium | Medium | Arrow keys to navigate file tree. §13 |
+| 7 | **Merge conflict resolution** | Source Control | Medium | Large | 3-way merge or inline markers. §11 |
+| 8 | **Commit history / log** | Source Control | Medium | Medium | View past commits. §11 |
+| 9 | **Inline blame (git blame)** | Source Control | Medium | Medium | Per-line author/date annotations. §11 |
+| 10 | **Stash support** | Source Control | Medium | Small | Stash/pop/apply from UI. §11 |
+| 11 | **Drag-to-move files in tree** | File Tree | Medium | Medium | Drag files between folders. §13 |
+| 12 | **Indent guides** | Editor | Medium | Small | Colored lines showing nesting depth. §15 |
+| 13 | **Navigate to next/prev diff file** | Diff | Medium | Small | Alt+F5 cycle through changed files. §12 |
+| 14 | **Interactive diff minimap** | Diff | Low | Small | Click minimap to jump to chunk. §12 |
+| 15 | **Workspace symbols** | LSP | Medium | Medium | Cross-project symbol search in command palette |
+| 16 | **Inlay hints** | LSP | Medium | Medium | Inline type annotations for TS/Rust |
+| 17 | **Breadcrumbs** | Editor | Low | Small | File path segments above editor |
+| 18 | **Code minimap** | Editor | Low | Large | Outline panel is a good substitute |
+| 19 | **Debug adapter (DAP)** | Editor | Low | Massive | AI terminal handles debugging better |
+| -- | **Extensions / Plugins** | System | None | Massive | MCP servers are our extension model |
 
 ---
 
@@ -357,4 +583,8 @@ The gap list above looks daunting, but Voice Mirror doesn't need to close every 
 4. **MCP tool ecosystem** — browser control, n8n workflows, memory system
 5. **AI-native terminal** — Claude Code is embedded, not a bolt-on extension
 
-The strategy: close the top gaps so Lens is **comfortable enough** for real coding, then double down on the voice+AI features no one else has. Done: ~~find/replace~~ ✓, ~~multi-cursor~~ ✓, ~~global search~~ ✓, ~~git stage+commit~~ ✓, ~~document formatting~~ ✓, ~~signature help~~ ✓, ~~split editor~~ ✓, ~~command palette~~ ✓. Remaining: split editor polish (persist layout), workspace symbols (feeds into command palette).
+The strategy: close the top gaps so Lens is **comfortable enough** for real coding, then double down on the voice+AI features no one else has.
+
+**Done:** find/replace ✓, multi-cursor ✓, global search ✓, git stage+commit+push ✓, branch management ✓, dynamic sync ✓, document formatting ✓, signature help ✓, split editor ✓, command palette ✓, file tree git decorations ✓, LSP diagnostics in tree ✓.
+
+**Next wave:** inline gutter change indicators, hunk-level staging, terminal find, clickable terminal links, terminal persistence. These are the gaps that separate "usable" from "daily driver."
