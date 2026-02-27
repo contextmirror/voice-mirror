@@ -41,8 +41,9 @@
         class:added={change.stagedStatus === 'added'}
         class:modified={change.stagedStatus === 'modified'}
         class:deleted={change.stagedStatus === 'deleted'}
+        title={change.stagedStatus === 'added' ? 'Added — new file' : change.stagedStatus === 'deleted' ? 'Deleted' : change.stagedStatus === 'renamed' ? 'Renamed' : 'Modified'}
       >
-        {change.stagedStatus === 'added' ? 'A' : change.stagedStatus === 'deleted' ? 'D' : 'M'}
+        {change.stagedStatus === 'added' ? 'A' : change.stagedStatus === 'deleted' ? 'D' : change.stagedStatus === 'renamed' ? 'R' : 'M'}
       </span>
     </div>
   {/each}
@@ -75,8 +76,9 @@
         class:added={change.status === 'added'}
         class:modified={change.status === 'modified'}
         class:deleted={change.status === 'deleted'}
+        title={change.status === 'added' ? 'Added — new file' : change.status === 'deleted' ? 'Deleted' : change.status === 'renamed' ? 'Renamed' : 'Modified'}
       >
-        {change.status === 'added' ? 'A' : change.status === 'deleted' ? 'D' : 'M'}
+        {change.status === 'added' ? 'A' : change.status === 'deleted' ? 'D' : change.status === 'renamed' ? 'R' : 'M'}
       </span>
     </div>
   {/each}
