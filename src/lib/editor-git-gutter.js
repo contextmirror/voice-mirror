@@ -350,12 +350,10 @@ function showPeekWidget(view, change) {
   const deco = Decoration.widget({ widget, block: true, side: 1 });
 
   view.dispatch({
-    effects: setPeekWidget.of(Decoration.set([deco.range(lineEnd)])),
-  });
-
-  // Scroll the peek widget into view
-  view.dispatch({
-    effects: EditorView.scrollIntoView(lineEnd, { y: 'center' }),
+    effects: [
+      setPeekWidget.of(Decoration.set([deco.range(lineEnd)])),
+      EditorView.scrollIntoView(lineEnd, { y: 'center' }),
+    ],
   });
 }
 
@@ -621,15 +619,6 @@ export function computeLineChanges(originalText, modifiedText) {
       } else {
         // Find the modified-text line just before this delete position.
         // Look at the edit before this block for context.
-        const deleteIdx = deletes[paired].oldIdx;
-        // Count how many modified lines exist before this point
-        let modLine = 0;
-        for (const e of edits) {
-          if (e.op === 'equal' || e.op === 'insert') {
-            if (e.newIdx !== undefined && e.newIdx < deleteIdx) modLine = e.newIdx + 1;
-            else break;
-          }
-        }
         // Find the newIdx of the nearest preceding equal/insert edit
         anchorLine = 0;
         for (let j = 0; j < edits.length; j++) {
@@ -713,10 +702,12 @@ export function createGitGutter(getOriginalContent) {
 
   const plugin = ViewPlugin.define((view) => {
     let debounceTimer = null;
+    let currentPath = null;
 
     return {
       /** Load original content for a file path and compute initial diff */
       async setPath(filePath) {
+        currentPath = filePath;
         try {
           const result = await getOriginalContent(filePath);
           if (result && result.content !== undefined) {
@@ -740,13 +731,11 @@ export function createGitGutter(getOriginalContent) {
         }
       },
 
-      /** Re-fetch original content and recompute (e.g. after git commit) */
+      /** Re-fetch original content and recompute (e.g. after save or git commit) */
       async refreshOriginal() {
-        const originalContent = view.state.field(originalContentField);
-        if (originalContent === null) return;
-        // Re-trigger setPath logic if we have a file path stored
-        // The caller (FileEditor) should call setPath again with the path
-        computeAndDispatch(view);
+        if (currentPath) {
+          await this.setPath(currentPath);
+        }
       },
 
       /** Respond to editor updates — debounce recompute on doc changes */
