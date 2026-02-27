@@ -1017,7 +1017,8 @@ pub async fn handle_browser_action(
                 r#"(function() {{
                     var el = {target};
                     if (!el) return JSON.stringify({{ error: 'Element not found' }});
-                    return JSON.stringify({{ ok: true, text: (el.textContent || '').trim() }});
+                    var text = ('value' in el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT')) ? el.value : (el.textContent || '').trim();
+                    return JSON.stringify({{ ok: true, text: text }});
                 }})()"#
             );
             evaluate_js_with_result(app, &webview, &js, std::time::Duration::from_secs(10)).await
