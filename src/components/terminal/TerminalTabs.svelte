@@ -614,7 +614,7 @@
     height: 36px;
     min-height: 36px;
     background: var(--bg);
-    border-bottom: 4px solid color-mix(in srgb, var(--text) 12%, var(--bg));
+    border-bottom: 1px solid color-mix(in srgb, var(--text) 12%, var(--bg));
     user-select: none;
   }
 

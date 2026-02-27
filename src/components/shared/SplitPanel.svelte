@@ -113,7 +113,7 @@
     align-items: center;
     justify-content: center;
     -webkit-app-region: no-drag;
-    background: color-mix(in srgb, var(--text) 12%, var(--bg));
+    background: transparent;
     transition: background var(--duration-fast) var(--ease-out);
   }
   .split-handle:hover {
@@ -128,10 +128,12 @@
   .horizontal > .split-handle {
     width: 4px;
     cursor: col-resize;
+    border-left: 1px solid color-mix(in srgb, var(--text) 12%, var(--bg));
   }
   .vertical > .split-handle {
     height: 4px;
     cursor: row-resize;
+    border-top: 1px solid color-mix(in srgb, var(--text) 12%, var(--bg));
   }
 
   .handle-line {
