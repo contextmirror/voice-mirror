@@ -25,23 +25,29 @@
   let stagedChanges = $derived(gitChanges.filter(c => c.staged));
   let unstagedChanges = $derived(gitChanges.filter(c => c.unstaged || (!c.staged && !c.unstaged)));
 
-  // Git status lookup for file tree decorations
-  // Maps file path → status ('added' | 'modified' | 'deleted')
-  // and dir path → most severe child status (for folder coloring)
+  // Git status lookup for file tree decorations (matches VS Code behavior)
+  // Maps file path → status ('added' | 'modified' | 'deleted' | 'renamed')
+  // and dir path → most relevant child status (for folder coloring)
+  // VS Code rule: deleted files do NOT propagate to parent folders
   let gitStatusMap = $derived.by(() => {
     const map = new Map();
     for (const c of gitChanges) {
       // File status — prefer unstaged (working tree) over staged
-      const status = c.unstagedStatus || c.stagedStatus || c.status || 'modified';
+      const raw = c.unstagedStatus || c.stagedStatus || c.status || 'modified';
+      // Normalize: renamed → added (VS Code treats renamed as green like added)
+      const status = raw === 'renamed' ? 'added' : raw;
       map.set(c.path, status);
-      // Propagate to parent directories
+      // Propagate to parent directories (skip deleted — VS Code doesn't propagate deletes)
+      if (status === 'deleted') continue;
       const parts = c.path.split('/');
       for (let i = 1; i < parts.length; i++) {
         const dir = parts.slice(0, i).join('/');
         const existing = map.get(dir);
-        // Priority: added > modified > deleted (show green for new, blue for modified)
-        if (!existing || (status === 'added' && existing !== 'added') || (status === 'modified' && existing === 'deleted')) {
-          map.set(dir, status === 'deleted' ? 'modified' : status);
+        if (!existing) {
+          map.set(dir, status);
+        } else if (existing !== 'modified' && status === 'modified') {
+          // Modified takes priority for folders (mixed changes = modified)
+          map.set(dir, 'modified');
         }
       }
     }

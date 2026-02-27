@@ -242,7 +242,7 @@
   }
 
   .tree-name.git-modified {
-    color: var(--accent);
+    color: var(--warn);
   }
 
   .tree-name.git-deleted {
