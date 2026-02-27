@@ -104,7 +104,7 @@ pub fn build_js_selector(entry: &RefEntry) -> String {
         "heading" => "document.querySelectorAll('h1, h2, h3, h4, h5, h6')",
         "checkbox" => "document.querySelectorAll('input[type=\"checkbox\"]')",
         "radio" => "document.querySelectorAll('input[type=\"radio\"]')",
-        "combobox" => "document.querySelectorAll('select')",
+        "combobox" | "listbox" => "document.querySelectorAll('select')",
         "option" => "document.querySelectorAll('option')",
         "tab" => "document.querySelectorAll('[role=\"tab\"]')",
         _ => "null",

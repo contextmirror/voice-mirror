@@ -254,6 +254,19 @@ pub async fn evaluate_js_with_result(
     }
 }
 
+/// Unwrap double-encoded JSON from ExecuteScript.
+///
+/// When JS does `return JSON.stringify({...})`, ExecuteScript JSON-serializes the
+/// string result again, so `evaluate_js_with_result` returns `Value::String("{...}")`.
+/// This helper detects that case and parses the inner JSON object.
+fn unwrap_js_result(val: Value) -> Value {
+    if let Some(s) = val.as_str() {
+        serde_json::from_str::<Value>(s).unwrap_or(val)
+    } else {
+        val
+    }
+}
+
 // ---------------------------------------------------------------------------
 // CDP call (via native WebView2 CallDevToolsProtocolMethod COM API)
 // ---------------------------------------------------------------------------
@@ -627,7 +640,7 @@ pub async fn handle_browser_action(
                             return JSON.stringify({{ x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) }});
                         }})()"#
                     );
-                    if let Ok(bbox_val) = evaluate_js_with_result(
+                    if let Ok(bbox_raw) = evaluate_js_with_result(
                         app,
                         &webview,
                         &bbox_js,
@@ -635,6 +648,7 @@ pub async fn handle_browser_action(
                     )
                     .await
                     {
+                        let bbox_val = unwrap_js_result(bbox_raw);
                         if bbox_val.is_object() {
                             let x = bbox_val.get("x").and_then(|v| v.as_i64()).unwrap_or(0);
                             let y = bbox_val.get("y").and_then(|v| v.as_i64()).unwrap_or(0);
@@ -1147,7 +1161,8 @@ pub async fn handle_browser_action(
                 )
                 .await
                 {
-                    if result.get("found").and_then(|v| v.as_bool()).unwrap_or(false) {
+                    let parsed = unwrap_js_result(result);
+                    if parsed.get("found").and_then(|v| v.as_bool()).unwrap_or(false) {
                         return Ok(json!({ "ok": true, "action": "wait", "elapsed_ms": start.elapsed().as_millis() as u64 }));
                     }
                 }
@@ -1185,8 +1200,9 @@ pub async fn handle_browser_action(
                 )
                 .await
                 {
-                    if result.get("matched").and_then(|v| v.as_bool()).unwrap_or(false) {
-                        let url = result.get("url").and_then(|v| v.as_str()).unwrap_or("");
+                    let parsed = unwrap_js_result(result);
+                    if parsed.get("matched").and_then(|v| v.as_bool()).unwrap_or(false) {
+                        let url = parsed.get("url").and_then(|v| v.as_str()).unwrap_or("");
                         return Ok(json!({ "ok": true, "action": "waitforurl", "url": url, "elapsed_ms": start.elapsed().as_millis() as u64 }));
                     }
                 }
@@ -1227,8 +1243,9 @@ pub async fn handle_browser_action(
                 )
                 .await
                 {
-                    if result.get("ready").and_then(|v| v.as_bool()).unwrap_or(false) {
-                        return Ok(json!({ "ok": true, "action": "waitforloadstate", "readyState": result.get("readyState") }));
+                    let parsed = unwrap_js_result(result);
+                    if parsed.get("ready").and_then(|v| v.as_bool()).unwrap_or(false) {
+                        return Ok(json!({ "ok": true, "action": "waitforloadstate", "readyState": parsed.get("readyState") }));
                     }
                 }
 
@@ -1279,7 +1296,40 @@ pub async fn handle_browser_action(
             if tab_id.is_empty() {
                 return Err("tabId is required for tab_switch".into());
             }
+
+            // Verify tab exists
+            {
+                let tabs = state.tabs.lock().map_err(|e| format!("Lock error: {}", e))?;
+                if !tabs.contains_key(tab_id) {
+                    return Err(format!("Tab {} not found", tab_id));
+                }
+            }
+
+            // Update active tab on the Rust side so get_webview() targets the right tab
+            {
+                let mut active = state.active_tab_id.lock()
+                    .map_err(|e| format!("Lock error: {}", e))?;
+                *active = Some(tab_id.to_string());
+            }
+
+            // Show/hide webviews + update bounds via the Tauri command
             let _ = app.emit("lens-focus-tab", json!({ "tabId": tab_id }));
+
+            // Also position the new tab's webview at the current bounds
+            if let Ok(bounds_guard) = state.bounds.lock() {
+                if let Some((bx, by, bw, bh)) = *bounds_guard {
+                    let tabs = state.tabs.lock().map_err(|e| format!("Lock error: {}", e))?;
+                    if let Some(tab) = tabs.get(tab_id) {
+                        if let Some(webview) = app.get_webview(&tab.webview_label) {
+                            use tauri::{LogicalPosition, LogicalSize, Position, Size};
+                            let _ = webview.set_position(Position::Logical(LogicalPosition::new(bx, by)));
+                            let _ = webview.set_size(Size::Logical(LogicalSize::new(bw, bh)));
+                            let _ = webview.show();
+                        }
+                    }
+                }
+            }
+
             Ok(json!({ "ok": true, "tabId": tab_id }))
         }
 
