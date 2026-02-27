@@ -629,43 +629,60 @@ pub async fn handle_browser_action(
                         .collect()
                 };
 
-                let mut annotations: Vec<Value> = Vec::new();
-
-                for (ref_key, entry) in &refs_snapshot {
+                // Build a single batched JS call that resolves all bounding boxes at once.
+                // This avoids N sequential evaluate calls (one per ref) which is slow
+                // and can silently fail on complex pages.
+                let mut finders = String::from("[");
+                for (i, (ref_key, entry)) in refs_snapshot.iter().enumerate() {
+                    if i > 0 { finders.push(','); }
                     let selector_js = cdp::build_js_selector(entry);
-                    let bbox_js = format!(
-                        r#"(function() {{
-                            var el = {selector_js};
-                            if (!el) return JSON.stringify(null);
-                            var r = el.getBoundingClientRect();
-                            return JSON.stringify({{ x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) }});
-                        }})()"#
-                    );
-                    if let Ok(bbox_raw) = evaluate_js_with_result(
-                        app,
-                        &webview,
-                        &bbox_js,
-                        std::time::Duration::from_secs(5),
-                    )
-                    .await
-                    {
-                        let bbox_val = unwrap_js_result(bbox_raw);
-                        if bbox_val.is_object() {
-                            let x = bbox_val.get("x").and_then(|v| v.as_i64()).unwrap_or(0);
-                            let y = bbox_val.get("y").and_then(|v| v.as_i64()).unwrap_or(0);
-                            let w = bbox_val.get("w").and_then(|v| v.as_i64()).unwrap_or(0);
-                            let h = bbox_val.get("h").and_then(|v| v.as_i64()).unwrap_or(0);
-                            if w > 0 && h > 0 {
-                                annotations.push(json!({
-                                    "ref": format!("@{}", ref_key),
-                                    "role": entry.role,
-                                    "name": entry.name,
-                                    "box": { "x": x, "y": y, "w": w, "h": h },
-                                }));
-                            }
-                        }
-                    }
+                    finders.push_str(&format!(
+                        r#"{{ ref: "{ref_key}", role: "{role}", name: {name_json}, el: {selector_js} }}"#,
+                        ref_key = ref_key,
+                        role = entry.role,
+                        name_json = serde_json::to_string(&entry.name).unwrap_or_default(),
+                        selector_js = selector_js,
+                    ));
                 }
+                finders.push(']');
+
+                let batch_js = format!(
+                    r#"(function() {{
+                        var items = {finders};
+                        var results = [];
+                        for (var i = 0; i < items.length; i++) {{
+                            var item = items[i];
+                            if (!item.el) continue;
+                            var r = item.el.getBoundingClientRect();
+                            var x = Math.round(r.x), y = Math.round(r.y);
+                            var w = Math.round(r.width), h = Math.round(r.height);
+                            if (w > 0 && h > 0) {{
+                                results.push({{ ref: '@' + item.ref, role: item.role, name: item.name, box: {{ x: x, y: y, w: w, h: h }} }});
+                            }}
+                        }}
+                        return JSON.stringify(results);
+                    }})()"#
+                );
+
+                let annotations: Vec<Value> = if let Ok(raw) = evaluate_js_with_result(
+                    app,
+                    &webview,
+                    &batch_js,
+                    std::time::Duration::from_secs(15),
+                )
+                .await
+                {
+                    let parsed = unwrap_js_result(raw);
+                    if let Some(arr) = parsed.as_array() {
+                        arr.clone()
+                    } else {
+                        tracing::warn!("[browser_bridge] Annotation batch returned non-array: {:?}", parsed);
+                        Vec::new()
+                    }
+                } else {
+                    tracing::warn!("[browser_bridge] Annotation batch JS eval failed");
+                    Vec::new()
+                };
 
                 // 3. Inject overlay DOM with annotation boxes
                 let mut overlay_html = String::from(
@@ -1199,8 +1216,10 @@ pub async fn handle_browser_action(
             let timeout_ms = args.get("timeout").and_then(|v| v.as_u64()).unwrap_or(30000);
             let poll_ms = args.get("poll").and_then(|v| v.as_u64()).unwrap_or(500);
 
-            // Use serde_json to safely embed pattern in JS (handles all escaping)
-            let pattern_json = serde_json::to_string(pattern).unwrap_or_default();
+            // Escape for embedding in a JS single-quoted string.
+            // Don't use serde_json::to_string — it re-encodes backslashes, breaking
+            // regex patterns like `example\.com` which become `example\\.com` in JS.
+            let pattern_js = escape_js(pattern);
 
             let start = std::time::Instant::now();
             let deadline = std::time::Duration::from_millis(timeout_ms);
@@ -1209,7 +1228,7 @@ pub async fn handle_browser_action(
                 let check_js = format!(
                     r#"(function() {{
                         try {{
-                            var re = new RegExp({pattern_json});
+                            var re = new RegExp('{pattern_js}');
                             return JSON.stringify({{ url: location.href, matched: re.test(location.href) }});
                         }} catch(e) {{
                             return JSON.stringify({{ url: location.href, matched: false, error: e.message }});
