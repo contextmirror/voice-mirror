@@ -93,12 +93,30 @@ describe('TerminalContextMenu.svelte -- store methods', () => {
   });
 });
 
-describe('TerminalContextMenu.svelte -- placeholders', () => {
-  it('Change Color is a placeholder', () => {
-    assert.ok(src.includes('console.log') && src.includes('Change Color'), 'Color should be placeholder');
+describe('TerminalContextMenu.svelte -- picker imports', () => {
+  it('imports TerminalColorPicker', () => {
+    assert.ok(src.includes("import TerminalColorPicker from"), 'Should import color picker');
   });
-  it('Change Icon is a placeholder', () => {
-    assert.ok(src.includes('console.log') && src.includes('Change Icon'), 'Icon should be placeholder');
+  it('imports TerminalIconPicker', () => {
+    assert.ok(src.includes("import TerminalIconPicker from"), 'Should import icon picker');
+  });
+  it('renders TerminalColorPicker component', () => {
+    assert.ok(src.includes('<TerminalColorPicker'), 'Should render color picker component');
+  });
+  it('renders TerminalIconPicker component', () => {
+    assert.ok(src.includes('<TerminalIconPicker'), 'Should render icon picker component');
+  });
+  it('tracks colorPickerOpen state', () => {
+    assert.ok(src.includes('colorPickerOpen'), 'Should track color picker state');
+  });
+  it('tracks iconPickerOpen state', () => {
+    assert.ok(src.includes('iconPickerOpen'), 'Should track icon picker state');
+  });
+  it('has closeColorPicker handler', () => {
+    assert.ok(src.includes('closeColorPicker'), 'Should have close color picker handler');
+  });
+  it('has closeIconPicker handler', () => {
+    assert.ok(src.includes('closeIconPicker'), 'Should have close icon picker handler');
   });
 });
 

@@ -3,12 +3,18 @@
    * TerminalContextMenu.svelte -- Right-click context menu for terminal instances/tabs.
    *
    * Accepts props for positioning and visibility. Shows actions like split,
-   * rename, kill, unsplit, and placeholders for color/icon customization.
+   * rename, kill, unsplit, and opens color/icon picker popups for customization.
    */
   import { terminalTabsStore } from '../../lib/stores/terminal-tabs.svelte.js';
+  import TerminalColorPicker from './TerminalColorPicker.svelte';
+  import TerminalIconPicker from './TerminalIconPicker.svelte';
 
   /** @type {{ instanceId: string|null, x: number, y: number, visible: boolean, onClose: () => void }} */
   let { instanceId = null, x = 0, y = 0, visible = false, onClose = () => {} } = $props();
+
+  let colorPickerOpen = $state(false);
+  let iconPickerOpen = $state(false);
+  let pickerPos = $state({ x: 0, y: 0 });
 
   // Derived: the instance and its group
   const instance = $derived(instanceId ? terminalTabsStore.getInstance(instanceId) : null);
@@ -21,12 +27,22 @@
   }
 
   function handleChangeColor() {
-    console.log('[TerminalContextMenu] Change Color (placeholder)', instanceId);
-    onClose();
+    pickerPos = { x: x + 200, y };
+    colorPickerOpen = true;
   }
 
   function handleChangeIcon() {
-    console.log('[TerminalContextMenu] Change Icon (placeholder)', instanceId);
+    pickerPos = { x: x + 200, y };
+    iconPickerOpen = true;
+  }
+
+  function closeColorPicker() {
+    colorPickerOpen = false;
+    onClose();
+  }
+
+  function closeIconPicker() {
+    iconPickerOpen = false;
     onClose();
   }
 
@@ -131,6 +147,24 @@
     {/if}
   </div>
 {/if}
+
+<TerminalColorPicker
+  instanceId={instanceId}
+  x={pickerPos.x}
+  y={pickerPos.y}
+  visible={colorPickerOpen}
+  onSelect={() => {}}
+  onClose={closeColorPicker}
+/>
+
+<TerminalIconPicker
+  instanceId={instanceId}
+  x={pickerPos.x}
+  y={pickerPos.y}
+  visible={iconPickerOpen}
+  onSelect={() => {}}
+  onClose={closeIconPicker}
+/>
 
 <style>
   .context-menu {
