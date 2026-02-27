@@ -348,7 +348,7 @@ Voice Mirror's extension story is: "Add an MCP server" — not "install a VS Cod
 | Feature | VS Code | Zed | Voice Mirror | Priority |
 |---------|---------|-----|-------------|----------|
 | **Hunk-level staging** | ✅ Stage individual hunks in diff gutter | ✅ Via diff hunks | ❌ Whole-file only | **High** |
-| **Inline change indicators (editor gutter)** | ✅ Green/blue/red bars showing add/modify/delete | ✅ Same | ❌ | **High** |
+| **Inline change indicators (editor gutter)** | ✅ Green/blue/red bars showing add/modify/delete | ✅ Same | ✅ Green/blue/red bars + peek + revert | Done ✓ |
 | **Commit history / log** | ✅ Git Graph extension, Timeline view | ✅ Basic log | ❌ | Medium |
 | **Stash support** | ✅ Stash/pop/apply from SCM panel | ❌ | ❌ | Medium |
 | **Merge conflict resolution** | ✅ 3-way merge editor | ✅ Inline markers | ❌ | Medium |
@@ -362,7 +362,7 @@ Voice Mirror's extension story is: "Add an MCP server" — not "install a VS Cod
 
 **Highest-value next steps:**
 1. Hunk-level staging (stage individual diff chunks) — this is what power users expect
-2. Editor gutter change indicators (green/blue/red bars) — instant visual feedback while editing
+2. ~~Editor gutter change indicators (green/blue/red bars) — instant visual feedback while editing~~ ✓ Done
 
 ---
 
@@ -525,7 +525,7 @@ See `docs/design/TERMINAL-GAP-ANALYSIS.md` for the complete 33-item gap list. Th
 
 | Feature | VS Code | Zed | Voice Mirror | Priority |
 |---------|---------|-----|-------------|----------|
-| **Inline gutter change indicators** | ✅ Green/blue/red bars (add/modify/delete) | ✅ | ❌ | **High** |
+| **Inline gutter change indicators** | ✅ Green/blue/red bars (add/modify/delete) | ✅ | ✅ Green/blue/red bars + peek + revert | Done ✓ |
 | **Indent guides** | ✅ Colored lines showing nesting depth | ✅ | ❌ | Medium |
 | **Bracket pair colorization** | ✅ Rainbow brackets | ✅ | ❌ | Low |
 | **Sticky scroll** | ✅ Pin scope headers (function/class) at top | ✅ | ❌ | Low |
@@ -534,7 +534,7 @@ See `docs/design/TERMINAL-GAP-ANALYSIS.md` for the complete 33-item gap list. Th
 | **Snippet system** | ✅ User-defined snippets | ✅ | ❌ | Low |
 | **Image preview in editor** | ✅ | ✅ | ❌ | Very low |
 
-**Assessment:** Core editing is feature-complete. The biggest gap is inline gutter change indicators (green/blue/red bars showing which lines are added/modified/deleted since last commit) — this is both an editor and a git feature, shared with §11.
+**Assessment:** Core editing is feature-complete. Inline gutter change indicators are now implemented (green/blue/red bars + peek widget + hunk revert). The next biggest editor gaps are indent guides and bracket pair colorization.
 
 ---
 
@@ -554,6 +554,7 @@ See `docs/design/TERMINAL-GAP-ANALYSIS.md` for the complete 33-item gap list. Th
 | Command palette | Editor | 48 commands, 4 modes, fuzzy search, MRU |
 | Git decorations in file tree | File Tree | Color-coded added/modified/deleted with folder propagation |
 | Dynamic sync button | Source Control | Zed-style Pull N / Push N / Fetch / Publish |
+| Inline gutter change indicators | Editor + Git | Green/blue/red bars + peek widget + hunk revert |
 | Tab close button | Terminal | Hover X, middle-click, last-group safety, dev-server confirm |
 | Grid splits (H + V) | Terminal | Recursive split tree, Split Right/Down, max ~8 panes |
 | Find in terminal (Ctrl+F) | Terminal | Search with regex, case toggle, match navigation |
@@ -564,8 +565,8 @@ See `docs/design/TERMINAL-GAP-ANALYSIS.md` for the complete 33-item gap list. Th
 
 | Rank | Feature | Category | Impact | Effort | Rationale |
 |------|---------|----------|--------|--------|-----------|
-| 1 | **Inline gutter change indicators** | Editor + Git | High | Medium | Green/blue/red bars in editor gutter. Visual feedback while editing. §11, §15 |
-| 2 | **Hunk-level staging** | Source Control + Diff | High | Medium | Stage individual chunks, not whole files. Power-user expectation. §11, §12 |
+| ~~1~~ | ~~Inline gutter change indicators~~ | ~~Editor + Git~~ | ~~High~~ | ~~Medium~~ | ✅ Done — green/blue/red bars + peek widget + revert. §11, §15 |
+| 2 | **Hunk-level staging** | Source Control + Diff | High | Medium | Stage individual chunks, not whole files. Hunk-level *revert* done (via gutter peek). §11, §12 |
 | 3 | **Keyboard tree navigation** | File Tree | Medium | Medium | Arrow keys to navigate file tree. §13 |
 | 4 | **Merge conflict resolution** | Source Control | Medium | Large | 3-way merge or inline markers. §11 |
 | 5 | **Commit history / log** | Source Control | Medium | Medium | View past commits. §11 |
@@ -596,6 +597,6 @@ The gap list above looks daunting, but Voice Mirror doesn't need to close every 
 
 The strategy: close the top gaps so Lens is **comfortable enough** for real coding, then double down on the voice+AI features no one else has.
 
-**Done:** find/replace ✓, multi-cursor ✓, global search ✓, git stage+commit+push ✓, branch management ✓, dynamic sync ✓, document formatting ✓, signature help ✓, split editor ✓, command palette ✓, file tree git decorations ✓, LSP diagnostics in tree ✓, terminal tab close ✓, terminal grid splits (H+V) ✓, terminal find (Ctrl+F) ✓, clickable terminal links ✓, terminal persistence ✓.
+**Done:** find/replace ✓, multi-cursor ✓, global search ✓, git stage+commit+push ✓, branch management ✓, dynamic sync ✓, document formatting ✓, signature help ✓, split editor ✓, command palette ✓, file tree git decorations ✓, LSP diagnostics in tree ✓, terminal tab close ✓, terminal grid splits (H+V) ✓, terminal find (Ctrl+F) ✓, clickable terminal links ✓, terminal persistence ✓, inline gutter change indicators ✓.
 
-**Next wave:** inline gutter change indicators, hunk-level staging. These are the remaining high-impact gaps that separate "usable" from "daily driver." The terminal is now feature-compete with VS Code for core workflows.
+**Next wave:** hunk-level staging (stage individual diff chunks from the gutter). This is the remaining high-impact gap that separates "usable" from "daily driver." The terminal is now feature-compete with VS Code for core workflows.

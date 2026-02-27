@@ -23,6 +23,7 @@ import { createGitGutter } from './editor-git-gutter.js';
  * @param {function} [options.onFormat] - Callback for Shift-Alt-f format document
  * @param {object} [options.onSignatureHelp] - Signature help callbacks { onDocChanged(update), onSelectionChanged(update) }
  * @param {function} options.onContextMenu - Callback for context menu events (event, view)
+ * @param {function} [options.getOriginalContent] - Async callback returning original git content for diff gutter
  * @param {function} [options.onClick] - Callback for Ctrl+Click go-to-definition (event, view)
  * @returns {Array} CodeMirror extensions array
  */
