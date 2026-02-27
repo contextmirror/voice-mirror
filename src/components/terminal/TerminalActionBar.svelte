@@ -148,7 +148,7 @@
       <div class="dropdown-divider"></div>
       {#each terminalProfilesStore.profiles as profile}
         <button class="dropdown-item" onclick={() => handleNewWithProfile(profile.id)}>
-          <span class="profile-icon">{profile.icon || profile.name.charAt(0)}</span>
+          <span class="profile-icon">{profile.name.charAt(0)}</span>
           {profile.name}
         </button>
       {/each}

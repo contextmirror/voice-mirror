@@ -128,10 +128,10 @@
   }
 
   .handle-line {
-    background: var(--border);
+    background: rgba(255, 255, 255, 0.15);
     border-radius: 2px;
-    opacity: 0.2;
-    transition: opacity var(--duration-fast) var(--ease-out);
+    opacity: 1;
+    transition: background var(--duration-fast) var(--ease-out);
   }
   .horizontal > .split-handle .handle-line {
     width: 2px;
@@ -143,14 +143,12 @@
   }
   .split-handle:hover .handle-line,
   .dragging .split-handle .handle-line {
-    opacity: 0.5;
+    background: rgba(255, 255, 255, 0.3);
   }
   .dragging .split-handle .handle-line {
-    opacity: 0.7;
     background: var(--accent);
   }
   .split-handle:focus-visible .handle-line {
-    opacity: 0.5;
     background: var(--accent);
   }
 
