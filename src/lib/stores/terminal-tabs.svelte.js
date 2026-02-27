@@ -338,6 +338,101 @@ function createTerminalTabsStore() {
     },
 
     /**
+     * Split a specific group (add instance to that group, not necessarily the active one).
+     * @param {string} groupId
+     * @param {Object} [options]
+     * @returns {Promise<string|null>} The new instance ID, or null on failure.
+     */
+    async splitGroup(groupId, options = {}) {
+      const group = groups.find(g => g.id === groupId);
+      if (!group) return null;
+
+      try {
+        const result = await terminalSpawn(options);
+        if (!result?.success || !result?.data?.id) {
+          console.error('[terminal-tabs] Failed to spawn terminal for split:', result?.error);
+          return null;
+        }
+        const shellId = result.data.id;
+        const tabNum = nextTerminalNumber();
+
+        const instance = {
+          id: shellId,
+          groupId,
+          title: `Terminal ${tabNum}`,
+          profileId: options.profileId || 'default',
+          icon: null,
+          color: null,
+          shellId,
+          running: true,
+        };
+
+        instances = { ...instances, [shellId]: instance };
+
+        const groupIdx = groups.findIndex(g => g.id === groupId);
+        if (groupIdx !== -1) {
+          groups[groupIdx].instanceIds = [...groups[groupIdx].instanceIds, shellId];
+          groups = [...groups];
+        }
+
+        activeGroupId = groupId;
+        activeInstanceId = shellId;
+        syncLegacyTabs();
+        return shellId;
+      } catch (err) {
+        console.error('[terminal-tabs] Terminal split error:', err);
+        return null;
+      }
+    },
+
+    /**
+     * Move an instance to a new position within or across groups.
+     * @param {string} instanceId - The instance to move
+     * @param {string} targetGroupId - The group to move into
+     * @param {number} targetIndex - Position within that group's instanceIds
+     */
+    moveInstance(instanceId, targetGroupId, targetIndex) {
+      const instance = instances[instanceId];
+      if (!instance) return;
+
+      const sourceGroupId = instance.groupId;
+      const sourceGroupIdx = groups.findIndex(g => g.id === sourceGroupId);
+      const targetGroupIdx = groups.findIndex(g => g.id === targetGroupId);
+      if (sourceGroupIdx === -1 || targetGroupIdx === -1) return;
+
+      // Remove from source group
+      const sourceIds = groups[sourceGroupIdx].instanceIds.filter(id => id !== instanceId);
+
+      if (sourceGroupId === targetGroupId) {
+        // Same group -- reorder within it
+        const newIds = [...sourceIds];
+        const clampedIdx = Math.min(targetIndex, newIds.length);
+        newIds.splice(clampedIdx, 0, instanceId);
+        groups[targetGroupIdx].instanceIds = newIds;
+      } else {
+        // Different group -- remove from source, insert into target
+        groups[sourceGroupIdx].instanceIds = sourceIds;
+
+        const targetIds = [...groups[targetGroupIdx].instanceIds];
+        const clampedIdx = Math.min(targetIndex, targetIds.length);
+        targetIds.splice(clampedIdx, 0, instanceId);
+        groups[targetGroupIdx].instanceIds = targetIds;
+
+        // Update instance's groupId
+        instance.groupId = targetGroupId;
+        instances = { ...instances };
+
+        // Clean up empty source group
+        if (sourceIds.length === 0) {
+          groups = groups.filter(g => g.id !== sourceGroupId);
+        }
+      }
+
+      groups = [...groups]; // trigger reactivity
+      syncLegacyTabs();
+    },
+
+    /**
      * Focus a specific instance (sets both activeGroupId and activeInstanceId).
      * @param {string} instanceId
      */

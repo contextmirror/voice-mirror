@@ -86,3 +86,65 @@ describe('TerminalSidebar.svelte -- accessibility', () => {
     assert.ok(src.includes('tabindex="0"'), 'Should be focusable');
   });
 });
+
+describe('TerminalSidebar.svelte -- hover action buttons', () => {
+  it('has instance-actions container', () => {
+    assert.ok(src.includes('instance-actions'), 'Should have actions container');
+  });
+  it('has split terminal button', () => {
+    assert.ok(src.includes('Split Terminal'), 'Should have split button title');
+  });
+  it('has kill terminal button', () => {
+    assert.ok(src.includes('Kill Terminal'), 'Should have kill button title');
+  });
+  it('split button calls splitGroup', () => {
+    assert.ok(src.includes('splitGroup(group.id)'), 'Should call splitGroup with group id');
+  });
+  it('kill button calls killInstance', () => {
+    assert.ok(src.includes('killInstance(instId)'), 'Should call killInstance with instance id');
+  });
+  it('buttons stop click propagation', () => {
+    assert.ok(src.includes('stopPropagation'), 'Should prevent row click when clicking action');
+  });
+  it('has action-btn CSS class', () => {
+    assert.ok(src.includes('.action-btn'), 'Should style action buttons');
+  });
+  it('actions hidden by default, shown on hover', () => {
+    assert.ok(src.includes('.instance-actions') && src.includes('display: none'), 'Actions hidden by default');
+    assert.ok(src.includes(':hover .instance-actions'), 'Actions shown on hover');
+  });
+});
+
+describe('TerminalSidebar.svelte -- drag-to-reorder', () => {
+  it('has draggable attribute on instances', () => {
+    assert.ok(src.includes('draggable="true"'), 'Instances should be draggable');
+  });
+  it('has dragstart handler', () => {
+    assert.ok(src.includes('ondragstart'), 'Should handle drag start');
+  });
+  it('has dragover handler', () => {
+    assert.ok(src.includes('ondragover'), 'Should handle drag over');
+  });
+  it('has drop handler', () => {
+    assert.ok(src.includes('ondrop'), 'Should handle drop');
+  });
+  it('has dragend handler', () => {
+    assert.ok(src.includes('ondragend'), 'Should handle drag end');
+  });
+  it('has dragging class for visual feedback', () => {
+    assert.ok(src.includes('class:dragging'), 'Should dim dragged item');
+  });
+  it('has drop-before indicator class', () => {
+    assert.ok(src.includes('class:drop-before'), 'Should show top drop indicator');
+  });
+  it('has drop-after indicator class', () => {
+    assert.ok(src.includes('class:drop-after'), 'Should show bottom drop indicator');
+  });
+  it('calls moveInstance on drop', () => {
+    assert.ok(src.includes('moveInstance'), 'Should call store moveInstance');
+  });
+  it('tracks drag state', () => {
+    assert.ok(src.includes('dragInstanceId'), 'Should track which instance is being dragged');
+    assert.ok(src.includes('dropTargetId'), 'Should track drop target');
+  });
+});

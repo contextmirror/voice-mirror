@@ -6,11 +6,58 @@
    * groups have no tree prefix; multi-instance groups use box-drawing chars.
    * Click focuses an instance; right-click dispatches a context menu event.
    * Displays color dot and icon indicator when set on an instance.
+   * Hover shows split + kill action buttons (VS Code style).
+   * Drag-to-reorder instances within and across groups.
    */
   import { terminalTabsStore } from '../../lib/stores/terminal-tabs.svelte.js';
 
   /** @type {{ oncontextmenu?: (e: MouseEvent, instanceId: string) => void }} */
   let { oncontextmenu } = $props();
+
+  // ---- Drag-to-reorder state ----
+  let dragInstanceId = $state(null);
+  let dropTargetId = $state(null);
+  let dropPosition = $state('after'); // 'before' | 'after'
+
+  function handleDragStart(e, instId) {
+    dragInstanceId = instId;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', instId);
+  }
+
+  function handleDragOver(e, instId) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    dropTargetId = instId;
+    // Determine drop position based on cursor within the row
+    const rect = e.currentTarget.getBoundingClientRect();
+    dropPosition = (e.clientY - rect.top) < rect.height / 2 ? 'before' : 'after';
+  }
+
+  function handleDragLeave(e) {
+    // Only clear if leaving the sidebar-instance element entirely
+    if (!e.currentTarget.contains(e.relatedTarget)) {
+      dropTargetId = null;
+    }
+  }
+
+  function handleDrop(e, targetInstId, targetGroupId, targetIdx) {
+    e.preventDefault();
+    if (!dragInstanceId || dragInstanceId === targetInstId) {
+      dragInstanceId = null;
+      dropTargetId = null;
+      return;
+    }
+    const insertIdx = dropPosition === 'before' ? targetIdx : targetIdx + 1;
+    terminalTabsStore.moveInstance(dragInstanceId, targetGroupId, insertIdx);
+    dragInstanceId = null;
+    dropTargetId = null;
+  }
+
+  function handleDragEnd() {
+    dragInstanceId = null;
+    dropTargetId = null;
+  }
 
   /** Icon SVG paths keyed by icon id (matches TerminalIconPicker ICONS) */
   const ICON_SVGS = {
@@ -40,8 +87,17 @@
       <div
         class="sidebar-instance"
         class:active={instId === terminalTabsStore.activeInstanceId}
+        class:dragging={dragInstanceId === instId}
+        class:drop-before={dropTargetId === instId && dropPosition === 'before'}
+        class:drop-after={dropTargetId === instId && dropPosition === 'after'}
         onclick={() => terminalTabsStore.focusInstance(instId)}
         oncontextmenu={(e) => { e.preventDefault(); oncontextmenu?.(e, instId); }}
+        draggable="true"
+        ondragstart={(e) => handleDragStart(e, instId)}
+        ondragover={(e) => handleDragOver(e, instId)}
+        ondragleave={handleDragLeave}
+        ondrop={(e) => handleDrop(e, instId, group.id, idx)}
+        ondragend={handleDragEnd}
         role="option"
         tabindex="0"
         aria-selected={instId === terminalTabsStore.activeInstanceId}
@@ -57,6 +113,28 @@
           </svg>
         {/if}
         <span class="instance-title">{instance?.title || 'Terminal'}</span>
+        <span class="instance-actions">
+          <button
+            class="action-btn"
+            title="Split Terminal"
+            onclick={(e) => { e.stopPropagation(); terminalTabsStore.splitGroup(group.id); }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <rect x="3" y="3" width="18" height="18" rx="2"/>
+              <line x1="12" y1="3" x2="12" y2="21"/>
+            </svg>
+          </button>
+          <button
+            class="action-btn"
+            title="Kill Terminal"
+            onclick={(e) => { e.stopPropagation(); terminalTabsStore.killInstance(instId); }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <polyline points="3 6 5 6 21 6"/>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+            </svg>
+          </button>
+        </span>
       </div>
     {/each}
   {/each}
@@ -78,6 +156,7 @@
     white-space: nowrap;
     display: flex;
     align-items: center;
+    position: relative;
   }
 
   .sidebar-instance:hover {
@@ -87,6 +166,19 @@
   .sidebar-instance.active {
     background: var(--bg-elevated);
     color: var(--text-strong);
+  }
+
+  /* Drag-to-reorder styles */
+  .sidebar-instance.dragging {
+    opacity: 0.4;
+  }
+
+  .sidebar-instance.drop-before {
+    box-shadow: inset 0 2px 0 0 var(--accent);
+  }
+
+  .sidebar-instance.drop-after {
+    box-shadow: inset 0 -2px 0 0 var(--accent);
   }
 
   .tree-char {
@@ -112,5 +204,36 @@
   .instance-title {
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  /* Hover action buttons */
+  .instance-actions {
+    display: none;
+    margin-left: auto;
+    flex-shrink: 0;
+    gap: 2px;
+  }
+
+  .sidebar-instance:hover .instance-actions,
+  .sidebar-instance:focus-within .instance-actions {
+    display: flex;
+  }
+
+  .action-btn {
+    background: none;
+    border: none;
+    padding: 2px;
+    cursor: pointer;
+    color: var(--muted);
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 0;
+  }
+
+  .action-btn:hover {
+    background: color-mix(in srgb, var(--text) 15%, var(--bg));
+    color: var(--text);
   }
 </style>
