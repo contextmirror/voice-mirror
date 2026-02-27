@@ -614,7 +614,7 @@
     height: 36px;
     min-height: 36px;
     background: var(--bg);
-    border-bottom: 1px solid color-mix(in srgb, var(--text) 12%, var(--bg));
+    border-bottom: none;
     user-select: none;
   }
 
@@ -993,6 +993,7 @@
     flex: 1;
     overflow: hidden;
     min-height: 0;
+    border-top: 1px solid color-mix(in srgb, var(--text) 12%, var(--bg));
   }
 
   /* -- Terminal panel container -- */
@@ -1001,6 +1002,7 @@
     flex: 1;
     overflow: hidden;
     min-height: 0;
+    border-top: 1px solid color-mix(in srgb, var(--text) 12%, var(--bg));
   }
 
   /* -- Terminal panels -- */
