@@ -580,7 +580,7 @@ pub async fn handle_browser_action(
             }
 
             // Get page metadata
-            let meta = evaluate_js_with_result(
+            let meta_raw = evaluate_js_with_result(
                 app,
                 &webview,
                 r#"JSON.stringify({ title: document.title, url: location.href })"#,
@@ -588,6 +588,7 @@ pub async fn handle_browser_action(
             )
             .await
             .unwrap_or(json!(null));
+            let meta = unwrap_js_result(meta_raw);
 
             let title = meta.get("title").and_then(|v| v.as_str()).unwrap_or("");
             let url = meta.get("url").and_then(|v| v.as_str()).unwrap_or("");
@@ -1141,8 +1142,18 @@ pub async fn handle_browser_action(
         // -----------------------------------------------------------------
 
         "wait" => {
-            let webview = get_webview(app, &state)?;
             let timeout_ms = args.get("timeout").and_then(|v| v.as_u64()).unwrap_or(30000);
+
+            // Pure delay mode: no ref/selector → just sleep for the timeout duration
+            let has_ref = args.get("ref").and_then(|v| v.as_str()).is_some();
+            let has_selector = args.get("selector").and_then(|v| v.as_str()).is_some();
+            if !has_ref && !has_selector {
+                tokio::time::sleep(std::time::Duration::from_millis(timeout_ms)).await;
+                return Ok(json!({ "ok": true, "action": "wait", "elapsed_ms": timeout_ms }));
+            }
+
+            // Element wait mode: poll until element appears
+            let webview = get_webview(app, &state)?;
             let poll_ms = args.get("poll").and_then(|v| v.as_u64()).unwrap_or(200);
             let target = resolve_element_target(args)?;
 
@@ -1184,9 +1195,11 @@ pub async fn handle_browser_action(
                 .or_else(|| args.get("value"))
                 .and_then(|v| v.as_str())
                 .ok_or("'pattern' (or 'value') is required for waitforurl — provide a regex to match against the URL")?;
-            let pattern_js = escape_js(pattern);
             let timeout_ms = args.get("timeout").and_then(|v| v.as_u64()).unwrap_or(30000);
             let poll_ms = args.get("poll").and_then(|v| v.as_u64()).unwrap_or(500);
+
+            // Use serde_json to safely embed pattern in JS (handles all escaping)
+            let pattern_json = serde_json::to_string(pattern).unwrap_or_default();
 
             let start = std::time::Instant::now();
             let deadline = std::time::Duration::from_millis(timeout_ms);
@@ -1194,11 +1207,15 @@ pub async fn handle_browser_action(
             loop {
                 let check_js = format!(
                     r#"(function() {{
-                        var re = new RegExp('{pattern_js}');
-                        return JSON.stringify({{ url: location.href, matched: re.test(location.href) }});
+                        try {{
+                            var re = new RegExp({pattern_json});
+                            return JSON.stringify({{ url: location.href, matched: re.test(location.href) }});
+                        }} catch(e) {{
+                            return JSON.stringify({{ url: location.href, matched: false, error: e.message }});
+                        }}
                     }})()"#
                 );
-                if let Ok(result) = evaluate_js_with_result(
+                match evaluate_js_with_result(
                     app,
                     &webview,
                     &check_js,
@@ -1206,10 +1223,15 @@ pub async fn handle_browser_action(
                 )
                 .await
                 {
-                    let parsed = unwrap_js_result(result);
-                    if parsed.get("matched").and_then(|v| v.as_bool()).unwrap_or(false) {
-                        let url = parsed.get("url").and_then(|v| v.as_str()).unwrap_or("");
-                        return Ok(json!({ "ok": true, "action": "waitforurl", "url": url, "elapsed_ms": start.elapsed().as_millis() as u64 }));
+                    Ok(result) => {
+                        let parsed = unwrap_js_result(result);
+                        if parsed.get("matched").and_then(|v| v.as_bool()).unwrap_or(false) {
+                            let url = parsed.get("url").and_then(|v| v.as_str()).unwrap_or("");
+                            return Ok(json!({ "ok": true, "action": "waitforurl", "url": url, "elapsed_ms": start.elapsed().as_millis() as u64 }));
+                        }
+                    }
+                    Err(e) => {
+                        tracing::debug!("[browser_bridge] waitforurl JS eval failed: {}", e);
                     }
                 }
 
