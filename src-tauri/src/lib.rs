@@ -374,6 +374,8 @@ pub fn run() {
             files_cmds::git_commit,
             files_cmds::git_discard,
             files_cmds::git_push,
+            files_cmds::git_list_branches,
+            files_cmds::git_checkout_branch,
             // Terminal sessions
             terminal_cmds::terminal_spawn,
             terminal_cmds::terminal_input,

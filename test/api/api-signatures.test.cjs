@@ -272,6 +272,8 @@ describe('api.js -- exported async functions', () => {
     'gitCommit',
     'gitDiscard',
     'gitPush',
+    'gitListBranches',
+    'gitCheckoutBranch',
     // Terminals
     'terminalSpawn',
     'terminalInput',

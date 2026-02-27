@@ -431,6 +431,127 @@ pub fn git_push(root: Option<String>) -> IpcResponse {
     IpcResponse::ok_empty()
 }
 
+/// List all branches (local and remote).
+///
+/// Returns `{ branches: [{ name, isCurrent, isRemote }], current: "branch-name" }`.
+/// Sorted: current branch first, then local branches, then remote branches.
+#[tauri::command]
+pub fn git_list_branches(root: Option<String>) -> IpcResponse {
+    let root = match resolve_root(root) {
+        Ok(r) => r,
+        Err(e) => return e,
+    };
+
+    // Get current branch
+    let current = std::process::Command::new("git")
+        .args(["rev-parse", "--abbrev-ref", "HEAD"])
+        .current_dir(&root)
+        .output()
+        .ok()
+        .and_then(|o| {
+            if o.status.success() {
+                Some(String::from_utf8_lossy(&o.stdout).trim().to_string())
+            } else {
+                None
+            }
+        })
+        .unwrap_or_default();
+
+    // Get local branches
+    let local_output = std::process::Command::new("git")
+        .args(["branch", "--format=%(refname:short)"])
+        .current_dir(&root)
+        .output();
+
+    let mut branches: Vec<serde_json::Value> = Vec::new();
+
+    if let Ok(output) = &local_output {
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            for line in stdout.lines() {
+                let name = line.trim();
+                if name.is_empty() { continue; }
+                branches.push(serde_json::json!({
+                    "name": name,
+                    "isCurrent": name == current,
+                    "isRemote": false,
+                }));
+            }
+        }
+    }
+
+    // Get remote branches
+    let remote_output = std::process::Command::new("git")
+        .args(["branch", "-r", "--format=%(refname:short)"])
+        .current_dir(&root)
+        .output();
+
+    if let Ok(output) = &remote_output {
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            for line in stdout.lines() {
+                let name = line.trim();
+                if name.is_empty() || name.contains("HEAD") { continue; }
+                // Skip remotes that have a local tracking branch with same short name
+                let short = name.split('/').skip(1).collect::<Vec<_>>().join("/");
+                if branches.iter().any(|b| b["name"].as_str() == Some(&short)) {
+                    continue;
+                }
+                branches.push(serde_json::json!({
+                    "name": name,
+                    "isCurrent": false,
+                    "isRemote": true,
+                }));
+            }
+        }
+    }
+
+    // Sort: current first, then local, then remote
+    branches.sort_by(|a, b| {
+        let a_current = a["isCurrent"].as_bool().unwrap_or(false);
+        let b_current = b["isCurrent"].as_bool().unwrap_or(false);
+        let a_remote = a["isRemote"].as_bool().unwrap_or(false);
+        let b_remote = b["isRemote"].as_bool().unwrap_or(false);
+        b_current.cmp(&a_current)
+            .then(a_remote.cmp(&b_remote))
+    });
+
+    info!("git_list_branches: {} branches (current={})", branches.len(), current);
+    IpcResponse::ok(serde_json::json!({ "branches": branches, "current": current }))
+}
+
+/// Switch to a different git branch.
+///
+/// Runs `git checkout <branch_name>`. For remote branches like `origin/feature`,
+/// git will auto-create a local tracking branch.
+#[tauri::command]
+pub fn git_checkout_branch(branch: String, root: Option<String>) -> IpcResponse {
+    if branch.trim().is_empty() {
+        return IpcResponse::err("Branch name cannot be empty");
+    }
+    let root = match resolve_root(root) {
+        Ok(r) => r,
+        Err(e) => return e,
+    };
+
+    let output = match std::process::Command::new("git")
+        .args(["checkout", branch.trim()])
+        .current_dir(&root)
+        .output()
+    {
+        Ok(o) => o,
+        Err(e) => return IpcResponse::err(format!("Failed to run git checkout: {}", e)),
+    };
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return IpcResponse::err(format!("git checkout failed: {}", stderr.trim()));
+    }
+
+    info!("git_checkout_branch: switched to {}", branch.trim());
+    IpcResponse::ok(serde_json::json!({ "branch": branch.trim() }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

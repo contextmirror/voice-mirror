@@ -484,6 +484,8 @@ export async function gitUnstageAll(root) { return invoke('git_unstage_all', { r
 export async function gitCommit(message, root) { return invoke('git_commit', { message, root: root || null }); }
 export async function gitDiscard(paths, root) { return invoke('git_discard', { paths, root: root || null }); }
 export async function gitPush(root) { return invoke('git_push', { root: root || null }); }
+export async function gitListBranches(root) { return invoke('git_list_branches', { root: root || null }); }
+export async function gitCheckoutBranch(branch, root) { return invoke('git_checkout_branch', { branch, root: root || null }); }
 /**
  * Create a new file with optional content.
  * Errors if the file already exists. Creates parent directories as needed.
