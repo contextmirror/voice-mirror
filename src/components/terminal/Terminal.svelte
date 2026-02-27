@@ -11,6 +11,8 @@
   import { currentThemeName } from '../../lib/stores/theme.svelte.js';
   import { terminalTabsStore } from '../../lib/stores/terminal-tabs.svelte.js';
   import { devServerManager } from '../../lib/stores/dev-server-manager.svelte.js';
+  import { searchBuffer, nextMatch, prevMatch } from '../../lib/terminal-search.js';
+  import TerminalSearch from './TerminalSearch.svelte';
 
   let { shellId, visible = true, onRegisterActions } = $props();
 
@@ -24,6 +26,15 @@
   let lastPtyRows = $state(0);
   let initialized = $state(false);
   let pendingEvents = [];
+
+  // ---- Search state ----
+  let searchVisible = $state(false);
+  let searchQuery = $state('');
+  let searchMatches = $state([]);
+  let searchMatchCount = $state(0);
+  let currentMatchIndex = $state(0);
+  let searchCaseSensitive = $state(false);
+  let searchRegex = $state(false);
 
   // ---- CSS token -> ghostty-web theme mapping ----
 
@@ -103,6 +114,93 @@
     } catch {
       // Not mounted yet or container has zero size
     }
+  }
+
+  // ---- Search functions ----
+
+  /**
+   * Extract visible text lines from the terminal buffer.
+   * ghostty-web exposes buffer via term.buffer.active.
+   */
+  function runSearch(query) {
+    searchQuery = query;
+    if (!term || !query) {
+      searchMatches = [];
+      searchMatchCount = 0;
+      currentMatchIndex = 0;
+      return;
+    }
+
+    const buffer = term.buffer?.active;
+    if (!buffer) {
+      searchMatches = [];
+      searchMatchCount = 0;
+      currentMatchIndex = 0;
+      return;
+    }
+
+    const lineCount = buffer.length;
+    const getLine = (y) => {
+      const line = buffer.getLine(y);
+      return line ? line.translateToString(true) : null;
+    };
+
+    const result = searchBuffer(getLine, lineCount, query, {
+      caseSensitive: searchCaseSensitive,
+      regex: searchRegex,
+    });
+
+    searchMatches = result.matches;
+    searchMatchCount = result.total;
+    currentMatchIndex = result.total > 0 ? 0 : 0;
+  }
+
+  function handleSearchNext() {
+    if (searchMatchCount === 0) return;
+    currentMatchIndex = nextMatch(searchMatchCount, currentMatchIndex);
+    scrollToMatch(currentMatchIndex);
+  }
+
+  function handleSearchPrev() {
+    if (searchMatchCount === 0) return;
+    currentMatchIndex = prevMatch(searchMatchCount, currentMatchIndex);
+    scrollToMatch(currentMatchIndex);
+  }
+
+  function scrollToMatch(index) {
+    if (!term || !searchMatches[index]) return;
+    const match = searchMatches[index];
+    // Scroll the terminal to the match row if possible
+    const buffer = term.buffer?.active;
+    if (buffer) {
+      const viewportTop = buffer.viewportY;
+      const viewportBottom = viewportTop + term.rows;
+      if (match.row < viewportTop || match.row >= viewportBottom) {
+        // Scroll so match row is near the middle of the viewport
+        const targetY = Math.max(0, match.row - Math.floor(term.rows / 2));
+        term.scrollToLine(targetY);
+      }
+    }
+  }
+
+  function handleSearchClose() {
+    searchVisible = false;
+    searchQuery = '';
+    searchMatches = [];
+    searchMatchCount = 0;
+    currentMatchIndex = 0;
+    // Re-focus the terminal
+    if (term) term.focus();
+  }
+
+  function handleToggleCase() {
+    searchCaseSensitive = !searchCaseSensitive;
+    if (searchQuery) runSearch(searchQuery);
+  }
+
+  function handleToggleRegex() {
+    searchRegex = !searchRegex;
+    if (searchQuery) runSearch(searchQuery);
   }
 
   // ---- Toolbar actions ----
@@ -215,9 +313,16 @@
         });
       });
 
-      // Custom keyboard handler for Ctrl+C (copy selection) and Ctrl+V (paste)
+      // Custom keyboard handler for Ctrl+C (copy), Ctrl+V (paste), Ctrl+F (search)
       ghosttyTerm.attachCustomKeyEventHandler((event) => {
         if (event.type !== 'keydown') return false;
+
+        // Ctrl+F: toggle terminal search
+        if (event.ctrlKey && event.key === 'f' && !event.shiftKey && !event.altKey) {
+          searchVisible = !searchVisible;
+          if (!searchVisible) handleSearchClose();
+          return true; // Handled: prevent browser find
+        }
 
         // Ctrl+C: copy selected text if there is a selection
         if (event.ctrlKey && event.key === 'c' && !event.shiftKey && !event.altKey) {
@@ -363,6 +468,19 @@
 </script>
 
 <div class="terminal-view">
+  <TerminalSearch
+    visible={searchVisible}
+    onClose={handleSearchClose}
+    onSearch={runSearch}
+    onNext={handleSearchNext}
+    onPrev={handleSearchPrev}
+    matchCount={searchMatchCount}
+    currentMatch={currentMatchIndex}
+    caseSensitive={searchCaseSensitive}
+    regex={searchRegex}
+    onToggleCase={handleToggleCase}
+    onToggleRegex={handleToggleRegex}
+  />
   <div class="terminal-container" class:ready={initialized} bind:this={containerEl}></div>
 </div>
 
@@ -373,6 +491,7 @@
     height: 100%;
     overflow: hidden;
     background: var(--bg);
+    position: relative;
     /* Minimal left/right padding so terminal text doesn't touch the edge.
        No top padding — avoids visible gap between tab bar and terminal. */
     padding: 0 4px;
