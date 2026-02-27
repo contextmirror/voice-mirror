@@ -6,6 +6,8 @@
    * rename, kill, unsplit, and opens color/icon picker popups for customization.
    */
   import { terminalTabsStore } from '../../lib/stores/terminal-tabs.svelte.js';
+  import { devServerManager } from '../../lib/stores/dev-server-manager.svelte.js';
+  import { toastStore } from '../../lib/stores/toast.svelte.js';
   import TerminalColorPicker from './TerminalColorPicker.svelte';
   import TerminalIconPicker from './TerminalIconPicker.svelte';
 
@@ -58,7 +60,21 @@
 
   function handleKill() {
     if (!instanceId) return;
-    terminalTabsStore.killInstance(instanceId);
+    const inst = instance;
+    if (inst?.type === 'dev-server' && devServerManager.isDevServerShell(instanceId)) {
+      const label = inst.title || 'Dev server';
+      toastStore.addToast({
+        message: `Stop ${label}?`,
+        severity: 'warning',
+        duration: 8000,
+        actions: [
+          { label: 'Stop', callback: () => devServerManager.stopServerByShellId(instanceId) },
+          { label: 'Cancel', callback: () => {} },
+        ],
+      });
+    } else {
+      terminalTabsStore.killInstance(instanceId);
+    }
     onClose();
   }
 

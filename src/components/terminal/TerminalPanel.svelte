@@ -47,41 +47,19 @@
     terminalTabsStore.groups.some(g => g.instanceIds.length > 1)
   );
 
-  const activeGroup = $derived(terminalTabsStore.activeGroup);
-  const activeInstances = $derived(
-    activeGroup
-      ? activeGroup.instanceIds.map(id => terminalTabsStore.getInstance(id)).filter(Boolean)
-      : []
-  );
+  const activeGroupId = $derived(terminalTabsStore.activeGroupId);
 
-  // Split ratio for 2-pane splits
-  let splitRatio = $state(0.5);
+  /**
+   * Get instances for a group, resolved from the store.
+   * @param {{ id: string, instanceIds: string[] }} group
+   */
+  function getGroupInstances(group) {
+    return group.instanceIds.map(id => terminalTabsStore.getInstance(id)).filter(Boolean);
+  }
 
-  // ---- Transition blanking ----
-  // When instance count or active group changes, Svelte tears down and
-  // recreates Terminal components. During teardown, ghostty-web disposal
-  // artifacts flash as garbled text for a frame.
-  //
-  // $effect.pre runs BEFORE the DOM update, so we can hide the content
-  // area before Svelte destroys the old terminal components.
-  let transitioning = $state(false);
-  let prevInstanceKey = $state('');
-
-  $effect.pre(() => {
-    // Build a key from group ID + instance IDs so any layout change triggers blanking
-    const key = (activeGroup?.id || '') + ':' + activeInstances.map(i => i.shellId).join(',');
-    if (prevInstanceKey !== '' && key !== prevInstanceKey) {
-      // Hide BEFORE Svelte tears down old terminals
-      transitioning = true;
-      // Reveal after new terminals have initialized (double-rAF)
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          transitioning = false;
-        });
-      });
-    }
-    prevInstanceKey = key;
-  });
+  // Per-group split ratios (keyed by group ID)
+  /** @type {Record<string, number>} */
+  let splitRatios = $state({});
 
   // Context menu state (triggered from sidebar or tab strip right-click)
   let ctxMenu = $state({ visible: false, x: 0, y: 0, instanceId: null });
@@ -121,29 +99,29 @@
 <div class="terminal-panel-inner">
   <!-- Body: terminal content + optional sidebar -->
   <div class="terminal-body">
-    <div class="terminal-content" class:transitioning>
-      {#if activeInstances.length === 1}
-        <Terminal shellId={activeInstances[0].shellId} visible={true} />
-      {:else if activeInstances.length === 2}
-        <SplitPanel direction="horizontal" bind:ratio={splitRatio} minA={120} minB={120}>
-          {#snippet panelA()}
-            <Terminal shellId={activeInstances[0].shellId} visible={true} />
-          {/snippet}
-          {#snippet panelB()}
-            <Terminal shellId={activeInstances[1].shellId} visible={true} />
-          {/snippet}
-        </SplitPanel>
-      {:else if activeInstances.length > 2}
-        <!-- Support up to 2 splits cleanly; render first 2 and warn -->
-        <SplitPanel direction="horizontal" bind:ratio={splitRatio} minA={120} minB={120}>
-          {#snippet panelA()}
-            <Terminal shellId={activeInstances[0].shellId} visible={true} />
-          {/snippet}
-          {#snippet panelB()}
-            <Terminal shellId={activeInstances[1].shellId} visible={true} />
-          {/snippet}
-        </SplitPanel>
-      {/if}
+    <div class="terminal-content">
+      <!-- All groups are always mounted — only the active one is visible.
+           This prevents ghostty-web from losing PTY output on group switch. -->
+      {#each terminalTabsStore.groups as group (group.id)}
+        {@const instances = getGroupInstances(group)}
+        {@const isActive = group.id === activeGroupId}
+        <!-- Ensure split ratio is initialized for this group -->
+        {(splitRatios[group.id] ??= 0.5, '')}
+        <div class="group-container" class:active={isActive}>
+          {#if instances.length === 1}
+            <Terminal shellId={instances[0].shellId} visible={isActive} />
+          {:else if instances.length >= 2}
+            <SplitPanel direction="horizontal" bind:ratio={splitRatios[group.id]} minA={120} minB={120}>
+              {#snippet panelA()}
+                <Terminal shellId={instances[0].shellId} visible={isActive} />
+              {/snippet}
+              {#snippet panelB()}
+                <Terminal shellId={instances[1].shellId} visible={isActive} />
+              {/snippet}
+            </SplitPanel>
+          {/if}
+        </div>
+      {/each}
     </div>
 
     {#if showSidebar}
@@ -191,10 +169,22 @@
     flex: 1;
     min-width: 0;
     overflow: hidden;
+    position: relative;
   }
 
-  .terminal-content.transitioning {
+  /* All groups are always mounted; only the active one is visible and sized.
+     Inactive groups use visibility:hidden + absolute positioning so they
+     still have real dimensions (Terminal can measure for fit) but don't
+     show or consume layout space in the parent. */
+  .group-container {
+    position: absolute;
+    inset: 0;
     visibility: hidden;
+  }
+
+  .group-container.active {
+    visibility: visible;
+    z-index: 1;
   }
 
   /* Empty sidebar context menu */

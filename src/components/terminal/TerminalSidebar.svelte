@@ -10,9 +10,34 @@
    * Drag-to-reorder instances within and across groups.
    */
   import { terminalTabsStore } from '../../lib/stores/terminal-tabs.svelte.js';
+  import { devServerManager } from '../../lib/stores/dev-server-manager.svelte.js';
+  import { toastStore } from '../../lib/stores/toast.svelte.js';
 
   /** @type {{ oncontextmenu?: (e: MouseEvent, instanceId: string) => void, onEmptyContextMenu?: (e: MouseEvent) => void }} */
   let { oncontextmenu, onEmptyContextMenu } = $props();
+
+  /**
+   * Handle kill button click. For dev-server instances, shows a confirmation
+   * toast before stopping. For regular terminals, kills immediately.
+   * @param {string} instId
+   */
+  function handleKillInstance(instId) {
+    const instance = terminalTabsStore.getInstance(instId);
+    if (instance?.type === 'dev-server' && devServerManager.isDevServerShell(instId)) {
+      const label = instance.title || 'Dev server';
+      toastStore.addToast({
+        message: `Stop ${label}?`,
+        severity: 'warning',
+        duration: 8000,
+        actions: [
+          { label: 'Stop', callback: () => devServerManager.stopServerByShellId(instId) },
+          { label: 'Cancel', callback: () => {} },
+        ],
+      });
+    } else {
+      terminalTabsStore.killInstance(instId);
+    }
+  }
 
   // ---- Drag-to-reorder state ----
   let dragInstanceId = $state(null);
@@ -127,7 +152,7 @@
           <button
             class="action-btn"
             title="Kill Terminal"
-            onclick={(e) => { e.stopPropagation(); terminalTabsStore.killInstance(instId); }}
+            onclick={(e) => { e.stopPropagation(); handleKillInstance(instId); }}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
               <polyline points="3 6 5 6 21 6"/>
