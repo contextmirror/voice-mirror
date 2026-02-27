@@ -23,8 +23,13 @@
   const group = $derived(instance ? terminalTabsStore.groups.find(g => g.id === instance.groupId) : null);
   const canUnsplit = $derived(group ? group.instanceIds.length > 1 : false);
 
-  function handleSplit() {
-    terminalTabsStore.splitInstance();
+  function handleSplitRight() {
+    terminalTabsStore.splitInstance({ direction: 'horizontal' });
+    onClose();
+  }
+
+  function handleSplitDown() {
+    terminalTabsStore.splitInstance({ direction: 'vertical' });
     onClose();
   }
 
@@ -107,13 +112,21 @@
     style="left: {x}px; top: {y}px;"
     onclick={(e) => e.stopPropagation()}
   >
-    <button class="context-menu-item" onclick={handleSplit}>
+    <button class="context-menu-item" onclick={handleSplitRight}>
       <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
         <rect x="1" y="2" width="14" height="12" rx="1" stroke="currentColor" stroke-width="1.2" fill="none"/>
         <line x1="8" y1="2" x2="8" y2="14" stroke="currentColor" stroke-width="1.2"/>
       </svg>
-      <span class="item-label">Split Terminal</span>
+      <span class="item-label">Split Right</span>
       <span class="item-shortcut">Ctrl+Shift+5</span>
+    </button>
+    <button class="context-menu-item" onclick={handleSplitDown}>
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+        <rect x="1" y="2" width="14" height="12" rx="1" stroke="currentColor" stroke-width="1.2" fill="none"/>
+        <line x1="1" y1="8" x2="15" y2="8" stroke="currentColor" stroke-width="1.2"/>
+      </svg>
+      <span class="item-label">Split Down</span>
+      <span class="item-shortcut">Ctrl+Shift+&minus;</span>
     </button>
 
     <div class="context-menu-divider"></div>

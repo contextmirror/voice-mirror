@@ -10,6 +10,7 @@
  * still work and delegate to the new group/instance model.
  */
 import { terminalSpawn, terminalKill } from '../api.js';
+import { createLeaf, splitLeaf, removeLeaf, getAllInstanceIds, findLeaf } from '../split-tree.js';
 
 function createTerminalTabsStore() {
   // AI tab is always present, cannot be closed
@@ -37,6 +38,20 @@ function createTerminalTabsStore() {
 
   function generateGroupId() {
     return `group-${nextGroupNum++}`;
+  }
+
+  /**
+   * Create a group object with a splitTree and backward-compat instanceIds getter.
+   * @param {string} id - group ID
+   * @param {object} splitTree - root SplitNode
+   * @returns {{ id: string, splitTree: object, readonly instanceIds: string[] }}
+   */
+  function createGroupObj(id, splitTree) {
+    return {
+      id,
+      splitTree,
+      get instanceIds() { return getAllInstanceIds(this.splitTree); },
+    };
   }
 
   /**
@@ -157,7 +172,7 @@ function createTerminalTabsStore() {
         };
 
         instances = { ...instances, [shellId]: instance };
-        groups = [...groups, { id: groupId, instanceIds: [shellId] }];
+        groups = [...groups, createGroupObj(groupId, createLeaf(shellId))];
         activeGroupId = groupId;
         activeInstanceId = shellId;
 
@@ -176,15 +191,25 @@ function createTerminalTabsStore() {
      * @param {number} [options.rows]
      * @param {string} [options.cwd]
      * @param {string} [options.profileId]
+     * @param {'horizontal'|'vertical'} [options.direction] - split direction (default: 'horizontal' = side-by-side)
      * @returns {Promise<string|null>} The instance ID, or null on failure.
      */
     async splitInstance(options = {}) {
+      const direction = options.direction || 'horizontal';
+
       if (!activeGroupId) {
         // No active group -- create one instead
         const groupId = await this.addGroup(options);
         if (!groupId) return null;
         return activeInstanceId;
       }
+
+      const groupIdx = groups.findIndex(g => g.id === activeGroupId);
+      if (groupIdx === -1) return null;
+
+      // Check if split would exceed depth before spawning a PTY
+      const targetId = activeInstanceId || groups[groupIdx].instanceIds[0];
+      if (!targetId) return null;
 
       try {
         const result = await terminalSpawn(options);
@@ -206,14 +231,18 @@ function createTerminalTabsStore() {
           running: true,
         };
 
-        instances = { ...instances, [shellId]: instance };
-
-        // Add to active group's instanceIds
-        const groupIdx = groups.findIndex(g => g.id === activeGroupId);
-        if (groupIdx !== -1) {
-          groups[groupIdx].instanceIds = [...groups[groupIdx].instanceIds, shellId];
-          groups = [...groups]; // trigger reactivity
+        // Use splitLeaf to insert into the split tree at the active instance's position
+        const newTree = splitLeaf(groups[groupIdx].splitTree, targetId, shellId, direction);
+        if (!newTree) {
+          // Depth exceeded or target not found -- kill the spawned PTY
+          console.warn('[terminal-tabs] Split depth exceeded, cannot split further');
+          try { await terminalKill(shellId); } catch (_) {}
+          return null;
         }
+
+        instances = { ...instances, [shellId]: instance };
+        groups[groupIdx].splitTree = newTree;
+        groups = [...groups]; // trigger reactivity
 
         activeInstanceId = shellId;
         syncLegacyTabs();
@@ -245,12 +274,12 @@ function createTerminalTabsStore() {
       const groupId = instance.groupId;
       const groupIdx = groups.findIndex(g => g.id === groupId);
 
-      // Remove instance from group
+      // Remove instance from group's split tree using removeLeaf
       if (groupIdx !== -1) {
-        const newInstanceIds = groups[groupIdx].instanceIds.filter(id => id !== instanceId);
+        const newTree = removeLeaf(groups[groupIdx].splitTree, instanceId);
 
-        if (newInstanceIds.length === 0) {
-          // Group is now empty -- remove it
+        if (newTree === null) {
+          // Last leaf removed -- remove the entire group
           groups = groups.filter(g => g.id !== groupId);
 
           // Focus previous group or null
@@ -266,14 +295,13 @@ function createTerminalTabsStore() {
             }
           }
         } else {
-          groups[groupIdx].instanceIds = newInstanceIds;
+          groups[groupIdx].splitTree = newTree;
           groups = [...groups]; // trigger reactivity
 
           // Focus previous instance in group if we killed the active one
           if (activeInstanceId === instanceId) {
-            const prevIdx = Math.max(0, groups[groupIdx]?.instanceIds?.indexOf?.(instanceId) ?? 0);
-            const focusIdx = Math.min(prevIdx, newInstanceIds.length - 1);
-            activeInstanceId = newInstanceIds[focusIdx] || newInstanceIds[0] || null;
+            const remainingIds = groups[groupIdx].instanceIds;
+            activeInstanceId = remainingIds[0] || null;
           }
         }
       }
@@ -313,10 +341,10 @@ function createTerminalTabsStore() {
         instances = rest;
       }
 
-      // Update group to only have the kept instance
+      // Rebuild group as a single leaf
       const groupIdx = groups.findIndex(g => g.id === groupId);
       if (groupIdx !== -1) {
-        groups[groupIdx].instanceIds = [keepId];
+        groups[groupIdx].splitTree = createLeaf(keepId);
         groups = [...groups];
       }
 
@@ -392,11 +420,19 @@ function createTerminalTabsStore() {
      * Split a specific group (add instance to that group, not necessarily the active one).
      * @param {string} groupId
      * @param {Object} [options]
+     * @param {'horizontal'|'vertical'} [options.direction] - split direction (default: 'horizontal')
      * @returns {Promise<string|null>} The new instance ID, or null on failure.
      */
     async splitGroup(groupId, options = {}) {
+      const direction = options.direction || 'horizontal';
       const group = groups.find(g => g.id === groupId);
       if (!group) return null;
+
+      // Determine which leaf to split (active instance in this group, or first)
+      const targetId = (activeGroupId === groupId && activeInstanceId && findLeaf(group.splitTree, activeInstanceId))
+        ? activeInstanceId
+        : group.instanceIds[0];
+      if (!targetId) return null;
 
       try {
         const result = await terminalSpawn(options);
@@ -418,13 +454,19 @@ function createTerminalTabsStore() {
           running: true,
         };
 
-        instances = { ...instances, [shellId]: instance };
-
         const groupIdx = groups.findIndex(g => g.id === groupId);
-        if (groupIdx !== -1) {
-          groups[groupIdx].instanceIds = [...groups[groupIdx].instanceIds, shellId];
-          groups = [...groups];
+        if (groupIdx === -1) return null;
+
+        const newTree = splitLeaf(groups[groupIdx].splitTree, targetId, shellId, direction);
+        if (!newTree) {
+          console.warn('[terminal-tabs] Split depth exceeded for group', groupId);
+          try { await terminalKill(shellId); } catch (_) {}
+          return null;
         }
+
+        instances = { ...instances, [shellId]: instance };
+        groups[groupIdx].splitTree = newTree;
+        groups = [...groups];
 
         activeGroupId = groupId;
         activeInstanceId = shellId;
@@ -438,9 +480,11 @@ function createTerminalTabsStore() {
 
     /**
      * Move an instance to a new position within or across groups.
+     * For split-tree groups, this removes the instance from the source tree
+     * and appends it as a horizontal split at the last leaf of the target tree.
      * @param {string} instanceId - The instance to move
      * @param {string} targetGroupId - The group to move into
-     * @param {number} targetIndex - Position within that group's instanceIds
+     * @param {number} targetIndex - Position hint (used for ordering context)
      */
     moveInstance(instanceId, targetGroupId, targetIndex) {
       const instance = instances[instanceId];
@@ -451,32 +495,51 @@ function createTerminalTabsStore() {
       const targetGroupIdx = groups.findIndex(g => g.id === targetGroupId);
       if (sourceGroupIdx === -1 || targetGroupIdx === -1) return;
 
-      // Remove from source group
-      const sourceIds = groups[sourceGroupIdx].instanceIds.filter(id => id !== instanceId);
+      // Remove from source group's split tree
+      const newSourceTree = removeLeaf(groups[sourceGroupIdx].splitTree, instanceId);
 
       if (sourceGroupId === targetGroupId) {
-        // Same group -- reorder within it
-        const newIds = [...sourceIds];
-        const clampedIdx = Math.min(targetIndex, newIds.length);
-        newIds.splice(clampedIdx, 0, instanceId);
-        groups[targetGroupIdx].instanceIds = newIds;
+        // Same group -- remove and re-add via splitLeaf on last leaf
+        if (newSourceTree === null) return; // can't reorder single leaf
+        const targetIds = getAllInstanceIds(newSourceTree);
+        const clampedIdx = Math.min(targetIndex, targetIds.length - 1);
+        const targetLeafId = targetIds[clampedIdx] || targetIds[targetIds.length - 1];
+        const reinserted = splitLeaf(newSourceTree, targetLeafId, instanceId, 'horizontal');
+        if (reinserted) {
+          groups[targetGroupIdx].splitTree = reinserted;
+        } else {
+          // Fallback: just put it back
+          groups[targetGroupIdx].splitTree = newSourceTree;
+        }
       } else {
-        // Different group -- remove from source, insert into target
-        groups[sourceGroupIdx].instanceIds = sourceIds;
-
-        const targetIds = [...groups[targetGroupIdx].instanceIds];
-        const clampedIdx = Math.min(targetIndex, targetIds.length);
-        targetIds.splice(clampedIdx, 0, instanceId);
-        groups[targetGroupIdx].instanceIds = targetIds;
+        // Different group -- remove from source, add to target
+        if (newSourceTree === null) {
+          // Source group is now empty -- remove it
+          groups = groups.filter(g => g.id !== sourceGroupId);
+          // Recalculate target index after removal
+          const newTargetIdx = groups.findIndex(g => g.id === targetGroupId);
+          if (newTargetIdx === -1) return;
+          // Add to target tree via splitLeaf on last leaf
+          const targetIds = groups[newTargetIdx].instanceIds;
+          const targetLeafId = targetIds[targetIds.length - 1];
+          const newTargetTree = splitLeaf(groups[newTargetIdx].splitTree, targetLeafId, instanceId, 'horizontal');
+          if (newTargetTree) {
+            groups[newTargetIdx].splitTree = newTargetTree;
+          }
+        } else {
+          groups[sourceGroupIdx].splitTree = newSourceTree;
+          // Add to target tree
+          const targetIds = groups[targetGroupIdx].instanceIds;
+          const targetLeafId = targetIds[targetIds.length - 1];
+          const newTargetTree = splitLeaf(groups[targetGroupIdx].splitTree, targetLeafId, instanceId, 'horizontal');
+          if (newTargetTree) {
+            groups[targetGroupIdx].splitTree = newTargetTree;
+          }
+        }
 
         // Update instance's groupId
         instance.groupId = targetGroupId;
         instances = { ...instances };
-
-        // Clean up empty source group
-        if (sourceIds.length === 0) {
-          groups = groups.filter(g => g.id !== sourceGroupId);
-        }
       }
 
       groups = [...groups]; // trigger reactivity
@@ -675,7 +738,7 @@ function createTerminalTabsStore() {
         };
 
         instances = { ...instances, [shellId]: instance };
-        groups = [...groups, { id: groupId, instanceIds: [shellId] }];
+        groups = [...groups, createGroupObj(groupId, createLeaf(shellId))];
         activeGroupId = groupId;
         activeInstanceId = shellId;
 
@@ -722,7 +785,7 @@ function createTerminalTabsStore() {
       };
 
       instances = { ...instances, [shellId]: instance };
-      groups = [...groups, { id: groupId, instanceIds: [shellId] }];
+      groups = [...groups, createGroupObj(groupId, createLeaf(shellId))];
       activeGroupId = groupId;
       activeInstanceId = shellId;
 
@@ -896,7 +959,7 @@ function createTerminalTabsStore() {
         // Re-add group
         const groupId = instance.groupId;
         if (!groups.find(g => g.id === groupId)) {
-          groups = [...groups, { id: groupId, instanceIds: [id] }];
+          groups = [...groups, createGroupObj(groupId, createLeaf(id))];
         }
         activeGroupId = groupId;
         activeInstanceId = id;

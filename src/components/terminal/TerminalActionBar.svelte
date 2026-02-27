@@ -59,8 +59,13 @@
     closeAll();
   }
 
-  function handleSplitTerminal() {
-    terminalTabsStore.splitInstance();
+  function handleSplitRight() {
+    terminalTabsStore.splitInstance({ direction: 'horizontal' });
+    closeAll();
+  }
+
+  function handleSplitDown() {
+    terminalTabsStore.splitInstance({ direction: 'vertical' });
     closeAll();
   }
 
@@ -92,8 +97,8 @@
 </script>
 
 <div class="terminal-actions">
-  <!-- Split Terminal (quick action) -->
-  <button class="action-btn" title="Split Terminal" onclick={() => terminalTabsStore.splitInstance()}>
+  <!-- Split Right (quick action) -->
+  <button class="action-btn" title="Split Right" onclick={() => terminalTabsStore.splitInstance({ direction: 'horizontal' })}>
     <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
       <rect x="1" y="2" width="14" height="12" rx="1" stroke="currentColor" stroke-width="1.2" fill="none"/>
       <line x1="8" y1="2" x2="8" y2="14" stroke="currentColor" stroke-width="1.2"/>
@@ -133,12 +138,19 @@
       </svg>
       New Terminal
     </button>
-    <button class="dropdown-item" onclick={handleSplitTerminal}>
+    <button class="dropdown-item" onclick={handleSplitRight}>
       <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
         <rect x="1" y="2" width="14" height="12" rx="1" stroke="currentColor" stroke-width="1.2" fill="none"/>
         <line x1="8" y1="2" x2="8" y2="14" stroke="currentColor" stroke-width="1.2"/>
       </svg>
-      Split Terminal
+      Split Right
+    </button>
+    <button class="dropdown-item" onclick={handleSplitDown}>
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+        <rect x="1" y="2" width="14" height="12" rx="1" stroke="currentColor" stroke-width="1.2" fill="none"/>
+        <line x1="1" y1="8" x2="15" y2="8" stroke="currentColor" stroke-width="1.2"/>
+      </svg>
+      Split Down
     </button>
     {#if terminalProfilesStore.profiles.length > 0}
       <div class="dropdown-divider"></div>

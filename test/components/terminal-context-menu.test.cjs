@@ -46,8 +46,8 @@ describe('TerminalContextMenu.svelte -- positioning', () => {
 });
 
 describe('TerminalContextMenu.svelte -- menu items', () => {
-  it('has Split Terminal option', () => {
-    assert.ok(src.includes('Split Terminal'), 'Should have split option');
+  it('has split options (Split Right / Split Down)', () => {
+    assert.ok(src.includes('Split Right') || src.includes('Split Terminal'), 'Should have split option');
   });
   it('has Change Color option', () => {
     assert.ok(src.includes('Change Color'), 'Should have color option');

@@ -49,18 +49,6 @@
 
   const activeGroupId = $derived(terminalTabsStore.activeGroupId);
 
-  /**
-   * Get instances for a group, resolved from the store.
-   * @param {{ id: string, instanceIds: string[] }} group
-   */
-  function getGroupInstances(group) {
-    return group.instanceIds.map(id => terminalTabsStore.getInstance(id)).filter(Boolean);
-  }
-
-  // Per-group split ratios (keyed by group ID)
-  /** @type {Record<string, number>} */
-  let splitRatios = $state({});
-
   // Context menu state (triggered from sidebar or tab strip right-click)
   let ctxMenu = $state({ visible: false, x: 0, y: 0, instanceId: null });
 
@@ -100,25 +88,32 @@
   <!-- Body: terminal content + optional sidebar -->
   <div class="terminal-body">
     <div class="terminal-content">
+      <!-- Recursive snippet for rendering split tree nodes -->
+      {#snippet splitNode(node, visible)}
+        {#if node.type === 'leaf'}
+          {@const inst = terminalTabsStore.getInstance(node.instanceId)}
+          {#if inst}
+            <Terminal shellId={inst.shellId} {visible} />
+          {/if}
+        {:else if node.type === 'split'}
+          <SplitPanel direction={node.direction} ratio={node.ratio} minA={80} minB={80}>
+            {#snippet panelA()}
+              {@render splitNode(node.children[0], visible)}
+            {/snippet}
+            {#snippet panelB()}
+              {@render splitNode(node.children[1], visible)}
+            {/snippet}
+          </SplitPanel>
+        {/if}
+      {/snippet}
+
       <!-- All groups are always mounted — only the active one is visible.
            This prevents ghostty-web from losing PTY output on group switch. -->
       {#each terminalTabsStore.groups as group (group.id)}
-        {@const instances = getGroupInstances(group)}
         {@const isActive = group.id === activeGroupId}
-        <!-- Ensure split ratio is initialized for this group -->
-        {(splitRatios[group.id] ??= 0.5, '')}
         <div class="group-container" class:active={isActive}>
-          {#if instances.length === 1}
-            <Terminal shellId={instances[0].shellId} visible={isActive} />
-          {:else if instances.length >= 2}
-            <SplitPanel direction="horizontal" bind:ratio={splitRatios[group.id]} minA={120} minB={120}>
-              {#snippet panelA()}
-                <Terminal shellId={instances[0].shellId} visible={isActive} />
-              {/snippet}
-              {#snippet panelB()}
-                <Terminal shellId={instances[1].shellId} visible={isActive} />
-              {/snippet}
-            </SplitPanel>
+          {#if group.splitTree}
+            {@render splitNode(group.splitTree, isActive)}
           {/if}
         </div>
       {/each}

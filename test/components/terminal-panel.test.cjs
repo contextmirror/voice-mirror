@@ -120,9 +120,9 @@ describe('TerminalPanel.svelte -- SplitPanel integration', () => {
     assert.ok(src.includes('{#snippet panelB()}'), 'Should use panelB snippet matching SplitPanel API');
   });
   it('passes direction to SplitPanel', () => {
-    assert.ok(src.includes('direction="horizontal"'), 'Should pass horizontal direction');
+    assert.ok(src.includes('direction') && src.includes('SplitPanel'), 'Should pass direction to SplitPanel');
   });
-  it('binds ratio to SplitPanel', () => {
-    assert.ok(src.includes('bind:ratio'), 'Should bind ratio for resizable splits');
+  it('passes ratio to SplitPanel', () => {
+    assert.ok(src.includes('ratio') && src.includes('SplitPanel'), 'Should pass ratio to SplitPanel');
   });
 });

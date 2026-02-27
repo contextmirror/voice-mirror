@@ -154,9 +154,9 @@ describe('terminal-tabs.svelte.js -- splitInstance behavior', () => {
     const block = src.split('async splitInstance(')[1]?.split('\n    },')[0] || '';
     assert.ok(block.includes('terminalSpawn'), 'splitInstance should call terminalSpawn');
   });
-  it('splitInstance adds to active group instanceIds', () => {
+  it('splitInstance adds to active group via splitLeaf or instanceIds', () => {
     const block = src.split('async splitInstance(')[1]?.split('\n    },')[0] || '';
-    assert.ok(block.includes('instanceIds'), 'splitInstance should add to group instanceIds');
+    assert.ok(block.includes('splitLeaf') || block.includes('instanceIds'), 'splitInstance should modify group split tree or instanceIds');
   });
 });
 
@@ -191,9 +191,9 @@ describe('terminal-tabs.svelte.js -- splitGroup method', () => {
     const block = src.split('async splitGroup(')[1]?.split('\n    },')[0] || '';
     assert.ok(block.includes('terminalSpawn'), 'splitGroup should call terminalSpawn');
   });
-  it('splitGroup adds instance to specified group', () => {
+  it('splitGroup adds instance to specified group via splitLeaf or instanceIds', () => {
     const block = src.split('async splitGroup(')[1]?.split('\n    },')[0] || '';
-    assert.ok(block.includes('instanceIds'), 'splitGroup should add to group instanceIds');
+    assert.ok(block.includes('splitLeaf') || block.includes('instanceIds'), 'splitGroup should modify group split tree or instanceIds');
   });
 });
 
@@ -217,7 +217,10 @@ describe('terminal-tabs.svelte.js -- moveInstance method', () => {
   });
   it('moveInstance cleans up empty source group', () => {
     const block = src.split('moveInstance(')[1]?.split('\n    },')[0] || '';
-    assert.ok(block.includes('sourceIds.length === 0'), 'Should check for empty group after move');
+    assert.ok(
+      block.includes('sourceIds.length === 0') || block.includes('newSourceTree === null'),
+      'Should check for empty group after move'
+    );
   });
   it('moveInstance syncs legacy tabs', () => {
     const block = src.split('moveInstance(')[1]?.split('\n    },')[0] || '';

@@ -37,8 +37,8 @@ describe('TerminalActionBar.svelte -- split button', () => {
   it('calls splitInstance', () => {
     assert.ok(src.includes('splitInstance'), 'Should call splitInstance');
   });
-  it('has Split Terminal title', () => {
-    assert.ok(src.includes('Split Terminal'), 'Should have Split Terminal label');
+  it('has split option (Split Right or Split Terminal)', () => {
+    assert.ok(src.includes('Split Right') || src.includes('Split Terminal'), 'Should have split label');
   });
 });
 
