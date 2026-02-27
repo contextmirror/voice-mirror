@@ -9,6 +9,30 @@
 
 import { editorGroupsStore } from './editor-groups.svelte.js';
 
+/**
+ * Show a native Save/Don't Save/Cancel dialog for a dirty tab.
+ * Uses Tauri's message dialog with three buttons.
+ * @param {string} filename
+ * @returns {Promise<string>} 'Save', "Don't Save", or 'Cancel'
+ */
+async function showDirtyCloseDialog(filename) {
+  try {
+    const { message } = await import('@tauri-apps/plugin-dialog');
+    const result = await message(
+      `Do you want to save changes to ${filename}?`,
+      {
+        title: 'Save Changes',
+        kind: 'warning',
+        buttons: { yes: 'Save', no: "Don't Save", cancel: 'Cancel' },
+      }
+    );
+    return result;
+  } catch {
+    // Fallback: no Tauri runtime (e.g. tests) — default to cancel
+    return 'Cancel';
+  }
+}
+
 function createTabsStore() {
   let tabs = $state([]);
   // activeTabId tracks the active tab in group 1 for backwards compatibility
@@ -227,6 +251,58 @@ function createTabsStore() {
           activeTabId = editorGroupsStore.getActiveTabForGroup(siblingGroupId);
         }
       }
+    },
+
+    /**
+     * Close a tab with a save prompt if the tab has unsaved changes.
+     * Shows a native dialog: Save / Don't Save / Cancel.
+     * - Save: triggers command:save event, waits for save, then closes.
+     * - Don't Save: closes without saving.
+     * - Cancel: keeps the tab open.
+     * @param {string} id - Tab ID to close
+     * @returns {Promise<boolean>} true if tab was closed, false if cancelled
+     */
+    async requestClose(id) {
+      const tab = tabs.find(t => t.id === id);
+      if (!tab) return true;
+
+      if (!tab.dirty) {
+        this.closeTab(id);
+        return true;
+      }
+
+      const result = await showDirtyCloseDialog(tab.title);
+
+      if (result === 'Save' || result === 'Yes') {
+        // Make this tab active so command:save targets the right editor
+        this.setActive(id);
+        // Dispatch save command and wait for dirty flag to clear
+        window.dispatchEvent(new CustomEvent('command:save'));
+        // Poll for dirty flag (save is async, usually completes in <100ms)
+        const saved = await new Promise(resolve => {
+          let attempts = 0;
+          const check = () => {
+            const t = tabs.find(t2 => t2.id === id);
+            if (!t || !t.dirty) { resolve(true); return; }
+            if (++attempts > 20) { resolve(false); return; }
+            setTimeout(check, 50);
+          };
+          // Small initial delay for the save to start
+          setTimeout(check, 50);
+        });
+        if (saved) {
+          this.closeTab(id);
+          return true;
+        }
+        // Save failed — keep tab open
+        return false;
+      } else if (result === "Don't Save" || result === 'No') {
+        this.closeTab(id);
+        return true;
+      }
+
+      // Cancel — keep tab open
+      return false;
     },
 
     /**

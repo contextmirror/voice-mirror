@@ -55,7 +55,7 @@ describe('TabContextMenu.svelte: props', () => {
 describe('TabContextMenu.svelte: close actions', () => {
   it('has Close button', () => {
     assert.ok(src.includes('handleClose'));
-    assert.ok(src.includes('closeTab'));
+    assert.ok(src.includes('requestClose'), 'Close should use requestClose (with save prompt)');
   });
   it('has Close Others button', () => {
     assert.ok(src.includes('handleCloseOthers'));
@@ -215,6 +215,17 @@ describe('TabContextMenu.svelte: split actions', () => {
     assert.ok(
       src.includes('Ctrl+\\') || src.includes('Ctrl+\\\\'),
       'Should show keyboard shortcut hint for Split Right'
+    );
+  });
+});
+
+// ============ Save prompt ============
+
+describe('TabContextMenu.svelte: save prompt on close', () => {
+  it('handleClose uses requestClose for save prompt', () => {
+    assert.ok(
+      src.includes('requestClose'),
+      'Close action should use requestClose to prompt for unsaved changes'
     );
   });
 });

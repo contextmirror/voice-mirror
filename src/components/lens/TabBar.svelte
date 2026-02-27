@@ -55,6 +55,7 @@
       aria-selected={tab.id === tabsStore.activeTabId}
       onclick={() => tabsStore.setActive(tab.id)}
       ondblclick={() => tabsStore.pinTab(tab.id)}
+      onauxclick={(e) => { if (e.button === 1) { e.preventDefault(); tabsStore.requestClose(tab.id); } }}
       oncontextmenu={(e) => handleTabContextMenu(e, tab)}
       onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') tabsStore.setActive(tab.id); }}
       title={tab.path || tab.title}
@@ -91,7 +92,7 @@
       <button
         class="tab-action"
         class:pinned={!tab.preview}
-        onclick={(e) => { e.stopPropagation(); tabsStore.closeTab(tab.id); }}
+        onclick={(e) => { e.stopPropagation(); tabsStore.requestClose(tab.id); }}
         aria-label="Close tab"
       >
         <svg class="icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>

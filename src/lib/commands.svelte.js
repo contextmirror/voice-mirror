@@ -380,7 +380,7 @@ commandRegistry.registerMany([
     category: 'File',
     execute: () => {
       const tab = tabsStore.getActiveTabForGroup(editorGroupsStore.focusedGroupId);
-      if (tab) tabsStore.closeTab(tab.id);
+      if (tab) tabsStore.requestClose(tab.id);
     },
   },
   {
