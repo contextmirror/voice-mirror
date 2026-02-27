@@ -5,6 +5,7 @@
  * are passed in via parameters so FileEditor.svelte retains control of state.
  */
 import { showMinimap } from '@replit/codemirror-minimap';
+import { createGitGutter } from './editor-git-gutter.js';
 
 /**
  * Build the full CodeMirror extensions array for the file editor.
@@ -37,6 +38,7 @@ export function buildEditorExtensions(cm, lsp, options) {
     onSignatureHelp,
     onContextMenu,
     onClick,
+    getOriginalContent,
   } = options;
 
   const extensions = [
@@ -110,6 +112,11 @@ export function buildEditorExtensions(cm, lsp, options) {
       };
     })
   );
+
+  // Git change gutter — skip for read-only / external files
+  if (getOriginalContent && !isReadOnly) {
+    extensions.push(...createGitGutter(getOriginalContent));
+  }
 
   // Add hover tooltip and LSP keybindings
   if (lsp.hasLsp) {

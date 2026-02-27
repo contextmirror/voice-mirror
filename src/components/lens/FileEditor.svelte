@@ -1,7 +1,7 @@
 <script>
   import { onDestroy, tick } from 'svelte';
   import { listen } from '@tauri-apps/api/event';
-  import { readFile, readExternalFile, writeFile, lspRequestDefinition, lspApplyWorkspaceEdit, writeUserMessage, aiPtyInput } from '../../lib/api.js';
+  import { readFile, readExternalFile, writeFile, getFileGitContent, lspRequestDefinition, lspApplyWorkspaceEdit, writeUserMessage, aiPtyInput } from '../../lib/api.js';
   import { tabsStore } from '../../lib/stores/tabs.svelte.js';
   import { projectStore } from '../../lib/stores/project.svelte.js';
   import { configStore } from '../../lib/stores/config.svelte.js';
@@ -18,6 +18,7 @@
   import { createEditorLsp, LSP_EXTENSIONS, uriToRelativePath, lspPositionToOffset, mapCompletionKind } from '../../lib/editor-lsp.svelte.js';
   import { lspDiagnosticsStore } from '../../lib/stores/lsp-diagnostics.svelte.js';
   import { buildEditorExtensions } from '../../lib/editor-extensions.js';
+  import { gitGutterPlugin } from '../../lib/editor-git-gutter.js';
   import { loadLanguageExtension } from '../../lib/codemirror-languages.js';
 
   let { tab, groupId = 1 } = $props();
@@ -126,6 +127,10 @@
       await writeFile(tab.path, content, root);
       tabsStore.setDirty(tab.id, false);
       lsp.saveFile(tab.path, content, root);
+
+      // Refresh git gutter after save (file on disk changed)
+      const gp = view?.plugin?.(gitGutterPlugin);
+      if (gp) gp.refreshOriginal();
     } catch (err) {
       console.error('[FileEditor] Save failed:', err);
     }
@@ -345,6 +350,13 @@
           } catch {}
           return true;
         } : null,
+        getOriginalContent: isExternal ? null : async (filePath) => {
+          const root = projectStore.activeProject?.path || null;
+          try {
+            const result = await getFileGitContent(filePath, root);
+            return result?.data || result;
+          } catch { return null; }
+        },
       });
 
       if (langSupport && !Array.isArray(langSupport)) {
@@ -371,6 +383,12 @@
         view = new cm.EditorView({ state, parent: editorEl });
         // Attach current path for LSP handler access
         view._lspPath = filePath;
+
+        // Initialize git gutter with file path
+        if (!isExternal && !isReadOnly && !isUntitled) {
+          const gp = view.plugin(gitGutterPlugin);
+          if (gp) gp.setPath(filePath);
+        }
       }
 
       // Open file in LSP (fire and forget)

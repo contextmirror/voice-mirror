@@ -209,3 +209,47 @@ describe('editor-theme.js -- peek widget styles', () => {
     assert.ok(themeSrc.includes('cm-git-peek-line'), 'Should style peek diff lines');
   });
 });
+
+// ── editor-extensions.js git gutter integration ──
+
+describe('editor-extensions.js -- git gutter integration', () => {
+  const extSrc = fs.readFileSync(path.join(__dirname, '../../src/lib/editor-extensions.js'), 'utf-8');
+
+  it('imports createGitGutter', () => {
+    assert.ok(extSrc.includes('createGitGutter'), 'Should import createGitGutter');
+  });
+
+  it('accepts getOriginalContent option', () => {
+    assert.ok(extSrc.includes('getOriginalContent'), 'Should accept original content callback');
+  });
+
+  it('conditionally adds git gutter for non-read-only files', () => {
+    assert.ok(extSrc.includes('createGitGutter(getOriginalContent)'), 'Should call createGitGutter');
+  });
+});
+
+// ── FileEditor.svelte git gutter integration ──
+
+describe('FileEditor.svelte -- git gutter integration', () => {
+  const editorSrc = fs.readFileSync(path.join(__dirname, '../../src/components/lens/FileEditor.svelte'), 'utf-8');
+
+  it('imports getFileGitContent from api', () => {
+    assert.ok(editorSrc.includes('getFileGitContent'), 'Should import getFileGitContent');
+  });
+
+  it('imports gitGutterPlugin', () => {
+    assert.ok(editorSrc.includes('gitGutterPlugin'), 'Should import gitGutterPlugin');
+  });
+
+  it('passes getOriginalContent to extensions', () => {
+    assert.ok(editorSrc.includes('getOriginalContent'), 'Should pass original content callback');
+  });
+
+  it('initializes git gutter with setPath after editor creation', () => {
+    assert.ok(editorSrc.includes('setPath'), 'Should call setPath on git gutter plugin');
+  });
+
+  it('refreshes git gutter after save', () => {
+    assert.ok(editorSrc.includes('refreshOriginal'), 'Should refresh git gutter after save');
+  });
+});
