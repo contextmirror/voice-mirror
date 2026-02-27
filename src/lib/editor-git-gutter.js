@@ -421,6 +421,31 @@ function revertChange(view, change, originalLines) {
 // Gutter definition
 // ---------------------------------------------------------------------------
 
+/** Base theme for git gutter markers — uses baseTheme to avoid scoping issues */
+const gitGutterBaseTheme = EditorView.baseTheme({
+  '.cm-git-change-gutter': {
+    width: '4px',
+    minWidth: '4px',
+    marginLeft: '1px',
+    marginRight: '2px',
+  },
+  '.cm-git-change-gutter .cm-gutterElement': {
+    padding: '0 !important',
+    minWidth: '4px',
+    width: '4px',
+    cursor: 'pointer',
+  },
+  '.cm-gutterElement.cm-git-added': {
+    borderLeft: '3px solid var(--ok, #22c55e)',
+  },
+  '.cm-gutterElement.cm-git-modified': {
+    borderLeft: '3px solid var(--accent, #56b4e9)',
+  },
+  '.cm-gutterElement.cm-git-deleted': {
+    borderLeft: '3px solid var(--danger, #ef4444)',
+  },
+});
+
 const gitChangeGutter = gutter({
   class: 'cm-git-change-gutter',
   markers: (v) => v.state.field(gitChangeField).markers,
@@ -762,6 +787,7 @@ export function createGitGutter(getOriginalContent) {
     originalContentField,
     peekWidgetField,
     gitChangeGutter,
+    gitGutterBaseTheme,
     plugin,
     escapeHandler,
   ];

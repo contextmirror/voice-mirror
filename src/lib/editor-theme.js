@@ -110,28 +110,7 @@ const editorTheme = EditorView.theme({
     borderBottom: '1px solid var(--cm-accent, var(--accent))',
   },
   // ── Git change gutter ──
-  '.cm-git-change-gutter': {
-    width: '4px',
-    minWidth: '4px',
-    marginLeft: '1px',
-    marginRight: '2px',
-  },
-  '.cm-git-change-gutter .cm-gutterElement': {
-    padding: '0 !important',
-    minWidth: '4px',
-    width: '4px',
-    cursor: 'pointer',
-  },
-  // elementClass styles — applied directly to .cm-gutterElement
-  '.cm-git-change-gutter .cm-git-added': {
-    borderLeft: '3px solid var(--cm-git-added, var(--ok))',
-  },
-  '.cm-git-change-gutter .cm-git-modified': {
-    borderLeft: '3px solid var(--cm-git-modified, var(--accent))',
-  },
-  '.cm-git-change-gutter .cm-git-deleted': {
-    borderLeft: '3px solid var(--cm-git-deleted, var(--danger))',
-  },
+  // Git gutter bar styles are in editor-git-gutter.js baseTheme (avoids scoping issues)
   // ── Git peek widget ──
   '.cm-git-peek': {
     backgroundColor: 'var(--cm-panel-bg, var(--bg-elevated))',

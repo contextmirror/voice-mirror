@@ -164,27 +164,32 @@ describe('editor-git-gutter.js -- peek widget', () => {
   });
 });
 
-// ── editor-theme.js git gutter styles ──
+// ── git gutter bar styles (in baseTheme inside editor-git-gutter.js) ──
 
-describe('editor-theme.js -- git gutter styles', () => {
-  const themeSrc = fs.readFileSync(path.join(__dirname, '../../src/lib/editor-theme.js'), 'utf-8');
+describe('editor-git-gutter.js -- gutter bar styles', () => {
+  const src = fs.readFileSync(SRC_PATH, 'utf-8');
 
   it('styles .cm-git-added with green bar', () => {
-    assert.ok(themeSrc.includes('.cm-git-added'), 'Should style .cm-git-added');
-    assert.ok(themeSrc.includes('--ok'), 'Added should use --ok (green) color');
+    assert.ok(src.includes('cm-git-added'), 'Should style .cm-git-added');
+    assert.ok(src.includes('--ok'), 'Added should use --ok (green) color');
   });
 
   it('styles .cm-git-modified with accent bar', () => {
-    assert.ok(themeSrc.includes('.cm-git-modified'), 'Should style .cm-git-modified');
+    assert.ok(src.includes('cm-git-modified'), 'Should style .cm-git-modified');
+    assert.ok(src.includes('--accent'), 'Modified should use --accent (blue) color');
   });
 
   it('styles .cm-git-deleted with danger color', () => {
-    assert.ok(themeSrc.includes('.cm-git-deleted'), 'Should style .cm-git-deleted');
-    assert.ok(themeSrc.includes('--danger'), 'Deleted should use --danger (red) color');
+    assert.ok(src.includes('cm-git-deleted'), 'Should style .cm-git-deleted');
+    assert.ok(src.includes('--danger'), 'Deleted should use --danger (red) color');
   });
 
   it('sets gutter column width', () => {
-    assert.ok(themeSrc.includes('cm-git-change-gutter'), 'Should style the gutter column');
+    assert.ok(src.includes('cm-git-change-gutter'), 'Should style the gutter column');
+  });
+
+  it('uses baseTheme for unscoped CSS', () => {
+    assert.ok(src.includes('baseTheme'), 'Should use EditorView.baseTheme');
   });
 });
 
