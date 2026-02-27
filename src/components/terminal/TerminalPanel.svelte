@@ -60,16 +60,20 @@
   // ---- Transition blanking ----
   // When instance count or active group changes, Svelte tears down and
   // recreates Terminal components. During teardown, ghostty-web disposal
-  // artifacts flash as garbled text. Hide the content area during transitions.
+  // artifacts flash as garbled text for a frame.
+  //
+  // $effect.pre runs BEFORE the DOM update, so we can hide the content
+  // area before Svelte destroys the old terminal components.
   let transitioning = $state(false);
   let prevInstanceKey = $state('');
 
-  $effect(() => {
+  $effect.pre(() => {
     // Build a key from group ID + instance IDs so any layout change triggers blanking
     const key = (activeGroup?.id || '') + ':' + activeInstances.map(i => i.shellId).join(',');
     if (prevInstanceKey !== '' && key !== prevInstanceKey) {
+      // Hide BEFORE Svelte tears down old terminals
       transitioning = true;
-      // Reveal after terminals have had time to initialize (double-rAF)
+      // Reveal after new terminals have initialized (double-rAF)
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           transitioning = false;
