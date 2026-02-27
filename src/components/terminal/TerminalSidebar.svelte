@@ -65,7 +65,7 @@
 <style>
   .terminal-sidebar {
     width: 160px;
-    border-left: 1px solid var(--muted);
+    border-left: 4px solid color-mix(in srgb, var(--text) 12%, var(--bg));
     overflow-y: auto;
     flex-shrink: 0;
   }
