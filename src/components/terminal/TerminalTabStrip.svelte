@@ -7,9 +7,36 @@
    * the active group. Clicking a tab switches the active group.
    */
   import { terminalTabsStore } from '../../lib/stores/terminal-tabs.svelte.js';
+  import { devServerManager } from '../../lib/stores/dev-server-manager.svelte.js';
+  import { toastStore } from '../../lib/stores/toast.svelte.js';
 
   /** @type {{ oncontextmenu?: (e: MouseEvent, groupId: string) => void }} */
   let { oncontextmenu } = $props();
+
+  function handleClose(e, group) {
+    e.stopPropagation();
+    const firstInst = terminalTabsStore.getInstance(group.instanceIds[0]);
+    if (firstInst?.type === 'dev-server' && devServerManager.isDevServerShell(firstInst.id)) {
+      toastStore.addToast({
+        message: `Stop ${firstInst.title || 'Dev server'}?`,
+        severity: 'warning',
+        duration: 8000,
+        actions: [
+          { label: 'Stop', callback: () => terminalTabsStore.killGroup(group.id) },
+          { label: 'Cancel', callback: () => {} },
+        ],
+      });
+    } else {
+      terminalTabsStore.killGroup(group.id);
+    }
+  }
+
+  function handleAuxClick(e, group) {
+    if (e.button === 1) {
+      e.preventDefault();
+      handleClose(e, group);
+    }
+  }
 </script>
 
 <div class="tab-strip" role="tablist">
@@ -20,6 +47,7 @@
       class:active={group.id === terminalTabsStore.activeGroupId}
       onclick={() => terminalTabsStore.setActiveGroup(group.id)}
       oncontextmenu={(e) => oncontextmenu?.(e, group.id)}
+      onauxclick={(e) => handleAuxClick(e, group)}
       role="tab"
       tabindex="0"
       aria-selected={group.id === terminalTabsStore.activeGroupId}
@@ -29,6 +57,17 @@
       {#if group.instanceIds.length > 1}
         <span class="split-badge">{group.instanceIds.length}</span>
       {/if}
+      <button
+        class="tab-close"
+        onclick={(e) => handleClose(e, group)}
+        aria-label="Close terminal group"
+        tabindex="-1"
+      >
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+          <line x1="4" y1="4" x2="12" y2="12" stroke="currentColor" stroke-width="1.5"/>
+          <line x1="12" y1="4" x2="4" y2="12" stroke="currentColor" stroke-width="1.5"/>
+        </svg>
+      </button>
     </div>
   {/each}
 </div>
@@ -73,5 +112,30 @@
     border-radius: 4px;
     padding: 0 4px;
     line-height: 1.4;
+  }
+
+  .tab-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--muted);
+    border-radius: 3px;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.1s, background 0.1s;
+  }
+
+  .group-tab:hover .tab-close {
+    opacity: 1;
+  }
+
+  .tab-close:hover {
+    background: rgba(255,255,255,0.1);
+    color: var(--text);
   }
 </style>

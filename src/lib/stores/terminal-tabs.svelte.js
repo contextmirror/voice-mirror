@@ -328,6 +328,54 @@ function createTerminalTabsStore() {
     },
 
     /**
+     * Kill an entire group and all its instances.
+     * If this is the last group, auto-creates a fresh terminal.
+     * @param {string} groupId
+     */
+    async killGroup(groupId) {
+      const group = groups.find(g => g.id === groupId);
+      if (!group) return;
+
+      // Kill all instances in the group
+      for (const instId of [...group.instanceIds]) {
+        const inst = instances[instId];
+        if (inst?.shellId && inst.running) {
+          try {
+            await terminalKill(inst.shellId);
+          } catch (err) {
+            console.warn('[terminal-tabs] Failed to kill instance:', err);
+          }
+        }
+        const { [instId]: _, ...rest } = instances;
+        instances = rest;
+      }
+
+      // Remove the group
+      const groupIdx = groups.findIndex(g => g.id === groupId);
+      groups = groups.filter(g => g.id !== groupId);
+
+      // Focus previous group
+      if (activeGroupId === groupId) {
+        if (groups.length > 0) {
+          const prevIdx = Math.min(groupIdx, groups.length - 1);
+          const prevGroup = groups[prevIdx > 0 ? prevIdx - 1 : 0] || groups[0];
+          activeGroupId = prevGroup.id;
+          activeInstanceId = prevGroup.instanceIds[0] || null;
+        } else {
+          activeGroupId = null;
+          activeInstanceId = null;
+        }
+      }
+
+      syncLegacyTabs();
+
+      // Auto-create fresh terminal if no groups left
+      if (groups.length === 0) {
+        await this.addGroup();
+      }
+    },
+
+    /**
      * Switch the active group.
      * @param {string} groupId
      */
