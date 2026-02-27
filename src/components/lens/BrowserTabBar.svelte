@@ -76,7 +76,7 @@
 
 {#if contextMenu.visible}
   <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="context-backdrop" onclick={closeContextMenu} oncontextmenu|preventDefault={closeContextMenu}></div>
+  <div class="context-backdrop" onclick={closeContextMenu} oncontextmenu={(e) => { e.preventDefault(); closeContextMenu(); }}></div>
   <div class="context-menu" style="left: {contextMenu.x}px; top: {contextMenu.y}px;">
     <button class="context-item" onclick={handleContextClose}>
       Close Tab
