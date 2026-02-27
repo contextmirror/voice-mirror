@@ -17,8 +17,6 @@
   import { setActionHandler } from '../../lib/stores/shortcuts.svelte.js';
   import Terminal from './Terminal.svelte';
   import SplitPanel from '../shared/SplitPanel.svelte';
-  import TerminalTabStrip from './TerminalTabStrip.svelte';
-  import TerminalActionBar from './TerminalActionBar.svelte';
   import TerminalSidebar from './TerminalSidebar.svelte';
   import TerminalContextMenu from './TerminalContextMenu.svelte';
 
@@ -73,26 +71,12 @@
     ctxMenu = { ...ctxMenu, visible: false };
   }
 
-  function handleTabContextMenu(e, groupId) {
-    e.preventDefault();
-    const group = terminalTabsStore.groups.find(g => g.id === groupId);
-    if (group && group.instanceIds.length > 0) {
-      showContextMenu(e, group.instanceIds[0]);
-    }
-  }
-
   function handleSidebarContextMenu(e, instanceId) {
     showContextMenu(e, instanceId);
   }
 </script>
 
 <div class="terminal-panel-inner">
-  <!-- Header: group tabs + action bar -->
-  <div class="terminal-header">
-    <TerminalTabStrip oncontextmenu={handleTabContextMenu} />
-    <TerminalActionBar />
-  </div>
-
   <!-- Body: terminal content + optional sidebar -->
   <div class="terminal-body">
     <div class="terminal-content">
@@ -142,15 +126,6 @@
     display: flex;
     flex-direction: column;
     background: var(--bg);
-  }
-
-  .terminal-header {
-    display: flex;
-    align-items: center;
-    height: 32px;
-    padding: 0 8px;
-    border-bottom: 1px solid var(--muted);
-    flex-shrink: 0;
   }
 
   .terminal-body {

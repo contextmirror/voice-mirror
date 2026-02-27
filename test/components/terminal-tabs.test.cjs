@@ -34,6 +34,10 @@ describe('TerminalTabs.svelte -- imports', () => {
   it('imports setActionHandler from shortcuts store', () => {
     assert.ok(src.includes('setActionHandler'), 'Should import setActionHandler');
   });
+
+  it('imports TerminalActionBar component', () => {
+    assert.ok(src.includes("import TerminalActionBar from"), 'Should import TerminalActionBar');
+  });
 });
 
 describe('TerminalTabs.svelte -- structure', () => {
@@ -292,6 +296,10 @@ describe('TerminalTabs.svelte -- toolbar', () => {
 
   it('shows AI controls when in ai mode', () => {
     assert.ok(src.includes("bottomPanelMode === 'ai'"), 'Should check for ai mode in toolbar');
+  });
+
+  it('shows TerminalActionBar when in terminal mode', () => {
+    assert.ok(src.includes("bottomPanelMode === 'terminal'") && src.includes('<TerminalActionBar'), 'Should show TerminalActionBar in terminal mode');
   });
 
   it('has output filter input', () => {

@@ -21,6 +21,7 @@
   import { toastStore } from '../../lib/stores/toast.svelte.js';
   import { PROVIDER_GROUPS, PROVIDER_ICONS, PROVIDER_NAMES } from '../../lib/providers.js';
   import { setActionHandler } from '../../lib/stores/shortcuts.svelte.js';
+  import TerminalActionBar from './TerminalActionBar.svelte';
   import OutputPanel from '../lens/OutputPanel.svelte';
   import { outputStore } from '../../lib/stores/output.svelte.js';
 
@@ -315,16 +316,16 @@
       onclick={() => bottomPanelMode = 'terminal'}
       onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') bottomPanelMode = 'terminal'; }}
     >
-      <svg class="tab-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
-        <polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>
-      </svg>
       <span class="tab-label">Terminal</span>
     </div>
 
     <!-- Spacer pushes toolbar actions to the right -->
     <div class="tab-bar-spacer"></div>
 
-    {#if bottomPanelMode === 'output'}
+    {#if bottomPanelMode === 'terminal'}
+      <!-- Terminal action bar (split, +, ...) on the outer strip -->
+      <TerminalActionBar />
+    {:else if bottomPanelMode === 'output'}
       <!-- Output controls (right side of tab bar, VS Code style) -->
       <div class="output-controls">
         <!-- Filter text input -->
@@ -465,7 +466,6 @@
         </button>
       </div>
     {/if}
-    <!-- Terminal mode: no toolbar (TerminalPanel has its own action bar) -->
   </div>
 
   <!-- Voice Agent context menu -->
