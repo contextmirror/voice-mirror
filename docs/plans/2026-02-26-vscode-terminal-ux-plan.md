@@ -515,7 +515,7 @@ git commit -m "feat: add terminal group/instance model for split support"
 
 ---
 
-### Task 6: TerminalPanel Component (Main Layout)
+### Task 6: TerminalPanel Component (Main Layout) ✅ DONE (4207 tests pass)
 
 **Files:**
 - Create: `src/components/terminal/TerminalPanel.svelte`
@@ -659,7 +659,7 @@ git commit -m "feat: add TerminalPanel component with group layout and auto-spaw
 
 ---
 
-### Task 7: TerminalTabStrip Component (Group Tabs)
+### Task 7: TerminalTabStrip Component (Group Tabs) ✅ DONE (commit 68e313e2)
 
 **Files:**
 - Create: `src/components/terminal/TerminalTabStrip.svelte`
@@ -699,7 +699,7 @@ git commit -m "feat: add TerminalTabStrip component for group tabs"
 
 ---
 
-### Task 8: TerminalSidebar Component (Instance List)
+### Task 8: TerminalSidebar Component (Instance List) ✅ DONE (commit 68e313e2)
 
 **Files:**
 - Create: `src/components/terminal/TerminalSidebar.svelte`
@@ -764,7 +764,7 @@ git commit -m "feat: add TerminalSidebar with instance tree characters"
 
 ---
 
-### Task 9: TerminalActionBar Component
+### Task 9: TerminalActionBar Component ✅ DONE (commit 68e313e2)
 
 **Files:**
 - Create: `src/components/terminal/TerminalActionBar.svelte`
@@ -818,7 +818,7 @@ git commit -m "feat: add TerminalActionBar with dropdown and overflow menus"
 
 ---
 
-### Task 10: TerminalContextMenu Component
+### Task 10: TerminalContextMenu Component ✅ DONE (commit 68e313e2)
 
 **Files:**
 - Create: `src/components/terminal/TerminalContextMenu.svelte`
@@ -887,7 +887,7 @@ git commit -m "feat: add TerminalContextMenu with split, kill, rename, color, ic
 
 ## Phase 3: Profile System & Customization
 
-### Task 11: Terminal Profile Detection (Rust)
+### Task 11: Terminal Profile Detection (Rust) ✅ DONE (commit 57e68ec4)
 
 **Files:**
 - Modify: `src-tauri/src/terminal/mod.rs`
@@ -1002,7 +1002,7 @@ git commit -m "feat: add terminal profile detection and profile-based spawn"
 
 ---
 
-### Task 12: Terminal Profiles Store and API
+### Task 12: Terminal Profiles Store and API ✅ DONE (commit 7f98b600, 4353 tests pass)
 
 **Files:**
 - Create: `src/lib/stores/terminal-profiles.svelte.js`
@@ -1096,7 +1096,7 @@ git commit -m "feat: add terminal profiles store with detection and default sele
 
 ---
 
-### Task 13: Tab Color and Icon Pickers
+### Task 13: Tab Color and Icon Pickers ✅ DONE (commit 74f0c42a, 4410 tests pass)
 
 **Files:**
 - Create: `src/components/terminal/TerminalColorPicker.svelte`
@@ -1164,7 +1164,7 @@ git commit -m "feat: add terminal tab color and icon pickers"
 
 ---
 
-### Task 14: Keyboard Shortcuts
+### Task 14: Keyboard Shortcuts ✅ DONE (commit 5bd468ca, 4328 tests pass)
 
 **Files:**
 - Modify: `src/lib/stores/shortcuts.svelte.js` (or wherever shortcuts are registered)
@@ -1201,7 +1201,7 @@ git commit -m "feat: add terminal keyboard shortcuts (new, split, toggle, focus,
 
 ---
 
-### Task 15: Integration Testing and Polish
+### Task 15: Integration Testing and Polish ✅ DONE
 
 **Files:**
 - All test files
