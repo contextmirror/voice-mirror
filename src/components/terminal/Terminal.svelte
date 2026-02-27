@@ -373,9 +373,9 @@
     height: 100%;
     overflow: hidden;
     background: var(--bg);
-    /* Visual spacing around terminal — applied here (not on inner container)
-       so ghostty-web's canvas fills the container exactly without clipping */
-    padding: 4px;
+    /* Minimal left/right padding so terminal text doesn't touch the edge.
+       No top padding — avoids visible gap between tab bar and terminal. */
+    padding: 0 4px;
   }
 
   .terminal-container {
@@ -384,6 +384,7 @@
     min-height: 0;
     position: relative;
     contain: strict;
+    border-top: none;
   }
 
   .terminal-container :global(canvas) {

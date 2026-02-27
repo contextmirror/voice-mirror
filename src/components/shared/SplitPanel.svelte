@@ -128,27 +128,30 @@
   }
 
   .handle-line {
-    background: rgba(255, 255, 255, 0.15);
-    border-radius: 2px;
-    opacity: 1;
-    transition: background var(--duration-fast) var(--ease-out);
+    background: var(--muted);
+    border-radius: 0;
+    opacity: 0.5;
+    transition: opacity var(--duration-fast) var(--ease-out),
+                background var(--duration-fast) var(--ease-out);
   }
   .horizontal > .split-handle .handle-line {
-    width: 2px;
+    width: 1px;
     height: 100%;
   }
   .vertical > .split-handle .handle-line {
-    height: 2px;
-    width: 32px;
+    height: 1px;
+    width: 100%;
   }
-  .split-handle:hover .handle-line,
-  .dragging .split-handle .handle-line {
-    background: rgba(255, 255, 255, 0.3);
+  .split-handle:hover .handle-line {
+    opacity: 0.8;
+    background: var(--accent);
   }
   .dragging .split-handle .handle-line {
+    opacity: 1;
     background: var(--accent);
   }
   .split-handle:focus-visible .handle-line {
+    opacity: 1;
     background: var(--accent);
   }
 
