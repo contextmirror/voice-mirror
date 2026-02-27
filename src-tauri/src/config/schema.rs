@@ -33,6 +33,8 @@ pub struct AppConfig {
     pub projects: ProjectsConfig,
     #[serde(default)]
     pub editor: EditorConfig,
+    #[serde(default)]
+    pub terminal_layout: Option<serde_json::Value>,
 }
 
 /// Wake word detection settings.

@@ -91,6 +91,56 @@ describe('TerminalContextMenu - split direction', () => {
   });
 });
 
+describe('terminal-tabs store - persistence', () => {
+  it('has saveLayout method', () => {
+    assert.ok(storeSrc.includes('saveLayout'), 'should have saveLayout');
+  });
+
+  it('has restoreLayout method', () => {
+    assert.ok(storeSrc.includes('restoreLayout'), 'should have restoreLayout');
+  });
+
+  it('exports saveLayout in return object', () => {
+    assert.ok(storeSrc.includes('saveLayout,') || storeSrc.includes('saveLayout:'), 'should export saveLayout');
+  });
+
+  it('exports restoreLayout in return object', () => {
+    assert.ok(storeSrc.includes('restoreLayout,') || storeSrc.includes('restoreLayout:'), 'should export restoreLayout');
+  });
+
+  it('debounces save calls', () => {
+    assert.ok(
+      storeSrc.includes('setTimeout') && storeSrc.includes('clearTimeout'),
+      'should debounce saves with setTimeout/clearTimeout'
+    );
+  });
+
+  it('imports setConfig from api.js', () => {
+    assert.ok(storeSrc.includes('setConfig') && storeSrc.includes('api.js'), 'should import setConfig from api.js');
+  });
+
+  it('imports getConfig from api.js', () => {
+    assert.ok(storeSrc.includes('getConfig') && storeSrc.includes('api.js'), 'should import getConfig from api.js');
+  });
+
+  it('imports serialize from split-tree.js', () => {
+    assert.ok(storeSrc.includes('serialize') && storeSrc.includes('split-tree.js'), 'should import serialize');
+  });
+
+  it('imports deserialize from split-tree.js', () => {
+    assert.ok(storeSrc.includes('deserialize') && storeSrc.includes('split-tree.js'), 'should import deserialize');
+  });
+
+  it('saves layout via setConfig with terminalLayout key', () => {
+    assert.ok(storeSrc.includes('terminalLayout'), 'should save under terminalLayout config key');
+  });
+
+  it('calls debouncedSave in structural methods', () => {
+    const saveCallCount = (storeSrc.match(/debouncedSave\(\)/g) || []).length;
+    assert.ok(saveCallCount >= 5, 'should call debouncedSave in multiple structural methods, found ' + saveCallCount);
+  });
+});
+
 const actionBarSrc = fs.readFileSync(
   path.join(__dirname, '../../src/components/terminal/TerminalActionBar.svelte'),
   'utf-8'

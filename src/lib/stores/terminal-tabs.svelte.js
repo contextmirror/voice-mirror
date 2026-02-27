@@ -9,8 +9,8 @@
  * Backward-compatible: legacy methods (addTerminalTab, closeTab, etc.)
  * still work and delegate to the new group/instance model.
  */
-import { terminalSpawn, terminalKill } from '../api.js';
-import { createLeaf, splitLeaf, removeLeaf, getAllInstanceIds, findLeaf } from '../split-tree.js';
+import { terminalSpawn, terminalKill, getConfig, setConfig } from '../api.js';
+import { createLeaf, splitLeaf, removeLeaf, getAllInstanceIds, findLeaf, serialize, deserialize } from '../split-tree.js';
 
 function createTerminalTabsStore() {
   // AI tab is always present, cannot be closed
@@ -102,6 +102,131 @@ function createTerminalTabsStore() {
     }
   }
 
+  // ---- Layout Persistence ----
+
+  let saveTimeout = null;
+  function debouncedSave() {
+    if (saveTimeout) clearTimeout(saveTimeout);
+    saveTimeout = setTimeout(() => saveLayout(), 500);
+  }
+
+  async function saveLayout() {
+    try {
+      const layoutData = {
+        groups: groups.map(g => ({
+          id: g.id,
+          splitTree: serialize(g.splitTree),
+          instances: Object.fromEntries(
+            g.instanceIds.map(instId => {
+              const inst = instances[instId];
+              return inst ? [instId, {
+                title: inst.title,
+                color: inst.color,
+                icon: inst.icon,
+                profileId: inst.profileId,
+                type: inst.type || null,
+              }] : null;
+            }).filter(Boolean)
+          ),
+        })),
+        activeGroupId,
+      };
+      await setConfig({ terminalLayout: layoutData });
+    } catch (err) {
+      console.error('[terminal-tabs] Failed to save layout:', err);
+    }
+  }
+
+  async function restoreLayout() {
+    try {
+      const config = await getConfig();
+      const layoutData = config?.terminalLayout;
+      if (!layoutData || !Array.isArray(layoutData.groups) || layoutData.groups.length === 0) {
+        return false; // No saved layout
+      }
+
+      for (const savedGroup of layoutData.groups) {
+        const tree = deserialize(savedGroup.splitTree);
+        if (!tree) continue;
+
+        const groupId = savedGroup.id || generateGroupId();
+        const savedInstances = savedGroup.instances || {};
+        const leafIds = getAllInstanceIds(tree);
+
+        // Map old instance IDs to new shell IDs
+        const idMap = {};
+        for (const oldId of leafIds) {
+          const savedInst = savedInstances[oldId] || {};
+          try {
+            const result = await terminalSpawn({ profileId: savedInst.profileId || 'default' });
+            if (result?.success && result?.data?.id) {
+              const shellId = result.data.id;
+              idMap[oldId] = shellId;
+              instances = { ...instances, [shellId]: {
+                id: shellId,
+                groupId,
+                title: savedInst.title || 'Terminal',
+                profileId: savedInst.profileId || 'default',
+                icon: savedInst.icon || null,
+                color: savedInst.color || null,
+                shellId,
+                running: true,
+                type: savedInst.type || undefined,
+              }};
+            }
+          } catch (err) {
+            console.warn('[terminal-tabs] Failed to restore instance:', err);
+          }
+        }
+
+        // Remap tree instance IDs to new shell IDs
+        function remapTree(node) {
+          if (node.type === 'leaf') {
+            const newId = idMap[node.instanceId];
+            return newId ? { type: 'leaf', instanceId: newId } : null;
+          }
+          if (node.type === 'split') {
+            const left = remapTree(node.children[0]);
+            const right = remapTree(node.children[1]);
+            if (!left && !right) return null;
+            if (!left) return right;
+            if (!right) return left;
+            return { ...node, children: [left, right] };
+          }
+          return null;
+        }
+
+        const remappedTree = remapTree(tree);
+        if (!remappedTree) continue;
+
+        // Adjust nextGroupNum to avoid collisions
+        const num = parseInt(groupId.replace('group-', ''), 10);
+        if (!isNaN(num) && num >= nextGroupNum) {
+          nextGroupNum = num + 1;
+        }
+
+        groups = [...groups, createGroupObj(groupId, remappedTree)];
+      }
+
+      if (groups.length > 0) {
+        // Restore active group
+        const savedActiveGroupId = layoutData.activeGroupId;
+        if (savedActiveGroupId && groups.find(g => g.id === savedActiveGroupId)) {
+          activeGroupId = savedActiveGroupId;
+        } else {
+          activeGroupId = groups[0].id;
+        }
+        activeInstanceId = groups.find(g => g.id === activeGroupId)?.instanceIds[0] || null;
+        syncLegacyTabs();
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.error('[terminal-tabs] Failed to restore layout:', err);
+      return false;
+    }
+  }
+
   return {
     get tabs() { return tabs; },
     get activeTabId() { return activeTabId; },
@@ -114,6 +239,11 @@ function createTerminalTabsStore() {
     get activeInstanceId() { return activeInstanceId; },
     get activeGroup() { return groups.find(g => g.id === activeGroupId) || null; },
     get activeInstance() { return activeInstanceId ? instances[activeInstanceId] || null : null; },
+
+    // ---- Persistence ----
+    saveLayout,
+    restoreLayout,
+    debouncedSave,
 
     /**
      * Get an instance by ID.
@@ -177,6 +307,7 @@ function createTerminalTabsStore() {
         activeInstanceId = shellId;
 
         syncLegacyTabs();
+        debouncedSave();
         return groupId;
       } catch (err) {
         console.error('[terminal-tabs] Terminal spawn error:', err);
@@ -246,6 +377,7 @@ function createTerminalTabsStore() {
 
         activeInstanceId = shellId;
         syncLegacyTabs();
+        debouncedSave();
         return shellId;
       } catch (err) {
         console.error('[terminal-tabs] Terminal split error:', err);
@@ -311,6 +443,7 @@ function createTerminalTabsStore() {
       instances = rest;
 
       syncLegacyTabs();
+      debouncedSave();
     },
 
     /**
@@ -353,6 +486,7 @@ function createTerminalTabsStore() {
       }
 
       syncLegacyTabs();
+      debouncedSave();
     },
 
     /**
@@ -396,6 +530,7 @@ function createTerminalTabsStore() {
       }
 
       syncLegacyTabs();
+      debouncedSave();
 
       // Auto-create fresh terminal if no groups left
       if (groups.length === 0) {
@@ -593,6 +728,7 @@ function createTerminalTabsStore() {
         instance.title = title;
         instances = { ...instances }; // trigger reactivity
         syncLegacyTabs();
+        debouncedSave();
       }
     },
 
@@ -606,6 +742,7 @@ function createTerminalTabsStore() {
       if (instance) {
         instance.color = color;
         instances = { ...instances };
+        debouncedSave();
       }
     },
 
@@ -619,6 +756,7 @@ function createTerminalTabsStore() {
       if (instance) {
         instance.icon = icon;
         instances = { ...instances };
+        debouncedSave();
       }
     },
 
@@ -752,6 +890,7 @@ function createTerminalTabsStore() {
         };
         tabs.push(tab);
         activeTabId = tab.id;
+        debouncedSave();
         return tab.id;
       } catch (err) {
         console.error('[terminal-tabs] Terminal spawn error:', err);
@@ -801,6 +940,7 @@ function createTerminalTabsStore() {
         port: port || null,
       });
       activeTabId = shellId;
+      debouncedSave();
     },
 
     /**
