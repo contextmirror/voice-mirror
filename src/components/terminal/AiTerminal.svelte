@@ -512,7 +512,7 @@
 </script>
 
 <div class="terminal-view">
-  <div class="terminal-container" bind:this={containerEl}></div>
+  <div class="terminal-container" class:ready={initialized} bind:this={containerEl}></div>
 </div>
 
 <style>
@@ -535,6 +535,12 @@
     position: relative;
     /* Clip canvas rendering to container bounds */
     contain: strict;
+    /* Hidden until WASM init + first fit completes — prevents flash of raw escape sequences */
+    visibility: hidden;
+  }
+
+  .terminal-container.ready {
+    visibility: visible;
   }
 
   /* ghostty-web renders into a canvas; ensure it fills the container */

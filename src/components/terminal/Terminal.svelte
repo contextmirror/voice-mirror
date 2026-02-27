@@ -363,7 +363,7 @@
 </script>
 
 <div class="terminal-view">
-  <div class="terminal-container" bind:this={containerEl}></div>
+  <div class="terminal-container" class:ready={initialized} bind:this={containerEl}></div>
 </div>
 
 <style>
@@ -385,6 +385,11 @@
     position: relative;
     contain: strict;
     border-top: none;
+    visibility: hidden;
+  }
+
+  .terminal-container.ready {
+    visibility: visible;
   }
 
   .terminal-container :global(canvas) {
