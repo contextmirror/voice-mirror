@@ -14,6 +14,8 @@ import {
 } from '../api.js';
 import { navigationStore } from './navigation.svelte.js';
 import { overlayStore } from './overlay.svelte.js';
+import { tabsStore } from './tabs.svelte.js';
+import { layoutStore } from './layout.svelte.js';
 
 // ============ Default Shortcuts ============
 
@@ -31,12 +33,12 @@ export const DEFAULT_GLOBAL_SHORTCUTS = {
     category: 'global',
   },
   'toggle-mute': {
-    keys: 'Ctrl+Shift+M',
+    keys: 'Ctrl+Shift+U',
     label: 'Toggle mute',
     category: 'global',
   },
   'toggle-overlay': {
-    keys: 'Ctrl+Shift+O',
+    keys: 'Ctrl+Shift+Y',
     label: 'Toggle overlay mode',
     category: 'global',
   },
@@ -46,7 +48,7 @@ export const DEFAULT_GLOBAL_SHORTCUTS = {
     category: 'global',
   },
   'stats-dashboard': {
-    keys: 'Ctrl+Shift+M',
+    keys: 'Ctrl+Shift+D',
     label: 'Toggle stats dashboard',
     category: 'global',
   },
@@ -182,6 +184,21 @@ export const IN_APP_SHORTCUTS = {
     label: 'Rename terminal',
     category: 'in-app',
   },
+  'close-tab': {
+    keys: 'Ctrl+W',
+    label: 'Close active editor tab',
+    category: 'in-app',
+  },
+  'toggle-sidebar': {
+    keys: 'Ctrl+B',
+    label: 'Toggle sidebar',
+    category: 'in-app',
+  },
+  'toggle-bottom-panel': {
+    keys: 'Ctrl+J',
+    label: 'Toggle bottom panel',
+    category: 'in-app',
+  },
 };
 
 // ============ Action Handlers ============
@@ -228,6 +245,17 @@ const actionHandlers = {
     }
     // Dispatch for modal handling
     window.dispatchEvent(new CustomEvent('shortcut:close-panel'));
+  },
+  'close-tab': () => {
+    if (tabsStore.activeTabId) {
+      tabsStore.closeTab(tabsStore.activeTabId);
+    }
+  },
+  'toggle-sidebar': () => {
+    navigationStore.toggleSidebar();
+  },
+  'toggle-bottom-panel': () => {
+    layoutStore.toggleTerminal();
   },
 };
 
@@ -583,6 +611,27 @@ export function setupInAppShortcuts() {
     if (ctrl && event.shiftKey && event.key === 'O') {
       event.preventDefault();
       actionHandlers['go-to-symbol']?.();
+      return;
+    }
+
+    // Ctrl+W -> Close active editor tab (prevent browser window close)
+    if (ctrl && event.key === 'w' && !event.shiftKey) {
+      event.preventDefault();
+      actionHandlers['close-tab']?.();
+      return;
+    }
+
+    // Ctrl+B -> Toggle sidebar
+    if (ctrl && event.key === 'b' && !event.shiftKey) {
+      event.preventDefault();
+      actionHandlers['toggle-sidebar']?.();
+      return;
+    }
+
+    // Ctrl+J -> Toggle bottom panel
+    if (ctrl && event.key === 'j' && !event.shiftKey) {
+      event.preventDefault();
+      actionHandlers['toggle-bottom-panel']?.();
       return;
     }
 
