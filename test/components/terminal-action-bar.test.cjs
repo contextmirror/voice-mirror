@@ -72,12 +72,9 @@ describe('TerminalActionBar.svelte -- overflow menu', () => {
   });
 });
 
-describe('TerminalActionBar.svelte -- configure settings placeholder', () => {
-  it('has Configure Terminal Settings option', () => {
-    assert.ok(src.includes('Configure Terminal Settings'), 'Should have configure option');
-  });
-  it('configure is a placeholder (console.log)', () => {
-    assert.ok(src.includes('console.log') && src.includes('placeholder'), 'Should be placeholder');
+describe('TerminalActionBar.svelte -- no dead configure button', () => {
+  it('does not have placeholder Configure Terminal Settings', () => {
+    assert.ok(!src.includes('Configure Terminal Settings'), 'Should not have dead configure button');
   });
 });
 

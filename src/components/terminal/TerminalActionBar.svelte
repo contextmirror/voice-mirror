@@ -69,10 +69,6 @@
     closeAll();
   }
 
-  function handleConfigureSettings() {
-    console.log('[TerminalActionBar] Configure Terminal Settings (placeholder)');
-    closeAll();
-  }
 
   function handleClearTerminal() {
     // Dispatch a custom event that TerminalPanel can listen to
@@ -153,14 +149,6 @@
         </button>
       {/each}
     {/if}
-    <div class="dropdown-divider"></div>
-    <button class="dropdown-item" onclick={handleConfigureSettings}>
-      <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
-        <circle cx="8" cy="8" r="3" stroke="currentColor" stroke-width="1.2" fill="none"/>
-        <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.41 1.41M11.54 11.54l1.41 1.41M3.05 12.95l1.41-1.41M11.54 4.46l1.41-1.41" stroke="currentColor" stroke-width="1"/>
-      </svg>
-      Configure Terminal Settings
-    </button>
   </div>
 {/if}
 

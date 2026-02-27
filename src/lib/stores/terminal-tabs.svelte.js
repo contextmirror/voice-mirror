@@ -139,13 +139,16 @@ function createTerminalTabsStore() {
           return null;
         }
         const shellId = result.data.id;
+        const profileName = result.data.profileName || null;
         const groupId = generateGroupId();
         const tabNum = nextTerminalNumber();
+        // Use profile name for tab title when a profile was explicitly selected
+        const title = profileName ? `${profileName} ${tabNum}` : `Terminal ${tabNum}`;
 
         const instance = {
           id: shellId,
           groupId,
-          title: `Terminal ${tabNum}`,
+          title,
           profileId: options.profileId || 'default',
           icon: null,
           color: null,

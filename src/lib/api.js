@@ -593,7 +593,7 @@ export async function terminalSpawn(options = {}) {
     cols: options.cols || null,
     rows: options.rows || null,
     cwd: options.cwd || null,
-    profile_id: options.profileId || null,
+    profileId: options.profileId || null,
   });
 }
 

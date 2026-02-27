@@ -40,7 +40,7 @@ pub fn terminal_spawn(
     let rows = rows.unwrap_or(24);
 
     match manager.spawn(cols, rows, cwd, profile_id) {
-        Ok(id) => IpcResponse::ok(json!({ "id": id })),
+        Ok((id, profile_name)) => IpcResponse::ok(json!({ "id": id, "profileName": profile_name })),
         Err(e) => IpcResponse::err(e),
     }
 }

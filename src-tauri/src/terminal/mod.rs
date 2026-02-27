@@ -257,9 +257,9 @@ impl TerminalManager {
 
     /// Spawn a new terminal PTY session.
     ///
-    /// Returns the session ID (e.g. "terminal-1") on success.
+    /// Returns `(session_id, profile_name)` on success.
     /// If `profile_id` is given, uses the matching profile's shell and args.
-    pub fn spawn(&mut self, cols: u16, rows: u16, cwd: Option<String>, profile_id: Option<String>) -> Result<String, String> {
+    pub fn spawn(&mut self, cols: u16, rows: u16, cwd: Option<String>, profile_id: Option<String>) -> Result<(String, Option<String>), String> {
         let id = format!("terminal-{}", self.next_id);
         self.next_id += 1;
 
@@ -276,11 +276,12 @@ impl TerminalManager {
 
         // Determine the shell command and args.
         // If a profile_id is provided, look it up; otherwise use platform defaults.
-        let (shell, shell_args) = if let Some(ref pid) = profile_id {
+        let (shell, shell_args, profile_name) = if let Some(ref pid) = profile_id {
             let profiles = self.detect_profiles();
             if let Some(prof) = profiles.iter().find(|p| p.id == *pid) {
-                (prof.path.clone(), prof.args.clone())
+                (prof.path.clone(), prof.args.clone(), Some(prof.name.clone()))
             } else {
+                warn!("Profile '{}' not found, falling back to default shell", pid);
                 // Fall back to default platform detection
                 let default_shell = if cfg!(target_os = "windows") {
                     #[cfg(target_os = "windows")]
@@ -298,7 +299,7 @@ impl TerminalManager {
                 } else {
                     vec![]
                 };
-                (default_shell, args)
+                (default_shell, args, None)
             }
         } else {
             // No profile — use platform defaults
@@ -318,7 +319,7 @@ impl TerminalManager {
             } else {
                 vec![]
             };
-            (default_shell, args)
+            (default_shell, args, None)
         };
 
         let mut cmd = CommandBuilder::new(&shell);
@@ -427,9 +428,9 @@ impl TerminalManager {
             _reader_handle: Some(reader_handle),
         };
 
-        info!("Spawned terminal session '{}' (shell={}, cols={}, rows={})", id, shell, cols, rows);
+        info!("Spawned terminal session '{}' (shell={}, profile={:?}, cols={}, rows={})", id, shell, profile_name, cols, rows);
         self.sessions.insert(id.clone(), session);
-        Ok(id)
+        Ok((id, profile_name))
     }
 
     /// Send raw input bytes to a terminal session.
