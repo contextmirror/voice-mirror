@@ -8,27 +8,37 @@
 
 ## Executive Summary
 
-Voice Mirror's Lens workspace has solid functionality but significant UX gaps in **interactive polish** — the small behaviors that make an IDE feel professional. The audit found:
+Voice Mirror's Lens workspace has solid functionality with remaining UX gaps in **interactive polish**. Wave 1 (10 items) has been completed. Remaining gaps:
 
-- **1 critical gap**: Terminal body has NO right-click context menu at all
 - **1 critical infrastructure gap**: No persistent bottom status bar (line:col, language, errors, git branch)
-- **6 high-priority shortcut issues**: Ctrl+W not wired, Ctrl+B/J missing, shortcut conflicts
-- **Multiple medium-priority gaps** across all 6 audit areas
+- **Multiple medium-priority gaps** across context menus, tabs, editor, drag-and-drop
 
-### Top 10 Most Impactful Fixes
+### Wave 1 — COMPLETED
+
+All 10 items from the initial wave are done:
+
+| # | Fix | Status |
+|---|-----|--------|
+| 1 | Terminal body context menu (Copy/Paste/SelectAll/Clear) | ✅ Done |
+| 2 | Wire Ctrl+W to close active tab | ✅ Done |
+| 3 | Save prompt on dirty tab close | ✅ Done |
+| 4 | Wire Ctrl+B (toggle sidebar) + Ctrl+J (toggle panel) | ✅ Done |
+| 5 | Fix Ctrl+Shift+M conflict (mute→Ctrl+Shift+U, stats→Ctrl+Shift+D) | ✅ Done |
+| 6 | Fix Ctrl+Shift+O conflict (overlay→Ctrl+Shift+Y) | ✅ Done |
+| 7 | Tab/Shift+Tab for indent in editor | ✅ Done (already had `indentWithTab`) |
+| 8 | F12 for Go to Definition | ✅ Done (already wired in editor-extensions.js) |
+| 9 | Editor font zoom (Ctrl+=/Ctrl+-/Ctrl+0) | ✅ Done (already wired with config persistence) |
+| 10 | Middle-click to close editor tabs | ✅ Done |
+
+### Next Priorities
 
 | # | Fix | Category | Effort |
 |---|-----|----------|--------|
-| 1 | **Add terminal body context menu** (Copy/Paste/Clear) | Context Menus | Small |
-| 2 | **Add persistent bottom status bar** (line:col, language, errors, git) | Status Bar | Medium |
-| 3 | **Wire Ctrl+W** to close active tab | Keyboards | Small |
-| 4 | **Add save prompt on dirty tab close** | Tab Behaviors | Medium |
-| 5 | **Wire Ctrl+B** (toggle sidebar) + **Ctrl+J** (toggle panel) | Keyboards | Small |
-| 6 | **Fix Ctrl+Shift+M conflict** (mute vs stats) | Keyboards | Small |
-| 7 | **Add Tab/Shift+Tab for indent** in editor | Editor | Small |
-| 8 | **Wire F12** for Go to Definition in editor | Editor | Small |
-| 9 | **Add back/forward navigation** (Alt+Left/Right after jump) | Editor | Medium |
-| 10 | **Add editor font zoom** (Ctrl+=/Ctrl+-) | Editor | Small |
+| 1 | **Add persistent bottom status bar** (line:col, language, errors, git) | Status Bar | Medium |
+| 2 | **Back/forward navigation** (Alt+Left/Right after jump) | Editor | Medium |
+| 3 | **Closed tab history + Ctrl+Shift+T** | Tabs | Medium |
+| 4 | **Mouse wheel scroll on tab bar** | Tabs | Small |
+| 5 | **Tab drag → split zones** (extend DropZoneOverlay) | Drag | Small-Medium |
 
 ---
 
@@ -583,85 +593,73 @@ Alt+Down/Up (next/prev chunk)
 
 ---
 
-## Priority Summary — All Categories
+## Priority Summary — Remaining Items
 
-### P0 — Critical / Fix Immediately
+### P0 — Critical
 
 | # | Item | Category | Effort |
 |---|------|----------|--------|
-| 1 | Terminal body has NO context menu | Context Menus | Small |
-| 2 | Ctrl+W not wired (shown as hint but broken) | Keyboards | Small |
-| 3 | Save prompt on dirty tab close (data loss risk) | Tabs | Medium |
-| 4 | Bottom status bar (container for all indicators) | Status Bar | Medium |
-| 5 | Line:Column cursor position display | Status Bar | Small (needs #4) |
-| 6 | Aggregate error/warning count display | Status Bar | Small (needs #4) |
+| 1 | Bottom status bar (container for all indicators) | Status Bar | Medium |
+| 2 | Line:Column cursor position display | Status Bar | Small (needs #1) |
+| 3 | Aggregate error/warning count display | Status Bar | Small (needs #1) |
 
 ### P1 — High Priority
 
 | # | Item | Category | Effort |
 |---|------|----------|--------|
-| 7 | Ctrl+B (toggle sidebar) | Keyboards | Small |
-| 8 | Ctrl+J (toggle bottom panel) | Keyboards | Small |
-| 9 | Fix Ctrl+Shift+M conflict (mute vs stats) | Keyboards | Small |
-| 10 | Fix Ctrl+Shift+O conflict (symbol vs overlay) | Keyboards | Small |
-| 11 | Tab/Shift+Tab for indent in editor | Editor | Small |
-| 12 | F12 for Go to Definition | Editor/Keyboards | Small |
-| 13 | Middle-click to close editor tabs | Tabs | Small |
-| 14 | Closed tab history + Ctrl+Shift+T | Tabs | Medium |
-| 15 | Mouse wheel scroll on tab bar | Tabs | Small |
-| 16 | Terminal context menu: Copy, Paste, Clear | Context Menus | Small |
-| 17 | Font zoom (Ctrl+=/Ctrl+-) | Editor | Small |
-| 18 | Language mode in status bar | Status Bar | Small (needs #4) |
-| 19 | Git branch in status bar | Status Bar | Small (needs #4) |
-| 20 | File tree: Open to the Side, Open in Terminal | Context Menus | Small |
-| 21 | Browser tab: Reload, New Tab | Context Menus | Small |
-| 22 | Tab drag → split zones (extend DropZoneOverlay) | Drag | Small-Medium |
+| 4 | Closed tab history + Ctrl+Shift+T | Tabs | Medium |
+| 5 | Mouse wheel scroll on tab bar | Tabs | Small |
+| 6 | Language mode in status bar | Status Bar | Small (needs #1) |
+| 7 | Git branch in status bar | Status Bar | Small (needs #1) |
+| 8 | File tree: Open to the Side, Open in Terminal | Context Menus | Small |
+| 9 | Browser tab: Reload, New Tab | Context Menus | Small |
+| 10 | Tab drag → split zones (extend DropZoneOverlay) | Drag | Small-Medium |
 
 ### P2 — Medium Priority
 
 | # | Item | Category | Effort |
 |---|------|----------|--------|
-| 23 | Back/forward navigation (Alt+Left/Right) | Editor | Medium |
-| 24 | Ctrl+hover underline (definition hint) | Editor | Small |
-| 25 | Quick fix lightbulb in gutter | Editor | Medium |
-| 26 | Ctrl+Tab MRU tab cycling | Tabs | Medium |
-| 27 | Ctrl+PageUp/PageDown (prev/next tab) | Keyboards | Small |
-| 28 | Terminal inline rename (replace prompt() dialog) | Tabs | Small |
-| 29 | Terminal tab strip drag reorder | Drag | Medium |
-| 30 | Indentation type/size in status bar | Status Bar | Small (needs #4) |
-| 31 | LSP status in persistent location | Status Bar | Small (needs #4) |
-| 32 | File path breadcrumbs | Status Bar | Medium |
-| 33 | Sidebar badge counts (git changes, errors) | Status Bar | Medium |
-| 34 | Diagnostics panel (unified error list) | Status Bar | Medium-Large |
-| 35 | Editor context menu: Toggle Comment, Format | Context Menus | Small |
-| 36 | Diff context menu: Revert Hunk | Context Menus | Medium |
-| 37 | File tree: Stage/Unstage/Discard on changes | Context Menus | Small |
-| 38 | Word wrap toggle in editor | Editor | Small |
-| 39 | Tab size configuration | Editor | Small |
-| 40 | Auto-indent on paste | Editor | Medium |
-| 41 | Text drag in editor (unblock in main.js) | Drag | Small |
-| 42 | External file drop from OS | Drag | Medium |
-| 43 | Ctrl+O (open file) wired to handler | Keyboards | Small |
-| 44 | Ctrl+Shift+E (focus file tree) | Keyboards | Small |
-| 45 | Wire Ctrl+K W / Ctrl+K U chords | Keyboards | Small |
+| 11 | Back/forward navigation (Alt+Left/Right) | Editor | Medium |
+| 12 | Ctrl+hover underline (definition hint) | Editor | Small |
+| 13 | Quick fix lightbulb in gutter | Editor | Medium |
+| 14 | Ctrl+Tab MRU tab cycling | Tabs | Medium |
+| 15 | Ctrl+PageUp/PageDown (prev/next tab) | Keyboards | Small |
+| 16 | Terminal inline rename (replace prompt() dialog) | Tabs | Small |
+| 17 | Terminal tab strip drag reorder | Drag | Medium |
+| 18 | Indentation type/size in status bar | Status Bar | Small (needs #1) |
+| 19 | LSP status in persistent location | Status Bar | Small (needs #1) |
+| 20 | File path breadcrumbs | Status Bar | Medium |
+| 21 | Sidebar badge counts (git changes, errors) | Status Bar | Medium |
+| 22 | Diagnostics panel (unified error list) | Status Bar | Medium-Large |
+| 23 | Editor context menu: Toggle Comment, Format | Context Menus | Small |
+| 24 | Diff context menu: Revert Hunk | Context Menus | Medium |
+| 25 | File tree: Stage/Unstage/Discard on changes | Context Menus | Small |
+| 26 | Word wrap toggle in editor | Editor | Small |
+| 27 | Tab size configuration | Editor | Small |
+| 28 | Auto-indent on paste | Editor | Medium |
+| 29 | Text drag in editor (unblock in main.js) | Drag | Small |
+| 30 | External file drop from OS | Drag | Medium |
+| 31 | Ctrl+O (open file) wired to handler | Keyboards | Small |
+| 32 | Ctrl+Shift+E (focus file tree) | Keyboards | Small |
+| 33 | Wire Ctrl+K W / Ctrl+K U chords | Keyboards | Small |
 
 ### P3 — Low Priority / Nice-to-Have
 
 | # | Item | Category | Effort |
 |---|------|----------|--------|
-| 46 | Inlay hints (LSP) | Editor | Medium |
-| 47 | Peek definition (Alt+F12) | Editor | Large |
-| 48 | Tab overflow dropdown | Tabs | Medium |
-| 49 | Git/diagnostic tab decorations | Tabs | Medium |
-| 50 | Close to the Left (tab context menu) | Context Menus | Small |
-| 51 | Encoding/EOL in status bar | Status Bar | Small |
-| 52 | Notification center/history | Status Bar | Medium |
-| 53 | File drag to terminal (insert path) | Drag | Medium |
-| 54 | Cursor blink/animation config | Editor | Low |
-| 55 | Render whitespace | Editor | Low |
-| 56 | Bracket pair colorization | Editor | Low |
-| 57 | Minimap show/hide toggle | Editor | Small |
-| 58 | Browser tab: Duplicate, Close Others | Context Menus | Small |
+| 34 | Inlay hints (LSP) | Editor | Medium |
+| 35 | Peek definition (Alt+F12) | Editor | Large |
+| 36 | Tab overflow dropdown | Tabs | Medium |
+| 37 | Git/diagnostic tab decorations | Tabs | Medium |
+| 38 | Close to the Left (tab context menu) | Context Menus | Small |
+| 39 | Encoding/EOL in status bar | Status Bar | Small |
+| 40 | Notification center/history | Status Bar | Medium |
+| 41 | File drag to terminal (insert path) | Drag | Medium |
+| 42 | Cursor blink/animation config | Editor | Low |
+| 43 | Render whitespace | Editor | Low |
+| 44 | Bracket pair colorization | Editor | Low |
+| 45 | Minimap show/hide toggle | Editor | Small |
+| 46 | Browser tab: Duplicate, Close Others | Context Menus | Small |
 
 ---
 
@@ -669,7 +667,5 @@ Alt+Down/Up (next/prev chunk)
 
 - **VS Code reference repo:** `E:\Projects\references\VSCode\`
 - **Zed reference repo:** Not cloned locally; comparisons based on published documentation and known features.
-- **CodeMirror `basicSetup`** provides many defaults. Several "missing" items may only need a one-line extension add (e.g., `indentWithTab`, `selectLine` remap).
-- **The status bar is the biggest infrastructure gap.** It's the container that ~8 individual indicators need. Building it first unblocks many small P1/P2 items.
+- **The status bar is the biggest remaining infrastructure gap.** It's the container that ~8 individual indicators need. Building it first unblocks many P1/P2 items.
 - **Context menu gaps are mostly small scope.** Adding items to existing menus is straightforward once the pattern exists.
-- **Keyboard conflicts should be fixed before adding new shortcuts.** The Ctrl+Shift+M and Ctrl+Shift+O conflicts mean existing features silently break.
