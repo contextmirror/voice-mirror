@@ -119,7 +119,7 @@
   .split-handle:hover {
     background: color-mix(in srgb, var(--accent) 30%, var(--bg));
   }
-  .dragging .split-handle {
+  .dragging > .split-handle {
     background: color-mix(in srgb, var(--accent) 50%, var(--bg));
   }
   .split-handle:focus-visible {
