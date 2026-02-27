@@ -215,7 +215,7 @@
     border: 1px solid var(--border, rgba(255,255,255,0.1));
     border-radius: 6px;
     padding: 4px;
-    min-width: 180px;
+    min-width: 240px;
     box-shadow: 0 4px 16px rgba(0,0,0,0.4);
   }
 
@@ -233,6 +233,7 @@
     font-family: var(--font-family);
     cursor: pointer;
     transition: background 0.1s;
+    white-space: nowrap;
   }
 
   .dropdown-item:hover {

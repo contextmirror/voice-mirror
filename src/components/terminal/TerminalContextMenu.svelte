@@ -27,12 +27,12 @@
   }
 
   function handleChangeColor() {
-    pickerPos = { x: x + 200, y };
+    pickerPos = { x: Math.min(x + 200, window.innerWidth - 250), y: Math.min(y, window.innerHeight - 300) };
     colorPickerOpen = true;
   }
 
   function handleChangeIcon() {
-    pickerPos = { x: x + 200, y };
+    pickerPos = { x: Math.min(x + 200, window.innerWidth - 250), y: Math.min(y, window.innerHeight - 350) };
     iconPickerOpen = true;
   }
 

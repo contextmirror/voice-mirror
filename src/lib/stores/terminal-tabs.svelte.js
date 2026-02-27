@@ -44,20 +44,15 @@ function createTerminalTabsStore() {
    * If Terminal 1 and Terminal 3 exist, returns 2.
    */
   function nextTerminalNumber() {
-    // Check both legacy tabs and new instances for existing terminal numbers
-    const existingFromTabs = new Set(
-      tabs.filter(t => t.type === 'terminal').map(t => {
-        const match = t.title.match(/^Terminal (\d+)$/);
-        return match ? parseInt(match[1]) : null;
-      }).filter(n => n !== null)
-    );
-    const existingFromInstances = new Set(
+    // Scan only active instances -- the single source of truth for terminal numbers.
+    // Legacy tabs are derived from instances via syncLegacyTabs(), so checking
+    // them separately would double-count and risk stale entries blocking reuse.
+    const existing = new Set(
       Object.values(instances).map(inst => {
         const match = inst.title.match(/^Terminal (\d+)$/);
         return match ? parseInt(match[1]) : null;
       }).filter(n => n !== null)
     );
-    const existing = new Set([...existingFromTabs, ...existingFromInstances]);
     let num = 1;
     while (existing.has(num)) num++;
     return num;

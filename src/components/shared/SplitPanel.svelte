@@ -130,12 +130,12 @@
   .handle-line {
     background: var(--border);
     border-radius: 2px;
-    opacity: 0;
+    opacity: 0.2;
     transition: opacity var(--duration-fast) var(--ease-out);
   }
   .horizontal > .split-handle .handle-line {
     width: 2px;
-    height: 32px;
+    height: 100%;
   }
   .vertical > .split-handle .handle-line {
     height: 2px;
@@ -143,10 +143,10 @@
   }
   .split-handle:hover .handle-line,
   .dragging .split-handle .handle-line {
-    opacity: 0.3;
+    opacity: 0.5;
   }
   .dragging .split-handle .handle-line {
-    opacity: 0.5;
+    opacity: 0.7;
     background: var(--accent);
   }
   .split-handle:focus-visible .handle-line {
