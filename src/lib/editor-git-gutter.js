@@ -16,10 +16,12 @@ import { StateField, StateEffect, RangeSet } from '@codemirror/state';
 // GutterMarker subclasses
 // ---------------------------------------------------------------------------
 
+const BAR_STYLE = 'display:block;width:3px;height:1.4em;border-radius:1px;';
+
 class AddedMarker extends GutterMarker {
   toDOM() {
     const el = document.createElement('div');
-    el.style.cssText = 'position:absolute;top:0;bottom:0;left:0;width:3px;background:var(--ok,#22c55e);border-radius:1px;';
+    el.style.cssText = BAR_STYLE + 'background:#22c55e;';
     return el;
   }
 }
@@ -27,7 +29,7 @@ class AddedMarker extends GutterMarker {
 class ModifiedMarker extends GutterMarker {
   toDOM() {
     const el = document.createElement('div');
-    el.style.cssText = 'position:absolute;top:0;bottom:0;left:0;width:3px;background:var(--accent,#56b4e9);border-radius:1px;';
+    el.style.cssText = BAR_STYLE + 'background:#56b4e9;';
     return el;
   }
 }
@@ -35,7 +37,7 @@ class ModifiedMarker extends GutterMarker {
 class DeletedMarker extends GutterMarker {
   toDOM() {
     const el = document.createElement('div');
-    el.style.cssText = 'position:absolute;top:0;bottom:0;left:0;width:3px;background:var(--danger,#ef4444);border-radius:1px;';
+    el.style.cssText = BAR_STYLE + 'background:#ef4444;';
     return el;
   }
 }
