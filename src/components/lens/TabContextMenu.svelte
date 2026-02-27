@@ -63,7 +63,7 @@
 
   function handleClose() {
     close();
-    if (tab) tabsStore.closeTab(tab.id);
+    if (tab) tabsStore.requestClose(tab.id);
   }
 
   function handleCloseOthers() {

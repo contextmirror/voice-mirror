@@ -249,6 +249,118 @@ describe('tabs.svelte.js: browser tab removal', () => {
   });
 });
 
+// ============ dirty close dialog (save prompt) ============
+
+describe('tabs.svelte.js: dirty close dialog', () => {
+  it('has showDirtyCloseDialog helper function', () => {
+    assert.ok(
+      src.includes('async function showDirtyCloseDialog'),
+      'Should have showDirtyCloseDialog helper'
+    );
+  });
+
+  it('showDirtyCloseDialog imports message from @tauri-apps/plugin-dialog', () => {
+    assert.ok(
+      src.includes("@tauri-apps/plugin-dialog"),
+      'Should import Tauri dialog plugin'
+    );
+    assert.ok(
+      src.includes("import('@tauri-apps/plugin-dialog')"),
+      'Should dynamically import dialog'
+    );
+  });
+
+  it('showDirtyCloseDialog uses warning kind with 3 buttons', () => {
+    assert.ok(
+      src.includes("kind: 'warning'"),
+      'Should use warning dialog kind'
+    );
+    assert.ok(
+      src.includes("yes: 'Save'"),
+      'Should have Save button'
+    );
+    assert.ok(
+      src.includes("no: \"Don't Save\""),
+      'Should have Don\'t Save button'
+    );
+    assert.ok(
+      src.includes("cancel: 'Cancel'"),
+      'Should have Cancel button'
+    );
+  });
+
+  it('showDirtyCloseDialog has fallback for non-Tauri environments', () => {
+    assert.ok(
+      src.includes("return 'Cancel'"),
+      'Should return Cancel as fallback'
+    );
+  });
+});
+
+// ============ requestClose ============
+
+describe('tabs.svelte.js: requestClose method', () => {
+  it('has async requestClose method', () => {
+    assert.ok(
+      src.includes('async requestClose('),
+      'Should have async requestClose method'
+    );
+  });
+
+  it('requestClose skips dialog for non-dirty tabs', () => {
+    // Should check tab.dirty and call closeTab directly if not dirty
+    const requestCloseStart = src.indexOf('async requestClose(');
+    const chunk = src.slice(requestCloseStart, requestCloseStart + 500);
+    assert.ok(
+      chunk.includes('!tab.dirty'),
+      'Should check dirty flag'
+    );
+    assert.ok(
+      chunk.includes('this.closeTab(id)'),
+      'Should call closeTab directly for clean tabs'
+    );
+  });
+
+  it('requestClose calls showDirtyCloseDialog for dirty tabs', () => {
+    assert.ok(
+      src.includes('showDirtyCloseDialog(tab.title)'),
+      'Should call showDirtyCloseDialog with tab title'
+    );
+  });
+
+  it('requestClose dispatches command:save on Save', () => {
+    assert.ok(
+      src.includes("new CustomEvent('command:save')"),
+      'Should dispatch command:save event for Save'
+    );
+  });
+
+  it('requestClose closes tab on Don\'t Save', () => {
+    assert.ok(
+      src.includes("Don't Save") && src.includes("result === 'No'"),
+      'Should handle Don\'t Save / No result'
+    );
+  });
+
+  it('requestClose returns boolean indicating if tab was closed', () => {
+    const requestCloseStart = src.indexOf('async requestClose(');
+    const chunk = src.slice(requestCloseStart, requestCloseStart + 2000);
+    assert.ok(
+      chunk.includes('return true') && chunk.includes('return false'),
+      'Should return true/false for close/cancel'
+    );
+  });
+
+  it('requestClose sets tab active before saving', () => {
+    const requestCloseStart = src.indexOf('async requestClose(');
+    const chunk = src.slice(requestCloseStart, requestCloseStart + 2000);
+    assert.ok(
+      chunk.includes('this.setActive(id)'),
+      'Should set the tab active before dispatching save'
+    );
+  });
+});
+
 describe('tabs.svelte.js: diff tab support', () => {
   it('has openDiff method', () => {
     assert.ok(src.includes('openDiff('), 'Should have openDiff method');
