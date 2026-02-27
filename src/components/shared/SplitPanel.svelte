@@ -133,7 +133,6 @@
   .vertical > .split-handle {
     height: 4px;
     cursor: row-resize;
-    border-top: 1px solid color-mix(in srgb, var(--text) 12%, var(--bg));
   }
 
   .handle-line {
