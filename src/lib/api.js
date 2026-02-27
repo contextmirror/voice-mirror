@@ -585,6 +585,7 @@ export async function stopFileWatching() {
  * @param {number} [options.cols] - Terminal columns.
  * @param {number} [options.rows] - Terminal rows.
  * @param {string} [options.cwd] - Working directory.
+ * @param {string} [options.profileId] - Terminal profile ID (shell).
  * @returns {Promise<Object>}
  */
 export async function terminalSpawn(options = {}) {
@@ -592,6 +593,7 @@ export async function terminalSpawn(options = {}) {
     cols: options.cols || null,
     rows: options.rows || null,
     cwd: options.cwd || null,
+    profile_id: options.profileId || null,
   });
 }
 
@@ -623,6 +625,16 @@ export async function terminalResize(id, cols, rows) {
  */
 export async function terminalKill(id) {
   return invoke('terminal_kill', { id });
+}
+
+/**
+ * Detect available terminal profiles (shells) on the system.
+ * Returns { success: boolean, data?: TerminalProfile[] }
+ * where TerminalProfile has { id, name, path, args, icon, color, is_default, is_builtin }.
+ * @returns {Promise<Object>}
+ */
+export async function terminalDetectProfiles() {
+  return invoke('terminal_detect_profiles');
 }
 
 // ============ LSP ============

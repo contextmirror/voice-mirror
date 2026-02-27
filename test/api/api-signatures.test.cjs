@@ -141,6 +141,8 @@ describe('api.js -- critical Tauri command names', () => {
     'git_commit',
     'git_discard',
     'git_push',
+    // Terminal profiles
+    'terminal_detect_profiles',
     // LSP
     'lsp_request_formatting',
     'lsp_request_range_formatting',
@@ -275,6 +277,7 @@ describe('api.js -- exported async functions', () => {
     'terminalInput',
     'terminalResize',
     'terminalKill',
+    'terminalDetectProfiles',
     // LSP
     'lspOpenFile',
     'lspCloseFile',

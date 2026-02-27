@@ -81,6 +81,33 @@ describe('TerminalActionBar.svelte -- configure settings placeholder', () => {
   });
 });
 
+describe('TerminalActionBar.svelte -- terminal profiles integration', () => {
+  it('imports terminalProfilesStore', () => {
+    assert.ok(src.includes('terminalProfilesStore'), 'Should import profiles store');
+  });
+  it('imports from terminal-profiles.svelte.js', () => {
+    assert.ok(src.includes('terminal-profiles.svelte.js'), 'Should import from correct store file');
+  });
+  it('imports onMount from svelte', () => {
+    assert.ok(src.includes("import { onMount }") || src.includes("onMount"), 'Should import onMount');
+  });
+  it('loads profiles on mount', () => {
+    assert.ok(src.includes('loadProfiles'), 'Should call loadProfiles');
+  });
+  it('renders profile items in dropdown', () => {
+    assert.ok(src.includes('terminalProfilesStore.profiles'), 'Should iterate over profiles');
+  });
+  it('has handleNewWithProfile function', () => {
+    assert.ok(src.includes('handleNewWithProfile'), 'Should have handler for profile selection');
+  });
+  it('passes profileId when creating terminal from profile', () => {
+    assert.ok(src.includes('profileId') || src.includes('profile.id'), 'Should pass profile ID');
+  });
+  it('has profile-icon class', () => {
+    assert.ok(src.includes('profile-icon'), 'Should have profile icon styling');
+  });
+});
+
 describe('TerminalActionBar.svelte -- outside click handling', () => {
   it('closes menus on outside click', () => {
     assert.ok(src.includes('window.addEventListener'), 'Should listen for outside clicks');

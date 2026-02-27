@@ -8,6 +8,14 @@
    * - Split Terminal button (quick action)
    */
   import { terminalTabsStore } from '../../lib/stores/terminal-tabs.svelte.js';
+  import { terminalProfilesStore } from '../../lib/stores/terminal-profiles.svelte.js';
+  import { onMount } from 'svelte';
+
+  onMount(() => {
+    if (!terminalProfilesStore.loaded) {
+      terminalProfilesStore.loadProfiles();
+    }
+  });
 
   // Dropdown state: "+" new terminal menu
   let newDropdownOpen = $state(false);
@@ -53,6 +61,11 @@
 
   function handleSplitTerminal() {
     terminalTabsStore.splitInstance();
+    closeAll();
+  }
+
+  function handleNewWithProfile(profileId) {
+    terminalTabsStore.addGroup({ profileId });
     closeAll();
   }
 
@@ -131,6 +144,15 @@
       </svg>
       Split Terminal
     </button>
+    {#if terminalProfilesStore.profiles.length > 0}
+      <div class="dropdown-divider"></div>
+      {#each terminalProfilesStore.profiles as profile}
+        <button class="dropdown-item" onclick={() => handleNewWithProfile(profile.id)}>
+          <span class="profile-icon">{profile.icon || profile.name.charAt(0)}</span>
+          {profile.name}
+        </button>
+      {/each}
+    {/if}
     <div class="dropdown-divider"></div>
     <button class="dropdown-item" onclick={handleConfigureSettings}>
       <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
@@ -221,5 +243,15 @@
     height: 1px;
     background: var(--border, rgba(255,255,255,0.06));
     margin: 4px 0;
+  }
+
+  .profile-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    font-size: 11px;
+    flex-shrink: 0;
   }
 </style>
