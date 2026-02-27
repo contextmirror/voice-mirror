@@ -1,5 +1,5 @@
 <script>
-  import { gitCommit, gitPush, gitFetch, gitPull, gitForcePush, gitListBranches, gitCheckoutBranch } from '../../lib/api.js';
+  import { gitCommit, gitPush, gitFetch, gitPull, gitForcePush, gitAheadBehind, gitListBranches, gitCheckoutBranch } from '../../lib/api.js';
 
   let { branch = '', stagedCount = 0, onCommit = () => {}, root = null } = $props();
 
@@ -24,6 +24,18 @@
   let fetchDropdownPos = $state({ x: 0, y: 0 });
   let remoteOp = $state(''); // 'fetch' | 'pull' | 'pull-rebase' | 'push' | 'force-push'
 
+  // Ahead/behind tracking for dynamic label
+  let ahead = $state(0);
+  let behind = $state(0);
+  let hasUpstream = $state(false);
+
+  // Dynamic button label like Zed
+  let syncLabel = $derived(
+    behind > 0 ? `Pull${behind > 1 ? ` ${behind}` : ''}`
+    : ahead > 0 ? `Push${ahead > 1 ? ` ${ahead}` : ''}`
+    : hasUpstream ? 'Fetch' : 'Publish'
+  );
+
   function clearError() { error = ''; }
   function clearSuccess() { success = ''; }
 
@@ -39,6 +51,7 @@
         success = hash ? `Committed ${hash.slice(0, 7)}` : 'Committed';
         message = '';
         onCommit?.();
+        refreshAheadBehind();
         setTimeout(clearSuccess, 3000);
       } else if (resp && resp.error) {
         error = resp.error;
@@ -69,6 +82,7 @@
           success = hash ? `Committed ${hash.slice(0, 7)}` : 'Committed';
           error = typeof pushErr === 'string' ? pushErr : (pushErr.message || 'Push failed');
         }
+        refreshAheadBehind();
         setTimeout(clearSuccess, 3000);
       } else if (resp && resp.error) {
         error = resp.error;
@@ -147,7 +161,26 @@
       : branches
   );
 
+  // ── Ahead/behind refresh ──
+  async function refreshAheadBehind() {
+    try {
+      const resp = await gitAheadBehind(root);
+      if (resp?.success && resp.data) {
+        ahead = resp.data.ahead || 0;
+        behind = resp.data.behind || 0;
+        hasUpstream = resp.data.hasUpstream ?? false;
+      }
+    } catch { /* ignore */ }
+  }
+
+  // Refresh on mount and whenever branch changes
+  $effect(() => {
+    if (branch) refreshAheadBehind();
+  });
+
   // ── Fetch / Push dropdown ──
+  const FETCH_DROPDOWN_WIDTH = 180;
+
   function toggleFetchDropdown() {
     if (fetchDropdown) {
       closeFetchDropdown();
@@ -155,7 +188,10 @@
     }
     if (fetchBtnEl) {
       const rect = fetchBtnEl.getBoundingClientRect();
-      fetchDropdownPos = { x: rect.left, y: rect.bottom + 4 };
+      // Anchor to right edge of button so it doesn't overflow the window
+      const rightEdge = rect.right;
+      const left = Math.max(4, rightEdge - FETCH_DROPDOWN_WIDTH);
+      fetchDropdownPos = { x: left, y: rect.bottom + 4 };
     }
     fetchDropdown = true;
   }
@@ -201,6 +237,8 @@
           break;
       }
       if (success) setTimeout(clearSuccess, 3000);
+      // Refresh ahead/behind after any remote operation
+      await refreshAheadBehind();
     } catch (err) {
       error = typeof err === 'string' ? err : (err.message || `${op} failed`);
     } finally {
@@ -238,8 +276,17 @@
           <span class="spinner small"></span>
           <span class="fetch-label">{remoteOp === 'pull-rebase' ? 'Pull' : remoteOp.charAt(0).toUpperCase() + remoteOp.slice(1)}...</span>
         {:else}
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 17 12 21 16 17"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29"/></svg>
-          <span class="fetch-label">Fetch</span>
+          {#if behind > 0}
+            <!-- Down arrow for Pull -->
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="7 13 12 18 17 13"/><polyline points="7 6 12 11 17 6"/></svg>
+          {:else if ahead > 0}
+            <!-- Up arrow for Push -->
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg>
+          {:else}
+            <!-- Cloud for Fetch/Publish -->
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 17 12 21 16 17"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29"/></svg>
+          {/if}
+          <span class="fetch-label">{syncLabel}</span>
           <svg class="chevron" class:open={fetchDropdown} width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
         {/if}
       </button>

@@ -431,6 +431,42 @@ pub fn git_push(root: Option<String>) -> IpcResponse {
     IpcResponse::ok_empty()
 }
 
+/// Get ahead/behind counts relative to the upstream tracking branch.
+///
+/// Returns `{ ahead: N, behind: N, hasUpstream: bool }`.
+/// If no upstream is configured, returns zeros with `hasUpstream: false`.
+#[tauri::command]
+pub fn git_ahead_behind(root: Option<String>) -> IpcResponse {
+    let root = match resolve_root(root) {
+        Ok(r) => r,
+        Err(e) => return e,
+    };
+
+    let output = match std::process::Command::new("git")
+        .args(["rev-list", "--count", "--left-right", "@{upstream}...HEAD"])
+        .current_dir(&root)
+        .output()
+    {
+        Ok(o) => o,
+        Err(_) => {
+            return IpcResponse::ok(serde_json::json!({ "ahead": 0, "behind": 0, "hasUpstream": false }));
+        }
+    };
+
+    if !output.status.success() {
+        // No upstream configured or other error
+        return IpcResponse::ok(serde_json::json!({ "ahead": 0, "behind": 0, "hasUpstream": false }));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    // Output format: "BEHIND\tAHEAD"
+    let parts: Vec<&str> = stdout.split('\t').collect();
+    let behind = parts.first().and_then(|s| s.parse::<u64>().ok()).unwrap_or(0);
+    let ahead = parts.get(1).and_then(|s| s.parse::<u64>().ok()).unwrap_or(0);
+
+    IpcResponse::ok(serde_json::json!({ "ahead": ahead, "behind": behind, "hasUpstream": true }))
+}
+
 /// Fetch from the remote.
 #[tauri::command]
 pub fn git_fetch(root: Option<String>) -> IpcResponse {

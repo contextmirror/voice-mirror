@@ -484,6 +484,7 @@ export async function gitUnstageAll(root) { return invoke('git_unstage_all', { r
 export async function gitCommit(message, root) { return invoke('git_commit', { message, root: root || null }); }
 export async function gitDiscard(paths, root) { return invoke('git_discard', { paths, root: root || null }); }
 export async function gitPush(root) { return invoke('git_push', { root: root || null }); }
+export async function gitAheadBehind(root) { return invoke('git_ahead_behind', { root: root || null }); }
 export async function gitFetch(root) { return invoke('git_fetch', { root: root || null }); }
 export async function gitPull(rebase, root) { return invoke('git_pull', { rebase: rebase || false, root: root || null }); }
 export async function gitForcePush(root) { return invoke('git_force_push', { root: root || null }); }

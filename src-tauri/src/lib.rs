@@ -374,6 +374,7 @@ pub fn run() {
             files_cmds::git_commit,
             files_cmds::git_discard,
             files_cmds::git_push,
+            files_cmds::git_ahead_behind,
             files_cmds::git_fetch,
             files_cmds::git_pull,
             files_cmds::git_force_push,
