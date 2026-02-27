@@ -18,10 +18,27 @@ const app = mount(App, {
 // This prevents the browser's "Back / Refresh / Save as / Print / Inspect"
 // menu from appearing on any right-click that isn't handled by a component.
 document.addEventListener('contextmenu', (e) => {
-  // Allow context menu in contenteditable and textareas (for spell-check etc.)
-  const tag = /** @type {HTMLElement} */ (e.target)?.tagName;
+  const el = /** @type {HTMLElement} */ (e.target);
+  const tag = el?.tagName;
+
+  // Block context menu on ghostty-web's hidden textarea inside terminals.
+  // ghostty-web creates an invisible <textarea> for keyboard input capture —
+  // without this check, right-clicking the terminal shows the browser's
+  // "Save image as / Copy image / Paste" menu.
+  if (tag === 'TEXTAREA' || tag === 'CANVAS') {
+    let parent = el?.parentElement;
+    while (parent) {
+      if (parent.classList?.contains('terminal-container')) {
+        e.preventDefault();
+        return;
+      }
+      parent = parent.parentElement;
+    }
+  }
+
+  // Allow context menu in real textareas and inputs (for spell-check etc.)
   if (tag === 'TEXTAREA' || tag === 'INPUT') return;
-  if (/** @type {HTMLElement} */ (e.target)?.isContentEditable) return;
+  if (el?.isContentEditable) return;
 
   e.preventDefault();
 }, true);

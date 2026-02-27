@@ -97,6 +97,10 @@ describe('main.js: global browser suppression -- context menu', () => {
   it('allows context menu on contentEditable', () => {
     assert.ok(src.includes('isContentEditable'), 'Should whitelist contentEditable');
   });
+  it('blocks context menu on ghostty-web textarea inside terminal', () => {
+    assert.ok(src.includes('terminal-container'), 'Should detect terminal-container ancestor');
+    assert.ok(src.includes('CANVAS'), 'Should also check canvas elements in terminals');
+  });
 });
 
 describe('main.js: global browser suppression -- keyboard shortcuts', () => {
