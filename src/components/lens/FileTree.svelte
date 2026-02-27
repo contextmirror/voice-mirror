@@ -74,6 +74,7 @@
   async function handleTreeChanged(event) {
     const { directories, root: rootChanged } = event.payload;
     const currentRoot = projectStore.activeProject?.path || null;
+    if (!currentRoot) return; // No project open, ignore stale watcher events
 
     if (rootChanged) {
       await loadRoot();
@@ -102,7 +103,10 @@
   }
 
   function handleGitChanged() {
-    loadGitChanges();
+    // Only reload if a project is still open (avoids stale data after project close)
+    if (projectStore.activeProject?.path) {
+      loadGitChanges();
+    }
   }
 
   async function loadRoot() {
