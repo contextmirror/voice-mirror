@@ -1,5 +1,5 @@
 <script>
-  import { gitCommit, gitPush, gitListBranches, gitCheckoutBranch } from '../../lib/api.js';
+  import { gitCommit, gitPush, gitFetch, gitPull, gitForcePush, gitListBranches, gitCheckoutBranch } from '../../lib/api.js';
 
   let { branch = '', stagedCount = 0, onCommit = () => {}, root = null } = $props();
 
@@ -17,6 +17,12 @@
   let switching = $state(false);
   let branchBtnEl = $state(null);
   let dropdownPos = $state({ x: 0, y: 0 });
+
+  // Fetch dropdown state
+  let fetchDropdown = $state(false);
+  let fetchBtnEl = $state(null);
+  let fetchDropdownPos = $state({ x: 0, y: 0 });
+  let remoteOp = $state(''); // 'fetch' | 'pull' | 'pull-rebase' | 'push' | 'force-push'
 
   function clearError() { error = ''; }
   function clearSuccess() { success = ''; }
@@ -140,25 +146,104 @@
       ? branches.filter(b => b.name.toLowerCase().includes(branchFilter.toLowerCase()))
       : branches
   );
+
+  // ── Fetch / Push dropdown ──
+  function toggleFetchDropdown() {
+    if (fetchDropdown) {
+      closeFetchDropdown();
+      return;
+    }
+    if (fetchBtnEl) {
+      const rect = fetchBtnEl.getBoundingClientRect();
+      fetchDropdownPos = { x: rect.left, y: rect.bottom + 4 };
+    }
+    fetchDropdown = true;
+  }
+
+  function closeFetchDropdown() {
+    fetchDropdown = false;
+  }
+
+  async function handleRemoteOp(op) {
+    closeFetchDropdown();
+    if (remoteOp) return;
+    clearError();
+    clearSuccess();
+    remoteOp = op;
+    try {
+      let resp;
+      switch (op) {
+        case 'fetch':
+          resp = await gitFetch(root);
+          if (resp?.success) { success = 'Fetched'; onCommit?.(); }
+          else if (resp?.error) error = resp.error;
+          break;
+        case 'pull':
+          resp = await gitPull(false, root);
+          if (resp?.success) { success = resp.data?.message || 'Pulled'; onCommit?.(); }
+          else if (resp?.error) error = resp.error;
+          break;
+        case 'pull-rebase':
+          resp = await gitPull(true, root);
+          if (resp?.success) { success = resp.data?.message || 'Pulled (rebase)'; onCommit?.(); }
+          else if (resp?.error) error = resp.error;
+          break;
+        case 'push':
+          resp = await gitPush(root);
+          if (resp?.success) { success = 'Pushed'; }
+          else if (resp?.error) error = resp.error;
+          break;
+        case 'force-push':
+          if (!window.confirm('Force push? This will overwrite remote history and cannot be undone.')) break;
+          resp = await gitForcePush(root);
+          if (resp?.success) { success = 'Force pushed'; }
+          else if (resp?.error) error = resp.error;
+          break;
+      }
+      if (success) setTimeout(clearSuccess, 3000);
+    } catch (err) {
+      error = typeof err === 'string' ? err : (err.message || `${op} failed`);
+    } finally {
+      remoteOp = '';
+    }
+  }
 </script>
 
 <div class="commit-panel">
   {#if branch}
-    <button
-      class="branch-label"
-      title="Switch branch"
-      bind:this={branchBtnEl}
-      onclick={toggleBranchDropdown}
-      disabled={switching}
-    >
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
-      <span class="branch-name">{branch}</span>
-      {#if switching}
-        <span class="spinner small"></span>
-      {:else}
-        <svg class="chevron" class:open={branchDropdown} width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-      {/if}
-    </button>
+    <div class="branch-row">
+      <button
+        class="branch-label"
+        title="Switch branch"
+        bind:this={branchBtnEl}
+        onclick={toggleBranchDropdown}
+        disabled={switching}
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
+        <span class="branch-name">{branch}</span>
+        {#if switching}
+          <span class="spinner small"></span>
+        {:else}
+          <svg class="chevron" class:open={branchDropdown} width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        {/if}
+      </button>
+      <button
+        class="fetch-btn"
+        title="Fetch / Pull / Push"
+        bind:this={fetchBtnEl}
+        onclick={toggleFetchDropdown}
+        disabled={!!remoteOp}
+      >
+        {#if remoteOp}
+          <span class="spinner small"></span>
+          <span class="fetch-label">{remoteOp === 'pull-rebase' ? 'Pull' : remoteOp.charAt(0).toUpperCase() + remoteOp.slice(1)}...</span>
+        {:else}
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 17 12 21 16 17"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29"/></svg>
+          <span class="fetch-label">Fetch</span>
+          <svg class="chevron" class:open={fetchDropdown} width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        {/if}
+      </button>
+    </div>
   {/if}
 
   <textarea
@@ -254,6 +339,34 @@
   </div>
 {/if}
 
+{#if fetchDropdown}
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="branch-backdrop" onclick={closeFetchDropdown}></div>
+  <div class="fetch-dropdown" style="left: {fetchDropdownPos.x}px; top: {fetchDropdownPos.y}px;">
+    <button class="fetch-menu-item" onclick={() => handleRemoteOp('fetch')}>
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 17 12 21 16 17"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29"/></svg>
+      <span>Fetch</span>
+    </button>
+    <button class="fetch-menu-item" onclick={() => handleRemoteOp('pull')}>
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="7 13 12 18 17 13"/><polyline points="7 6 12 11 17 6"/></svg>
+      <span>Pull</span>
+    </button>
+    <button class="fetch-menu-item" onclick={() => handleRemoteOp('pull-rebase')}>
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="7 13 12 18 17 13"/><polyline points="7 6 12 11 17 6"/></svg>
+      <span>Pull (Rebase)</span>
+    </button>
+    <div class="fetch-menu-separator"></div>
+    <button class="fetch-menu-item" onclick={() => handleRemoteOp('push')}>
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg>
+      <span>Push</span>
+    </button>
+    <button class="fetch-menu-item danger" onclick={() => handleRemoteOp('force-push')}>
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg>
+      <span>Force Push</span>
+    </button>
+  </div>
+{/if}
+
 <style>
   .commit-panel {
     padding: 8px;
@@ -303,6 +416,41 @@
   }
   .chevron.open {
     transform: rotate(180deg);
+  }
+
+  .branch-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .fetch-btn {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    margin-left: auto;
+    font-size: 11px;
+    color: var(--muted);
+    background: none;
+    border: 1px solid var(--border, color-mix(in srgb, var(--muted) 30%, transparent));
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: var(--font-family);
+    transition: background 0.12s, color 0.12s;
+    white-space: nowrap;
+    -webkit-app-region: no-drag;
+  }
+  .fetch-btn:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--text) 8%, transparent);
+    color: var(--text);
+  }
+  .fetch-btn:disabled {
+    opacity: 0.6;
+    cursor: wait;
+  }
+  .fetch-label {
+    font-size: 11px;
   }
 
   .commit-textarea {
@@ -512,5 +660,52 @@
   .branch-check {
     flex-shrink: 0;
     color: var(--accent);
+  }
+
+  /* ── Fetch dropdown ── */
+  .fetch-dropdown {
+    position: fixed;
+    z-index: 10002;
+    width: 180px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+    -webkit-app-region: no-drag;
+    font-family: var(--font-family);
+    padding: 4px 0;
+  }
+
+  .fetch-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 6px 12px;
+    border: none;
+    background: transparent;
+    color: var(--text);
+    font-size: 12px;
+    font-family: var(--font-family);
+    cursor: pointer;
+    text-align: left;
+    -webkit-app-region: no-drag;
+  }
+  .fetch-menu-item:hover {
+    background: var(--accent);
+    color: var(--bg);
+  }
+  .fetch-menu-item.danger {
+    color: var(--danger);
+  }
+  .fetch-menu-item.danger:hover {
+    background: var(--danger);
+    color: var(--bg);
+  }
+
+  .fetch-menu-separator {
+    height: 1px;
+    background: var(--border);
+    margin: 4px 8px;
   }
 </style>

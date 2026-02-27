@@ -431,6 +431,92 @@ pub fn git_push(root: Option<String>) -> IpcResponse {
     IpcResponse::ok_empty()
 }
 
+/// Fetch from the remote.
+#[tauri::command]
+pub fn git_fetch(root: Option<String>) -> IpcResponse {
+    let root = match resolve_root(root) {
+        Ok(r) => r,
+        Err(e) => return e,
+    };
+
+    let output = match std::process::Command::new("git")
+        .args(["fetch"])
+        .current_dir(&root)
+        .output()
+    {
+        Ok(o) => o,
+        Err(e) => return IpcResponse::err(format!("Failed to run git fetch: {}", e)),
+    };
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return IpcResponse::err(format!("git fetch failed: {}", stderr.trim()));
+    }
+
+    info!("git_fetch: fetched successfully");
+    IpcResponse::ok_empty()
+}
+
+/// Pull changes from the remote.
+///
+/// When `rebase` is true, uses `git pull --rebase` instead of merge.
+#[tauri::command]
+pub fn git_pull(rebase: Option<bool>, root: Option<String>) -> IpcResponse {
+    let root = match resolve_root(root) {
+        Ok(r) => r,
+        Err(e) => return e,
+    };
+
+    let mut args = vec!["pull"];
+    if rebase.unwrap_or(false) {
+        args.push("--rebase");
+    }
+
+    let output = match std::process::Command::new("git")
+        .args(&args)
+        .current_dir(&root)
+        .output()
+    {
+        Ok(o) => o,
+        Err(e) => return IpcResponse::err(format!("Failed to run git pull: {}", e)),
+    };
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return IpcResponse::err(format!("git pull failed: {}", stderr.trim()));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    info!("git_pull: pulled successfully (rebase={})", rebase.unwrap_or(false));
+    IpcResponse::ok(serde_json::json!({ "message": stdout }))
+}
+
+/// Force-push commits to the remote.
+#[tauri::command]
+pub fn git_force_push(root: Option<String>) -> IpcResponse {
+    let root = match resolve_root(root) {
+        Ok(r) => r,
+        Err(e) => return e,
+    };
+
+    let output = match std::process::Command::new("git")
+        .args(["push", "--force"])
+        .current_dir(&root)
+        .output()
+    {
+        Ok(o) => o,
+        Err(e) => return IpcResponse::err(format!("Failed to run git push --force: {}", e)),
+    };
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return IpcResponse::err(format!("git push --force failed: {}", stderr.trim()));
+    }
+
+    info!("git_force_push: force-pushed successfully");
+    IpcResponse::ok_empty()
+}
+
 /// List all branches (local and remote).
 ///
 /// Returns `{ branches: [{ name, isCurrent, isRemote }], current: "branch-name" }`.

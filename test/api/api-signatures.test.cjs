@@ -141,6 +141,9 @@ describe('api.js -- critical Tauri command names', () => {
     'git_commit',
     'git_discard',
     'git_push',
+    'git_fetch',
+    'git_pull',
+    'git_force_push',
     // Terminal profiles
     'terminal_detect_profiles',
     // LSP
@@ -272,6 +275,9 @@ describe('api.js -- exported async functions', () => {
     'gitCommit',
     'gitDiscard',
     'gitPush',
+    'gitFetch',
+    'gitPull',
+    'gitForcePush',
     'gitListBranches',
     'gitCheckoutBranch',
     // Terminals
