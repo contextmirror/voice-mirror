@@ -11,8 +11,8 @@
    */
   import { terminalTabsStore } from '../../lib/stores/terminal-tabs.svelte.js';
 
-  /** @type {{ oncontextmenu?: (e: MouseEvent, instanceId: string) => void }} */
-  let { oncontextmenu } = $props();
+  /** @type {{ oncontextmenu?: (e: MouseEvent, instanceId: string) => void, onEmptyContextMenu?: (e: MouseEvent) => void }} */
+  let { oncontextmenu, onEmptyContextMenu } = $props();
 
   // ---- Drag-to-reorder state ----
   let dragInstanceId = $state(null);
@@ -79,7 +79,7 @@
   };
 </script>
 
-<div class="terminal-sidebar">
+<div class="terminal-sidebar" oncontextmenu={(e) => { e.preventDefault(); onEmptyContextMenu?.(e); }}>
   {#each terminalTabsStore.groups as group}
     {#each group.instanceIds as instId, idx}
       {@const instance = terminalTabsStore.getInstance(instId)}

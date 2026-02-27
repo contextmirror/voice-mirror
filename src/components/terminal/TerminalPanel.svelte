@@ -74,6 +74,22 @@
   function handleSidebarContextMenu(e, instanceId) {
     showContextMenu(e, instanceId);
   }
+
+  // Empty sidebar space context menu (just "New Terminal")
+  let emptyCtx = $state({ visible: false, x: 0, y: 0 });
+
+  function handleEmptyContextMenu(e) {
+    emptyCtx = { visible: true, x: e.clientX, y: e.clientY };
+  }
+
+  function closeEmptyContextMenu() {
+    emptyCtx = { ...emptyCtx, visible: false };
+  }
+
+  function handleNewTerminal() {
+    terminalTabsStore.addGroup();
+    closeEmptyContextMenu();
+  }
 </script>
 
 <div class="terminal-panel-inner">
@@ -105,10 +121,20 @@
     </div>
 
     {#if showSidebar}
-      <TerminalSidebar oncontextmenu={handleSidebarContextMenu} />
+      <TerminalSidebar oncontextmenu={handleSidebarContextMenu} onEmptyContextMenu={handleEmptyContextMenu} />
     {/if}
   </div>
 </div>
+
+<!-- Empty sidebar context menu (New Terminal) -->
+{#if emptyCtx.visible}
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="ctx-backdrop" onclick={closeEmptyContextMenu} oncontextmenu={(e) => { e.preventDefault(); closeEmptyContextMenu(); }}>
+    <div class="ctx-menu" style="left: {emptyCtx.x}px; top: {emptyCtx.y}px;">
+      <button class="ctx-item" onclick={handleNewTerminal}>New Terminal</button>
+    </div>
+  </div>
+{/if}
 
 <!-- Context menu (shared between tab strip and sidebar) -->
 <TerminalContextMenu
@@ -139,5 +165,40 @@
     flex: 1;
     min-width: 0;
     overflow: hidden;
+  }
+
+  /* Empty sidebar context menu */
+  .ctx-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+  }
+
+  .ctx-menu {
+    position: fixed;
+    z-index: 10000;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border, rgba(255,255,255,0.06));
+    border-radius: 6px;
+    padding: 4px 0;
+    min-width: 160px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  }
+
+  .ctx-item {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    padding: 6px 12px;
+    background: none;
+    border: none;
+    color: var(--text);
+    font-size: 12px;
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .ctx-item:hover {
+    background: rgba(255,255,255,0.06);
   }
 </style>
