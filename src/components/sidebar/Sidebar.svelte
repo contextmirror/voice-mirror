@@ -15,7 +15,11 @@
   ];
 
   function handleTabClick(tabId) {
-    navigationStore.setView(tabId);
+    if (activeView === tabId) {
+      navigationStore.setView('lens');
+    } else {
+      navigationStore.setView(tabId);
+    }
   }
 
   function handleToggleSidebar() {
