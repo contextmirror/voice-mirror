@@ -126,6 +126,69 @@ describe('Terminal.svelte -- visibility', () => {
   });
 });
 
+describe('Terminal.svelte -- context menu', () => {
+  it('has context menu state', () => {
+    assert.ok(src.includes('ctxMenu') && src.includes('$state('), 'Should have ctxMenu state');
+  });
+
+  it('has handleTerminalContextMenu handler', () => {
+    assert.ok(src.includes('function handleTerminalContextMenu'), 'Should have context menu handler');
+  });
+
+  it('prevents default on right-click', () => {
+    assert.ok(src.includes('event.preventDefault()'), 'Should prevent default context menu');
+  });
+
+  it('has oncontextmenu on terminal-view', () => {
+    assert.ok(src.includes('oncontextmenu={handleTerminalContextMenu}'), 'Should wire oncontextmenu');
+  });
+
+  it('has Copy menu item', () => {
+    assert.ok(src.includes('ctxCopy') && src.includes('Copy'), 'Should have Copy item');
+  });
+
+  it('has Paste menu item', () => {
+    assert.ok(src.includes('ctxPaste') && src.includes('Paste'), 'Should have Paste item');
+  });
+
+  it('has Select All menu item', () => {
+    assert.ok(src.includes('ctxSelectAll') && src.includes('Select All'), 'Should have Select All item');
+  });
+
+  it('has Clear Terminal menu item', () => {
+    assert.ok(src.includes('ctxClear') && src.includes('Clear Terminal'), 'Should have Clear Terminal item');
+  });
+
+  it('has handleSelectAll using term.selectAll()', () => {
+    assert.ok(src.includes('function handleSelectAll') && src.includes('term.selectAll()'), 'Should have selectAll');
+  });
+
+  it('dismisses on Escape key', () => {
+    assert.ok(src.includes("e.key === 'Escape'") || src.includes("key === 'Escape'"), 'Should dismiss on Escape');
+  });
+
+  it('dismisses on document click', () => {
+    assert.ok(src.includes('handleDocumentClick'), 'Should dismiss on outside click');
+  });
+
+  it('uses svelte:document for dismiss events', () => {
+    assert.ok(src.includes('svelte:document'), 'Should use svelte:document');
+  });
+
+  it('has context menu CSS', () => {
+    assert.ok(src.includes('.terminal-ctx-menu'), 'Should have context menu styles');
+    assert.ok(src.includes('.terminal-ctx-item'), 'Should have menu item styles');
+  });
+
+  it('shows shortcut hints', () => {
+    assert.ok(src.includes('Ctrl+C') && src.includes('Ctrl+V'), 'Should show shortcut hints');
+  });
+
+  it('has separator between groups', () => {
+    assert.ok(src.includes('terminal-ctx-separator'), 'Should have separator');
+  });
+});
+
 describe('Terminal.svelte -- CSS', () => {
   it('has terminal-view class', () => {
     assert.ok(src.includes('terminal-view'), 'Should have view class');

@@ -237,6 +237,32 @@
     }
   }
 
+  function handleSelectAll() {
+    if (!term) return;
+    term.selectAll();
+  }
+
+  // ---- Context menu state ----
+  let ctxMenu = $state({ visible: false, x: 0, y: 0 });
+
+  function handleTerminalContextMenu(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    ctxMenu = { visible: true, x: event.clientX, y: event.clientY };
+  }
+
+  function closeCtxMenu() {
+    ctxMenu = { ...ctxMenu, visible: false };
+  }
+
+  function ctxCopy() { closeCtxMenu(); handleCopy(); }
+  function ctxPaste() { closeCtxMenu(); handlePaste(); }
+  function ctxSelectAll() { closeCtxMenu(); handleSelectAll(); }
+  function ctxClear() { closeCtxMenu(); handleClear(); }
+
+  function handleDocumentClick() { if (ctxMenu.visible) closeCtxMenu(); }
+  function handleDocumentKeydown(e) { if (e.key === 'Escape' && ctxMenu.visible) closeCtxMenu(); }
+
   // Register toolbar actions for parent TerminalTabs.
   // Wrapped in $effect so we capture the latest prop value (not just initial).
   $effect(() => {
@@ -467,7 +493,10 @@
   });
 </script>
 
-<div class="terminal-view">
+<svelte:document onclick={handleDocumentClick} onkeydown={handleDocumentKeydown} />
+
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div class="terminal-view" oncontextmenu={handleTerminalContextMenu}>
   <TerminalSearch
     visible={searchVisible}
     onClose={handleSearchClose}
@@ -482,6 +511,19 @@
     onToggleRegex={handleToggleRegex}
   />
   <div class="terminal-container" class:ready={initialized} bind:this={containerEl}></div>
+
+  {#if ctxMenu.visible}
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="terminal-ctx-backdrop" onclick={closeCtxMenu} oncontextmenu={(e) => { e.preventDefault(); closeCtxMenu(); }}>
+      <div class="terminal-ctx-menu" role="menu" style="left:{ctxMenu.x}px;top:{ctxMenu.y}px;">
+        <button class="terminal-ctx-item" role="menuitem" onclick={ctxCopy}>Copy<span class="terminal-ctx-shortcut">Ctrl+C</span></button>
+        <button class="terminal-ctx-item" role="menuitem" onclick={ctxPaste}>Paste<span class="terminal-ctx-shortcut">Ctrl+V</span></button>
+        <button class="terminal-ctx-item" role="menuitem" onclick={ctxSelectAll}>Select All</button>
+        <div class="terminal-ctx-separator"></div>
+        <button class="terminal-ctx-item" role="menuitem" onclick={ctxClear}>Clear Terminal</button>
+      </div>
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -518,5 +560,53 @@
   .terminal-container :global(.ghostty-web),
   .terminal-container :global(.xterm) {
     overflow: hidden !important;
+  }
+
+  /* ---- Context menu ---- */
+  .terminal-ctx-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+  }
+
+  .terminal-ctx-menu {
+    position: fixed;
+    z-index: 10000;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border, rgba(255,255,255,0.06));
+    border-radius: 6px;
+    padding: 4px 0;
+    min-width: 180px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  }
+
+  .terminal-ctx-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 6px 12px;
+    background: none;
+    border: none;
+    color: var(--text);
+    font-size: 12px;
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .terminal-ctx-item:hover {
+    background: rgba(255,255,255,0.06);
+  }
+
+  .terminal-ctx-shortcut {
+    color: var(--muted);
+    font-size: 11px;
+    margin-left: 24px;
+  }
+
+  .terminal-ctx-separator {
+    height: 1px;
+    background: var(--border, rgba(255,255,255,0.06));
+    margin: 4px 0;
   }
 </style>
