@@ -48,7 +48,7 @@
     <button
       class="project-avatar"
       class:active={i === activeIndex}
-      data-tooltip={entry.name}
+      title="{entry.name} — {entry.path}"
       onclick={() => handleSelect(i)}
       oncontextmenu={(e) => handleContextMenu(e, i)}
       aria-label={entry.name}
