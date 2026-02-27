@@ -81,11 +81,14 @@ fn js_escape(s: &str) -> String {
 /// Build a JS expression (IIFE) that locates a DOM element by role + name.
 ///
 /// Strategy:
-/// 1. Try `querySelectorAll('[role="ROLE"]')` and match by `aria-label` or
-///    `textContent`.
+/// 1. Try `querySelectorAll('[role="ROLE"]')` and match by accessible name.
 /// 2. Fall back to a tag-name mapping (button→`<button>`, link→`<a>`, etc.).
 /// 3. Apply `nth` disambiguation if present.
 /// 4. Return `null` if nothing matches.
+///
+/// Name matching mirrors the W3C AccName algorithm sources:
+/// `aria-label`, `aria-labelledby`, associated `<label>`, `placeholder`,
+/// `title`, and `textContent`.
 pub fn build_js_selector(entry: &RefEntry) -> String {
     let role_esc = js_escape(&entry.role);
     let name_esc = js_escape(&entry.name);
@@ -109,12 +112,40 @@ pub fn build_js_selector(entry: &RefEntry) -> String {
 
     format!(
         r#"(function() {{
-  var name = '{name_esc}';
+  var name = '{name_esc}'.trim();
   var nth = {nth_val};
+  function getLabel(el) {{
+    var id = el.id || el.getAttribute('id');
+    if (id) {{
+      var lbl = document.querySelector('label[for="' + id + '"]');
+      if (lbl) return (lbl.textContent || '').trim();
+    }}
+    var parent = el.closest('label');
+    if (parent) return (parent.textContent || '').trim();
+    return '';
+  }}
   function matchName(el) {{
-    var label = el.getAttribute('aria-label') || '';
+    if (name === '') return true;
+    var ariaLabel = (el.getAttribute('aria-label') || '').trim();
+    if (ariaLabel === name) return true;
     var text = (el.textContent || '').trim();
-    return label === name || text === name;
+    if (text === name) return true;
+    var lbl = getLabel(el);
+    if (lbl === name) return true;
+    var ph = (el.getAttribute('placeholder') || '').trim();
+    if (ph === name) return true;
+    var title = (el.getAttribute('title') || '').trim();
+    if (title === name) return true;
+    var ariaLabelledBy = el.getAttribute('aria-labelledby');
+    if (ariaLabelledBy) {{
+      var parts = ariaLabelledBy.split(/\s+/);
+      var combined = parts.map(function(rid) {{
+        var refEl = document.getElementById(rid);
+        return refEl ? (refEl.textContent || '').trim() : '';
+      }}).join(' ').trim();
+      if (combined === name) return true;
+    }}
+    return false;
   }}
   function pickNth(list) {{
     var matches = [];
