@@ -111,43 +111,26 @@ const editorTheme = EditorView.theme({
   },
   // ── Git change gutter ──
   '.cm-git-change-gutter': {
-    width: '3px',
-    minWidth: '3px',
+    width: '4px',
+    minWidth: '4px',
+    marginLeft: '1px',
     marginRight: '2px',
   },
   '.cm-git-change-gutter .cm-gutterElement': {
-    padding: '0',
-    minWidth: '3px',
+    padding: '0 !important',
+    minWidth: '4px',
+    width: '4px',
     cursor: 'pointer',
   },
-  '.cm-git-added': {
-    width: '3px',
-    height: '100%',
-    backgroundColor: 'var(--cm-git-added, var(--ok))',
-    borderRadius: '1px',
+  // elementClass styles — applied directly to .cm-gutterElement
+  '.cm-git-change-gutter .cm-git-added': {
+    borderLeft: '3px solid var(--cm-git-added, var(--ok))',
   },
-  '.cm-git-modified': {
-    width: '3px',
-    height: '100%',
-    backgroundColor: 'var(--cm-git-modified, var(--accent))',
-    borderRadius: '1px',
+  '.cm-git-change-gutter .cm-git-modified': {
+    borderLeft: '3px solid var(--cm-git-modified, var(--accent))',
   },
-  '.cm-git-deleted': {
-    position: 'relative',
-    width: '3px',
-    height: '0',
-  },
-  '.cm-git-deleted::after': {
-    content: '""',
-    position: 'absolute',
-    left: '-1px',
-    top: '-4px',
-    width: '0',
-    height: '0',
-    borderTop: '4px solid transparent',
-    borderBottom: '4px solid transparent',
-    borderLeft: '5px solid var(--cm-git-deleted, var(--danger))',
-    pointerEvents: 'none',
+  '.cm-git-change-gutter .cm-git-deleted': {
+    borderLeft: '3px solid var(--cm-git-deleted, var(--danger))',
   },
   // ── Git peek widget ──
   '.cm-git-peek': {
@@ -158,6 +141,8 @@ const editorTheme = EditorView.theme({
     overflow: 'hidden',
     fontFamily: 'var(--font-mono)',
     fontSize: '12px',
+    maxWidth: 'min(600px, calc(100% - 48px))',
+    minWidth: '280px',
   },
   '.cm-git-peek-header': {
     display: 'flex',
@@ -196,12 +181,13 @@ const editorTheme = EditorView.theme({
   '.cm-git-peek-body': {
     padding: '4px 0',
     maxHeight: '200px',
-    overflowY: 'auto',
+    overflow: 'auto',
   },
   '.cm-git-peek-line': {
     padding: '0 8px',
     lineHeight: '1.6',
     whiteSpace: 'pre',
+    minWidth: 'fit-content',
   },
   '.cm-git-peek-line.removed': {
     backgroundColor: 'color-mix(in srgb, var(--danger) 12%, transparent)',

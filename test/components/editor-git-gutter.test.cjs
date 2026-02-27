@@ -178,7 +178,7 @@ describe('editor-theme.js -- git gutter styles', () => {
     assert.ok(themeSrc.includes('.cm-git-modified'), 'Should style .cm-git-modified');
   });
 
-  it('styles .cm-git-deleted with danger triangle', () => {
+  it('styles .cm-git-deleted with danger color', () => {
     assert.ok(themeSrc.includes('.cm-git-deleted'), 'Should style .cm-git-deleted');
     assert.ok(themeSrc.includes('--danger'), 'Deleted should use --danger (red) color');
   });

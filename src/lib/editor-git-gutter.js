@@ -17,27 +17,15 @@ import { StateField, StateEffect, RangeSet } from '@codemirror/state';
 // ---------------------------------------------------------------------------
 
 class AddedMarker extends GutterMarker {
-  toDOM() {
-    const el = document.createElement('div');
-    el.className = 'cm-git-added';
-    return el;
-  }
+  elementClass = 'cm-git-added';
 }
 
 class ModifiedMarker extends GutterMarker {
-  toDOM() {
-    const el = document.createElement('div');
-    el.className = 'cm-git-modified';
-    return el;
-  }
+  elementClass = 'cm-git-modified';
 }
 
 class DeletedMarker extends GutterMarker {
-  toDOM() {
-    const el = document.createElement('div');
-    el.className = 'cm-git-deleted';
-    return el;
-  }
+  elementClass = 'cm-git-deleted';
 }
 
 const addedMarker = new AddedMarker();
