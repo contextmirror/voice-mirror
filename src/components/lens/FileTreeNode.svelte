@@ -15,6 +15,7 @@
     editingValue = $bindable(''),
     creatingIn = null,
     creatingValue = $bindable(''),
+    gitStatusMap = new Map(),
     onToggle = () => {},
     onFileClick = () => {},
     onFileDblClick = () => {},
@@ -64,6 +65,7 @@
       </div>
     {:else}
       {@const dirDiag = lspDiagnosticsStore.getForDirectory(entry.path)}
+      {@const dirGit = gitStatusMap.get(entry.path)}
       <button
         class="tree-item folder"
         style="padding-left: {8 + depth * 16}px"
@@ -72,7 +74,7 @@
       >
         <span class="tree-chevron">{isExpanded ? 'v' : '>'}</span>
         <svg class="tree-icon"><use href="{spriteUrl}#{chooseIconName(entry.path, 'directory', isExpanded)}" /></svg>
-        <span class="tree-name" class:has-error={dirDiag?.errors > 0} class:has-warning={dirDiag && dirDiag.errors === 0 && dirDiag.warnings > 0}>{entry.name}</span>
+        <span class="tree-name" class:has-error={dirDiag?.errors > 0} class:has-warning={dirDiag && dirDiag.errors === 0 && dirDiag.warnings > 0} class:git-added={!dirDiag?.errors && !dirDiag?.warnings && dirGit === 'added'} class:git-modified={!dirDiag?.errors && !dirDiag?.warnings && dirGit === 'modified'}>{entry.name}</span>
         {#if dirDiag}
           {#if dirDiag.errors > 0}
             <span class="diag-badge error">{dirDiag.errors}</span>
@@ -111,6 +113,7 @@
           bind:editingValue
           {creatingIn}
           bind:creatingValue
+          {gitStatusMap}
           {onToggle}
           {onFileClick}
           {onFileDblClick}
@@ -137,6 +140,7 @@
       </div>
     {:else}
       {@const fileDiag = lspDiagnosticsStore.getForFile(entry.path)}
+      {@const fileGit = gitStatusMap.get(entry.path)}
       <button
         class="tree-item file"
         style="padding-left: {8 + depth * 16 + 18}px"
@@ -148,7 +152,7 @@
         ondragend={handleFileDragEnd}
       >
         <svg class="tree-icon"><use href="{spriteUrl}#{chooseIconName(entry.path, 'file')}" /></svg>
-        <span class="tree-name" class:ignored={entry.ignored} class:has-error={fileDiag?.errors > 0} class:has-warning={fileDiag && fileDiag.errors === 0 && fileDiag.warnings > 0}>{entry.name}</span>
+        <span class="tree-name" class:ignored={entry.ignored} class:has-error={fileDiag?.errors > 0} class:has-warning={fileDiag && fileDiag.errors === 0 && fileDiag.warnings > 0} class:git-added={!entry.ignored && !fileDiag?.errors && !fileDiag?.warnings && fileGit === 'added'} class:git-modified={!entry.ignored && !fileDiag?.errors && !fileDiag?.warnings && fileGit === 'modified'} class:git-deleted={!entry.ignored && !fileDiag?.errors && !fileDiag?.warnings && fileGit === 'deleted'}>{entry.name}</span>
         {#if fileDiag}
           {#if fileDiag.errors > 0}
             <span class="diag-badge error">{fileDiag.errors}</span>
@@ -231,10 +235,28 @@
     outline: none;
   }
 
-  /* Diagnostic decorations */
+  /* Git status decorations */
+
+  .tree-name.git-added {
+    color: var(--ok);
+  }
+
+  .tree-name.git-modified {
+    color: var(--accent);
+  }
+
+  .tree-name.git-deleted {
+    color: var(--danger);
+    text-decoration: line-through;
+    opacity: 0.7;
+  }
+
+  /* Diagnostic decorations (override git status when present) */
 
   .tree-name.has-error {
     color: var(--danger);
+    text-decoration: none;
+    opacity: 1;
   }
 
   .tree-name.has-warning {

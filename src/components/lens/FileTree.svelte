@@ -25,6 +25,29 @@
   let stagedChanges = $derived(gitChanges.filter(c => c.staged));
   let unstagedChanges = $derived(gitChanges.filter(c => c.unstaged || (!c.staged && !c.unstaged)));
 
+  // Git status lookup for file tree decorations
+  // Maps file path → status ('added' | 'modified' | 'deleted')
+  // and dir path → most severe child status (for folder coloring)
+  let gitStatusMap = $derived.by(() => {
+    const map = new Map();
+    for (const c of gitChanges) {
+      // File status — prefer unstaged (working tree) over staged
+      const status = c.unstagedStatus || c.stagedStatus || c.status || 'modified';
+      map.set(c.path, status);
+      // Propagate to parent directories
+      const parts = c.path.split('/');
+      for (let i = 1; i < parts.length; i++) {
+        const dir = parts.slice(0, i).join('/');
+        const existing = map.get(dir);
+        // Priority: added > modified > deleted (show green for new, blue for modified)
+        if (!existing || (status === 'added' && existing !== 'added') || (status === 'modified' && existing === 'deleted')) {
+          map.set(dir, status === 'deleted' ? 'modified' : status);
+        }
+      }
+    }
+    return map;
+  });
+
   // Context menu state
   let contextMenu = $state({ visible: false, x: 0, y: 0, entry: null, isFolder: false, isChange: false });
 
@@ -525,6 +548,7 @@
         bind:editingValue
         {creatingIn}
         bind:creatingValue
+        {gitStatusMap}
         onToggle={toggleDir}
         onFileClick={handleFileClick}
         onFileDblClick={(entry) => onFileDblClick(entry)}
