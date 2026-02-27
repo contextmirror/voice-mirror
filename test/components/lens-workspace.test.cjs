@@ -330,11 +330,11 @@ describe('LensWorkspace.svelte', () => {
   it('uses flex column layout', () => {
     assert.ok(src.includes('flex-direction: column'));
   });
-  it('has chat-area with border-right', () => {
-    assert.ok(src.includes('border-right'));
+  it('chat-area has no border-right (SplitPanel handle provides border)', () => {
+    assert.ok(!src.includes('border-right'), 'SplitPanel handle is the border source');
   });
-  it('has terminal-area with border-top', () => {
-    assert.ok(src.includes('border-top'));
+  it('terminal-area has no border-top (SplitPanel handle provides border)', () => {
+    assert.ok(!src.includes('border-top: 1px solid var(--border)'), 'SplitPanel handle is the border source');
   });
 
 });

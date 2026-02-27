@@ -478,7 +478,6 @@
     height: 100%;
     overflow: hidden;
     background: var(--bg);
-    border-right: 1px solid var(--border);
   }
 
   /* -- Terminal Panel -- */
@@ -489,7 +488,6 @@
     height: 100%;
     overflow: hidden;
     background: var(--bg);
-    border-top: 1px solid var(--border);
   }
 
 </style>

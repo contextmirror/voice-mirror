@@ -617,7 +617,6 @@
     height: 100%;
     overflow: hidden;
     background: var(--bg);
-    border-left: 1px solid var(--border);
   }
 
   .files-header {
