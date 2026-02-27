@@ -647,32 +647,85 @@ fn build_all_groups() -> HashMap<String, ToolGroupDef> {
         "browser".into(),
         ToolGroupDef {
             name: "browser".into(),
-            description: "Chrome browser control and web research (16 tools)".into(),
+            description: "Browser control with element refs and annotated screenshots (1 tool)".into(),
             always_loaded: false,
             keywords: vec![
                 "search".into(), "browse".into(), "website".into(), "web".into(),
                 "google".into(), "open page".into(), "fetch url".into(),
                 "look up".into(), "find online".into(), "what is".into(),
                 "who is".into(), "latest news".into(),
+                "ref".into(), "annotate".into(), "auth".into(), "login".into(),
+                "cookie".into(), "snapshot".into(),
             ],
             dependencies: vec![],
             tools: vec![
-                ToolDef { name: "browser_start".into(), description: "Launch a managed Chrome browser instance with CDP debugging enabled.".into(), input_schema: json!({ "type": "object", "properties": { "profile": { "type": "string", "description": "Browser profile name (default: \"default\")" } } }) },
-                ToolDef { name: "browser_stop".into(), description: "Stop the managed Chrome browser instance.".into(), input_schema: json!({ "type": "object", "properties": { "profile": { "type": "string" } } }) },
-                ToolDef { name: "browser_status".into(), description: "Get the status of the browser.".into(), input_schema: json!({ "type": "object", "properties": { "profile": { "type": "string" } } }) },
-                ToolDef { name: "browser_tabs".into(), description: "List all open browser tabs.".into(), input_schema: json!({ "type": "object", "properties": { "profile": { "type": "string" } } }) },
-                ToolDef { name: "browser_open".into(), description: "Open a new browser tab with the given URL.".into(), input_schema: json!({ "type": "object", "properties": { "url": { "type": "string" }, "profile": { "type": "string" } }, "required": ["url"] }) },
-                ToolDef { name: "browser_close_tab".into(), description: "Close a browser tab by its targetId.".into(), input_schema: json!({ "type": "object", "properties": { "targetId": { "type": "string" }, "profile": { "type": "string" } }, "required": ["targetId"] }) },
-                ToolDef { name: "browser_focus".into(), description: "Focus/activate a browser tab by its targetId.".into(), input_schema: json!({ "type": "object", "properties": { "targetId": { "type": "string" }, "profile": { "type": "string" } }, "required": ["targetId"] }) },
-                ToolDef { name: "browser_navigate".into(), description: "Navigate a browser tab to a new URL.".into(), input_schema: json!({ "type": "object", "properties": { "url": { "type": "string" }, "targetId": { "type": "string" }, "profile": { "type": "string" } }, "required": ["url"] }) },
-                ToolDef { name: "browser_screenshot".into(), description: "Take a screenshot of a browser tab.".into(), input_schema: json!({ "type": "object", "properties": { "targetId": { "type": "string" }, "fullPage": { "type": "boolean" }, "ref": { "type": "string" }, "profile": { "type": "string" } } }) },
-                ToolDef { name: "browser_snapshot".into(), description: "Take an accessibility snapshot of a browser tab.".into(), input_schema: json!({ "type": "object", "properties": { "targetId": { "type": "string" }, "format": { "type": "string", "enum": ["role", "aria", "ai"] }, "interactive": { "type": "boolean" }, "compact": { "type": "boolean" }, "selector": { "type": "string" }, "ifChanged": { "type": "boolean" }, "maxPageText": { "type": "number" }, "profile": { "type": "string" } } }) },
-                ToolDef { name: "browser_act".into(), description: "Execute an action on a browser page element.".into(), input_schema: json!({ "type": "object", "properties": { "request": { "type": "object", "properties": { "kind": { "type": "string" }, "ref": { "type": "string" }, "text": { "type": "string" }, "key": { "type": "string" }, "expression": { "type": "string" }, "selector": { "type": "string" }, "value": { "type": "string" }, "startRef": { "type": "string" }, "endRef": { "type": "string" } }, "required": ["kind"] }, "targetId": { "type": "string" }, "profile": { "type": "string" }, "confirmed": { "type": "boolean" } }, "required": ["request"] }) },
-                ToolDef { name: "browser_console".into(), description: "Get console logs and errors from a browser tab.".into(), input_schema: json!({ "type": "object", "properties": { "targetId": { "type": "string" }, "profile": { "type": "string" } } }) },
-                ToolDef { name: "browser_search".into(), description: "Search Google using a headless browser.".into(), input_schema: json!({ "type": "object", "properties": { "query": { "type": "string" }, "max_results": { "type": "number" } }, "required": ["query"] }) },
-                ToolDef { name: "browser_fetch".into(), description: "Fetch and extract text content from a URL.".into(), input_schema: json!({ "type": "object", "properties": { "url": { "type": "string" }, "timeout": { "type": "number" }, "max_length": { "type": "number" }, "include_links": { "type": "boolean" } }, "required": ["url"] }) },
-                ToolDef { name: "browser_cookies".into(), description: "Manage browser cookies.".into(), input_schema: json!({ "type": "object", "properties": { "action": { "type": "string", "enum": ["list", "set", "delete", "clear"] }, "name": { "type": "string" }, "value": { "type": "string" }, "url": { "type": "string" }, "domain": { "type": "string" }, "path": { "type": "string" }, "secure": { "type": "boolean" }, "httpOnly": { "type": "boolean" }, "sameSite": { "type": "string", "enum": ["Strict", "Lax", "None"] }, "profile": { "type": "string" } }, "required": ["action"] }) },
-                ToolDef { name: "browser_storage".into(), description: "Read/write browser localStorage or sessionStorage.".into(), input_schema: json!({ "type": "object", "properties": { "type": { "type": "string", "enum": ["localStorage", "sessionStorage"] }, "action": { "type": "string", "enum": ["get", "set", "delete", "clear"] }, "key": { "type": "string" }, "value": { "type": "string" }, "profile": { "type": "string" } }, "required": ["action"] }) },
+                ToolDef {
+                    name: "browser_action".into(),
+                    description: "Control the browser. Use 'snapshot' to get @eN element refs, then interact by ref. Actions: navigate, back, forward, reload | click, dblclick, fill, type, hover, focus, scroll, select, check, uncheck | screenshot (annotate=true for numbered overlays), snapshot (@eN refs), gettext, content, boundingbox, isvisible, url, title | evaluate, addscript | tab_new, tab_list, tab_switch, tab_close | wait, waitforurl, waitforloadstate | cookies_get/set/clear, storage_get/set | auth_save/login/list/delete | search, fetch".into(),
+                    input_schema: json!({
+                        "type": "object",
+                        "properties": {
+                            "action": {
+                                "type": "string",
+                                "enum": [
+                                    "navigate", "back", "forward", "reload",
+                                    "click", "dblclick", "fill", "type", "hover", "focus",
+                                    "scroll", "select", "check", "uncheck",
+                                    "screenshot", "snapshot", "gettext", "content",
+                                    "boundingbox", "isvisible", "url", "title",
+                                    "evaluate", "addscript",
+                                    "tab_new", "tab_list", "tab_switch", "tab_close",
+                                    "wait", "waitforurl", "waitforloadstate",
+                                    "cookies_get", "cookies_set", "cookies_clear",
+                                    "storage_get", "storage_set",
+                                    "auth_save", "auth_login", "auth_list", "auth_delete",
+                                    "search", "fetch"
+                                ],
+                                "description": "The browser action to perform. Use 'snapshot' first to discover @eN element refs, then target elements by ref."
+                            },
+                            "ref": {
+                                "type": "string",
+                                "description": "Element reference from snapshot (e.g. '@e1', '@e3'). Preferred over selector."
+                            },
+                            "selector": {
+                                "type": "string",
+                                "description": "CSS selector (fallback when no ref available)"
+                            },
+                            "url": {
+                                "type": "string",
+                                "description": "URL for navigate/fetch/auth_save"
+                            },
+                            "value": {
+                                "type": "string",
+                                "description": "Value for fill/type/storage_set/select"
+                            },
+                            "annotate": {
+                                "type": "boolean",
+                                "description": "For screenshot: overlay numbered red boxes on interactive elements"
+                            },
+                            "expression": {
+                                "type": "string",
+                                "description": "JavaScript expression for evaluate action"
+                            },
+                            "query": {
+                                "type": "string",
+                                "description": "Search query for search action"
+                            },
+                            "name": {
+                                "type": "string",
+                                "description": "Profile name for auth actions"
+                            },
+                            "username": { "type": "string", "description": "Username for auth_save" },
+                            "password": { "type": "string", "description": "Password for auth_save" },
+                            "key": { "type": "string", "description": "Key for storage/cookies operations" },
+                            "timeout": { "type": "number", "description": "Timeout in ms for wait actions" },
+                            "tabId": { "type": "string", "description": "Tab ID for tab_switch/tab_close" },
+                            "x": { "type": "number", "description": "X offset for scroll" },
+                            "y": { "type": "number", "description": "Y offset for scroll" }
+                        },
+                        "required": ["action"]
+                    }),
+                },
             ],
         },
     );
@@ -828,7 +881,7 @@ mod tests {
     fn test_browser_loads_without_dependencies() {
         let mut reg = ToolRegistry::new();
         let _names = reg.load_group("browser").unwrap();
-        assert!(reg.is_tool_loaded("browser_start"));
+        assert!(reg.is_tool_loaded("browser_action"));
     }
 
     #[test]
@@ -838,7 +891,7 @@ mod tests {
             groups: vec!["core".into(), "memory".into()],
         });
         assert!(reg.is_tool_loaded("memory_search"));
-        assert!(!reg.is_tool_loaded("browser_start"));
+        assert!(!reg.is_tool_loaded("browser_action"));
         // always_loaded groups survive profile changes
         assert!(reg.is_tool_loaded("capture_window"));
     }

@@ -3,7 +3,7 @@
 //! Each module implements a group of related tools:
 //! - `core`        -- Voice I/O tools (voice_send, voice_inbox, voice_listen, voice_status)
 //! - `memory`      -- Memory system (search, remember, forget, get, stats, flush)
-//! - `browser`     -- Browser control (16 tools, pipe IPC)
+//! - `browser`     -- Browser control (1 unified tool, pipe IPC)
 //! - `capture`     -- Window capture and screenshots (2 tools, pipe IPC)
 //! - `n8n`         -- n8n REST API integration (22 tools)
 

@@ -10,10 +10,12 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
-use serde_json::{json, Value};
+#[cfg(test)]
+use serde_json::json;
+use serde_json::Value;
 use tracing::info;
 
-use super::McpToolResult;
+use super::{McpContent, McpToolResult};
 use crate::ipc::protocol::{AppToMcp, McpToApp};
 use crate::mcp::pipe_router::PipeRouter;
 
@@ -36,7 +38,7 @@ fn generate_request_id() -> String {
 
 /// Actions that need longer timeouts (60s instead of 30s).
 fn is_long_action(action: &str) -> bool {
-    matches!(action, "screenshot" | "snapshot" | "act")
+    matches!(action, "screenshot" | "snapshot" | "wait" | "waitforurl" | "waitforloadstate" | "auth_login")
 }
 
 /// Send a browser request through the named pipe and wait for the response.
@@ -134,7 +136,16 @@ pub async fn handle_browser_control(
                         .get("contentType")
                         .and_then(|v| v.as_str())
                         .unwrap_or("image/png");
-                    return McpToolResult::image(base64.to_string(), content_type.to_string());
+                    let mut result = McpToolResult::image(base64.to_string(), content_type.to_string());
+                    // Append annotation metadata as text block if present
+                    if let Some(annotations) = response.get("annotations") {
+                        if let Ok(text) = serde_json::to_string_pretty(annotations) {
+                            result.content.push(McpContent::Text {
+                                text: format!("\nAnnotations (use @eN refs to target these elements):\n{}", text),
+                            });
+                        }
+                    }
+                    return result;
                 }
             }
 
@@ -334,148 +345,6 @@ pub async fn handle_browser_fetch(args: &Value, _data_dir: &Path) -> McpToolResu
     ))
 }
 
-// ---------------------------------------------------------------------------
-// Lifecycle tools (webview managed by Tauri app)
-// ---------------------------------------------------------------------------
-
-/// `browser_start` -- check if the Lens browser webview is active.
-pub async fn handle_browser_start(
-    _args: &Value,
-    _data_dir: &Path,
-    pipe: Option<&Arc<PipeRouter>>,
-) -> McpToolResult {
-    let pipe = match require_pipe(pipe) {
-        Ok(p) => p,
-        Err(_) => {
-            return McpToolResult::text(
-                "Browser webview is managed by the Voice Mirror app. \
-                 Switch to the Lens tab to activate the browser.",
-            );
-        }
-    };
-
-    let request_id = generate_request_id();
-    match pipe_browser_request(pipe, &request_id, "status", json!({}), Duration::from_secs(5))
-        .await
-    {
-        Ok(result) => McpToolResult::text(format!(
-            "Browser is active. {}",
-            serde_json::to_string_pretty(&result).unwrap_or_default()
-        )),
-        Err(_) => McpToolResult::text(
-            "Browser webview is managed by the Voice Mirror app. \
-             Switch to the Lens tab to activate the browser.",
-        ),
-    }
-}
-
-/// `browser_stop` -- browser lifecycle is managed by Voice Mirror.
-pub async fn handle_browser_stop(_args: &Value, _data_dir: &Path) -> McpToolResult {
-    McpToolResult::text(
-        "Browser lifecycle is managed by Voice Mirror. \
-         The browser stays active while the Lens tab is open.",
-    )
-}
-
-// ---------------------------------------------------------------------------
-// Individual browser_* tool entry points
-// ---------------------------------------------------------------------------
-
-pub async fn handle_browser_status(
-    args: &Value,
-    data_dir: &Path,
-    pipe: Option<&Arc<PipeRouter>>,
-) -> McpToolResult {
-    handle_browser_control("status", args, data_dir, pipe).await
-}
-
-pub async fn handle_browser_tabs(
-    args: &Value,
-    data_dir: &Path,
-    pipe: Option<&Arc<PipeRouter>>,
-) -> McpToolResult {
-    handle_browser_control("tabs", args, data_dir, pipe).await
-}
-
-pub async fn handle_browser_open(
-    args: &Value,
-    data_dir: &Path,
-    pipe: Option<&Arc<PipeRouter>>,
-) -> McpToolResult {
-    handle_browser_control("open", args, data_dir, pipe).await
-}
-
-pub async fn handle_browser_close_tab(
-    args: &Value,
-    data_dir: &Path,
-    pipe: Option<&Arc<PipeRouter>>,
-) -> McpToolResult {
-    handle_browser_control("close_tab", args, data_dir, pipe).await
-}
-
-pub async fn handle_browser_focus(
-    args: &Value,
-    data_dir: &Path,
-    pipe: Option<&Arc<PipeRouter>>,
-) -> McpToolResult {
-    handle_browser_control("focus", args, data_dir, pipe).await
-}
-
-pub async fn handle_browser_navigate(
-    args: &Value,
-    data_dir: &Path,
-    pipe: Option<&Arc<PipeRouter>>,
-) -> McpToolResult {
-    handle_browser_control("navigate", args, data_dir, pipe).await
-}
-
-pub async fn handle_browser_screenshot(
-    args: &Value,
-    data_dir: &Path,
-    pipe: Option<&Arc<PipeRouter>>,
-) -> McpToolResult {
-    handle_browser_control("screenshot", args, data_dir, pipe).await
-}
-
-pub async fn handle_browser_snapshot(
-    args: &Value,
-    data_dir: &Path,
-    pipe: Option<&Arc<PipeRouter>>,
-) -> McpToolResult {
-    handle_browser_control("snapshot", args, data_dir, pipe).await
-}
-
-pub async fn handle_browser_act(
-    args: &Value,
-    data_dir: &Path,
-    pipe: Option<&Arc<PipeRouter>>,
-) -> McpToolResult {
-    handle_browser_control("act", args, data_dir, pipe).await
-}
-
-pub async fn handle_browser_console(
-    args: &Value,
-    data_dir: &Path,
-    pipe: Option<&Arc<PipeRouter>>,
-) -> McpToolResult {
-    handle_browser_control("console", args, data_dir, pipe).await
-}
-
-pub async fn handle_browser_cookies(
-    args: &Value,
-    data_dir: &Path,
-    pipe: Option<&Arc<PipeRouter>>,
-) -> McpToolResult {
-    handle_browser_control("cookies", args, data_dir, pipe).await
-}
-
-pub async fn handle_browser_storage(
-    args: &Value,
-    data_dir: &Path,
-    pipe: Option<&Arc<PipeRouter>>,
-) -> McpToolResult {
-    handle_browser_control("storage", args, data_dir, pipe).await
-}
 
 #[cfg(test)]
 mod tests {
@@ -485,10 +354,13 @@ mod tests {
     fn test_is_long_action() {
         assert!(is_long_action("screenshot"));
         assert!(is_long_action("snapshot"));
-        assert!(is_long_action("act"));
-        assert!(!is_long_action("tabs"));
+        assert!(is_long_action("wait"));
+        assert!(is_long_action("waitforurl"));
+        assert!(is_long_action("waitforloadstate"));
+        assert!(is_long_action("auth_login"));
+        assert!(!is_long_action("click"));
         assert!(!is_long_action("navigate"));
-        assert!(!is_long_action("stop"));
+        assert!(!is_long_action("tab_list"));
     }
 
     #[test]
@@ -522,14 +394,6 @@ mod tests {
         let result =
             handle_browser_fetch(&args, Path::new("/tmp")).await;
         assert!(result.is_error);
-    }
-
-    #[tokio::test]
-    async fn test_browser_stop_returns_info() {
-        let args = json!({});
-        let result =
-            handle_browser_stop(&args, Path::new("/tmp")).await;
-        assert!(!result.is_error);
     }
 
     #[test]
