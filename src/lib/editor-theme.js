@@ -109,6 +109,127 @@ const editorTheme = EditorView.theme({
     borderTop: '1px solid var(--cm-accent, var(--accent))',
     borderBottom: '1px solid var(--cm-accent, var(--accent))',
   },
+  // ── Git change gutter ──
+  '.cm-git-change-gutter': {
+    width: '3px',
+    minWidth: '3px',
+    marginRight: '2px',
+  },
+  '.cm-git-change-gutter .cm-gutterElement': {
+    padding: '0',
+    minWidth: '3px',
+    cursor: 'pointer',
+  },
+  '.cm-git-added': {
+    width: '3px',
+    height: '100%',
+    backgroundColor: 'var(--cm-git-added, var(--ok))',
+    borderRadius: '1px',
+  },
+  '.cm-git-modified': {
+    width: '3px',
+    height: '100%',
+    backgroundColor: 'var(--cm-git-modified, var(--accent))',
+    borderRadius: '1px',
+  },
+  '.cm-git-deleted': {
+    position: 'relative',
+    width: '3px',
+    height: '0',
+  },
+  '.cm-git-deleted::after': {
+    content: '""',
+    position: 'absolute',
+    left: '-1px',
+    top: '-4px',
+    width: '0',
+    height: '0',
+    borderTop: '4px solid transparent',
+    borderBottom: '4px solid transparent',
+    borderLeft: '5px solid var(--cm-git-deleted, var(--danger))',
+    pointerEvents: 'none',
+  },
+  // ── Git peek widget ──
+  '.cm-git-peek': {
+    backgroundColor: 'var(--cm-panel-bg, var(--bg-elevated))',
+    border: '1px solid var(--border)',
+    borderRadius: '4px',
+    margin: '4px 0 4px 24px',
+    overflow: 'hidden',
+    fontFamily: 'var(--font-mono)',
+    fontSize: '12px',
+  },
+  '.cm-git-peek-header': {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '4px 8px',
+    backgroundColor: 'color-mix(in srgb, var(--accent) 10%, transparent)',
+    borderBottom: '1px solid var(--border)',
+    fontSize: '11px',
+    color: 'var(--cm-foreground)',
+  },
+  '.cm-git-peek-label': {
+    fontWeight: '600',
+  },
+  '.cm-git-peek-nav': {
+    display: 'flex',
+    gap: '2px',
+  },
+  '.cm-git-peek-btn': {
+    background: 'transparent',
+    border: 'none',
+    color: 'var(--cm-foreground)',
+    cursor: 'pointer',
+    padding: '2px 6px',
+    borderRadius: '3px',
+    fontSize: '12px',
+    lineHeight: '1',
+  },
+  '.cm-git-peek-btn:hover': {
+    backgroundColor: 'color-mix(in srgb, var(--accent) 15%, transparent)',
+  },
+  '.cm-git-peek-btn:disabled': {
+    opacity: '0.3',
+    cursor: 'default',
+  },
+  '.cm-git-peek-body': {
+    padding: '4px 0',
+    maxHeight: '200px',
+    overflowY: 'auto',
+  },
+  '.cm-git-peek-line': {
+    padding: '0 8px',
+    lineHeight: '1.6',
+    whiteSpace: 'pre',
+  },
+  '.cm-git-peek-line.removed': {
+    backgroundColor: 'color-mix(in srgb, var(--danger) 12%, transparent)',
+    color: 'var(--danger)',
+  },
+  '.cm-git-peek-line.added': {
+    backgroundColor: 'color-mix(in srgb, var(--ok) 12%, transparent)',
+    color: 'var(--ok)',
+  },
+  '.cm-git-peek-actions': {
+    padding: '4px 8px',
+    borderTop: '1px solid var(--border)',
+    display: 'flex',
+    justifyContent: 'flex-end',
+  },
+  '.cm-git-peek-revert': {
+    backgroundColor: 'color-mix(in srgb, var(--danger) 15%, transparent)',
+    color: 'var(--danger)',
+    border: '1px solid var(--danger)',
+    padding: '3px 10px',
+    borderRadius: '3px',
+    cursor: 'pointer',
+    fontSize: '11px',
+    fontWeight: '600',
+  },
+  '.cm-git-peek-revert:hover': {
+    backgroundColor: 'color-mix(in srgb, var(--danger) 25%, transparent)',
+  },
 }, { dark: true });
 
 // ── Syntax highlighting ──

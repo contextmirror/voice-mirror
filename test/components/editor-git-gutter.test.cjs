@@ -84,3 +84,49 @@ describe('editor-git-gutter.js -- CM6 gutter extension', () => {
     assert.ok(src.includes('setOriginalContent'));
   });
 });
+
+// ── editor-theme.js git gutter styles ──
+
+describe('editor-theme.js -- git gutter styles', () => {
+  const themeSrc = fs.readFileSync(path.join(__dirname, '../../src/lib/editor-theme.js'), 'utf-8');
+
+  it('styles .cm-git-added with green bar', () => {
+    assert.ok(themeSrc.includes('.cm-git-added'), 'Should style .cm-git-added');
+    assert.ok(themeSrc.includes('--ok'), 'Added should use --ok (green) color');
+  });
+
+  it('styles .cm-git-modified with accent bar', () => {
+    assert.ok(themeSrc.includes('.cm-git-modified'), 'Should style .cm-git-modified');
+  });
+
+  it('styles .cm-git-deleted with danger triangle', () => {
+    assert.ok(themeSrc.includes('.cm-git-deleted'), 'Should style .cm-git-deleted');
+    assert.ok(themeSrc.includes('--danger'), 'Deleted should use --danger (red) color');
+  });
+
+  it('sets gutter column width', () => {
+    assert.ok(themeSrc.includes('cm-git-change-gutter'), 'Should style the gutter column');
+  });
+});
+
+// ── editor-theme.js peek widget styles ──
+
+describe('editor-theme.js -- peek widget styles', () => {
+  const themeSrc = fs.readFileSync(path.join(__dirname, '../../src/lib/editor-theme.js'), 'utf-8');
+
+  it('styles the peek widget container', () => {
+    assert.ok(themeSrc.includes('.cm-git-peek'), 'Should style .cm-git-peek');
+  });
+
+  it('styles peek header', () => {
+    assert.ok(themeSrc.includes('cm-git-peek-header'), 'Should style peek header');
+  });
+
+  it('styles peek revert button', () => {
+    assert.ok(themeSrc.includes('cm-git-peek-revert'), 'Should style revert button');
+  });
+
+  it('styles removed and added lines in peek', () => {
+    assert.ok(themeSrc.includes('cm-git-peek-line'), 'Should style peek diff lines');
+  });
+});
