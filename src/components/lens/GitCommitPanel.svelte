@@ -113,6 +113,11 @@
 
   async function handleSwitchBranch(branchName) {
     if (switching) return;
+    // Warn user — switching branches while dev server runs causes hot-reload crash
+    const confirmed = window.confirm(
+      `Switch to "${branchName}"?\n\nThis will change files on disk. If a dev server is running, it may crash and need to be restarted.`
+    );
+    if (!confirmed) return;
     closeBranchDropdown();
     switching = true;
     clearError();
