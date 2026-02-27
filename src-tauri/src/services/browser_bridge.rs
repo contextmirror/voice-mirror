@@ -1107,6 +1107,7 @@ pub async fn handle_browser_action(
 
         "addscript" => {
             let webview = get_webview(app, &state)?;
+            // Accept "url" for external scripts, "content" or "value" for inline scripts
             let js = if let Some(url) = args.get("url").and_then(|v| v.as_str()) {
                 let url_js = escape_js(url);
                 format!(
@@ -1117,7 +1118,9 @@ pub async fn handle_browser_action(
                         return JSON.stringify({{ ok: true, action: 'addscript', src: '{url_js}' }});
                     }})()"#
                 )
-            } else if let Some(content) = args.get("content").and_then(|v| v.as_str()) {
+            } else if let Some(content) = args.get("content")
+                .or_else(|| args.get("value"))
+                .and_then(|v| v.as_str()) {
                 let content_json = serde_json::to_string(content).unwrap_or_default();
                 format!(
                     r#"(function() {{
@@ -1128,7 +1131,7 @@ pub async fn handle_browser_action(
                     }})()"#
                 )
             } else {
-                return Err("Either 'url' or 'content' is required for addscript".into());
+                return Err("Either 'url' (external script) or 'value' (inline script content) is required for addscript".into());
             };
             evaluate_js_with_result(app, &webview, &js, std::time::Duration::from_secs(10)).await
         }
@@ -1177,7 +1180,10 @@ pub async fn handle_browser_action(
 
         "waitforurl" => {
             let webview = get_webview(app, &state)?;
-            let pattern = args.get("pattern").and_then(|v| v.as_str()).ok_or("pattern is required for waitforurl")?;
+            let pattern = args.get("pattern")
+                .or_else(|| args.get("value"))
+                .and_then(|v| v.as_str())
+                .ok_or("'pattern' (or 'value') is required for waitforurl — provide a regex to match against the URL")?;
             let pattern_js = escape_js(pattern);
             let timeout_ms = args.get("timeout").and_then(|v| v.as_u64()).unwrap_or(30000);
             let poll_ms = args.get("poll").and_then(|v| v.as_u64()).unwrap_or(500);
@@ -1342,6 +1348,36 @@ pub async fn handle_browser_action(
             if tab_id.is_empty() {
                 return Err("tabId is required for close_tab".into());
             }
+
+            // Remove from Rust-side tab state
+            let webview_label = {
+                let mut tabs = state.tabs.lock().map_err(|e| format!("Lock error: {}", e))?;
+                let label = tabs.get(tab_id).map(|t| t.webview_label.clone());
+                tabs.remove(tab_id);
+                label
+            };
+
+            // Clear active_tab_id if it pointed to the closed tab
+            {
+                let mut active = state.active_tab_id.lock()
+                    .map_err(|e| format!("Lock error: {}", e))?;
+                if active.as_deref() == Some(tab_id) {
+                    // Pick another tab if available, or set to None
+                    let tabs = state.tabs.lock().map_err(|e| format!("Lock error: {}", e))?;
+                    *active = tabs.keys().next().cloned();
+                }
+            }
+
+            // Destroy the native webview
+            if let Some(label) = webview_label {
+                if let Some(webview) = app.get_webview(&label) {
+                    // Hiding before close prevents visual flash
+                    let _ = webview.hide();
+                    let _ = webview.close();
+                }
+            }
+
+            // Notify frontend
             let _ = app.emit("lens-close-tab", json!({ "tabId": tab_id }));
             Ok(json!({ "ok": true, "tabId": tab_id }))
         }
@@ -1350,86 +1386,70 @@ pub async fn handle_browser_action(
         // Cookies / Storage
         // -----------------------------------------------------------------
 
-        "cookies" => {
+        "cookies" | "cookies_get" => {
             let webview = get_webview(app, &state)?;
-            let action_type = args
-                .get("action")
-                .and_then(|v| v.as_str())
-                .unwrap_or("list");
-            let js = match action_type {
-                "list" => "JSON.stringify({ cookies: document.cookie })".to_string(),
-                "clear" => {
-                    "document.cookie.split(';').forEach(function(c) { \
-                     document.cookie = c.trim().split('=')[0] + \
-                     '=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/'; }); \
-                     JSON.stringify({ ok: true })"
-                        .to_string()
-                }
-                _ => format!(
-                    "JSON.stringify({{ error: 'Cookie action {} not supported via JS' }})",
-                    action_type
-                ),
-            };
-            evaluate_js_with_result(
-                app,
-                &webview,
-                &js,
-                std::time::Duration::from_secs(10),
-            )
-            .await
+            let js = "JSON.stringify({ cookies: document.cookie })".to_string();
+            evaluate_js_with_result(app, &webview, &js, std::time::Duration::from_secs(10)).await
         }
 
-        "storage" => {
+        "cookies_set" => {
             let webview = get_webview(app, &state)?;
-            let raw_type = args
-                .get("type")
-                .and_then(|v| v.as_str())
-                .unwrap_or("localStorage");
-            // Whitelist storage types to prevent JS injection
+            let key = args.get("key").and_then(|v| v.as_str()).unwrap_or("");
+            let value = args.get("value").and_then(|v| v.as_str()).unwrap_or("");
+            let js = format!(
+                "document.cookie = '{}={}; path=/'; JSON.stringify({{ ok: true }})",
+                escape_js(key), escape_js(value)
+            );
+            evaluate_js_with_result(app, &webview, &js, std::time::Duration::from_secs(10)).await
+        }
+
+        "cookies_clear" => {
+            let webview = get_webview(app, &state)?;
+            let js = "document.cookie.split(';').forEach(function(c) { \
+                     document.cookie = c.trim().split('=')[0] + \
+                     '=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/'; }); \
+                     JSON.stringify({ ok: true })".to_string();
+            evaluate_js_with_result(app, &webview, &js, std::time::Duration::from_secs(10)).await
+        }
+
+        "storage" | "storage_get" => {
+            let webview = get_webview(app, &state)?;
+            let raw_type = args.get("type").and_then(|v| v.as_str()).unwrap_or("localStorage");
             let storage_type = match raw_type {
                 "localStorage" | "sessionStorage" => raw_type,
                 _ => return Err(format!("Invalid storage type: '{}'. Must be 'localStorage' or 'sessionStorage'.", raw_type)),
             };
-            let action_type = args
-                .get("action")
-                .and_then(|v| v.as_str())
-                .unwrap_or("get");
             let key = args.get("key").and_then(|v| v.as_str()).unwrap_or("");
-            let value = args.get("value").and_then(|v| v.as_str()).unwrap_or("");
-
-            let js = match action_type {
-                "get" => format!(
-                    "JSON.stringify({{ value: {}.getItem('{}') }})",
-                    storage_type,
-                    escape_js(key)
-                ),
-                "set" => format!(
-                    "{}.setItem('{}', '{}'); JSON.stringify({{ ok: true }})",
-                    storage_type,
-                    escape_js(key),
-                    escape_js(value)
-                ),
-                "delete" => format!(
-                    "{}.removeItem('{}'); JSON.stringify({{ ok: true }})",
-                    storage_type,
-                    escape_js(key)
-                ),
-                "clear" => format!(
-                    "{}.clear(); JSON.stringify({{ ok: true }})",
+            let js = if key.is_empty() {
+                // No key = dump all entries
+                format!(
+                    "(function() {{ var s = {}; var o = {{}}; for (var i = 0; i < s.length; i++) {{ var k = s.key(i); o[k] = s.getItem(k); }} return JSON.stringify(o); }})()",
                     storage_type
-                ),
-                _ => format!(
-                    "JSON.stringify({{ error: 'Unknown action: {}' }})",
-                    action_type
-                ),
+                )
+            } else {
+                format!(
+                    "JSON.stringify({{ value: {}.getItem('{}') }})",
+                    storage_type, escape_js(key)
+                )
             };
-            evaluate_js_with_result(
-                app,
-                &webview,
-                &js,
-                std::time::Duration::from_secs(10),
-            )
-            .await
+            evaluate_js_with_result(app, &webview, &js, std::time::Duration::from_secs(10)).await
+        }
+
+        "storage_set" => {
+            let webview = get_webview(app, &state)?;
+            let raw_type = args.get("type").and_then(|v| v.as_str()).unwrap_or("localStorage");
+            let storage_type = match raw_type {
+                "localStorage" | "sessionStorage" => raw_type,
+                _ => return Err(format!("Invalid storage type: '{}'. Must be 'localStorage' or 'sessionStorage'.", raw_type)),
+            };
+            let key = args.get("key").and_then(|v| v.as_str())
+                .ok_or("'key' is required for storage_set")?;
+            let value = args.get("value").and_then(|v| v.as_str()).unwrap_or("");
+            let js = format!(
+                "{}.setItem('{}', '{}'); JSON.stringify({{ ok: true }})",
+                storage_type, escape_js(key), escape_js(value)
+            );
+            evaluate_js_with_result(app, &webview, &js, std::time::Duration::from_secs(10)).await
         }
 
         // -----------------------------------------------------------------

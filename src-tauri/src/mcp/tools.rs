@@ -707,6 +707,14 @@ fn build_all_groups() -> HashMap<String, ToolGroupDef> {
                                 "type": "string",
                                 "description": "JavaScript expression for evaluate action"
                             },
+                            "pattern": {
+                                "type": "string",
+                                "description": "Regex pattern for waitforurl (matched against current URL)"
+                            },
+                            "content": {
+                                "type": "string",
+                                "description": "Inline script content for addscript (alternative to url)"
+                            },
                             "query": {
                                 "type": "string",
                                 "description": "Search query for search action"
