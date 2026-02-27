@@ -169,19 +169,19 @@ describe('editor-git-gutter.js -- peek widget', () => {
 describe('editor-git-gutter.js -- gutter bar styles', () => {
   const src = fs.readFileSync(SRC_PATH, 'utf-8');
 
-  it('styles .cm-git-added with green bar', () => {
-    assert.ok(src.includes('cm-git-added'), 'Should style .cm-git-added');
+  it('AddedMarker uses green color (--ok)', () => {
     assert.ok(src.includes('--ok'), 'Added should use --ok (green) color');
+    assert.ok(src.includes('#22c55e'), 'Added should have green fallback');
   });
 
-  it('styles .cm-git-modified with accent bar', () => {
-    assert.ok(src.includes('cm-git-modified'), 'Should style .cm-git-modified');
+  it('ModifiedMarker uses blue color (--accent)', () => {
     assert.ok(src.includes('--accent'), 'Modified should use --accent (blue) color');
+    assert.ok(src.includes('#56b4e9'), 'Modified should have blue fallback');
   });
 
-  it('styles .cm-git-deleted with danger color', () => {
-    assert.ok(src.includes('cm-git-deleted'), 'Should style .cm-git-deleted');
+  it('DeletedMarker uses red color (--danger)', () => {
     assert.ok(src.includes('--danger'), 'Deleted should use --danger (red) color');
+    assert.ok(src.includes('#ef4444'), 'Deleted should have red fallback');
   });
 
   it('sets gutter column width', () => {

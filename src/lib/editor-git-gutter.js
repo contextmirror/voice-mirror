@@ -17,15 +17,27 @@ import { StateField, StateEffect, RangeSet } from '@codemirror/state';
 // ---------------------------------------------------------------------------
 
 class AddedMarker extends GutterMarker {
-  elementClass = 'cm-git-added';
+  toDOM() {
+    const el = document.createElement('div');
+    el.style.cssText = 'position:absolute;top:0;bottom:0;left:0;width:3px;background:var(--ok,#22c55e);border-radius:1px;';
+    return el;
+  }
 }
 
 class ModifiedMarker extends GutterMarker {
-  elementClass = 'cm-git-modified';
+  toDOM() {
+    const el = document.createElement('div');
+    el.style.cssText = 'position:absolute;top:0;bottom:0;left:0;width:3px;background:var(--accent,#56b4e9);border-radius:1px;';
+    return el;
+  }
 }
 
 class DeletedMarker extends GutterMarker {
-  elementClass = 'cm-git-deleted';
+  toDOM() {
+    const el = document.createElement('div');
+    el.style.cssText = 'position:absolute;top:0;bottom:0;left:0;width:3px;background:var(--danger,#ef4444);border-radius:1px;';
+    return el;
+  }
 }
 
 const addedMarker = new AddedMarker();
@@ -421,28 +433,19 @@ function revertChange(view, change, originalLines) {
 // Gutter definition
 // ---------------------------------------------------------------------------
 
-/** Base theme for git gutter markers — uses baseTheme to avoid scoping issues */
+/** Base theme for git gutter — uses baseTheme to avoid scoping issues */
 const gitGutterBaseTheme = EditorView.baseTheme({
   '.cm-git-change-gutter': {
-    width: '4px',
-    minWidth: '4px',
-    marginLeft: '1px',
+    width: '6px',
+    minWidth: '6px',
     marginRight: '2px',
   },
   '.cm-git-change-gutter .cm-gutterElement': {
     padding: '0 !important',
-    minWidth: '4px',
-    width: '4px',
+    minWidth: '6px',
+    width: '6px',
+    position: 'relative',
     cursor: 'pointer',
-  },
-  '.cm-gutterElement.cm-git-added': {
-    borderLeft: '3px solid var(--ok, #22c55e)',
-  },
-  '.cm-gutterElement.cm-git-modified': {
-    borderLeft: '3px solid var(--accent, #56b4e9)',
-  },
-  '.cm-gutterElement.cm-git-deleted': {
-    borderLeft: '3px solid var(--danger, #ef4444)',
   },
 });
 
