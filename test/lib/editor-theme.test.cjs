@@ -64,6 +64,16 @@ describe('editor-theme.js: CSS variable usage', () => {
   });
 });
 
+describe('editor-theme.js: font size', () => {
+  it('uses --cm-font-size CSS variable for content font size', () => {
+    assert.ok(src.includes('--cm-font-size'), 'Should use --cm-font-size variable');
+  });
+
+  it('has 14px default fallback for font size', () => {
+    assert.ok(src.includes("'var(--cm-font-size, 14px)'"), 'Should have 14px default fallback');
+  });
+});
+
 describe('editor-theme.js: syntax highlighting variables', () => {
   const syntaxVars = [
     '--cm-keyword',

@@ -27,6 +27,7 @@ const editorTheme = EditorView.theme({
   '.cm-content': {
     caretColor: 'var(--cm-cursor)',
     fontFamily: 'var(--font-mono)',
+    fontSize: 'var(--cm-font-size, 14px)',
   },
   '.cm-cursor, .cm-dropCursor': {
     borderLeftColor: 'var(--cm-cursor)',

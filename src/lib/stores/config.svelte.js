@@ -86,6 +86,7 @@ const DEFAULT_CONFIG = {
   editor: {
     markdownPreview: true,
     formatOnSave: false,
+    fontSize: 14,
   },
   workspace: {
     showChat: false,

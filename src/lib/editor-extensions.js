@@ -4,6 +4,7 @@
  * Pure function module (no Svelte runes, no store imports). All dependencies
  * are passed in via parameters so FileEditor.svelte retains control of state.
  */
+import { indentWithTab } from '@codemirror/commands';
 import { showMinimap } from '@replit/codemirror-minimap';
 import { createGitGutter } from './editor-git-gutter.js';
 
@@ -25,6 +26,7 @@ import { createGitGutter } from './editor-git-gutter.js';
  * @param {function} options.onContextMenu - Callback for context menu events (event, view)
  * @param {function} [options.getOriginalContent] - Async callback returning original git content for diff gutter
  * @param {function} [options.onClick] - Callback for Ctrl+Click go-to-definition (event, view)
+ * @param {function} [options.onFontZoom] - Callback for font zoom (delta: +1, -1, or 0 to reset)
  * @returns {Array} CodeMirror extensions array
  */
 export function buildEditorExtensions(cm, lsp, options) {
@@ -40,6 +42,7 @@ export function buildEditorExtensions(cm, lsp, options) {
     onContextMenu,
     onClick,
     getOriginalContent,
+    onFontZoom,
   } = options;
 
   const extensions = [
@@ -71,6 +74,7 @@ export function buildEditorExtensions(cm, lsp, options) {
       }
     }),
     cm.keymap.of([
+      indentWithTab,
       { key: 'Mod-s', run: () => { onSave(); return true; } },
       ...(onFormat ? [{ key: 'Shift-Alt-f', run: () => { onFormat(); return true; } }] : []),
       // Multi-cursor: add cursor on line above/below (VS Code / Zed standard)
@@ -96,6 +100,12 @@ export function buildEditorExtensions(cm, lsp, options) {
         v.dispatch({ selection: cm.EditorSelection.create([...ranges, cm.EditorSelection.cursor(newHead)]) });
         return true;
       }},
+      // Font zoom: Ctrl+= (increase), Ctrl+- (decrease), Ctrl+0 (reset)
+      ...(onFontZoom ? [
+        { key: 'Ctrl-=', run: () => { onFontZoom(1); return true; } },
+        { key: 'Ctrl--', run: () => { onFontZoom(-1); return true; } },
+        { key: 'Ctrl-0', run: () => { onFontZoom(0); return true; } },
+      ] : []),
     ]),
   ];
 
@@ -123,6 +133,7 @@ export function buildEditorExtensions(cm, lsp, options) {
   if (lsp.hasLsp) {
     extensions.push(lsp.hoverTooltipExtension(filePath, cm.hoverTooltip));
     extensions.push(cm.keymap.of([
+      { key: 'F12', run: (v) => { lsp.handleGoToDefinition(v, v.state.selection.main.head); return true; } },
       { key: 'F2', run: (v) => { lsp.handleRenameSymbol(v, filePath); return true; } },
       { key: 'Shift-F12', run: (v) => { lsp.handleFindReferences(v, filePath); return true; } },
       { key: 'Mod-.', run: (v) => { lsp.handleCodeActions(v, filePath); return true; } },

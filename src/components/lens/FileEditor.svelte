@@ -4,7 +4,7 @@
   import { readFile, readExternalFile, writeFile, getFileGitContent, lspRequestDefinition, lspApplyWorkspaceEdit, writeUserMessage, aiPtyInput } from '../../lib/api.js';
   import { tabsStore } from '../../lib/stores/tabs.svelte.js';
   import { projectStore } from '../../lib/stores/project.svelte.js';
-  import { configStore } from '../../lib/stores/config.svelte.js';
+  import { configStore, updateConfig } from '../../lib/stores/config.svelte.js';
   import { chatStore } from '../../lib/stores/chat.svelte.js';
   import { aiStatusStore } from '../../lib/stores/ai-status.svelte.js';
   import EditorContextMenu from './EditorContextMenu.svelte';
@@ -95,6 +95,35 @@
     const root = projectStore.activeProject?.path || null;
     await lsp.formatDocument(view, currentPath, root);
   }
+
+  const DEFAULT_FONT_SIZE = 14;
+  const MIN_FONT_SIZE = 8;
+  const MAX_FONT_SIZE = 32;
+
+  function handleFontZoom(delta) {
+    const current = configStore.value?.editor?.fontSize ?? DEFAULT_FONT_SIZE;
+    let next;
+    if (delta === 0) {
+      next = DEFAULT_FONT_SIZE;
+    } else {
+      next = Math.max(MIN_FONT_SIZE, Math.min(MAX_FONT_SIZE, current + delta));
+    }
+    if (next !== current) {
+      updateConfig({ editor: { fontSize: next } });
+    }
+    // Immediately apply to DOM for responsiveness
+    if (editorEl) {
+      editorEl.style.setProperty('--cm-font-size', `${next}px`);
+    }
+  }
+
+  // Apply persisted font size when editor mounts or config changes
+  $effect(() => {
+    const size = configStore.value?.editor?.fontSize ?? DEFAULT_FONT_SIZE;
+    if (editorEl) {
+      editorEl.style.setProperty('--cm-font-size', `${size}px`);
+    }
+  });
 
   function handleGoToDefinition() {
     if (!view || !lsp.hasLsp || !currentPath) return;
@@ -350,6 +379,7 @@
           } catch {}
           return true;
         } : null,
+        onFontZoom: (delta) => handleFontZoom(delta),
         getOriginalContent: isExternal ? null : async (filePath) => {
           const root = projectStore.activeProject?.path || null;
           try {

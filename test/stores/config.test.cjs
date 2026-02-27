@@ -115,6 +115,10 @@ describe('config.svelte.js -- critical field values', () => {
   it('has formatOnSave editor config', () => {
     assert.ok(src.includes('formatOnSave'), 'Should have formatOnSave in editor config');
   });
+
+  it('has fontSize editor config defaulting to 14', () => {
+    assert.ok(src.includes('fontSize: 14'), 'Should have fontSize defaulting to 14 in editor config');
+  });
 });
 
 describe('config.svelte.js -- ai.endpoints', () => {
