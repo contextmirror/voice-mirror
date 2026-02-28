@@ -10,6 +10,26 @@
 
 ---
 
+## Progress Tracker
+
+| Task | Description | Status | Agent | Commit |
+|------|-------------|--------|-------|--------|
+| 1 | Device preset registry (`device-presets.js`) | Pending | — | — |
+| 2 | Device preview store (`device-preview.svelte.js`) | Pending | — | — |
+| 3 | Rust commands for device WebView2 lifecycle | Pending | — | — |
+| 4 | API wrappers for device preview commands | Pending | — | — |
+| 5 | DevicePickerMenu component | Pending | — | — |
+| 6 | DevicePreviewStrip component | Pending | — | — |
+| 7 | DevicePreview main panel component | Pending | — | — |
+| 8 | Device preview button in GroupTabBar | Pending | — | — |
+| 9 | Integrate DevicePreview into LensWorkspace | Pending | — | — |
+| 10 | Interaction sync module (`device-sync.js`) | Pending | — | — |
+| 11 | Wire sync into DevicePreview component | Pending | — | — |
+| 12 | DevicePreviewConfig in config schema | Pending | — | — |
+| 13 | Full test suite + compilation verification | Pending | — | — |
+
+---
+
 ## Context for the Implementer
 
 ### Key files to understand before starting
