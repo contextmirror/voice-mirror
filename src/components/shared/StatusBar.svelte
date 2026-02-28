@@ -6,6 +6,7 @@
    * dev server status, LSP health (left side) and cursor position, indentation,
    * encoding, EOL, language, notification bell (right side).
    */
+  import { listen } from '@tauri-apps/api/event';
   import { statusBarStore } from '../../lib/stores/status-bar.svelte.js';
   import { navigationStore } from '../../lib/stores/navigation.svelte.js';
   import { projectStore } from '../../lib/stores/project.svelte.js';
@@ -16,6 +17,11 @@
   let hasProject = $derived(!!projectStore.activeProject?.path);
   let activeView = $derived(navigationStore.activeView);
   let showEditorInfo = $derived(statusBarStore.editorFocused && activeView === 'lens');
+
+  // -- LSP install progress --
+  /** @type {{ server: string, status: string, message: string } | null} */
+  let lspInstall = $state(null);
+  let installClearTimer = null;
 
   // -- Notification panel --
   let notifPanelOpen = $state(false);
@@ -75,6 +81,48 @@
     } else {
       statusBarStore.stopPolling();
     }
+  });
+
+  // -- LSP install status listener --
+  $effect(() => {
+    let unlisten;
+    listen('lsp-server-status', (event) => {
+      const payload = event.payload;
+      // Only handle install lifecycle events (have server + status + message fields)
+      if (payload?.server && payload?.status && payload?.message) {
+        // Clear any pending auto-clear timer
+        if (installClearTimer) {
+          clearTimeout(installClearTimer);
+          installClearTimer = null;
+        }
+
+        if (payload.status === 'installing') {
+          lspInstall = { server: payload.server, status: payload.status, message: payload.message };
+        } else if (payload.status === 'installed') {
+          lspInstall = { server: payload.server, status: payload.status, message: payload.message };
+          // Auto-clear after 3 seconds
+          installClearTimer = setTimeout(() => {
+            lspInstall = null;
+            installClearTimer = null;
+          }, 3000);
+        } else if (payload.status === 'install_failed') {
+          lspInstall = { server: payload.server, status: payload.status, message: payload.message };
+          // Auto-clear after 5 seconds
+          installClearTimer = setTimeout(() => {
+            lspInstall = null;
+            installClearTimer = null;
+          }, 5000);
+        }
+      }
+    }).then(fn => { unlisten = fn; });
+
+    return () => {
+      if (unlisten) unlisten();
+      if (installClearTimer) {
+        clearTimeout(installClearTimer);
+        installClearTimer = null;
+      }
+    };
   });
 </script>
 
@@ -141,6 +189,31 @@
             class:lsp-starting={statusBarStore.lspHealth === 'starting'}
             class:lsp-error={statusBarStore.lspHealth === 'error'}
           ></span>
+        </button>
+      {/if}
+
+      <!-- L5: LSP install progress -->
+      {#if lspInstall}
+        <button class="sb-item lsp-install-status" title={lspInstall.message}>
+          {#if lspInstall.status === 'installing'}
+            <svg class="sb-icon lsp-spinner" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+              <circle cx="8" cy="8" r="6" stroke-opacity="0.25"/>
+              <path d="M8 2a6 6 0 0 1 6 6" stroke-linecap="round"/>
+            </svg>
+            <span>Installing {lspInstall.server}...</span>
+          {:else if lspInstall.status === 'installed'}
+            <svg class="sb-icon lsp-installed-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="3,8 7,12 13,4"/>
+            </svg>
+            <span>{lspInstall.server} ready</span>
+          {:else if lspInstall.status === 'install_failed'}
+            <svg class="sb-icon lsp-failed-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+              <path d="M7.56 1.44a.5.5 0 0 1 .88 0l6.5 12A.5.5 0 0 1 14.5 14h-13a.5.5 0 0 1-.44-.56l6.5-12z" fill="none"/>
+              <line x1="8" y1="6" x2="8" y2="9"/>
+              <circle cx="8" cy="11" r="0.5" fill="currentColor"/>
+            </svg>
+            <span>{lspInstall.server} failed</span>
+          {/if}
         </button>
       {/if}
     {/if}
@@ -368,6 +441,29 @@
 
   .lsp-dot.lsp-error {
     background: var(--danger);
+  }
+
+  /* ========== L5: LSP Install Progress ========== */
+  .lsp-install-status {
+    gap: 4px;
+  }
+
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
+  .lsp-spinner {
+    animation: spin 1s linear infinite;
+    color: var(--accent);
+  }
+
+  .lsp-installed-icon {
+    color: var(--ok);
+  }
+
+  .lsp-failed-icon {
+    color: var(--danger);
   }
 
   /* ========== R6: Bell ========== */

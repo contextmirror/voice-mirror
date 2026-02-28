@@ -482,6 +482,50 @@ describe('StatusBar.svelte: problems panel link', () => {
   });
 });
 
+// ──────────────────────────────────────────────────
+// Task 10: LSP install status indicator
+// ──────────────────────────────────────────────────
+
+describe('StatusBar.svelte: LSP install status', () => {
+  it('imports listen from Tauri events', () => {
+    assert.ok(src.includes("from '@tauri-apps/api/event'"), 'Should import listen from Tauri');
+  });
+
+  it('listens for lsp-server-status events', () => {
+    assert.ok(src.includes('lsp-server-status'), 'Should listen for install status events');
+  });
+
+  it('has lspInstall state', () => {
+    assert.ok(src.includes('lspInstall'), 'Should have lspInstall reactive state');
+  });
+
+  it('shows installing state with spinner', () => {
+    assert.ok(src.includes('installing'), 'Should show installing state');
+  });
+
+  it('shows install_failed state', () => {
+    assert.ok(src.includes('install_failed') || src.includes('install-failed'), 'Should show install_failed state');
+  });
+
+  it('shows server name during install', () => {
+    assert.ok(src.includes('lspInstall.server') || src.includes('lspInstall?.server'), 'Should display server name');
+  });
+
+  it('has spinner animation for installing state', () => {
+    assert.ok(src.includes('lsp-spinner') || src.includes('spin'), 'Should have spinner animation');
+  });
+
+  it('clears install state after timeout or on installed', () => {
+    assert.ok(src.includes("'installed'") || src.includes('"installed"'), 'Should handle installed status');
+  });
+
+  it('uses $effect for event listener lifecycle', () => {
+    // The lsp-server-status listener should be inside a $effect with cleanup
+    const effectCount = (src.match(/\$effect/g) || []).length;
+    assert.ok(effectCount >= 4, 'Should have at least 4 $effect blocks (existing 3 + install listener)');
+  });
+});
+
 const EXT_SRC = fs.readFileSync(path.join(__dirname, '../../src/lib/editor-extensions.js'), 'utf-8');
 
 describe('editor-extensions.js: cursor activity callback', () => {

@@ -23,10 +23,10 @@
 - [x] Task 4: Create npm installer module (`installer.rs`)
 - [x] Task 5: Rewrite detection module to use manifest
 - [x] Task 6: Wire installer into `ensure_server()` flow
-- [ ] Task 7: Pass `initializationOptions` from manifest on server init
-- [ ] Task 8: Handle `workspace/configuration` requests from servers
-- [ ] Task 9: Add `lsp_servers` config field for user overrides
-- [ ] Task 10: Frontend — API wrappers for server management
+- [x] Task 7: Pass `initializationOptions` from manifest on server init
+- [x] Task 8: Handle `workspace/configuration` requests from servers
+- [x] Task 9: Add `lsp_servers` config field for user overrides
+- [x] Task 10: Frontend — API wrappers for server management
 - [ ] Task 11: Frontend — Status bar install progress indicator
 - [ ] Task 12: Frontend — Notifications for install lifecycle
 - [ ] Task 13: Integration verification — full flow test
