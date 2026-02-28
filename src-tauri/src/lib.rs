@@ -429,6 +429,7 @@ pub fn run() {
             design_cmds::design_get_element,
             // Output / diagnostics
             output_cmds::get_output_logs,
+            output_cmds::log_frontend_error,
         ])
         .setup(|app| {
             // Migrate data from old Electron directory before anything reads it

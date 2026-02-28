@@ -27,16 +27,18 @@ pub enum Channel {
     Voice,
     Mcp,
     Browser,
+    Frontend,
 }
 
 impl Channel {
     /// All channels, in definition order.
-    pub const ALL: [Channel; 5] = [
+    pub const ALL: [Channel; 6] = [
         Channel::App,
         Channel::Cli,
         Channel::Voice,
         Channel::Mcp,
         Channel::Browser,
+        Channel::Frontend,
     ];
 
     /// String label for the channel.
@@ -47,6 +49,7 @@ impl Channel {
             Channel::Voice => "voice",
             Channel::Mcp => "mcp",
             Channel::Browser => "browser",
+            Channel::Frontend => "frontend",
         }
     }
 
@@ -58,6 +61,7 @@ impl Channel {
             "voice" => Some(Channel::Voice),
             "mcp" => Some(Channel::Mcp),
             "browser" => Some(Channel::Browser),
+            "frontend" => Some(Channel::Frontend),
             _ => None,
         }
     }
@@ -281,6 +285,7 @@ impl OutputStore {
             Channel::Voice => 2,
             Channel::Mcp => 3,
             Channel::Browser => 4,
+            Channel::Frontend => 5,
         }
     }
 
@@ -873,7 +878,7 @@ mod tests {
         store.inject(Channel::Cli, "TRACE", "noise");
 
         let summaries = store.summary();
-        assert_eq!(summaries.len(), 5);
+        assert_eq!(summaries.len(), 6);
 
         let app_sum = &summaries[0];
         assert_eq!(app_sum.channel, Channel::App);
@@ -1011,7 +1016,7 @@ mod tests {
         writer.append(&make_entry(4, "DEBUG", Channel::Cli, "d1"));
 
         let summaries = LogFileWriter::read_summary(&dir);
-        assert_eq!(summaries.len(), 5);
+        assert_eq!(summaries.len(), 6);
 
         let app = &summaries[0];
         assert_eq!(app.channel, Channel::App);

@@ -8,6 +8,36 @@ use tauri::State;
 use crate::services::output::{Channel, OutputStore};
 
 #[derive(Debug, Deserialize)]
+pub struct FrontendErrorParams {
+    pub level: String,
+    pub message: String,
+    pub context: Option<String>,
+}
+
+#[tauri::command]
+pub fn log_frontend_error(
+    params: FrontendErrorParams,
+    output_store: State<'_, Arc<OutputStore>>,
+) -> Result<(), String> {
+    let full_message = if let Some(ctx) = &params.context {
+        if ctx.is_empty() {
+            params.message.clone()
+        } else {
+            format!("{}\n{}", params.message, ctx)
+        }
+    } else {
+        params.message.clone()
+    };
+
+    output_store.inject(
+        Channel::Frontend,
+        &params.level,
+        &full_message,
+    );
+    Ok(())
+}
+
+#[derive(Debug, Deserialize)]
 pub struct GetLogsParams {
     pub channel: Option<String>,
     pub level: Option<String>,

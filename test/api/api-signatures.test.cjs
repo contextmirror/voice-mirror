@@ -317,6 +317,7 @@ describe('api.js -- exported async functions', () => {
     'lspInstallServer',
     'lspSetServerEnabled',
     'getOutputLogs',
+    'logFrontendError',
   ];
 
   for (const fn of expectedExports) {

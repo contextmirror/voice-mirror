@@ -9,13 +9,14 @@ import { listen } from '@tauri-apps/api/event';
 import { getOutputLogs } from '../api.js';
 
 const MAX_ENTRIES = 2000;
-const CHANNELS = ['app', 'cli', 'voice', 'mcp', 'browser'];
+const CHANNELS = ['app', 'cli', 'voice', 'mcp', 'browser', 'frontend'];
 const CHANNEL_LABELS = {
   app: 'Voice Mirror',
   cli: 'CLI Provider',
   voice: 'Voice Pipeline',
   mcp: 'MCP Server',
   browser: 'Browser Bridge',
+  frontend: 'Frontend Errors',
 };
 
 let entries = $state({
@@ -24,6 +25,7 @@ let entries = $state({
   voice: [],
   mcp: [],
   browser: [],
+  frontend: [],
 });
 
 let activeChannel = $state('app');

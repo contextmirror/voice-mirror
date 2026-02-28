@@ -760,3 +760,7 @@ export async function lspSetServerEnabled(serverId, enabled) {
 export async function getOutputLogs(params) {
   return invoke('get_output_logs', { params });
 }
+
+export async function logFrontendError(params) {
+  return invoke('log_frontend_error', { params });
+}
