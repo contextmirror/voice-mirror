@@ -30,7 +30,7 @@ use tracing::{debug, info, warn};
 use types::{LspServerStatus, LspServerStatusEvent};
 
 /// Build a composite key for the server HashMap: "lang_id::project_root"
-fn server_key(lang_id: &str, project_root: &str) -> String {
+pub(crate) fn server_key(lang_id: &str, project_root: &str) -> String {
     format!("{}::{}", lang_id, project_root)
 }
 
@@ -318,6 +318,7 @@ impl LspManager {
             lang_id.to_string(),
             Arc::clone(&pending),
             Arc::clone(&stdin),
+            server_key(lang_id, project_root),
         );
 
         // Build the root URI for the project

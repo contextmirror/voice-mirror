@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use serde_json::Value;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{ChildStdin, ChildStdout};
 use tokio::sync::{oneshot, Mutex};
@@ -112,13 +112,14 @@ pub async fn read_message(reader: &mut BufReader<ChildStdout>) -> Option<Value> 
 /// - Notifications with method `textDocument/publishDiagnostics`: parsed and emitted
 ///   as a `lsp-diagnostics` Tauri event.
 /// - Other notifications: logged and ignored.
-/// - EOF: emits `lsp-server-error` event.
+/// - EOF: triggers crash recovery with exponential backoff (max 5 restarts).
 pub fn spawn_reader_loop(
     stdout: ChildStdout,
     app_handle: AppHandle,
     lang_id: String,
     pending: Arc<Mutex<HashMap<i64, oneshot::Sender<Value>>>>,
     stdin: Arc<Mutex<ChildStdin>>,
+    server_key: String,
 ) {
     tokio::spawn(async move {
         let mut reader = BufReader::new(stdout);
@@ -159,6 +160,8 @@ pub fn spawn_reader_loop(
                 None => {
                     // EOF — server process has exited or pipe broken
                     warn!("[{}] LSP server stdout closed (EOF)", lang_id);
+
+                    // Emit error event for frontend notification
                     let _ = app_handle.emit(
                         "lsp-server-error",
                         serde_json::json!({
@@ -166,6 +169,119 @@ pub fn spawn_reader_loop(
                             "error": "LSP server process exited unexpectedly"
                         }),
                     );
+
+                    // --- Crash recovery with exponential backoff ---
+                    let lsp_state: tauri::State<'_, super::LspManagerState> =
+                        app_handle.state();
+
+                    // Extract crash info from the dead server (lock scope limited)
+                    let recovery_info: Option<(Vec<String>, String, u32)> = {
+                        let mut manager: tokio::sync::MutexGuard<'_, super::LspManager> =
+                            lsp_state.0.lock().await;
+                        if let Some(crashed) = manager.servers.remove(&server_key) {
+                            let mut crash_count: u32 = crashed.crash_count + 1;
+
+                            // Reset if last crash was > 60s ago (server was stable)
+                            if let Some(prev) = crashed.last_crash {
+                                if prev.elapsed().as_secs() > 60 {
+                                    crash_count = 1;
+                                }
+                            }
+
+                            let docs: Vec<String> =
+                                crashed.open_docs.iter().cloned().collect();
+                            Some((docs, crashed.project_root.clone(), crash_count))
+                        } else {
+                            None
+                        }
+                    }; // Lock released here — don't hold it during backoff sleep
+
+                    if let Some((open_docs, project_root, crash_count)) = recovery_info {
+                        if crash_count >= 5 {
+                            warn!(
+                                "[{}] Server crashed {} times — giving up",
+                                lang_id, crash_count
+                            );
+                            let _ = app_handle.emit(
+                                "lsp-server-failed",
+                                serde_json::json!({
+                                    "languageId": lang_id,
+                                    "crashCount": crash_count,
+                                }),
+                            );
+                        } else {
+                            // Exponential backoff: 1s, 2s, 4s, 8s, capped at 30s
+                            let backoff_secs: u64 = std::cmp::min(
+                                2u64.pow(crash_count.saturating_sub(1)),
+                                30,
+                            );
+                            info!(
+                                "[{}] Restarting in {}s (crash #{})...",
+                                lang_id, backoff_secs, crash_count
+                            );
+                            tokio::time::sleep(std::time::Duration::from_secs(
+                                backoff_secs,
+                            ))
+                            .await;
+
+                            // Re-lock and restart
+                            let mut manager: tokio::sync::MutexGuard<'_, super::LspManager> =
+                                lsp_state.0.lock().await;
+                            match manager
+                                .ensure_server(&lang_id, &project_root)
+                                .await
+                            {
+                                Ok(()) => {
+                                    info!("[{}] Restarted successfully", lang_id);
+
+                                    // Transfer crash tracking to the new server
+                                    let new_key = super::server_key(
+                                        &lang_id,
+                                        &project_root,
+                                    );
+                                    if let Some(server) =
+                                        manager.servers.get_mut(&new_key)
+                                    {
+                                        server.crash_count = crash_count;
+                                        server.last_crash =
+                                            Some(std::time::Instant::now());
+                                    }
+
+                                    // Replay open documents
+                                    let doc_count = open_docs.len();
+                                    for uri in &open_docs {
+                                        if let Some(file_path) =
+                                            super::types::uri_to_file_path(uri)
+                                        {
+                                            if let Ok(content) =
+                                                std::fs::read_to_string(&file_path)
+                                            {
+                                                let _ = manager
+                                                    .open_document(
+                                                        uri,
+                                                        &lang_id,
+                                                        &content,
+                                                        &project_root,
+                                                    )
+                                                    .await;
+                                            }
+                                        }
+                                    }
+                                    info!(
+                                        "[{}] Replayed {} open documents",
+                                        lang_id, doc_count
+                                    );
+                                }
+                                Err(e) => {
+                                    warn!(
+                                        "[{}] Failed to restart: {}",
+                                        lang_id, e
+                                    );
+                                }
+                            }
+                        }
+                    }
+
                     break;
                 }
             }

@@ -29,6 +29,16 @@ pub fn file_uri(relative_path: &str, project_root: &str) -> String {
     }
 }
 
+/// Convert a `file://` URI back to an absolute file path.
+///
+/// Returns `None` if the URI is not a valid `file://` URI.
+pub fn uri_to_file_path(uri: &str) -> Option<String> {
+    let url = Url::parse(uri).ok()?;
+    url.to_file_path()
+        .ok()
+        .map(|p| p.to_string_lossy().to_string())
+}
+
 /// Convert a `file://` URI back to a path relative to the project root.
 ///
 /// Returns `None` if the URI doesn't start with the project root.
