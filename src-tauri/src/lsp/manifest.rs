@@ -42,9 +42,16 @@ pub struct ServerEntry {
 pub struct InstallConfig {
     #[serde(rename = "type")]
     pub install_type: String,
+    #[serde(default)]
     pub packages: Vec<String>,
     #[serde(default)]
     pub version: String,
+    /// GitHub repo for github-release type (e.g., "rust-lang/rust-analyzer").
+    #[serde(default)]
+    pub repo: String,
+    /// Asset name pattern for github-release (e.g., "rust-analyzer-{arch}-{os}.gz").
+    #[serde(default, rename = "assetPattern")]
+    pub asset_pattern: String,
 }
 
 fn default_priority() -> String {
@@ -123,7 +130,21 @@ pub fn find_binary_path(command: &str, lsp_servers_dir: &Path) -> Option<PathBuf
         return Some(path);
     }
 
-    // 2. Check managed node_modules/.bin/
+    // 2. Check managed bin/ directory (for native binaries like rust-analyzer)
+    let native_bin_dir = lsp_servers_dir.join("bin");
+    #[cfg(windows)]
+    {
+        let exe_path = native_bin_dir.join(format!("{}.exe", command));
+        if exe_path.exists() {
+            return Some(exe_path);
+        }
+    }
+    let native_path = native_bin_dir.join(command);
+    if native_path.exists() {
+        return Some(native_path);
+    }
+
+    // 3. Check managed node_modules/.bin/
     let bin_dir = lsp_servers_dir.join("node_modules").join(".bin");
 
     // On Windows, prefer .cmd wrapper — the extensionless file is a bash script
@@ -235,5 +256,37 @@ mod tests {
         assert!(result.is_some());
         let (id, _) = result.unwrap();
         assert_eq!(id, "typescript", "Primary server should be preferred over supplementary");
+    }
+
+    #[test]
+    fn test_rust_analyzer_in_manifest() {
+        let manifest = load_manifest().unwrap();
+        assert!(manifest.servers.contains_key("rust-analyzer"), "Manifest should contain rust-analyzer");
+        let ra = &manifest.servers["rust-analyzer"];
+        assert_eq!(ra.install.install_type, "github-release");
+        assert_eq!(ra.install.repo, "rust-lang/rust-analyzer");
+        assert!(!ra.install.asset_pattern.is_empty(), "asset_pattern should not be empty");
+        assert!(ra.extensions.contains(&".rs".to_string()));
+        assert_eq!(ra.command, "rust-analyzer");
+        assert_eq!(ra.priority, "primary");
+    }
+
+    #[test]
+    fn test_find_server_for_rs() {
+        let manifest = load_manifest().unwrap();
+        let result = find_server_for_extension(&manifest, "rs");
+        assert!(result.is_some(), "Should find a server for .rs files");
+        let (id, _) = result.unwrap();
+        assert_eq!(id, "rust-analyzer");
+    }
+
+    #[test]
+    fn test_github_release_install_config_fields() {
+        let manifest = load_manifest().unwrap();
+        let ra = &manifest.servers["rust-analyzer"];
+        // github-release should have repo and assetPattern, packages should default to empty
+        assert!(ra.install.packages.is_empty(), "github-release should have empty packages");
+        assert!(ra.install.asset_pattern.contains("{arch}"), "assetPattern should contain {{arch}} placeholder");
+        assert!(ra.install.asset_pattern.contains("{os}"), "assetPattern should contain {{os}} placeholder");
     }
 }

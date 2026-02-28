@@ -62,3 +62,87 @@ describe('installer.rs: status events', () => {
     );
   });
 });
+
+describe('installer.rs: github-release support', () => {
+  it('has install_github_release function', () => {
+    assert.ok(
+      src.includes('fn install_github_release'),
+      'Should have install_github_release function'
+    );
+  });
+
+  it('downloads from GitHub releases URL', () => {
+    assert.ok(
+      src.includes('github.com') && src.includes('releases'),
+      'Should construct GitHub releases download URL'
+    );
+  });
+
+  it('handles platform detection', () => {
+    assert.ok(
+      src.includes('pc-windows-msvc') || src.includes('target_os'),
+      'Should detect Windows platform'
+    );
+    assert.ok(
+      src.includes('apple-darwin'),
+      'Should detect macOS platform'
+    );
+    assert.ok(
+      src.includes('unknown-linux-gnu'),
+      'Should detect Linux platform'
+    );
+  });
+
+  it('handles architecture detection', () => {
+    assert.ok(
+      src.includes('x86_64'),
+      'Should detect x86_64 architecture'
+    );
+    assert.ok(
+      src.includes('aarch64'),
+      'Should detect aarch64 architecture'
+    );
+  });
+
+  it('replaces asset pattern placeholders', () => {
+    assert.ok(
+      src.includes('{arch}') && src.includes('{os}'),
+      'Should replace {arch} and {os} placeholders in asset pattern'
+    );
+  });
+
+  it('stores binaries in bin directory', () => {
+    assert.ok(
+      src.includes('"bin"') && src.includes('bin_dir'),
+      'Should store native binaries in lsp-servers/bin/'
+    );
+  });
+
+  it('handles gzip decompression', () => {
+    assert.ok(
+      src.includes('.gz') && (src.includes('GzDecoder') || src.includes('flate2')),
+      'Should handle .gz compressed assets'
+    );
+  });
+
+  it('handles latest version', () => {
+    assert.ok(
+      src.includes('latest') && src.includes('releases/latest/download'),
+      'Should handle "latest" version via GitHub latest redirect'
+    );
+  });
+
+  it('emits download progress events', () => {
+    assert.ok(
+      src.includes('downloading'),
+      'Should emit downloading status event'
+    );
+  });
+
+  it('uses User-Agent header', () => {
+    assert.ok(
+      src.includes('User-Agent') && src.includes('voice-mirror'),
+      'Should set User-Agent header for GitHub API'
+    );
+  });
+});

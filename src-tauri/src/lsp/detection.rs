@@ -263,6 +263,14 @@ mod tests {
     }
 
     #[test]
+    fn test_rust_extension() {
+        let info = detect_for_extension("rs").unwrap();
+        assert_eq!(info.language_id, "rust-analyzer");
+        assert_eq!(info.server_id.as_deref(), Some("rust-analyzer"));
+        assert_eq!(info.binary, "rust-analyzer");
+    }
+
+    #[test]
     fn test_unknown_extension() {
         assert!(detect_for_extension("xyz").is_none());
         assert!(detect_for_extension("").is_none());
@@ -284,6 +292,7 @@ mod tests {
         assert_eq!(language_id_for_extension("ts"), Some("typescript".to_string()));
         assert_eq!(language_id_for_extension("css"), Some("css".to_string()));
         assert_eq!(language_id_for_extension("svelte"), Some("svelte".to_string()));
+        assert_eq!(language_id_for_extension("rs"), Some("rust-analyzer".to_string()));
         assert_eq!(language_id_for_extension("xyz"), None);
     }
 
@@ -316,6 +325,7 @@ mod tests {
         assert!(ids.contains(&"html"), "Should include html");
         assert!(ids.contains(&"json"), "Should include json");
         assert!(ids.contains(&"eslint"), "Should include eslint");
+        assert!(ids.contains(&"rust-analyzer"), "Should include rust-analyzer");
     }
 
     #[test]

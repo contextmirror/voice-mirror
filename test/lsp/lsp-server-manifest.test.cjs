@@ -35,8 +35,14 @@ describe('lsp-servers.json: server entries', () => {
         assert.ok(Array.isArray(server.extensions), `${id}: should have extensions array`);
         assert.ok(Array.isArray(server.excludeExtensions), `${id}: should have excludeExtensions array`);
         assert.ok(server.install, `${id}: should have install object`);
-        assert.ok(server.install.type === 'npm', `${id}: install type should be npm`);
-        assert.ok(Array.isArray(server.install.packages), `${id}: should have install.packages array`);
+        assert.ok(['npm', 'github-release'].includes(server.install.type), `${id}: install type should be npm or github-release`);
+        if (server.install.type === 'npm') {
+          assert.ok(Array.isArray(server.install.packages), `${id}: npm type should have install.packages array`);
+        }
+        if (server.install.type === 'github-release') {
+          assert.ok(server.install.repo, `${id}: github-release type should have repo`);
+          assert.ok(server.install.assetPattern, `${id}: github-release type should have assetPattern`);
+        }
         assert.ok(server.command, `${id}: should have command`);
         assert.ok(Array.isArray(server.args), `${id}: should have args array`);
         assert.ok(['primary', 'supplementary'].includes(server.priority), `${id}: should have valid priority`);
@@ -208,5 +214,63 @@ describe('lsp-servers.json: eslint entry', () => {
         `ESLint should support ${lang} language`
       );
     }
+  });
+});
+
+describe('lsp-servers.json: rust-analyzer entry', () => {
+  it('rust-analyzer entry exists', () => {
+    assert.ok(manifest.servers['rust-analyzer'], 'Should have rust-analyzer entry');
+  });
+
+  it('uses github-release install type', () => {
+    assert.strictEqual(
+      manifest.servers['rust-analyzer'].install.type,
+      'github-release',
+      'rust-analyzer should use github-release install type'
+    );
+  });
+
+  it('covers .rs extension', () => {
+    assert.ok(
+      manifest.servers['rust-analyzer'].extensions.includes('.rs'),
+      'rust-analyzer should cover .rs files'
+    );
+  });
+
+  it('has repo field pointing to rust-lang/rust-analyzer', () => {
+    assert.strictEqual(
+      manifest.servers['rust-analyzer'].install.repo,
+      'rust-lang/rust-analyzer',
+      'Should point to the correct GitHub repo'
+    );
+  });
+
+  it('has assetPattern with platform placeholders', () => {
+    const pattern = manifest.servers['rust-analyzer'].install.assetPattern;
+    assert.ok(pattern.includes('{arch}'), 'assetPattern should contain {arch} placeholder');
+    assert.ok(pattern.includes('{os}'), 'assetPattern should contain {os} placeholder');
+  });
+
+  it('has primary priority', () => {
+    assert.strictEqual(
+      manifest.servers['rust-analyzer'].priority,
+      'primary',
+      'rust-analyzer should be a primary server'
+    );
+  });
+
+  it('command is rust-analyzer', () => {
+    assert.strictEqual(
+      manifest.servers['rust-analyzer'].command,
+      'rust-analyzer',
+      'rust-analyzer command should be rust-analyzer'
+    );
+  });
+
+  it('has rust in languages', () => {
+    assert.ok(
+      manifest.servers['rust-analyzer'].languages.includes('rust'),
+      'rust-analyzer should support rust language'
+    );
   });
 });

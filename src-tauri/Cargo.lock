@@ -6248,6 +6248,7 @@ dependencies = [
  "byteorder",
  "cpal",
  "dirs",
+ "flate2",
  "futures-util",
  "ignore",
  "image",

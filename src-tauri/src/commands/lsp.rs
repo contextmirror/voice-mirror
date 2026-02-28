@@ -687,8 +687,9 @@ pub async fn lsp_get_server_list(
 
 /// Manually trigger installation of a specific LSP server by ID.
 ///
-/// Loads the manifest, finds the server entry, and runs `npm install`.
-/// Emits `lsp-server-status` events for progress tracking.
+/// Loads the manifest, finds the server entry, and runs the appropriate
+/// install method (npm or github-release).
+/// Emits `lsp-install-status` events for progress tracking.
 #[tauri::command]
 pub async fn lsp_install_server(
     app: AppHandle,
@@ -709,15 +710,32 @@ pub async fn lsp_install_server(
         Err(e) => return Ok(IpcResponse::err(e)),
     };
 
-    match crate::lsp::installer::install_server(
-        &server_id,
-        &entry.install.packages,
-        &entry.install.version,
-        &lsp_dir,
-        Some(&app),
-    )
-    .await
-    {
+    let result = match entry.install.install_type.as_str() {
+        "npm" => {
+            crate::lsp::installer::install_server(
+                &server_id,
+                &entry.install.packages,
+                &entry.install.version,
+                &lsp_dir,
+                Some(&app),
+            )
+            .await
+        }
+        "github-release" => {
+            crate::lsp::installer::install_github_release(
+                &server_id,
+                &entry.install.repo,
+                &entry.install.asset_pattern,
+                &entry.install.version,
+                &lsp_dir,
+                Some(&app),
+            )
+            .await
+        }
+        other => Err(format!("Unknown install type: {}", other)),
+    };
+
+    match result {
         Ok(()) => Ok(IpcResponse::ok(json!({ "ok": true, "server": server_id }))),
         Err(e) => Ok(IpcResponse::err(e)),
     }

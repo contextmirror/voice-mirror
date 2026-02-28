@@ -124,7 +124,7 @@ impl LspManager {
         )
         .ok_or_else(|| format!("No LSP server configured for language '{}'", lang_id))?;
 
-        // If server binary not found, attempt auto-install via npm
+        // If server binary not found, attempt auto-install
         let server_info = if !server_info.installed {
             // Load manifest to get install config
             let manifest = manifest::load_manifest()
@@ -140,39 +140,61 @@ impl LspManager {
                 .get(server_id)
                 .ok_or_else(|| format!("Server '{}' not found in manifest", server_id))?;
 
-            // Check if Node.js is available
-            let node_status = installer::detect_node();
-            if !node_status.available {
-                // Emit lsp-node-not-found event once per session
-                if NODE_NOT_FOUND_EMITTED
-                    .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-                    .is_ok()
-                {
-                    let _ = self.app_handle.emit("lsp-node-not-found", ());
-                }
-                return Err(format!(
-                    "LSP server '{}' requires Node.js for installation. Install Node.js from nodejs.org",
-                    server_info.binary
-                ));
-            }
-
             // Get install directory
             let lsp_dir = installer::get_lsp_servers_dir()
                 .map_err(|e| format!("Failed to get LSP servers directory: {}", e))?;
 
-            // Install the server
+            // Install the server using the appropriate method
             info!(
                 "Auto-installing LSP server '{}' for language '{}'",
                 server_id, lang_id
             );
-            installer::install_server(
-                server_id,
-                &entry.install.packages,
-                &entry.install.version,
-                &lsp_dir,
-                Some(&self.app_handle),
-            )
-            .await?;
+
+            match entry.install.install_type.as_str() {
+                "npm" => {
+                    // Check if Node.js is available (only needed for npm installs)
+                    let node_status = installer::detect_node();
+                    if !node_status.available {
+                        // Emit lsp-node-not-found event once per session
+                        if NODE_NOT_FOUND_EMITTED
+                            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+                            .is_ok()
+                        {
+                            let _ = self.app_handle.emit("lsp-node-not-found", ());
+                        }
+                        return Err(format!(
+                            "LSP server '{}' requires Node.js for installation. Install Node.js from nodejs.org",
+                            server_info.binary
+                        ));
+                    }
+
+                    installer::install_server(
+                        server_id,
+                        &entry.install.packages,
+                        &entry.install.version,
+                        &lsp_dir,
+                        Some(&self.app_handle),
+                    )
+                    .await?;
+                }
+                "github-release" => {
+                    installer::install_github_release(
+                        server_id,
+                        &entry.install.repo,
+                        &entry.install.asset_pattern,
+                        &entry.install.version,
+                        &lsp_dir,
+                        Some(&self.app_handle),
+                    )
+                    .await?;
+                }
+                other => {
+                    return Err(format!(
+                        "Unknown install type '{}' for server '{}'",
+                        other, server_id
+                    ));
+                }
+            }
 
             // Retry detection after install
             detection::detect_for_extension(&self.extension_for_language(lang_id))
@@ -1595,7 +1617,7 @@ impl LspManager {
     fn extension_for_language(&self, lang_id: &str) -> String {
         match lang_id {
             "typescript" => "ts".to_string(),
-            "rust" => "rs".to_string(),
+            "rust" | "rust-analyzer" => "rs".to_string(),
             "python" => "py".to_string(),
             "css" => "css".to_string(),
             "html" => "html".to_string(),

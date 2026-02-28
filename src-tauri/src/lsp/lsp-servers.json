@@ -135,6 +135,25 @@
       "restartPolicy": "on-crash",
       "initializationOptions": {},
       "settings": {}
+    },
+    "rust-analyzer": {
+      "name": "Rust Analyzer",
+      "languages": ["rust"],
+      "extensions": [".rs"],
+      "excludeExtensions": [],
+      "install": {
+        "type": "github-release",
+        "repo": "rust-lang/rust-analyzer",
+        "assetPattern": "rust-analyzer-{arch}-{os}.gz",
+        "version": "latest"
+      },
+      "command": "rust-analyzer",
+      "args": [],
+      "priority": "primary",
+      "enabled": true,
+      "restartPolicy": "on-crash",
+      "initializationOptions": {},
+      "settings": {}
     }
   }
 }
