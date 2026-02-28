@@ -8,6 +8,19 @@ const src = fs.readFileSync(
   'utf-8'
 );
 
+describe('mod.rs: workspaceFolders', () => {
+  it('sends workspaceFolders in initialize request', () => {
+    assert.ok(src.includes('workspaceFolders'), 'Should include workspaceFolders in init params');
+  });
+
+  it('declares workspaceFolders capability', () => {
+    assert.ok(
+      src.includes('workspace_folders') || src.includes('workspaceFolders'),
+      'Should declare workspace.workspaceFolders capability'
+    );
+  });
+});
+
 describe('mod.rs: initializationOptions', () => {
   it('passes initializationOptions in initialize request', () => {
     assert.ok(src.includes('initializationOptions'), 'Should include initializationOptions in init');

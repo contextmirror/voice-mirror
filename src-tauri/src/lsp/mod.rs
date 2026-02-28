@@ -341,6 +341,13 @@ impl LspManager {
         let init_params = serde_json::json!({
             "processId": std::process::id(),
             "rootUri": root_uri,
+            "workspaceFolders": [{
+                "uri": root_uri,
+                "name": std::path::Path::new(project_root)
+                    .file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_else(|| project_root.to_string()),
+            }],
             "initializationOptions": init_options,
             "capabilities": {
                 "textDocument": {
@@ -406,6 +413,12 @@ impl LspManager {
                     },
                     "publishDiagnostics": {
                         "relatedInformation": false
+                    }
+                },
+                "workspace": {
+                    "workspaceFolders": {
+                        "supported": true,
+                        "changeNotifications": true
                     }
                 }
             }
