@@ -327,13 +327,13 @@ Source Control icon badge (change count), error badge, search result count badge
 ### 2.4 Diagnostics Panel
 
 #### What We Have
-Diagnostics are inline squiggles in the editor and count badges in the file tree. **No unified diagnostics list panel.**
+✅ **Implemented.** `ProblemsPanel.svelte` — VS Code-style tree view grouped by file with collapse/expand, severity filter toggles (error/warning/info), text search, click-to-navigate (opens file + sets cursor to line:col). 4th bottom panel tab with badge showing total count. Status bar diagnostics button opens panel. Ctrl+Shift+M keyboard shortcut.
 
 #### What VS Code Has
 Problems panel (Ctrl+Shift+M) with filterable, sortable list of all errors/warnings across workspace.
 
 #### Recommendation
-**Medium priority.** Unified error browsing would be valuable.
+~~**Medium priority.** Unified error browsing would be valuable.~~ **Done.**
 
 ---
 

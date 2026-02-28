@@ -562,6 +562,7 @@ See `docs/archive/TERMINAL-GAP-ANALYSIS.md` for the complete 33-item gap list. T
 | Ctrl+hover definition underline | Editor | ViewPlugin with Ctrl key tracking, word detection, Decoration.mark |
 | Ctrl+PageUp/PageDown tab cycling | Tabs | prev/next editor tab shortcuts with wrap-around |
 | Tab drag to split zones | Drag | Custom MIME type, DropZoneOverlay for tab drags, 5-zone split on drop |
+| Problems panel (Ctrl+Shift+M) | LSP + Terminal | VS Code-style tree view grouped by file, severity/text filters, click-to-navigate, status bar click opens panel, tab badge |
 
 ### Open Gaps — Ranked by Impact
 
@@ -599,6 +600,6 @@ The gap list above looks daunting, but Voice Mirror doesn't need to close every 
 
 The strategy: close the top gaps so Lens is **comfortable enough** for real coding, then double down on the voice+AI features no one else has.
 
-**Done:** find/replace ✓, multi-cursor ✓, global search ✓, git stage+commit+push ✓, branch management ✓, dynamic sync ✓, document formatting ✓, signature help ✓, split editor ✓, command palette ✓, file tree git decorations ✓, LSP diagnostics in tree ✓, code minimap ✓, terminal tab close ✓, terminal grid splits (H+V) ✓, terminal find (Ctrl+F) ✓, clickable terminal links ✓, terminal persistence ✓, inline gutter change indicators ✓, closed tab history + Ctrl+Shift+T ✓, mouse wheel scroll on tab bar ✓, back/forward navigation (Alt+Left/Right) ✓, Ctrl+hover definition underline ✓, Ctrl+PageUp/PageDown tab cycling ✓, tab drag to split zones ✓.
+**Done:** find/replace ✓, multi-cursor ✓, global search ✓, git stage+commit+push ✓, branch management ✓, dynamic sync ✓, document formatting ✓, signature help ✓, split editor ✓, command palette ✓, file tree git decorations ✓, LSP diagnostics in tree ✓, code minimap ✓, terminal tab close ✓, terminal grid splits (H+V) ✓, terminal find (Ctrl+F) ✓, clickable terminal links ✓, terminal persistence ✓, inline gutter change indicators ✓, closed tab history + Ctrl+Shift+T ✓, mouse wheel scroll on tab bar ✓, back/forward navigation (Alt+Left/Right) ✓, Ctrl+hover definition underline ✓, Ctrl+PageUp/PageDown tab cycling ✓, tab drag to split zones ✓, Problems panel (Ctrl+Shift+M) ✓.
 
 **Next wave:** hunk-level staging (stage individual diff chunks from the gutter). This is the remaining high-impact gap that separates "usable" from "daily driver." The terminal is now feature-compete with VS Code for core workflows.
