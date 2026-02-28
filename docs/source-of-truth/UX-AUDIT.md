@@ -2,15 +2,14 @@
 
 > Internal doc. Comprehensive audit of interactive surfaces, context menus, keyboard shortcuts, status indicators, tab behaviors, editor micro-interactions, and drag-and-drop. Compared against VS Code and Zed.
 >
-> Last updated: 2026-02-27
+> Last updated: 2026-02-28
 
 ---
 
 ## Executive Summary
 
-Voice Mirror's Lens workspace has solid functionality with remaining UX gaps in **interactive polish**. Wave 1 (10 items) has been completed. Remaining gaps:
+Voice Mirror's Lens workspace has solid functionality with remaining UX gaps in **interactive polish**. Waves 1 and 2 (16 items total) have been completed. Remaining gaps:
 
-- **1 critical infrastructure gap**: No persistent bottom status bar (line:col, language, errors, git branch)
 - **Multiple medium-priority gaps** across context menus, tabs, editor, drag-and-drop
 
 ### Wave 1 — COMPLETED
@@ -30,15 +29,28 @@ All 10 items from the initial wave are done:
 | 9 | Editor font zoom (Ctrl+=/Ctrl+-/Ctrl+0) | ✅ Done (already wired with config persistence) |
 | 10 | Middle-click to close editor tabs | ✅ Done |
 
+### Wave 2 — COMPLETED
+
+All 6 items from the second wave are done:
+
+| # | Fix | Status |
+|---|-----|--------|
+| 1 | Closed tab history + Ctrl+Shift+T (max 20, context menu item) | ✅ Done |
+| 2 | Mouse wheel scroll on tab bar (deltaY → scrollLeft) | ✅ Done |
+| 3 | Back/forward navigation (Alt+Left/Right, navigation-history store) | ✅ Done |
+| 4 | Ctrl+hover definition underline (ViewPlugin, Decoration.mark, cm-definition-hint CSS) | ✅ Done |
+| 5 | Ctrl+PageUp/PageDown tab cycling (prev/next with wrap-around) | ✅ Done |
+| 6 | Tab drag → split zones (custom MIME, DropZoneOverlay, 5-zone split) | ✅ Done |
+
 ### Next Priorities
 
 | # | Fix | Category | Effort |
 |---|-----|----------|--------|
-| 1 | **Add persistent bottom status bar** (line:col, language, errors, git) | Status Bar | Medium |
-| 2 | **Back/forward navigation** (Alt+Left/Right after jump) | Editor | Medium |
-| 3 | **Closed tab history + Ctrl+Shift+T** | Tabs | Medium |
-| 4 | **Mouse wheel scroll on tab bar** | Tabs | Small |
-| 5 | **Tab drag → split zones** (extend DropZoneOverlay) | Drag | Small-Medium |
+| 1 | **Quick fix lightbulb in gutter** | Editor | Medium |
+| 2 | **Ctrl+Tab MRU tab cycling** | Tabs | Medium |
+| 3 | **Terminal inline rename** (replace prompt() dialog) | Tabs | Small |
+| 4 | **Terminal tab strip drag reorder** | Drag | Medium |
+| 5 | **Text drag in editor** (unblock in main.js) | Drag | Small |
 
 ---
 
@@ -84,7 +96,7 @@ Close, Close Others, Close to the Right, Close All, Rename (F2), Split Right, Sp
 |------|----------|
 | **Close Saved** | High |
 | **Pin / Unpin Tab** (discoverability — double-click-to-pin exists but no menu) | High |
-| **Reopen Closed Editor (Ctrl+Shift+T)** | Medium |
+| ~~Reopen Closed Editor (Ctrl+Shift+T)~~ | ~~Medium~~ ✅ Done (Wave 2) |
 | Close to the Left | Medium |
 | Split Up, Split Left | Low |
 
@@ -352,10 +364,10 @@ Problems panel (Ctrl+Shift+M) with filterable, sortable list of all errors/warni
 
 | Gap | Priority | Notes |
 |-----|----------|-------|
-| **Closed tab history + Ctrl+Shift+T** | P1 | No `closedTabs` stack in store, no reopen |
-| **Mouse wheel scroll on tab bar** | P1 | No `onwheel` handler — can only scroll via tiny scrollbar |
+| ~~Closed tab history + Ctrl+Shift+T~~ | ~~P1~~ | ✅ Done (Wave 2) — closedTabs stack (max 20), reopenClosedTab, context menu item |
+| ~~Mouse wheel scroll on tab bar~~ | ~~P1~~ | ✅ Done (Wave 2) — onwheel handler converts deltaY to scrollLeft |
 | **Ctrl+Tab MRU cycling** | P2 | No tab activation history tracked |
-| **Ctrl+PageUp/PageDown** | P2 | No prev/next editor tab navigation |
+| ~~Ctrl+PageUp/PageDown~~ | ~~P2~~ | ✅ Done (Wave 2) — prev/next editor tab with wrap-around |
 | **Close to the Left** | P2 | Has "Close to the Right" but not Left |
 | **Git/diagnostic tab decorations** | P2 | VS Code colors tab titles by git status |
 | Tab overflow dropdown | P3 | No ">>" icon for hidden tabs |
@@ -443,7 +455,7 @@ Click to activate, close button (hover), middle-click close, right-click context
 | Behavior | Priority | Notes |
 |----------|----------|-------|
 | **F12 for Go to Definition** | HIGH | Only Ctrl+Click works. F12 in commands.svelte.js is display-only metadata |
-| **Back/forward after navigation (Alt+Left/Right)** | HIGH | No navigation history stack. Essential after Ctrl+Click jumps |
+| ~~Back/forward after navigation (Alt+Left/Right)~~ | ~~HIGH~~ | ✅ Done (Wave 2) — navigation-history store, Alt+Left/Right keybindings, push before Ctrl+Click |
 | Peek definition (Alt+F12) | Medium | Inline definition preview widget |
 | Scroll without cursor (Ctrl+Up/Down) | Medium | No viewport-only scrolling |
 
@@ -486,7 +498,7 @@ Click to activate, close button (hover), middle-click close, right-click context
 
 | Behavior | Priority | Notes |
 |----------|----------|-------|
-| **Ctrl+hover underline** (definition hint) | Medium | No visual feedback that Ctrl+Click will navigate |
+| ~~Ctrl+hover underline (definition hint)~~ | ~~Medium~~ | ✅ Done (Wave 2) — ViewPlugin with Ctrl key tracking, word detection, Decoration.mark, cm-definition-hint CSS |
 | **Quick fix lightbulb in gutter** | Medium | Code actions exist but no visual indicator |
 | Peek definition (Alt+F12) | Medium | Inline preview widget |
 | Inlay hints (LSP) | Medium | Type annotations displayed inline |
@@ -539,8 +551,8 @@ Click to activate, close button (hover), middle-click close, right-click context
 | **Ctrl+J** | Toggle bottom panel | HIGH |
 | **Ctrl+W** | Close active tab | HIGH |
 | **Ctrl+O** | Open file (menu shows hint but not wired) | HIGH |
-| **Ctrl+Shift+T** | Reopen closed tab | MEDIUM |
-| **Ctrl+PageUp/Down** | Previous/next editor tab | MEDIUM |
+| ~~Ctrl+Shift+T~~ | ~~Reopen closed tab~~ | ~~MEDIUM~~ ✅ Done (Wave 2) |
+| ~~Ctrl+PageUp/Down~~ | ~~Previous/next editor tab~~ | ~~MEDIUM~~ ✅ Done (Wave 2) |
 | **Ctrl+Shift+E** | Focus file tree | MEDIUM |
 | Ctrl+Shift+S | Save As | LOW |
 | F11 | Toggle fullscreen | LOW |
@@ -596,11 +608,11 @@ Alt+Down/Up (next/prev chunk)
 | **Panel resize** (SplitPanel) | Handle divider | Continuous resize via pointer events | col-resize / row-resize cursor |
 | **Window resize** (ResizeEdges) | Edge/corner strips | Native Tauri resize | Resize cursors |
 
-### 6.2 Missing — High Priority
+### 6.2 ~~Missing~~ Done — High Priority
 
-| Gap | Description | Effort |
+| Gap | Description | Status |
 |-----|-------------|--------|
-| **Tab drag → split zones** | Dragging editor tabs does NOT activate DropZoneOverlay. Only file-tree drags show split zones. The overlay already exists — just needs to detect tab drag data too. | Small-Medium |
+| ~~Tab drag → split zones~~ | ~~Dragging editor tabs does NOT activate DropZoneOverlay.~~ Custom MIME type, DropZoneOverlay detects tab drags, 5-zone split on drop. | ✅ Done (Wave 2) |
 
 ### 6.3 Missing — Medium Priority
 
@@ -625,71 +637,62 @@ Alt+Down/Up (next/prev chunk)
 
 ### P0 — Critical
 
-| # | Item | Category | Effort |
-|---|------|----------|--------|
-| 1 | Bottom status bar (container for all indicators) | Status Bar | Medium |
-| 2 | Line:Column cursor position display | Status Bar | Small (needs #1) |
-| 3 | Aggregate error/warning count display | Status Bar | Small (needs #1) |
+All P0 items completed (status bar done in prior work).
 
 ### P1 — High Priority
 
 | # | Item | Category | Effort |
 |---|------|----------|--------|
-| 4 | Closed tab history + Ctrl+Shift+T | Tabs | Medium |
-| 5 | Mouse wheel scroll on tab bar | Tabs | Small |
-| 6 | Language mode in status bar | Status Bar | Small (needs #1) |
-| 7 | Git branch in status bar | Status Bar | Small (needs #1) |
-| 8 | File tree: Open to the Side, Open in Terminal | Context Menus | Small |
-| 9 | Browser tab: Reload, New Tab | Context Menus | Small |
-| 10 | Tab drag → split zones (extend DropZoneOverlay) | Drag | Small-Medium |
+| ~~4~~ | ~~Closed tab history + Ctrl+Shift+T~~ | ~~Tabs~~ | ✅ Done (Wave 2) |
+| ~~5~~ | ~~Mouse wheel scroll on tab bar~~ | ~~Tabs~~ | ✅ Done (Wave 2) |
+| 6 | File tree: Open to the Side, Open in Terminal | Context Menus | Small |
+| 7 | Browser tab: Reload, New Tab | Context Menus | Small |
+| ~~8~~ | ~~Tab drag → split zones (extend DropZoneOverlay)~~ | ~~Drag~~ | ✅ Done (Wave 2) |
 
 ### P2 — Medium Priority
 
 | # | Item | Category | Effort |
 |---|------|----------|--------|
-| 11 | Back/forward navigation (Alt+Left/Right) | Editor | Medium |
-| 12 | Ctrl+hover underline (definition hint) | Editor | Small |
-| 13 | Quick fix lightbulb in gutter | Editor | Medium |
-| 14 | Ctrl+Tab MRU tab cycling | Tabs | Medium |
-| 15 | Ctrl+PageUp/PageDown (prev/next tab) | Keyboards | Small |
-| 16 | Terminal inline rename (replace prompt() dialog) | Tabs | Small |
-| 17 | Terminal tab strip drag reorder | Drag | Medium |
-| 18 | Indentation type/size in status bar | Status Bar | Small (needs #1) |
-| 19 | LSP status in persistent location | Status Bar | Small (needs #1) |
-| 20 | File path breadcrumbs | Status Bar | Medium |
-| 21 | Sidebar badge counts (git changes, errors) | Status Bar | Medium |
-| 22 | Diagnostics panel (unified error list) | Status Bar | Medium-Large |
-| 23 | Editor context menu: Toggle Comment, Format | Context Menus | Small |
-| 24 | Diff context menu: Revert Hunk | Context Menus | Medium |
-| 25 | File tree: Stage/Unstage/Discard on changes | Context Menus | Small |
-| 26 | Word wrap toggle in editor | Editor | Small |
-| 27 | Tab size configuration | Editor | Small |
-| 28 | Auto-indent on paste | Editor | Medium |
-| 29 | Text drag in editor (unblock in main.js) | Drag | Small |
-| 30 | External file drop from OS | Drag | Medium |
-| 31 | Ctrl+O (open file) wired to handler | Keyboards | Small |
-| 32 | Ctrl+Shift+E (focus file tree) | Keyboards | Small |
-| 33 | Wire Ctrl+K W / Ctrl+K U chords | Keyboards | Small |
-| 34 | Edit Project dialog (name, icon, color, startup script) | Project | Medium |
-| 35 | Project strip context menu (Edit, Clear Notifications, Close) | Context Menus | Small |
+| ~~9~~ | ~~Back/forward navigation (Alt+Left/Right)~~ | ~~Editor~~ | ✅ Done (Wave 2) |
+| ~~10~~ | ~~Ctrl+hover underline (definition hint)~~ | ~~Editor~~ | ✅ Done (Wave 2) |
+| 11 | Quick fix lightbulb in gutter | Editor | Medium |
+| 12 | Ctrl+Tab MRU tab cycling | Tabs | Medium |
+| ~~13~~ | ~~Ctrl+PageUp/PageDown (prev/next tab)~~ | ~~Keyboards~~ | ✅ Done (Wave 2) |
+| 14 | Terminal inline rename (replace prompt() dialog) | Tabs | Small |
+| 15 | Terminal tab strip drag reorder | Drag | Medium |
+| 16 | File path breadcrumbs | Status Bar | Medium |
+| 17 | Sidebar badge counts (git changes, errors) | Status Bar | Medium |
+| 18 | Diagnostics panel (unified error list) | Status Bar | Medium-Large |
+| 19 | Editor context menu: Toggle Comment, Format | Context Menus | Small |
+| 20 | Diff context menu: Revert Hunk | Context Menus | Medium |
+| 21 | File tree: Stage/Unstage/Discard on changes | Context Menus | Small |
+| 22 | Word wrap toggle in editor | Editor | Small |
+| 23 | Tab size configuration | Editor | Small |
+| 24 | Auto-indent on paste | Editor | Medium |
+| 25 | Text drag in editor (unblock in main.js) | Drag | Small |
+| 26 | External file drop from OS | Drag | Medium |
+| 27 | Ctrl+O (open file) wired to handler | Keyboards | Small |
+| 28 | Ctrl+Shift+E (focus file tree) | Keyboards | Small |
+| 29 | Wire Ctrl+K W / Ctrl+K U chords | Keyboards | Small |
+| 30 | Edit Project dialog (name, icon, color, startup script) | Project | Medium |
+| 31 | Project strip context menu (Edit, Clear Notifications, Close) | Context Menus | Small |
 
 ### P3 — Low Priority / Nice-to-Have
 
 | # | Item | Category | Effort |
 |---|------|----------|--------|
-| 36 | Inlay hints (LSP) | Editor | Medium |
-| 37 | Peek definition (Alt+F12) | Editor | Large |
-| 38 | Tab overflow dropdown | Tabs | Medium |
-| 39 | Git/diagnostic tab decorations | Tabs | Medium |
-| 40 | Close to the Left (tab context menu) | Context Menus | Small |
-| 41 | Encoding/EOL in status bar | Status Bar | Small |
-| 42 | Notification center/history | Status Bar | Medium |
-| 43 | File drag to terminal (insert path) | Drag | Medium |
-| 44 | Cursor blink/animation config | Editor | Low |
-| 45 | Render whitespace | Editor | Low |
-| 46 | Bracket pair colorization | Editor | Low |
-| 47 | Minimap show/hide toggle | Editor | Small |
-| 48 | Browser tab: Duplicate, Close Others | Context Menus | Small |
+| 32 | Inlay hints (LSP) | Editor | Medium |
+| 33 | Peek definition (Alt+F12) | Editor | Large |
+| 34 | Tab overflow dropdown | Tabs | Medium |
+| 35 | Git/diagnostic tab decorations | Tabs | Medium |
+| 36 | Close to the Left (tab context menu) | Context Menus | Small |
+| 37 | Notification center/history | Status Bar | Medium |
+| 38 | File drag to terminal (insert path) | Drag | Medium |
+| 39 | Cursor blink/animation config | Editor | Low |
+| 40 | Render whitespace | Editor | Low |
+| 41 | Bracket pair colorization | Editor | Low |
+| 42 | Minimap show/hide toggle | Editor | Small |
+| 43 | Browser tab: Duplicate, Close Others | Context Menus | Small |
 
 ---
 
@@ -697,5 +700,5 @@ Alt+Down/Up (next/prev chunk)
 
 - **VS Code reference repo:** `E:\Projects\references\VSCode\`
 - **Zed reference repo:** Not cloned locally; comparisons based on published documentation and known features.
-- **The status bar is the biggest remaining infrastructure gap.** It's the container that ~8 individual indicators need. Building it first unblocks many P1/P2 items.
+- **Wave 2 closed 6 items** covering tab management (closed tab history, wheel scroll, tab cycling), editor navigation (back/forward, Ctrl+hover underline), and drag-and-drop (tab drag to split zones).
 - **Context menu gaps are mostly small scope.** Adding items to existing menus is straightforward once the pattern exists.

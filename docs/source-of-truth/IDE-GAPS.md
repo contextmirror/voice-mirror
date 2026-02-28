@@ -35,7 +35,7 @@ What's missing is everything that makes a "real IDE" feel seamless — the gaps 
 | Document outline | Full | Full | Full | **Feature Compete** |
 | Git status + diff | Full | Full | Stage/Commit/Push/Pull + AI | Minor gaps — see §11-13 |
 | Global text search | Full | Full | Full | **Feature Compete** |
-| Split editor | Full (40+ commands) | Full | 20+ features, drag-to-split + seam splits | **Feature Compete** |
+| Split editor | Full (40+ commands) | Full | 20+ features, drag-to-split (file + tab) + seam splits | **Feature Compete** |
 | Multi-cursor | Full | Full | Full | **Feature Compete** |
 | Debug adapter (DAP) | Full | Partial | None | Low priority |
 | Extensions/plugins | Massive | Growing | None | Not planned |
@@ -169,6 +169,7 @@ What's missing is everything that makes a "real IDE" feel seamless — the gaps 
 - **Basic splitting** — Right, down, left, up via keyboard (Ctrl+\\), context menu, and drag-to-split
 - **Arbitrary nesting** — Recursive binary tree (3+ groups, unlimited depth)
 - **Drag tab between groups** — Cross-group tab moves with auto-close on empty groups
+- **Drag tab to split zones** — Custom MIME type, DropZoneOverlay detects tab drags, 5-zone split on drop (Wave 2)
 - **Drag file from tree to split** — 5 zones (center/L/R/T/B) with `DropZoneOverlay.svelte`, 22% edge threshold
 - **Full-width seam splits** — Drag to the divider between two panes for ancestor-level splits spanning all columns/rows
 - **Panel resizing** — SplitPanel with drag ratio (clamped 10%-90%)
@@ -555,6 +556,12 @@ See `docs/archive/TERMINAL-GAP-ANALYSIS.md` for the complete 33-item gap list. T
 | Terminal persistence | Terminal | Layout/names/colors/icons saved to config, fresh PTYs on restore |
 | Status bar | Editor | Git branch, diagnostics, cursor pos, language, encoding, EOL, indentation, LSP health, dev server |
 | Notification system | Editor | Toast notifications + notification center + bell icon with unread count |
+| Closed tab history + Ctrl+Shift+T | Tabs | closedTabs stack (max 20), reopenClosedTab, context menu item, shortcut |
+| Mouse wheel scroll on tab bar | Tabs | onwheel handler converts deltaY to scrollLeft |
+| Back/forward navigation (Alt+Left/Right) | Editor | navigation-history store, Alt+Left/Right CodeMirror keybindings |
+| Ctrl+hover definition underline | Editor | ViewPlugin with Ctrl key tracking, word detection, Decoration.mark |
+| Ctrl+PageUp/PageDown tab cycling | Tabs | prev/next editor tab shortcuts with wrap-around |
+| Tab drag to split zones | Drag | Custom MIME type, DropZoneOverlay for tab drags, 5-zone split on drop |
 
 ### Open Gaps — Ranked by Impact
 
@@ -592,6 +599,6 @@ The gap list above looks daunting, but Voice Mirror doesn't need to close every 
 
 The strategy: close the top gaps so Lens is **comfortable enough** for real coding, then double down on the voice+AI features no one else has.
 
-**Done:** find/replace ✓, multi-cursor ✓, global search ✓, git stage+commit+push ✓, branch management ✓, dynamic sync ✓, document formatting ✓, signature help ✓, split editor ✓, command palette ✓, file tree git decorations ✓, LSP diagnostics in tree ✓, code minimap ✓, terminal tab close ✓, terminal grid splits (H+V) ✓, terminal find (Ctrl+F) ✓, clickable terminal links ✓, terminal persistence ✓, inline gutter change indicators ✓.
+**Done:** find/replace ✓, multi-cursor ✓, global search ✓, git stage+commit+push ✓, branch management ✓, dynamic sync ✓, document formatting ✓, signature help ✓, split editor ✓, command palette ✓, file tree git decorations ✓, LSP diagnostics in tree ✓, code minimap ✓, terminal tab close ✓, terminal grid splits (H+V) ✓, terminal find (Ctrl+F) ✓, clickable terminal links ✓, terminal persistence ✓, inline gutter change indicators ✓, closed tab history + Ctrl+Shift+T ✓, mouse wheel scroll on tab bar ✓, back/forward navigation (Alt+Left/Right) ✓, Ctrl+hover definition underline ✓, Ctrl+PageUp/PageDown tab cycling ✓, tab drag to split zones ✓.
 
 **Next wave:** hunk-level staging (stage individual diff chunks from the gutter). This is the remaining high-impact gap that separates "usable" from "daily driver." The terminal is now feature-compete with VS Code for core workflows.
