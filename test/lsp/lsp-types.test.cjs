@@ -94,7 +94,7 @@ describe('mod.rs: LspServer struct updates', () => {
     // Find get_status function
     const statusIdx = modSrc.indexOf('fn get_status');
     assert.ok(statusIdx > 0, 'get_status function should exist');
-    const statusBody = modSrc.substring(statusIdx, statusIdx + 600);
+    const statusBody = modSrc.substring(statusIdx, statusIdx + 1200);
     assert.ok(statusBody.includes('state: s.state.clone()'), 'get_status should include state');
     assert.ok(statusBody.includes('crash_count: s.crash_count'), 'get_status should include crash_count');
     assert.ok(statusBody.includes('project_root: s.project_root.clone()'), 'get_status should include project_root');

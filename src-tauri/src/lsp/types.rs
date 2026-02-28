@@ -120,6 +120,9 @@ pub struct LspServerStatus {
     pub pid: Option<u32>,
     /// Keep for backward compat with frontend
     pub running: bool,
+    /// Most recent stderr lines from the server process (last 5).
+    #[serde(default)]
+    pub stderr_lines: Vec<String>,
 }
 
 /// Emitted when LSP server status changes.

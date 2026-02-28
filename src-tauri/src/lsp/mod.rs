@@ -21,6 +21,9 @@ use std::time::Instant;
 /// Once-per-session flag: emit `lsp-node-not-found` only once.
 static NODE_NOT_FOUND_EMITTED: AtomicBool = AtomicBool::new(false);
 
+/// Maximum number of stderr lines retained per server for diagnostic display.
+const MAX_STDERR_LINES: usize = 50;
+
 use serde_json::Value;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::process::{Child, ChildStdin};
@@ -232,10 +235,15 @@ impl LspManager {
             .take()
             .ok_or("Failed to get LSP server stdout")?;
 
+        // Shared buffer for stderr lines — cloned into the task below, also
+        // stored on LspServer so get_status() can read recent lines.
+        let stderr_buf: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+
         // Spawn a task to log stderr output (deduped + rate-limited)
         if let Some(stderr) = process.stderr.take() {
             let lang_id_clone = lang_id.to_string();
             let binary_clone = server_info.binary.clone();
+            let stderr_buf_clone = stderr_buf.clone();
             tokio::spawn(async move {
                 use tokio::io::{AsyncBufReadExt, BufReader};
                 let mut reader = BufReader::new(stderr);
@@ -251,6 +259,15 @@ impl LspManager {
                             let trimmed = line.trim();
                             if trimmed.is_empty() {
                                 continue;
+                            }
+
+                            // Capture the raw line into the shared buffer (capped)
+                            {
+                                let mut buf = stderr_buf_clone.lock().await;
+                                if buf.len() >= MAX_STDERR_LINES {
+                                    buf.remove(0);
+                                }
+                                buf.push(trimmed.to_string());
                             }
 
                             // Strip leading timestamp for dedup comparison
@@ -472,7 +489,7 @@ impl LspManager {
                 state: types::ServerState::Running,
                 project_root: project_root.to_string(),
                 last_error: None,
-                stderr_lines: Arc::new(Mutex::new(Vec::new())),
+                stderr_lines: stderr_buf,
                 idle_cancel: None,
             },
         );
@@ -1258,16 +1275,30 @@ impl LspManager {
     pub fn get_status(&self) -> Vec<LspServerStatus> {
         self.servers
             .values()
-            .map(|s| LspServerStatus {
-                language_id: s.language_id.clone(),
-                binary: s.binary.clone(),
-                state: s.state.clone(),
-                open_docs_count: s.open_docs.len(),
-                crash_count: s.crash_count,
-                project_root: s.project_root.clone(),
-                last_error: s.last_error.clone(),
-                pid: s.process.id(),
-                running: s.state == types::ServerState::Running,
+            .map(|s| {
+                // Read last 5 stderr lines without blocking (try_lock on tokio Mutex)
+                let recent_stderr = s
+                    .stderr_lines
+                    .try_lock()
+                    .map(|buf| {
+                        let len = buf.len();
+                        let start = if len > 5 { len - 5 } else { 0 };
+                        buf[start..].to_vec()
+                    })
+                    .unwrap_or_default();
+
+                LspServerStatus {
+                    language_id: s.language_id.clone(),
+                    binary: s.binary.clone(),
+                    state: s.state.clone(),
+                    open_docs_count: s.open_docs.len(),
+                    crash_count: s.crash_count,
+                    project_root: s.project_root.clone(),
+                    last_error: s.last_error.clone(),
+                    pid: s.process.id(),
+                    running: s.state == types::ServerState::Running,
+                    stderr_lines: recent_stderr,
+                }
             })
             .collect()
     }
