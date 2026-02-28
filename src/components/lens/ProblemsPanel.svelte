@@ -86,9 +86,11 @@
   function navigateToDiagnostic(filePath, diag) {
     const line = diag.range?.start?.line ?? 0;
     const character = diag.range?.start?.character ?? 0;
+    const endLine = diag.range?.end?.line;
+    const endCharacter = diag.range?.end?.character;
     const fileName = filePath.split(/[/\\]/).pop() || filePath;
 
-    tabsStore.setPendingCursor(filePath, line, character);
+    tabsStore.setPendingCursor(filePath, line, character, endLine, endCharacter);
     tabsStore.openFile({ name: fileName, path: filePath });
   }
 

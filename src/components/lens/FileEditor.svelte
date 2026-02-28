@@ -592,8 +592,21 @@
       try {
         const lineNum = Math.min(Math.max(pending.line + 1, 1), view.state.doc.lines);
         const line = view.state.doc.line(lineNum);
-        const charOffset = Math.min(pending.character || 0, line.length);
-        view.dispatch({ selection: { anchor: line.from + charOffset }, scrollIntoView: true });
+        const anchor = line.from + Math.min(pending.character || 0, line.length);
+
+        // If we have an end range, create a selection highlight (like VS Code)
+        let head = anchor;
+        if (pending.endLine != null) {
+          const endLineNum = Math.min(Math.max(pending.endLine + 1, 1), view.state.doc.lines);
+          const endLine = view.state.doc.line(endLineNum);
+          head = endLine.from + Math.min(pending.endCharacter || 0, endLine.length);
+        }
+
+        const scrollEffect = cmCache?.EditorView?.scrollIntoView(anchor, { y: 'center' });
+        view.dispatch({
+          selection: { anchor, head },
+          ...(scrollEffect ? { effects: scrollEffect } : { scrollIntoView: true }),
+        });
         view.focus();
       } catch (e) {
         // Ignore if line is out of range
@@ -611,9 +624,11 @@
       const { line, character } = e.detail;
       try {
         const targetLine = view.state.doc.line(line + 1);
+        const anchor = targetLine.from + Math.min(character, targetLine.length);
+        const scrollEffect = cmCache?.EditorView?.scrollIntoView(anchor, { y: 'center' });
         view.dispatch({
-          selection: { anchor: targetLine.from + Math.min(character, targetLine.length) },
-          scrollIntoView: true,
+          selection: { anchor },
+          ...(scrollEffect ? { effects: scrollEffect } : { scrollIntoView: true }),
         });
         view.focus();
       } catch {}

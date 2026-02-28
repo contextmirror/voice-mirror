@@ -40,7 +40,7 @@ function createTabsStore() {
   let untitledCounter = 0;
   let previewEnabled = $state(true);
 
-  /** @type {{ path: string, line: number, character: number } | null} */
+  /** @type {{ path: string, line: number, character: number, endLine?: number, endCharacter?: number } | null} */
   let pendingCursorPosition = $state(null);
 
   /** @type {Array<{path: string, type: string, groupId: number, title: string, status?: string|null}>} */
@@ -75,9 +75,10 @@ function createTabsStore() {
     /** Pending cursor position for cross-file navigation */
     get pendingCursorPosition() { return pendingCursorPosition; },
 
-    /** Set a cursor position to navigate to after a file opens */
-    setPendingCursor(path, line, character) {
-      pendingCursorPosition = { path, line, character };
+    /** Set a cursor position to navigate to after a file opens.
+     *  Optional endLine/endCharacter create a selection range (for diagnostic highlighting). */
+    setPendingCursor(path, line, character, endLine, endCharacter) {
+      pendingCursorPosition = { path, line, character, endLine, endCharacter };
     },
 
     /** Clear pending cursor (called by FileEditor after applying) */
