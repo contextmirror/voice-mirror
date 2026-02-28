@@ -181,3 +181,23 @@ describe('lsp-diagnostics.svelte.js: getForDirectory returns null for empty dirs
     assert.ok(getForDir.includes('return null'), 'Should return null for clean directories');
   });
 });
+
+describe('lsp-diagnostics.svelte.js: getTotals method', () => {
+  it('has getTotals method', () => {
+    assert.ok(src.includes('getTotals('), 'Should have getTotals method');
+  });
+
+  it('getTotals aggregates errors, warnings, and infos', () => {
+    const getTotalsIdx = src.indexOf('getTotals()');
+    const getTotalsBody = src.slice(getTotalsIdx, getTotalsIdx + 300);
+    assert.ok(getTotalsBody.includes('errors'), 'Should count total errors');
+    assert.ok(getTotalsBody.includes('warnings'), 'Should count total warnings');
+    assert.ok(getTotalsBody.includes('infos'), 'Should count total infos');
+  });
+
+  it('getTotals iterates rawDiagnostics', () => {
+    const getTotalsIdx = src.indexOf('getTotals()');
+    const getTotalsBody = src.slice(getTotalsIdx, getTotalsIdx + 400);
+    assert.ok(getTotalsBody.includes('rawDiagnostics'), 'Should iterate rawDiagnostics for accurate counts');
+  });
+});
