@@ -20,10 +20,10 @@
 | 2 | StatusBar component + CSS | Done | agent | eaca80f7 |
 | 3 | Mount in App.svelte | Done | agent | b9fae202 |
 | 4 | FileEditor → store wiring | Done | agent | 0ce7453d |
-| 5 | R1 click → Go to Line | Pending | — | — |
-| 6 | Toast → notification routing | Pending | — | — |
-| 7 | Update IDE-GAPS.md | Pending | — | — |
-| 8 | Full verification | Pending | — | — |
+| 5 | R1 click → Go to Line | Done | manual | 723542dc |
+| 6 | Toast → notification routing | Done | manual | 723542dc |
+| 7 | Update IDE-GAPS.md | Done | manual | 723542dc |
+| 8 | Full verification | Done | manual | 723542dc |
 
 ---
 
