@@ -37,9 +37,23 @@ pub fn resolve_node_script(info: &ServerInfo) -> Option<(String, Vec<String>)> {
         return None;
     }
 
-    let npm_dir = resolved.parent()?;
+    let bin_dir = resolved.parent()?;
     let binary_name = resolved.file_stem()?.to_string_lossy().to_string();
-    let node_modules = npm_dir.join("node_modules");
+
+    // The .cmd file can be in two locations:
+    // 1. Global npm prefix: C:\Users\...\npm\svelteserver.cmd
+    //    → node_modules is at npm_dir/node_modules/
+    // 2. Managed lsp-servers: .../lsp-servers/node_modules/.bin/svelteserver.cmd
+    //    → node_modules is the parent of .bin/ (i.e., bin_dir's parent)
+    let node_modules = if bin_dir.ends_with("node_modules/.bin")
+        || bin_dir.ends_with(std::path::Path::new("node_modules").join(".bin"))
+    {
+        // Case 2: .bin/ is inside node_modules — go up one level
+        bin_dir.parent()?.to_path_buf()
+    } else {
+        // Case 1: global npm prefix — node_modules is a child
+        bin_dir.join("node_modules")
+    };
 
     if !node_modules.is_dir() {
         return None;
