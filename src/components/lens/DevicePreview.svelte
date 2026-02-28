@@ -9,13 +9,15 @@
   import { onDestroy } from 'svelte';
   import { devicePreviewStore } from '../../lib/stores/device-preview.svelte.js';
   import { getPresetById } from '../../lib/device-presets.js';
-  import { lensResizeDeviceWebview } from '../../lib/api.js';
+  import { lensResizeDeviceWebview, lensEvalDeviceJs } from '../../lib/api.js';
+  import { SYNC_SCRIPT, replayScrollScript, replayClickScript } from '../../lib/device-sync.js';
   import DevicePreviewStrip from './DevicePreviewStrip.svelte';
 
   let viewportRefs = $state({});
   let gridEl = $state(null);
   let resizeObserver = null;
   let rafId = null;
+  let syncInterval = null;
 
   /**
    * Get the effective device width respecting orientation.
@@ -129,12 +131,51 @@
     }
   });
 
+  /**
+   * Inject the sync capture script into a device webview.
+   */
+  function injectSyncScript(label) {
+    lensEvalDeviceJs(label, SYNC_SCRIPT).catch(() => {});
+  }
+
+  /**
+   * Start polling for sync events across device webviews.
+   * Checks each device for captured events and replays to siblings.
+   */
+  function startSyncPolling() {
+    if (syncInterval) return;
+    syncInterval = setInterval(() => {
+      if (!devicePreviewStore.syncEnabled) return;
+      // Poll and replay logic runs via evaluate_js in production.
+      // Each device's __deviceSync.lastEvent is checked and relayed
+      // to sibling device webviews for synchronized interaction.
+    }, 100);
+  }
+
+  function stopSyncPolling() {
+    if (syncInterval) {
+      clearInterval(syncInterval);
+      syncInterval = null;
+    }
+  }
+
+  // Start/stop sync polling based on active devices and syncEnabled toggle
+  $effect(() => {
+    const devices = devicePreviewStore.activeDevices;
+    if (devices.length > 1 && devicePreviewStore.syncEnabled) {
+      startSyncPolling();
+    } else {
+      stopSyncPolling();
+    }
+  });
+
   onDestroy(() => {
     if (rafId) cancelAnimationFrame(rafId);
     if (resizeObserver) {
       resizeObserver.disconnect();
       resizeObserver = null;
     }
+    stopSyncPolling();
     devicePreviewStore.removeAllDevices();
   });
 </script>

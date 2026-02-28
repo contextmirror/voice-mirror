@@ -990,3 +990,29 @@ pub fn lens_resize_device_webview(
         Err(e) => IpcResponse::err(format!("Failed to set size: {}", e)),
     }
 }
+
+/// Evaluate JavaScript in a specific device-preview webview (fire-and-forget).
+/// Used for injecting the interaction sync script and replaying events on sibling devices.
+#[tauri::command]
+pub async fn lens_eval_device_js(
+    app: AppHandle,
+    label: String,
+    js: String,
+    state: tauri::State<'_, LensState>,
+) -> Result<String, String> {
+    let exists = {
+        let devices = state.device_webviews.lock().map_err(|e| e.to_string())?;
+        devices.iter().any(|d| d.webview_label == label)
+    };
+
+    if !exists {
+        return Err(format!("Device webview '{}' not found", label));
+    }
+
+    if let Some(webview) = app.get_webview(&label) {
+        webview.eval(&js).map_err(|e| e.to_string())?;
+        Ok("ok".to_string())
+    } else {
+        Err(format!("Webview '{}' not found in app", label))
+    }
+}

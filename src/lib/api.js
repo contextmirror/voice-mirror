@@ -418,6 +418,11 @@ export async function lensResizeDeviceWebview(label, x, y, width, height) {
   return invoke('lens_resize_device_webview', { label, x, y, width, height });
 }
 
+/** Evaluate JS in a device-preview webview (fire-and-forget). Used for sync script injection and replay. */
+export async function lensEvalDeviceJs(label, js) {
+  return invoke('lens_eval_device_js', { label, js });
+}
+
 // ============ Dev Server ============
 
 /**

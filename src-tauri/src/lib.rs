@@ -358,6 +358,7 @@ pub fn run() {
             lens_cmds::lens_close_device_webview,
             lens_cmds::lens_close_all_device_webviews,
             lens_cmds::lens_resize_device_webview,
+            lens_cmds::lens_eval_device_js,
             // File tree
             files_cmds::list_directory,
             files_cmds::get_git_changes,

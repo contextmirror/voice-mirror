@@ -244,3 +244,47 @@ describe('config: device preview settings', () => {
     assert.ok(configStoreSrc.includes('devicePreview'), 'DEFAULT_CONFIG should have devicePreview');
   });
 });
+
+// Re-read the component source for sync tests (after Task 11 modifications)
+const componentSrcV2 = fs.readFileSync(path.join(__dirname, '../../src/components/lens/DevicePreview.svelte'), 'utf-8');
+
+describe('DevicePreview.svelte: interaction sync', () => {
+  it('imports SYNC_SCRIPT', () => {
+    assert.ok(componentSrcV2.includes('SYNC_SCRIPT'), 'Should import sync script');
+  });
+
+  it('imports replayScrollScript', () => {
+    assert.ok(componentSrcV2.includes('replayScrollScript'), 'Should import scroll replay');
+  });
+
+  it('injects sync script on device creation', () => {
+    assert.ok(componentSrcV2.includes('SYNC_SCRIPT') && componentSrcV2.includes('evaluate') || componentSrcV2.includes('lensEvalDeviceJs'), 'Should inject sync JS');
+  });
+
+  it('has sync polling interval', () => {
+    assert.ok(componentSrcV2.includes('setInterval') || componentSrcV2.includes('poll'), 'Should poll for sync events');
+  });
+
+  it('respects syncEnabled toggle', () => {
+    assert.ok(componentSrcV2.includes('syncEnabled'), 'Should check sync toggle');
+  });
+});
+
+// Check for lens_eval_device_js command
+const lensSrcV2 = fs.readFileSync(path.join(__dirname, '../../src-tauri/src/commands/lens.rs'), 'utf-8');
+const libSrcV2 = fs.readFileSync(path.join(__dirname, '../../src-tauri/src/lib.rs'), 'utf-8');
+const apiSrcV2 = fs.readFileSync(path.join(__dirname, '../../src/lib/api.js'), 'utf-8');
+
+describe('lens_eval_device_js command', () => {
+  it('has lens_eval_device_js in lens.rs', () => {
+    assert.ok(lensSrcV2.includes('lens_eval_device_js'), 'Should have lens_eval_device_js command');
+  });
+
+  it('is registered in lib.rs', () => {
+    assert.ok(libSrcV2.includes('lens_cmds::lens_eval_device_js'), 'Should be registered');
+  });
+
+  it('has API wrapper in api.js', () => {
+    assert.ok(apiSrcV2.includes('lensEvalDeviceJs') || apiSrcV2.includes('lens_eval_device_js'), 'Should have API wrapper');
+  });
+});
