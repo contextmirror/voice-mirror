@@ -14,19 +14,19 @@
 
 | Task | Description | Status | Agent | Commit |
 |------|-------------|--------|-------|--------|
-| 1 | Device preset registry (`device-presets.js`) | Pending | — | — |
-| 2 | Device preview store (`device-preview.svelte.js`) | Pending | — | — |
-| 3 | Rust commands for device WebView2 lifecycle | Pending | — | — |
-| 4 | API wrappers for device preview commands | Pending | — | — |
-| 5 | DevicePickerMenu component | Pending | — | — |
-| 6 | DevicePreviewStrip component | Pending | — | — |
-| 7 | DevicePreview main panel component | Pending | — | — |
-| 8 | Device preview button in GroupTabBar | Pending | — | — |
-| 9 | Integrate DevicePreview into LensWorkspace | Pending | — | — |
-| 10 | Interaction sync module (`device-sync.js`) | Pending | — | — |
-| 11 | Wire sync into DevicePreview component | Pending | — | — |
-| 12 | DevicePreviewConfig in config schema | Pending | — | — |
-| 13 | Full test suite + compilation verification | Pending | — | — |
+| 1 | Device preset registry (`device-presets.js`) | Done | agent | 0d5ebb57 |
+| 2 | Device preview store (`device-preview.svelte.js`) | Done | agent | cf15985d |
+| 3 | Rust commands for device WebView2 lifecycle | Done | agent | ae3f4c09 |
+| 4 | API wrappers for device preview commands | Done | agent | — |
+| 5 | DevicePickerMenu component | Done | agent | — |
+| 6 | DevicePreviewStrip component | Done | agent | 0cfeffda |
+| 7 | DevicePreview main panel component | Done | agent | — |
+| 8 | Device preview button in GroupTabBar | Done | agent | bc142548 |
+| 9 | Integrate DevicePreview into LensWorkspace | Done | agent | e1899584 |
+| 10 | Interaction sync module (`device-sync.js`) | Done | agent | 38dd6e11 |
+| 11 | Wire sync into DevicePreview component | Done | agent | 4c545e19 |
+| 12 | DevicePreviewConfig in config schema | Done | agent | 38dd6e11 |
+| 13 | Full test suite + compilation verification | Done | agent | — |
 
 ---
 
