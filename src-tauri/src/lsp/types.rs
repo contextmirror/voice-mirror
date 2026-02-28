@@ -123,6 +123,10 @@ pub struct LspServerStatus {
     /// Most recent stderr lines from the server process (last 5).
     #[serde(default)]
     pub stderr_lines: Vec<String>,
+    /// Server name from initialize response (serverInfo.name).
+    pub server_name: Option<String>,
+    /// Server version from initialize response (serverInfo.version).
+    pub version: Option<String>,
 }
 
 /// Emitted when LSP server status changes.

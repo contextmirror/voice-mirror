@@ -56,6 +56,10 @@ pub struct LspServer {
     /// Cancel sender for idle shutdown timer. When all documents close, a 60s
     /// timer starts; sending on this channel cancels the pending shutdown.
     pub idle_cancel: Option<watch::Sender<bool>>,
+    /// Server name from initialize response (serverInfo.name).
+    pub server_name: Option<String>,
+    /// Server version from initialize response (serverInfo.version).
+    pub version: Option<String>,
 }
 
 /// Manages all LSP server processes.
@@ -460,6 +464,29 @@ impl LspManager {
             .and_then(|r| r.get("capabilities"))
             .and_then(|c| serde_json::from_value::<lsp_types::ServerCapabilities>(c.clone()).ok());
 
+        // Extract server name and version from serverInfo in the response
+        let server_name = response
+            .get("result")
+            .and_then(|r| r.get("serverInfo"))
+            .and_then(|si| si.get("name"))
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
+        let version = response
+            .get("result")
+            .and_then(|r| r.get("serverInfo"))
+            .and_then(|si| si.get("version"))
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
+        if let Some(ref name) = server_name {
+            if let Some(ref ver) = version {
+                info!("LSP serverInfo: {} v{}", name, ver);
+            } else {
+                info!("LSP serverInfo: {} (no version)", name);
+            }
+        }
+
         // Send initialized notification
         client::send_notification(&mut *stdin.lock().await, "initialized", serde_json::json!({})).await?;
 
@@ -491,6 +518,8 @@ impl LspManager {
                 last_error: None,
                 stderr_lines: stderr_buf,
                 idle_cancel: None,
+                server_name,
+                version,
             },
         );
 
@@ -1298,6 +1327,8 @@ impl LspManager {
                     pid: s.process.id(),
                     running: s.state == types::ServerState::Running,
                     stderr_lines: recent_stderr,
+                    server_name: s.server_name.clone(),
+                    version: s.version.clone(),
                 }
             })
             .collect()
