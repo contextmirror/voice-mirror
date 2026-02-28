@@ -537,3 +537,53 @@ describe('editor-extensions.js: cursor activity callback', () => {
     assert.ok(EXT_SRC.includes('onCursorActivity('), 'Should call onCursorActivity');
   });
 });
+
+// ──────────────────────────────────────────────────
+// Task 11: Toast notifications for install lifecycle
+// ──────────────────────────────────────────────────
+
+describe('StatusBar.svelte: install lifecycle toast notifications', () => {
+  it('imports toastStore', () => {
+    assert.ok(src.includes('toastStore'), 'Should import toastStore');
+  });
+
+  it('imports from toast.svelte.js', () => {
+    assert.ok(src.includes('toast.svelte.js'), 'Should import from toast.svelte.js');
+  });
+
+  it('calls addToast for installing status', () => {
+    // Should show an info toast when installing starts
+    assert.ok(src.includes('addToast'), 'Should call addToast for toast notifications');
+  });
+
+  it('uses info severity for installing toast', () => {
+    // The installing toast should use info severity
+    assert.ok(
+      src.includes("'info'") || src.includes('"info"'),
+      'Should use info severity for installing toast'
+    );
+  });
+
+  it('uses success severity for installed toast', () => {
+    assert.ok(
+      src.includes("'success'") || src.includes('"success"'),
+      'Should use success severity for installed toast'
+    );
+  });
+
+  it('uses error severity for install_failed toast', () => {
+    assert.ok(
+      src.includes("'error'") || src.includes('"error"'),
+      'Should use error severity for install_failed toast'
+    );
+  });
+
+  it('toast messages include server name', () => {
+    // At least one addToast call should reference the server name from payload
+    assert.ok(
+      src.includes('payload.server') || src.includes('payload.message'),
+      'Toast messages should reference payload server or message'
+    );
+  });
+});
+

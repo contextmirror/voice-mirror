@@ -12,6 +12,7 @@
   import { projectStore } from '../../lib/stores/project.svelte.js';
   import { lspDiagnosticsStore } from '../../lib/stores/lsp-diagnostics.svelte.js';
   import { devServerManager } from '../../lib/stores/dev-server-manager.svelte.js';
+  import { toastStore } from '../../lib/stores/toast.svelte.js';
 
   // -- Derived state --
   let hasProject = $derived(!!projectStore.activeProject?.path);
@@ -98,8 +99,10 @@
 
         if (payload.status === 'installing') {
           lspInstall = { server: payload.server, status: payload.status, message: payload.message };
+          toastStore.addToast({ message: `Installing ${payload.server}...`, severity: 'info', key: `lsp-install-${payload.server}` });
         } else if (payload.status === 'installed') {
           lspInstall = { server: payload.server, status: payload.status, message: payload.message };
+          toastStore.addToast({ message: `${payload.server} installed successfully`, severity: 'success', key: `lsp-install-${payload.server}` });
           // Auto-clear after 3 seconds
           installClearTimer = setTimeout(() => {
             lspInstall = null;
@@ -107,6 +110,7 @@
           }, 3000);
         } else if (payload.status === 'install_failed') {
           lspInstall = { server: payload.server, status: payload.status, message: payload.message };
+          toastStore.addToast({ message: payload.message || `Failed to install ${payload.server}`, severity: 'error', key: `lsp-install-${payload.server}` });
           // Auto-clear after 5 seconds
           installClearTimer = setTimeout(() => {
             lspInstall = null;
@@ -124,6 +128,7 @@
       }
     };
   });
+
 </script>
 
 <svelte:document onclick={handleDocumentClick} />
