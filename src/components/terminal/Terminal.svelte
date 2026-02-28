@@ -259,6 +259,9 @@
   function ctxPaste() { closeCtxMenu(); handlePaste(); }
   function ctxSelectAll() { closeCtxMenu(); handleSelectAll(); }
   function ctxClear() { closeCtxMenu(); handleClear(); }
+  function ctxFind() { closeCtxMenu(); searchVisible = true; }
+  function ctxSplitRight() { closeCtxMenu(); terminalTabsStore.splitInstance({ direction: 'horizontal' }); }
+  function ctxSplitDown() { closeCtxMenu(); terminalTabsStore.splitInstance({ direction: 'vertical' }); }
 
   function handleDocumentClick() { if (ctxMenu.visible) closeCtxMenu(); }
   function handleDocumentKeydown(e) { if (e.key === 'Escape' && ctxMenu.visible) closeCtxMenu(); }
@@ -521,6 +524,10 @@
         <button class="terminal-ctx-item" role="menuitem" onclick={ctxSelectAll}>Select All</button>
         <div class="terminal-ctx-separator"></div>
         <button class="terminal-ctx-item" role="menuitem" onclick={ctxClear}>Clear Terminal</button>
+        <button class="terminal-ctx-item" role="menuitem" onclick={ctxFind}>Find<span class="terminal-ctx-shortcut">Ctrl+F</span></button>
+        <div class="terminal-ctx-separator"></div>
+        <button class="terminal-ctx-item" role="menuitem" onclick={ctxSplitRight}>Split Right<span class="terminal-ctx-shortcut">Ctrl+Shift+5</span></button>
+        <button class="terminal-ctx-item" role="menuitem" onclick={ctxSplitDown}>Split Down<span class="terminal-ctx-shortcut">Ctrl+Shift+&minus;</span></button>
       </div>
     </div>
   {/if}

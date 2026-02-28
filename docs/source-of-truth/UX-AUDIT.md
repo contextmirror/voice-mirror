@@ -143,18 +143,18 @@ Four modes: **empty space**, **file**, **folder**, **git change**.
 
 ---
 
-### 1.5 Terminal Body Context Menu — CRITICAL GAP
+### 1.5 Terminal Body Context Menu — ✅ DONE
 
 **File:** `src/components/terminal/Terminal.svelte`
 
 #### What We Have
-**Nothing.** Right-clicking in the terminal canvas produces no menu. The global context menu blocker in `main.js` suppresses the native browser menu, and no custom menu replaces it.
+Copy (Ctrl+C), Paste (Ctrl+V), Select All, Clear Terminal, Find (Ctrl+F), Split Right (Ctrl+Shift+5), Split Down (Ctrl+Shift+-)
 
 #### What VS Code Has
 Copy, Paste, Select All, Clear Terminal, Split Terminal, Find (Ctrl+F), Change Terminal Profile
 
-#### Recommendation
-**CRITICAL** — Add a terminal body context menu. Users universally expect right-click Copy/Paste in a terminal. Minimum items: Copy, Paste, Select All, Clear, separator, Split Right, Split Down, separator, Find (Ctrl+F).
+#### Status
+Complete. All essential items implemented. Only "Change Terminal Profile" is missing (available via sidebar context menu instead).
 
 ---
 

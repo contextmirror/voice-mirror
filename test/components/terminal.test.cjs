@@ -159,6 +159,30 @@ describe('Terminal.svelte -- context menu', () => {
     assert.ok(src.includes('ctxClear') && src.includes('Clear Terminal'), 'Should have Clear Terminal item');
   });
 
+  it('has Find menu item', () => {
+    assert.ok(src.includes('ctxFind') && src.includes('Find'), 'Should have Find item');
+  });
+
+  it('has Split Right menu item', () => {
+    assert.ok(src.includes('ctxSplitRight') && src.includes('Split Right'), 'Should have Split Right item');
+  });
+
+  it('has Split Down menu item', () => {
+    assert.ok(src.includes('ctxSplitDown') && src.includes('Split Down'), 'Should have Split Down item');
+  });
+
+  it('ctxFind toggles search visibility', () => {
+    assert.ok(src.includes('searchVisible = true'), 'ctxFind should show search');
+  });
+
+  it('ctxSplitRight calls terminalTabsStore.splitInstance horizontal', () => {
+    assert.ok(src.includes("ctxSplitRight") && src.includes("'horizontal'"), 'Should split horizontal');
+  });
+
+  it('ctxSplitDown calls terminalTabsStore.splitInstance vertical', () => {
+    assert.ok(src.includes("ctxSplitDown") && src.includes("'vertical'"), 'Should split vertical');
+  });
+
   it('has handleSelectAll using term.selectAll()', () => {
     assert.ok(src.includes('function handleSelectAll') && src.includes('term.selectAll()'), 'Should have selectAll');
   });
