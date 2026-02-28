@@ -78,9 +78,60 @@ impl LspManager {
         )
         .ok_or_else(|| format!("No LSP server configured for language '{}'", lang_id))?;
 
+        // If server binary not found, attempt auto-install via npm
+        let server_info = if !server_info.installed {
+            // Load manifest to get install config
+            let manifest = manifest::load_manifest()
+                .map_err(|e| format!("Failed to load LSP manifest: {}", e))?;
+
+            let server_id = server_info
+                .server_id
+                .as_deref()
+                .ok_or_else(|| "No server_id for auto-install".to_string())?;
+
+            let entry = manifest
+                .servers
+                .get(server_id)
+                .ok_or_else(|| format!("Server '{}' not found in manifest", server_id))?;
+
+            // Check if Node.js is available
+            let node_status = installer::detect_node();
+            if !node_status.available {
+                return Err(format!(
+                    "LSP server '{}' requires Node.js for installation. Install Node.js from nodejs.org",
+                    server_info.binary
+                ));
+            }
+
+            // Get install directory
+            let lsp_dir = installer::get_lsp_servers_dir()
+                .map_err(|e| format!("Failed to get LSP servers directory: {}", e))?;
+
+            // Install the server
+            info!(
+                "Auto-installing LSP server '{}' for language '{}'",
+                server_id, lang_id
+            );
+            installer::install_server(
+                server_id,
+                &entry.install.packages,
+                &entry.install.version,
+                &lsp_dir,
+                Some(&self.app_handle),
+            )
+            .await?;
+
+            // Retry detection after install
+            detection::detect_for_extension(&self.extension_for_language(lang_id))
+                .ok_or_else(|| format!("Server '{}' still not found after install", server_id))?
+        } else {
+            server_info
+        };
+
+        // Verify server is installed after potential auto-install attempt
         if !server_info.installed {
             return Err(format!(
-                "LSP server '{}' for '{}' is not installed (not found on PATH)",
+                "LSP server '{}' for '{}' is not installed after auto-install attempt",
                 server_info.binary, lang_id
             ));
         }
