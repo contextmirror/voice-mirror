@@ -1075,18 +1075,26 @@ pub async fn lens_set_device_emulation(
     device_scale_factor: f64,
     mobile: bool,
     user_agent: String,
+    scale: Option<f64>,
 ) -> Result<String, String> {
     let webview = app.get_webview(&label)
         .ok_or_else(|| format!("Webview '{}' not found", label))?;
 
-    // 1. Override device metrics (viewport size, DPR, mobile flag)
-    let metrics_params = serde_json::json!({
+    // 1. Override device metrics (viewport size, DPR, mobile flag, scale)
+    // The `scale` parameter tells the rendering engine to render at the logical
+    // viewport size (e.g. 360x800) and then scale the output down to fit the
+    // physical window. Without it, the page lays out at the logical size but
+    // overflows the smaller physical window, causing scrollbars.
+    let mut metrics = serde_json::json!({
         "width": width,
         "height": height,
         "deviceScaleFactor": device_scale_factor,
         "mobile": mobile
     });
-    call_cdp_method_lens(&webview, "Emulation.setDeviceMetricsOverride", &metrics_params.to_string()).await?;
+    if let Some(s) = scale {
+        metrics["scale"] = serde_json::json!(s);
+    }
+    call_cdp_method_lens(&webview, "Emulation.setDeviceMetricsOverride", &metrics.to_string()).await?;
 
     // 2. Override user agent
     if !user_agent.is_empty() {

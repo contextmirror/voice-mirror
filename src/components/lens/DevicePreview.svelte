@@ -113,33 +113,27 @@
         rect.height
       ).catch(() => {});
 
-      // Apply CDP device emulation (once per device) — sets the logical viewport,
-      // DPR, user agent, and touch emulation via Chrome DevTools Protocol
-      if (!emulatedDevices.has(device.presetId)) {
-        emulatedDevices.add(device.presetId);
-        const isM = isPhone(preset) || isTablet(preset);
-        lensSetDeviceEmulation(device.webviewLabel, {
-          width: getDeviceWidth(preset),
-          height: getDeviceHeight(preset),
-          deviceScaleFactor: preset.dpr || 1,
-          mobile: isM,
-          userAgent: preset.userAgent || '',
-        }).catch((err) => {
-          console.warn('[DevicePreview] CDP emulation failed:', err);
-          emulatedDevices.delete(device.presetId);
-        });
-      }
-
-      // Inject CSS zoom so the page renders at the real device viewport width
-      // within the smaller physical WebView2 window. CDP emulation sets the
-      // logical viewport (e.g. 393px) but the physical window may be 200px —
-      // without zoom the content would be cropped.
+      // Apply CDP device emulation — sets the logical viewport, DPR, user
+      // agent, touch emulation, and visual scale via Chrome DevTools Protocol.
+      // The `scale` parameter makes CDP render the page at the logical viewport
+      // (e.g. 360x800) then scale the output down to fit the physical window
+      // (e.g. 200x444), eliminating scrollbars and CSS zoom hacks.
+      // Re-applied on every reposition because scale changes with container size.
       const deviceW = getDeviceWidth(preset);
-      const zoom = rect.width / deviceW;
-      lensEvalDeviceJs(
-        device.webviewLabel,
-        `document.documentElement.style.zoom='${zoom.toFixed(4)}'`
-      ).catch(() => {});
+      const deviceH = getDeviceHeight(preset);
+      const scale = rect.width / deviceW;
+      const isM = isPhone(preset) || isTablet(preset);
+      lensSetDeviceEmulation(device.webviewLabel, {
+        width: deviceW,
+        height: deviceH,
+        deviceScaleFactor: preset.dpr || 1,
+        mobile: isM,
+        userAgent: emulatedDevices.has(device.presetId) ? '' : (preset.userAgent || ''),
+        scale,
+      }).catch((err) => {
+        console.warn('[DevicePreview] CDP emulation failed:', err);
+      });
+      emulatedDevices.add(device.presetId);
     }
   }
 
@@ -154,11 +148,13 @@
     });
   }
 
-  // Reposition when active devices change
+  // Reposition when active devices or orientation change
   $effect(() => {
-    // Read the dependency
+    // Read the dependencies
     const _devices = devicePreviewStore.activeDevices;
     const _orientation = devicePreviewStore.orientation;
+    // Clear emulation tracking so UA gets re-sent on orientation change
+    emulatedDevices.clear();
     // Schedule reposition after DOM updates
     scheduleReposition();
   });
