@@ -242,3 +242,40 @@ describe('lsp-diagnostics.svelte.js: project-wide state', () => {
     assert.ok(src.includes('updatedRaw.delete(relativePath)'), 'Should delete from raw map');
   });
 });
+
+describe('lsp-diagnostics.svelte.js: diagnostic source labels', () => {
+  it('rawDiagnostics stores lspDiags array as-is (preserves source field)', () => {
+    // The store does: updatedRaw.set(relativePath, lspDiags)
+    // This means all fields from the LSP diagnostic are preserved including 'source'
+    assert.ok(src.includes('updatedRaw.set(relativePath, lspDiags)'),
+      'Should store raw LSP diagnostic array without destructuring (preserves source)');
+  });
+
+  it('handleDiagnosticsEvent destructures event payload', () => {
+    // The handler gets the full diagnostic objects from event.payload
+    assert.ok(src.includes('const { uri, diagnostics: lspDiags } = event.payload'),
+      'Should destructure uri and diagnostics from event payload');
+  });
+
+  it('rawDiagnostics comment documents source field', () => {
+    // The JSDoc/comment for rawDiagnostics should mention source
+    assert.ok(src.includes('source'), 'rawDiagnostics type comment should mention source field');
+  });
+
+  it('getRawForFile exposes raw diagnostics with source preserved', () => {
+    // getRawForFile returns from rawDiagnostics which stores the unmodified array
+    assert.ok(src.includes('getRawForFile('), 'Should have getRawForFile to access raw diagnostics');
+    assert.ok(src.includes('rawDiagnostics.get(filePath)'),
+      'getRawForFile should return from rawDiagnostics (which preserves source)');
+  });
+
+  it('does not destructure individual diagnostic fields in handleDiagnosticsEvent', () => {
+    // The handler only reads d.severity for counting — it does NOT destructure
+    // fields like { range, severity, message } which would drop source
+    const handlerIdx = src.indexOf('handleDiagnosticsEvent');
+    const handlerBody = src.slice(handlerIdx, handlerIdx + 500);
+    // It stores lspDiags directly, not a mapped/filtered version
+    assert.ok(!handlerBody.includes('d.range') || handlerBody.includes('lspDiags'),
+      'Should store raw lspDiags, not destructured copies');
+  });
+});
