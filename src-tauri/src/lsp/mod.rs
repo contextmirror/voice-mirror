@@ -29,6 +29,11 @@ use tracing::{debug, info, warn};
 
 use types::{LspServerStatus, LspServerStatusEvent};
 
+/// Build a composite key for the server HashMap: "lang_id::project_root"
+fn server_key(lang_id: &str, project_root: &str) -> String {
+    format!("{}::{}", lang_id, project_root)
+}
+
 /// A running LSP server process.
 pub struct LspServer {
     pub language_id: String,
@@ -75,7 +80,7 @@ impl LspManager {
         lang_id: &str,
         project_root: &str,
     ) -> Result<(), String> {
-        if self.servers.contains_key(lang_id) {
+        if self.servers.contains_key(&server_key(lang_id, project_root)) {
             return Ok(());
         }
 
@@ -431,7 +436,7 @@ impl LspManager {
 
         // Store the server
         self.servers.insert(
-            lang_id.to_string(),
+            server_key(lang_id, project_root),
             LspServer {
                 language_id: lang_id.to_string(),
                 binary: server_info.binary.clone(),
@@ -462,10 +467,11 @@ impl LspManager {
         uri: &str,
         lang_id: &str,
         content: &str,
+        project_root: &str,
     ) -> Result<(), String> {
         let server = self
             .servers
-            .get_mut(lang_id)
+            .get_mut(&server_key(lang_id, project_root))
             .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
 
         // Don't re-open if already tracked
@@ -494,9 +500,10 @@ impl LspManager {
     /// Close a document in the LSP server.
     ///
     /// If no more documents are open for this language, shuts down the server.
-    pub async fn close_document(&mut self, uri: &str, lang_id: &str) -> Result<(), String> {
+    pub async fn close_document(&mut self, uri: &str, lang_id: &str, project_root: &str) -> Result<(), String> {
         // Send didClose notification
-        if let Some(server) = self.servers.get_mut(lang_id) {
+        let key = server_key(lang_id, project_root);
+        if let Some(server) = self.servers.get_mut(&key) {
             client::send_notification(
                 &mut *server.stdin.lock().await,
                 "textDocument/didClose",
@@ -524,10 +531,10 @@ impl LspManager {
         // Shutdown server if no docs remain (done outside the borrow above)
         if self
             .servers
-            .get(lang_id)
+            .get(&key)
             .map_or(false, |s| s.open_docs.is_empty())
         {
-            self.shutdown_server(lang_id).await?;
+            self.shutdown_server(lang_id, project_root).await?;
         }
 
         Ok(())
@@ -540,10 +547,11 @@ impl LspManager {
         lang_id: &str,
         content: &str,
         version: i32,
+        project_root: &str,
     ) -> Result<(), String> {
         let server = self
             .servers
-            .get_mut(lang_id)
+            .get_mut(&server_key(lang_id, project_root))
             .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
 
         client::send_notification(
@@ -563,10 +571,11 @@ impl LspManager {
         uri: &str,
         lang_id: &str,
         content: &str,
+        project_root: &str,
     ) -> Result<(), String> {
         let server = self
             .servers
-            .get_mut(lang_id)
+            .get_mut(&server_key(lang_id, project_root))
             .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
 
         // Include text in didSave if the server asked for it
@@ -610,10 +619,11 @@ impl LspManager {
         lang_id: &str,
         line: u32,
         character: u32,
+        project_root: &str,
     ) -> Result<Value, String> {
         let server = self
             .servers
-            .get_mut(lang_id)
+            .get_mut(&server_key(lang_id, project_root))
             .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
 
         let params = serde_json::json!({
@@ -657,10 +667,11 @@ impl LspManager {
         lang_id: &str,
         line: u32,
         character: u32,
+        project_root: &str,
     ) -> Result<Value, String> {
         let server = self
             .servers
-            .get_mut(lang_id)
+            .get_mut(&server_key(lang_id, project_root))
             .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
 
         let params = serde_json::json!({
@@ -724,10 +735,11 @@ impl LspManager {
         lang_id: &str,
         line: u32,
         character: u32,
+        project_root: &str,
     ) -> Result<Value, String> {
         let server = self
             .servers
-            .get_mut(lang_id)
+            .get_mut(&server_key(lang_id, project_root))
             .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
 
         let params = serde_json::json!({
@@ -765,10 +777,11 @@ impl LspManager {
         lang_id: &str,
         line: u32,
         character: u32,
+        project_root: &str,
     ) -> Result<Value, String> {
         let server = self
             .servers
-            .get_mut(lang_id)
+            .get_mut(&server_key(lang_id, project_root))
             .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
 
         let params = serde_json::json!({
@@ -815,10 +828,11 @@ impl LspManager {
         &mut self,
         uri: &str,
         lang_id: &str,
+        project_root: &str,
     ) -> Result<Value, String> {
         let server = self
             .servers
-            .get_mut(lang_id)
+            .get_mut(&server_key(lang_id, project_root))
             .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
 
         let params = serde_json::json!({
@@ -858,10 +872,11 @@ impl LspManager {
         lang_id: &str,
         line: u32,
         character: u32,
+        project_root: &str,
     ) -> Result<Value, String> {
         let server = self
             .servers
-            .get_mut(lang_id)
+            .get_mut(&server_key(lang_id, project_root))
             .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
 
         let params = serde_json::json!({
@@ -906,10 +921,11 @@ impl LspManager {
         range_end_line: u32,
         range_end_char: u32,
         diagnostics: Value,
+        project_root: &str,
     ) -> Result<Value, String> {
         let server = self
             .servers
-            .get_mut(lang_id)
+            .get_mut(&server_key(lang_id, project_root))
             .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
 
         let params = serde_json::json!({
@@ -956,10 +972,11 @@ impl LspManager {
         lang_id: &str,
         line: u32,
         character: u32,
+        project_root: &str,
     ) -> Result<Value, String> {
         let server = self
             .servers
-            .get_mut(lang_id)
+            .get_mut(&server_key(lang_id, project_root))
             .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
 
         let params = serde_json::json!({
@@ -1007,10 +1024,11 @@ impl LspManager {
         line: u32,
         character: u32,
         new_name: &str,
+        project_root: &str,
     ) -> Result<Value, String> {
         let server = self
             .servers
-            .get_mut(lang_id)
+            .get_mut(&server_key(lang_id, project_root))
             .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
 
         let params = serde_json::json!({
@@ -1054,10 +1072,11 @@ impl LspManager {
         lang_id: &str,
         tab_size: u32,
         insert_spaces: bool,
+        project_root: &str,
     ) -> Result<Value, String> {
         let server = self
             .servers
-            .get_mut(lang_id)
+            .get_mut(&server_key(lang_id, project_root))
             .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
 
         let params = serde_json::json!({
@@ -1105,10 +1124,11 @@ impl LspManager {
         range_end_char: u32,
         tab_size: u32,
         insert_spaces: bool,
+        project_root: &str,
     ) -> Result<Value, String> {
         let server = self
             .servers
-            .get_mut(lang_id)
+            .get_mut(&server_key(lang_id, project_root))
             .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
 
         let params = serde_json::json!({
@@ -1168,8 +1188,9 @@ impl LspManager {
     }
 
     /// Shut down a specific language server.
-    pub async fn shutdown_server(&mut self, lang_id: &str) -> Result<(), String> {
-        if let Some(mut server) = self.servers.remove(lang_id) {
+    pub async fn shutdown_server(&mut self, lang_id: &str, project_root: &str) -> Result<(), String> {
+        let key = server_key(lang_id, project_root);
+        if let Some(mut server) = self.servers.remove(&key) {
             info!("Shutting down LSP server for '{}'", lang_id);
 
             // Send shutdown request
@@ -1204,12 +1225,36 @@ impl LspManager {
 
     /// Shut down all running LSP servers.
     pub async fn shutdown_all(&mut self) {
-        let lang_ids: Vec<String> = self.servers.keys().cloned().collect();
-        for lang_id in lang_ids {
-            if let Err(e) = self.shutdown_server(&lang_id).await {
-                warn!("Error shutting down LSP server '{}': {}", lang_id, e);
+        let keys: Vec<String> = self.servers.keys().cloned().collect();
+        for key in keys {
+            if let Some(mut server) = self.servers.remove(&key) {
+                info!("Shutting down LSP server '{}' (key: {})", server.language_id, key);
+
+                // Send shutdown request
+                let rx = client::send_request(
+                    &mut *server.stdin.lock().await,
+                    &server.pending_requests,
+                    "shutdown",
+                    Value::Null,
+                    &server.next_id,
+                )
+                .await;
+
+                // Wait up to 2 seconds for shutdown response
+                if let Ok(rx) = rx {
+                    let _ = tokio::time::timeout(std::time::Duration::from_secs(2), rx).await;
+                }
+
+                // Send exit notification
+                let _ =
+                    client::send_notification(&mut *server.stdin.lock().await, "exit", Value::Null).await;
+
+                // Give it a moment, then kill if still running
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                let _ = server.process.kill().await;
             }
         }
+        self.emit_status();
     }
 
     /// Emit a status update event for all servers.

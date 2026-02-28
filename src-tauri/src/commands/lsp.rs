@@ -51,7 +51,7 @@ pub async fn lsp_open_file(
         return Ok(IpcResponse::err(e));
     }
 
-    match manager.open_document(&uri, &lang_id, &content).await {
+    match manager.open_document(&uri, &lang_id, &content, &project_root).await {
         Ok(()) => Ok(IpcResponse::ok(json!({ "languageId": lang_id, "uri": uri }))),
         Err(e) => Ok(IpcResponse::err(e)),
     }
@@ -80,7 +80,7 @@ pub async fn lsp_close_file(
     let uri = types::file_uri(&path, &project_root);
 
     let mut manager = state.0.lock().await;
-    match manager.close_document(&uri, &lang_id).await {
+    match manager.close_document(&uri, &lang_id, &project_root).await {
         Ok(()) => Ok(IpcResponse::ok_empty()),
         Err(e) => Ok(IpcResponse::err(e)),
     }
@@ -109,7 +109,7 @@ pub async fn lsp_change_file(
 
     let mut manager = state.0.lock().await;
     match manager
-        .change_document(&uri, &lang_id, &content, version)
+        .change_document(&uri, &lang_id, &content, version, &project_root)
         .await
     {
         Ok(()) => Ok(IpcResponse::ok_empty()),
@@ -138,7 +138,7 @@ pub async fn lsp_save_file(
     let uri = types::file_uri(&path, &project_root);
 
     let mut manager = state.0.lock().await;
-    match manager.save_document(&uri, &lang_id, &content).await {
+    match manager.save_document(&uri, &lang_id, &content, &project_root).await {
         Ok(()) => Ok(IpcResponse::ok_empty()),
         Err(e) => Ok(IpcResponse::err(e)),
     }
@@ -167,7 +167,7 @@ pub async fn lsp_request_completion(
 
     let mut manager = state.0.lock().await;
     match manager
-        .request_completion(&uri, &lang_id, line, character)
+        .request_completion(&uri, &lang_id, line, character, &project_root)
         .await
     {
         Ok(result) => Ok(IpcResponse::ok(result)),
@@ -198,7 +198,7 @@ pub async fn lsp_request_hover(
 
     let mut manager = state.0.lock().await;
     match manager
-        .request_hover(&uri, &lang_id, line, character)
+        .request_hover(&uri, &lang_id, line, character, &project_root)
         .await
     {
         Ok(result) => Ok(IpcResponse::ok(result)),
@@ -229,7 +229,7 @@ pub async fn lsp_request_signature_help(
 
     let mut manager = state.0.lock().await;
     match manager
-        .request_signature_help(&uri, &lang_id, line, character)
+        .request_signature_help(&uri, &lang_id, line, character, &project_root)
         .await
     {
         Ok(result) => Ok(IpcResponse::ok(result)),
@@ -260,7 +260,7 @@ pub async fn lsp_request_definition(
 
     let mut manager = state.0.lock().await;
     match manager
-        .request_definition(&uri, &lang_id, line, character)
+        .request_definition(&uri, &lang_id, line, character, &project_root)
         .await
     {
         Ok(result) => Ok(IpcResponse::ok(result)),
@@ -289,7 +289,7 @@ pub async fn lsp_request_document_symbols(
 
     let mut manager = state.0.lock().await;
     match manager
-        .request_document_symbols(&uri, &lang_id)
+        .request_document_symbols(&uri, &lang_id, &project_root)
         .await
     {
         Ok(result) => Ok(IpcResponse::ok(result)),
@@ -320,7 +320,7 @@ pub async fn lsp_request_references(
 
     let mut manager = state.0.lock().await;
     match manager
-        .request_references(&uri, &lang_id, line, character)
+        .request_references(&uri, &lang_id, line, character, &project_root)
         .await
     {
         Ok(result) => Ok(IpcResponse::ok(result)),
@@ -362,6 +362,7 @@ pub async fn lsp_request_code_actions(
             range_end_line,
             range_end_char,
             diagnostics,
+            &project_root,
         )
         .await
     {
@@ -393,7 +394,7 @@ pub async fn lsp_prepare_rename(
 
     let mut manager = state.0.lock().await;
     match manager
-        .request_prepare_rename(&uri, &lang_id, line, character)
+        .request_prepare_rename(&uri, &lang_id, line, character, &project_root)
         .await
     {
         Ok(result) => Ok(IpcResponse::ok(result)),
@@ -425,7 +426,7 @@ pub async fn lsp_rename(
 
     let mut manager = state.0.lock().await;
     match manager
-        .request_rename(&uri, &lang_id, line, character, &new_name)
+        .request_rename(&uri, &lang_id, line, character, &new_name, &project_root)
         .await
     {
         Ok(result) => Ok(IpcResponse::ok(result)),
@@ -456,7 +457,7 @@ pub async fn lsp_request_formatting(
 
     let mut manager = state.0.lock().await;
     match manager
-        .request_formatting(&uri, &lang_id, tab_size, insert_spaces)
+        .request_formatting(&uri, &lang_id, tab_size, insert_spaces, &project_root)
         .await
     {
         Ok(result) => Ok(IpcResponse::ok(result)),
@@ -500,6 +501,7 @@ pub async fn lsp_request_range_formatting(
             range_end_char,
             tab_size,
             insert_spaces,
+            &project_root,
         )
         .await
     {
