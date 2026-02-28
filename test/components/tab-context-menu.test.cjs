@@ -122,8 +122,8 @@ describe('TabContextMenu.svelte: menu behavior', () => {
     assert.ok(src.includes('handleClickOutside'));
   });
   it('clamps position to viewport', () => {
-    assert.ok(src.includes('Math.min'));
-    assert.ok(src.includes('window.innerWidth'));
+    assert.ok(src.includes('getBoundingClientRect'), 'Should measure menu for viewport clamping');
+    assert.ok(src.includes('window.innerHeight'), 'Should check viewport bounds');
   });
   it('has keyboard shortcut hint for Close', () => {
     assert.ok(src.includes('Ctrl+W'));

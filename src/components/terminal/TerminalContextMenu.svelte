@@ -89,6 +89,22 @@
     onClose();
   }
 
+  let menuEl = $state(null);
+
+  // Post-render: measure actual menu size and reposition if it overflows
+  $effect(() => {
+    if (visible && menuEl) {
+      const rect = menuEl.getBoundingClientRect();
+      const pad = 4;
+      if (rect.bottom > window.innerHeight - pad) {
+        menuEl.style.top = `${Math.max(pad, window.innerHeight - rect.height - pad)}px`;
+      }
+      if (rect.right > window.innerWidth - pad) {
+        menuEl.style.left = `${Math.max(pad, window.innerWidth - rect.width - pad)}px`;
+      }
+    }
+  });
+
   // Close on outside click
   $effect(() => {
     if (!visible) return;
@@ -110,6 +126,7 @@
   <div
     class="context-menu"
     style="left: {x}px; top: {y}px;"
+    bind:this={menuEl}
     onclick={(e) => e.stopPropagation()}
   >
     <button class="context-menu-item" onclick={handleSplitRight}>
