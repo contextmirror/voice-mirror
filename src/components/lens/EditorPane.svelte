@@ -12,6 +12,7 @@
   let activeTab = $derived(activeTabId ? tabsStore.tabs.find(t => t.id === activeTabId) : null);
 
   let fileTreeDragActive = $state(false);
+  let tabDragActive = $state(false);
   let dragOverThis = $state(false);
   let dropZone = $state('center');
   let paneEl;
@@ -24,13 +25,29 @@
     }
     function onDragEnd() {
       fileTreeDragActive = false;
-      dragOverThis = false;
+      if (!tabDragActive) dragOverThis = false;
     }
     window.addEventListener('file-tree-drag-start', onDragStart);
     window.addEventListener('file-tree-drag-end', onDragEnd);
     return () => {
       window.removeEventListener('file-tree-drag-start', onDragStart);
       window.removeEventListener('file-tree-drag-end', onDragEnd);
+    };
+  });
+
+  $effect(() => {
+    function onTabDragStart() {
+      tabDragActive = true;
+    }
+    function onTabDragEnd() {
+      tabDragActive = false;
+      if (!fileTreeDragActive) dragOverThis = false;
+    }
+    window.addEventListener('tab-drag-start', onTabDragStart);
+    window.addEventListener('tab-drag-end', onTabDragEnd);
+    return () => {
+      window.removeEventListener('tab-drag-start', onTabDragStart);
+      window.removeEventListener('tab-drag-end', onTabDragEnd);
     };
   });
 
@@ -48,9 +65,9 @@
   }
 
   function handleDragOver(e) {
-    if (!fileTreeDragActive) return;
+    if (!fileTreeDragActive && !tabDragActive) return;
     e.preventDefault();
-    e.dataTransfer.dropEffect = 'copy';
+    e.dataTransfer.dropEffect = fileTreeDragActive ? 'copy' : 'move';
     dragOverThis = true;
     dropZone = detectZone(e);
   }
@@ -65,6 +82,38 @@
     e.preventDefault();
     dragOverThis = false;
 
+    const zone = detectZone(e);
+
+    // Try tab data first
+    let tabRaw = e.dataTransfer.getData('application/x-voice-mirror-tab');
+    if (tabRaw) {
+      let tabData;
+      try { tabData = JSON.parse(tabRaw); } catch { return; }
+
+      if (tabData?.tabId) {
+        if (zone === 'center') {
+          if (tabData.sourceGroupId !== groupId) {
+            tabsStore.moveTab(tabData.tabId, groupId);
+          }
+        } else if (zone === 'right') {
+          const newId = editorGroupsStore.splitGroup(groupId, 'horizontal');
+          tabsStore.moveTab(tabData.tabId, newId);
+        } else if (zone === 'left') {
+          const newId = editorGroupsStore.splitGroup(groupId, 'horizontal', 'before');
+          tabsStore.moveTab(tabData.tabId, newId);
+        } else if (zone === 'bottom') {
+          const newId = editorGroupsStore.splitGroup(groupId, 'vertical');
+          tabsStore.moveTab(tabData.tabId, newId);
+        } else if (zone === 'top') {
+          const newId = editorGroupsStore.splitGroup(groupId, 'vertical', 'before');
+          tabsStore.moveTab(tabData.tabId, newId);
+        }
+        window.dispatchEvent(new CustomEvent('tab-drag-end'));
+        return;
+      }
+    }
+
+    // Fall through to file-tree drop handling
     let raw = e.dataTransfer.getData('application/x-voice-mirror-file');
     if (!raw) raw = e.dataTransfer.getData('text/plain');
     if (!raw) return;
@@ -73,7 +122,6 @@
     try { data = JSON.parse(raw); } catch { return; }
     if (data?.type !== 'file-tree' || !data.entry?.path) return;
 
-    const zone = detectZone(e);
     const entry = data.entry;
 
     if (zone === 'center') {

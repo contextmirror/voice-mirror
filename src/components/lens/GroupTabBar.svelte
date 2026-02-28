@@ -166,7 +166,14 @@
 
   function handleDragStart(e, tab) {
     e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', JSON.stringify({ tabId: tab.id, sourceGroupId: groupId }));
+    const data = JSON.stringify({ tabId: tab.id, sourceGroupId: groupId });
+    e.dataTransfer.setData('text/plain', data);
+    e.dataTransfer.setData('application/x-voice-mirror-tab', data);
+    window.dispatchEvent(new CustomEvent('tab-drag-start'));
+  }
+
+  function handleDragEnd() {
+    window.dispatchEvent(new CustomEvent('tab-drag-end'));
   }
 
   function handleDragOver(e, index) {
@@ -245,6 +252,7 @@
         oncontextmenu={(e) => handleTabContextMenu(e, tab)}
         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleTabClick(tab); }}
         ondragstart={(e) => handleDragStart(e, tab)}
+        ondragend={handleDragEnd}
         ondragover={(e) => handleDragOver(e, i)}
         ondragleave={handleDragLeave}
         ondrop={(e) => handleDrop(e, i)}

@@ -288,6 +288,22 @@ describe('GroupTabBar.svelte: mouse wheel scroll', () => {
   });
 });
 
+// ============ Tab drag MIME type ============
+
+describe('GroupTabBar.svelte: tab drag MIME type', () => {
+  it('sets application/x-voice-mirror-tab MIME type on drag start', () => {
+    assert.ok(src.includes('application/x-voice-mirror-tab'), 'Should set custom tab MIME type');
+  });
+
+  it('dispatches tab-drag-start event', () => {
+    assert.ok(src.includes('tab-drag-start'), 'Should dispatch tab-drag-start event');
+  });
+
+  it('dispatches tab-drag-end event', () => {
+    assert.ok(src.includes('tab-drag-end'), 'Should dispatch tab-drag-end event');
+  });
+});
+
 // ============ Styling ============
 
 describe('GroupTabBar.svelte: styling', () => {
