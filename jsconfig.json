@@ -4,6 +4,9 @@
     "target": "ESNext",
     "module": "ESNext",
     "checkJs": true,
+    "strict": false,
+    "noImplicitAny": false,
+    "skipLibCheck": true,
     "paths": {
       "$lib/*": ["./src/lib/*"]
     }
