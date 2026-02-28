@@ -1,12 +1,13 @@
 <script>
   /**
-   * TerminalTabs.svelte -- Bottom panel with 3 pinned tabs.
+   * TerminalTabs.svelte -- Bottom panel with 4 pinned tabs.
    *
    * Features:
-   * - 3 permanent tabs: Voice Agent, Output, Terminal
+   * - 4 permanent tabs: Voice Agent, Output, Terminal, Problems
    * - Right-click context menus for Voice Agent and Output
    * - Toolbar actions on the right side of the tab bar
    * - Content area routing based on bottomPanelMode
+   * - Problems tab with severity filters, text filter, badge count, Ctrl+Shift+M shortcut
    */
   import { onMount } from 'svelte';
   import AiTerminal from './AiTerminal.svelte';
@@ -24,9 +25,21 @@
   import TerminalActionBar from './TerminalActionBar.svelte';
   import OutputPanel from '../lens/OutputPanel.svelte';
   import { outputStore } from '../../lib/stores/output.svelte.js';
+  import ProblemsPanel from '../lens/ProblemsPanel.svelte';
+  import { lspDiagnosticsStore } from '../../lib/stores/lsp-diagnostics.svelte.js';
 
-  // ---- Bottom panel mode: ai | output | terminal ----
+  // ---- Bottom panel mode: ai | output | terminal | problems ----
   let bottomPanelMode = $state('ai');
+
+  // ---- Problems panel filter state ----
+  let problemsShowErrors = $state(true);
+  let problemsShowWarnings = $state(true);
+  let problemsShowInfos = $state(true);
+  let problemsFilterText = $state('');
+
+  // Derived totals for badge and toolbar
+  let problemsTotals = $derived(lspDiagnosticsStore.getTotals());
+  let problemsBadgeCount = $derived(problemsTotals.errors + problemsTotals.warnings);
 
   // ---- Output channel dropdown (custom, theme-aware) ----
   let channelDropdownOpen = $state(false);
@@ -233,7 +246,7 @@
 
   // ---- Keyboard: Ctrl+Tab / Ctrl+Shift+Tab to cycle panels ----
 
-  const panelOrder = ['ai', 'output', 'terminal'];
+  const panelOrder = ['ai', 'output', 'terminal', 'problems'];
 
   onMount(() => {
     function handleKeydown(e) {
@@ -247,8 +260,20 @@
           bottomPanelMode = panelOrder[(idx + 1) % panelOrder.length];
         }
       }
+
+      // Ctrl+Shift+M → Toggle problems panel
+      if (e.ctrlKey && e.shiftKey && e.key === 'M') {
+        e.preventDefault();
+        e.stopPropagation();
+        bottomPanelMode = bottomPanelMode === 'problems' ? 'ai' : 'problems';
+      }
     }
     window.addEventListener('keydown', handleKeydown, true);
+
+    function handleShowProblems() {
+      bottomPanelMode = 'problems';
+    }
+    window.addEventListener('status-bar-show-problems', handleShowProblems);
 
     // Register toggle-terminal shortcut handler (Ctrl+`)
     setActionHandler('toggle-terminal', () => {
@@ -261,6 +286,7 @@
 
     return () => {
       window.removeEventListener('keydown', handleKeydown, true);
+      window.removeEventListener('status-bar-show-problems', handleShowProblems);
       setActionHandler('toggle-terminal', null);
     };
   });
@@ -317,6 +343,28 @@
       onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') bottomPanelMode = 'terminal'; }}
     >
       <span class="tab-label">Terminal</span>
+    </div>
+
+    <!-- Problems tab (pinned) -->
+    <div class="tab-divider"></div>
+    <div
+      class="terminal-tab"
+      class:active={bottomPanelMode === 'problems'}
+      role="tab"
+      tabindex="0"
+      aria-selected={bottomPanelMode === 'problems'}
+      onclick={() => bottomPanelMode = 'problems'}
+      onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') bottomPanelMode = 'problems'; }}
+      title="Problems (Ctrl+Shift+M)"
+    >
+      <svg class="tab-icon" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M7.56 1.44a.5.5 0 0 1 .88 0l6.5 12A.5.5 0 0 1 14.5 14h-13a.5.5 0 0 1-.44-.56l6.5-12z"/>
+        <line x1="8" y1="6" x2="8" y2="9"/><circle cx="8" cy="11" r="0.5" fill="currentColor"/>
+      </svg>
+      <span class="tab-label">Problems</span>
+      {#if problemsBadgeCount > 0}
+        <span class="problems-badge">{problemsBadgeCount}</span>
+      {/if}
     </div>
 
     <!-- Spacer pushes toolbar actions to the right -->
@@ -465,6 +513,58 @@
           </svg>
         </button>
       </div>
+    {:else if bottomPanelMode === 'problems'}
+      <div class="output-controls">
+        <!-- Text filter -->
+        <div class="output-filter-wrapper">
+          <input
+            class="output-filter-input problems-filter"
+            type="text"
+            placeholder="Filter (e.g. text, !exclude)"
+            value={problemsFilterText}
+            oninput={(e) => problemsFilterText = e.target.value}
+          />
+          <svg class="output-filter-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+          </svg>
+        </div>
+        <!-- Severity toggles -->
+        <div class="toolbar-actions">
+          <button
+            class="toolbar-btn severity-toggle"
+            class:toggled={problemsShowErrors}
+            onclick={() => problemsShowErrors = !problemsShowErrors}
+            title="Toggle errors"
+          >
+            <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5">
+              <circle cx="8" cy="8" r="6"/><line x1="5.5" y1="5.5" x2="10.5" y2="10.5"/><line x1="10.5" y1="5.5" x2="5.5" y2="10.5"/>
+            </svg>
+            <span class="severity-count">{problemsTotals.errors}</span>
+          </button>
+          <button
+            class="toolbar-btn severity-toggle"
+            class:toggled={problemsShowWarnings}
+            onclick={() => problemsShowWarnings = !problemsShowWarnings}
+            title="Toggle warnings"
+          >
+            <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M7.56 1.44a.5.5 0 0 1 .88 0l6.5 12A.5.5 0 0 1 14.5 14h-13a.5.5 0 0 1-.44-.56l6.5-12zM8 5v4M8 11v1" stroke-linecap="round"/>
+            </svg>
+            <span class="severity-count">{problemsTotals.warnings}</span>
+          </button>
+          <button
+            class="toolbar-btn severity-toggle"
+            class:toggled={problemsShowInfos}
+            onclick={() => problemsShowInfos = !problemsShowInfos}
+            title="Toggle info"
+          >
+            <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5">
+              <circle cx="8" cy="8" r="6"/><line x1="8" y1="5" x2="8" y2="9" stroke-linecap="round"/><circle cx="8" cy="11.5" r="0.8" fill="currentColor"/>
+            </svg>
+            <span class="severity-count">{problemsTotals.infos}</span>
+          </button>
+        </div>
+      </div>
     {/if}
   </div>
 
@@ -591,6 +691,18 @@
   {#if bottomPanelMode === 'terminal'}
     <div class="terminal-panel-container">
       <TerminalPanel />
+    </div>
+  {/if}
+
+  <!-- Problems panel -->
+  {#if bottomPanelMode === 'problems'}
+    <div class="problems-panel-container">
+      <ProblemsPanel
+        showErrors={problemsShowErrors}
+        showWarnings={problemsShowWarnings}
+        showInfos={problemsShowInfos}
+        filterText={problemsFilterText}
+      />
     </div>
   {/if}
 </div>
@@ -1025,6 +1137,37 @@
 
   .terminal-panel.hidden {
     display: none;
+  }
+
+  /* -- Problems badge -- */
+  .problems-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: 8px;
+    background: var(--danger);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 1;
+    margin-left: 2px;
+  }
+
+  .severity-toggle {
+    gap: 2px;
+  }
+
+  .severity-count {
+    font-size: 11px;
+  }
+
+  .problems-panel-container {
+    flex: 1;
+    overflow: hidden;
+    min-height: 0;
   }
 
   @media (prefers-reduced-motion: reduce) {

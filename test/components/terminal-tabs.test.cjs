@@ -363,6 +363,55 @@ describe('TerminalTabs.svelte -- toggle-terminal shortcut', () => {
   });
 });
 
+describe('TerminalTabs.svelte: Problems tab', () => {
+  it('imports ProblemsPanel', () => {
+    assert.ok(src.includes('ProblemsPanel'), 'Should import ProblemsPanel');
+  });
+
+  it('imports lspDiagnosticsStore', () => {
+    assert.ok(src.includes('lspDiagnosticsStore'), 'Should import diagnostics store for badge');
+  });
+
+  it('has problems mode in panel order', () => {
+    assert.ok(src.includes("'problems'"), 'Should have problems mode');
+  });
+
+  it('includes problems in panelOrder array', () => {
+    assert.ok(
+      /panelOrder\s*=\s*\[.*'problems'.*\]/.test(src),
+      'Should include problems in panelOrder for Ctrl+Tab cycling'
+    );
+  });
+
+  it('has Problems tab in markup', () => {
+    assert.ok(src.includes('Problems'), 'Should have Problems tab label');
+  });
+
+  it('renders ProblemsPanel when problems mode active', () => {
+    assert.ok(src.includes('<ProblemsPanel'), 'Should render ProblemsPanel component');
+  });
+
+  it('listens for status-bar-show-problems event', () => {
+    assert.ok(src.includes('status-bar-show-problems'), 'Should listen for status bar event');
+  });
+
+  it('has Ctrl+Shift+M keyboard shortcut', () => {
+    assert.ok(
+      src.includes("'M'") || src.includes('"M"'),
+      'Should handle Ctrl+Shift+M'
+    );
+  });
+
+  it('has severity filter toggles in toolbar', () => {
+    assert.ok(src.includes('problemsShowErrors'), 'Should have error filter toggle');
+    assert.ok(src.includes('problemsShowWarnings'), 'Should have warning filter toggle');
+  });
+
+  it('has text filter input for problems', () => {
+    assert.ok(src.includes('problemsFilterText') || src.includes('problems-filter'), 'Should have text filter for problems');
+  });
+});
+
 describe('TerminalTabs.svelte -- CSS', () => {
   it('hides inactive panels with display none', () => {
     assert.ok(src.includes('display: none'), 'Should hide inactive panels');
