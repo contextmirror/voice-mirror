@@ -105,8 +105,10 @@ pub async fn read_message(reader: &mut BufReader<ChildStdout>) -> Option<Value> 
 
 /// Spawn a tokio task that reads LSP messages from stdout and dispatches them.
 ///
-/// - Responses (messages with an `id` field): routed to the matching oneshot sender
-///   in `pending_requests`.
+/// - Responses (messages with an `id` field, no `method`): routed to the matching
+///   oneshot sender in `pending_requests`.
+/// - Server requests (messages with both `id` and `method`): handled inline.
+///   Currently supports `workspace/configuration`.
 /// - Notifications with method `textDocument/publishDiagnostics`: parsed and emitted
 ///   as a `lsp-diagnostics` Tauri event.
 /// - Other notifications: logged and ignored.
@@ -116,6 +118,7 @@ pub fn spawn_reader_loop(
     app_handle: AppHandle,
     lang_id: String,
     pending: Arc<Mutex<HashMap<i64, oneshot::Sender<Value>>>>,
+    stdin: Arc<Mutex<ChildStdin>>,
 ) {
     tokio::spawn(async move {
         let mut reader = BufReader::new(stdout);
@@ -133,6 +136,12 @@ pub fn spawn_reader_loop(
                             } else {
                                 debug!("Received response for unknown request id={}", id);
                             }
+                            continue;
+                        }
+
+                        // This is a server→client request (has both "id" and "method")
+                        if let Some(method) = msg.get("method").and_then(|v| v.as_str()) {
+                            handle_server_request(&stdin, &lang_id, id, method, &msg).await;
                             continue;
                         }
                     }
@@ -163,6 +172,84 @@ pub fn spawn_reader_loop(
 
         debug!("[{}] LSP reader loop ended", lang_id);
     });
+}
+
+/// Send a JSON-RPC response back to the server (for server→client requests).
+async fn send_response(stdin: &Arc<Mutex<ChildStdin>>, id: i64, result: Value) {
+    let response = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": id,
+        "result": result,
+    });
+    let mut stdin_guard = stdin.lock().await;
+    if let Err(e) = write_message(&mut *stdin_guard, &response).await {
+        warn!("Failed to send response for request id={}: {}", id, e);
+    }
+}
+
+/// Handle a server→client request.
+///
+/// Currently supports:
+/// - `workspace/configuration`: returns settings from the manifest for each
+///   requested section (params.items[].section).
+async fn handle_server_request(
+    stdin: &Arc<Mutex<ChildStdin>>,
+    lang_id: &str,
+    id: i64,
+    method: &str,
+    msg: &Value,
+) {
+    match method {
+        "workspace/configuration" => {
+            debug!("[{}] Handling workspace/configuration request (id={})", lang_id, id);
+
+            // Load settings from manifest for this language's server
+            let settings = super::manifest::load_manifest()
+                .ok()
+                .and_then(|manifest| {
+                    // Find the server entry that handles this language
+                    manifest.servers.into_values().find(|entry| {
+                        entry.languages.iter().any(|l| l == lang_id)
+                    })
+                })
+                .map(|entry| entry.settings)
+                .unwrap_or(Value::Object(serde_json::Map::new()));
+
+            // Build result array — one value per requested item
+            let items = msg
+                .get("params")
+                .and_then(|p| p.get("items"))
+                .and_then(|i| i.as_array());
+
+            let result = if let Some(items) = items {
+                Value::Array(
+                    items
+                        .iter()
+                        .map(|item| {
+                            let section = item.get("section").and_then(|s| s.as_str()).unwrap_or("");
+                            if section.is_empty() {
+                                // Empty section = return all settings
+                                settings.clone()
+                            } else if let Some(val) = settings.get(section) {
+                                val.clone()
+                            } else {
+                                Value::Null
+                            }
+                        })
+                        .collect(),
+                )
+            } else {
+                Value::Array(vec![])
+            };
+
+            send_response(stdin, id, result).await;
+        }
+        _ => {
+            debug!("[{}] Unhandled server request: {} (id={})", lang_id, method, id);
+            // Respond with null for unrecognized requests to avoid blocking the server
+            send_response(stdin, id, Value::Null).await;
+        }
+    }
 }
 
 /// Send a JSON-RPC request to the LSP server.

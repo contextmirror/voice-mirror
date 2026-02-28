@@ -33,7 +33,7 @@ pub struct LspServer {
     pub process: Child,
     pub next_id: AtomicI64,
     pub open_docs: HashSet<String>,
-    pub stdin: ChildStdin,
+    pub stdin: Arc<Mutex<ChildStdin>>,
     pub capabilities: Option<lsp_types::ServerCapabilities>,
     pub pending_requests: Arc<Mutex<HashMap<i64, oneshot::Sender<Value>>>>,
     pub crash_count: u32,
@@ -200,10 +200,11 @@ impl LspManager {
             ));
         }
 
-        let mut stdin = process
+        let stdin = process
             .stdin
             .take()
             .ok_or("Failed to get LSP server stdin")?;
+        let stdin = Arc::new(Mutex::new(stdin));
         let stdout = process
             .stdout
             .take()
@@ -297,6 +298,7 @@ impl LspManager {
             self.app_handle.clone(),
             lang_id.to_string(),
             Arc::clone(&pending),
+            Arc::clone(&stdin),
         );
 
         // Build the root URI for the project
@@ -390,7 +392,7 @@ impl LspManager {
             }
         });
 
-        let rx = client::send_request(&mut stdin, &pending, "initialize", init_params, &next_id)
+        let rx = client::send_request(&mut *stdin.lock().await, &pending, "initialize", init_params, &next_id)
             .await?;
 
         // Wait for the initialize response (with timeout)
@@ -406,7 +408,7 @@ impl LspManager {
             .and_then(|c| serde_json::from_value::<lsp_types::ServerCapabilities>(c.clone()).ok());
 
         // Send initialized notification
-        client::send_notification(&mut stdin, "initialized", serde_json::json!({})).await?;
+        client::send_notification(&mut *stdin.lock().await, "initialized", serde_json::json!({})).await?;
 
         info!(
             "LSP server '{}' initialized for language '{}'",
@@ -454,7 +456,7 @@ impl LspManager {
         }
 
         client::send_notification(
-            &mut server.stdin,
+            &mut *server.stdin.lock().await,
             "textDocument/didOpen",
             serde_json::json!({
                 "textDocument": {
@@ -478,7 +480,7 @@ impl LspManager {
         // Send didClose notification
         if let Some(server) = self.servers.get_mut(lang_id) {
             client::send_notification(
-                &mut server.stdin,
+                &mut *server.stdin.lock().await,
                 "textDocument/didClose",
                 serde_json::json!({
                     "textDocument": { "uri": uri }
@@ -527,7 +529,7 @@ impl LspManager {
             .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
 
         client::send_notification(
-            &mut server.stdin,
+            &mut *server.stdin.lock().await,
             "textDocument/didChange",
             serde_json::json!({
                 "textDocument": { "uri": uri, "version": version },
@@ -580,7 +582,7 @@ impl LspManager {
             })
         };
 
-        client::send_notification(&mut server.stdin, "textDocument/didSave", params).await
+        client::send_notification(&mut *server.stdin.lock().await, "textDocument/didSave", params).await
     }
 
     /// Request completion items at a position.
@@ -602,7 +604,7 @@ impl LspManager {
         });
 
         let rx = client::send_request(
-            &mut server.stdin,
+            &mut *server.stdin.lock().await,
             &server.pending_requests,
             "textDocument/completion",
             params,
@@ -649,7 +651,7 @@ impl LspManager {
         });
 
         let rx = client::send_request(
-            &mut server.stdin,
+            &mut *server.stdin.lock().await,
             &server.pending_requests,
             "textDocument/hover",
             params,
@@ -716,7 +718,7 @@ impl LspManager {
         });
 
         let rx = client::send_request(
-            &mut server.stdin,
+            &mut *server.stdin.lock().await,
             &server.pending_requests,
             "textDocument/signatureHelp",
             params,
@@ -757,7 +759,7 @@ impl LspManager {
         });
 
         let rx = client::send_request(
-            &mut server.stdin,
+            &mut *server.stdin.lock().await,
             &server.pending_requests,
             "textDocument/definition",
             params,
@@ -806,7 +808,7 @@ impl LspManager {
         });
 
         let rx = client::send_request(
-            &mut server.stdin,
+            &mut *server.stdin.lock().await,
             &server.pending_requests,
             "textDocument/documentSymbol",
             params,
@@ -851,7 +853,7 @@ impl LspManager {
         });
 
         let rx = client::send_request(
-            &mut server.stdin,
+            &mut *server.stdin.lock().await,
             &server.pending_requests,
             "textDocument/references",
             params,
@@ -904,7 +906,7 @@ impl LspManager {
         });
 
         let rx = client::send_request(
-            &mut server.stdin,
+            &mut *server.stdin.lock().await,
             &server.pending_requests,
             "textDocument/codeAction",
             params,
@@ -948,7 +950,7 @@ impl LspManager {
         });
 
         let rx = client::send_request(
-            &mut server.stdin,
+            &mut *server.stdin.lock().await,
             &server.pending_requests,
             "textDocument/prepareRename",
             params,
@@ -1000,7 +1002,7 @@ impl LspManager {
         });
 
         let rx = client::send_request(
-            &mut server.stdin,
+            &mut *server.stdin.lock().await,
             &server.pending_requests,
             "textDocument/rename",
             params,
@@ -1049,7 +1051,7 @@ impl LspManager {
         });
 
         let rx = client::send_request(
-            &mut server.stdin,
+            &mut *server.stdin.lock().await,
             &server.pending_requests,
             "textDocument/formatting",
             params,
@@ -1104,7 +1106,7 @@ impl LspManager {
         });
 
         let rx = client::send_request(
-            &mut server.stdin,
+            &mut *server.stdin.lock().await,
             &server.pending_requests,
             "textDocument/rangeFormatting",
             params,
@@ -1149,7 +1151,7 @@ impl LspManager {
 
             // Send shutdown request
             let rx = client::send_request(
-                &mut server.stdin,
+                &mut *server.stdin.lock().await,
                 &server.pending_requests,
                 "shutdown",
                 Value::Null,
@@ -1164,7 +1166,7 @@ impl LspManager {
 
             // Send exit notification
             let _ =
-                client::send_notification(&mut server.stdin, "exit", Value::Null).await;
+                client::send_notification(&mut *server.stdin.lock().await, "exit", Value::Null).await;
 
             // Give it a moment, then kill if still running
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
