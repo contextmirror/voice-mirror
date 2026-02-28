@@ -9,6 +9,7 @@
 
 pub mod client;
 pub mod detection;
+pub mod manifest;
 pub mod types;
 
 use std::collections::{HashMap, HashSet};
