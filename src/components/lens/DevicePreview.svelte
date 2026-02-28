@@ -7,6 +7,7 @@
    * container bounds and reposition WebView2s when the pane resizes.
    */
   import { onDestroy } from 'svelte';
+  import { listen } from '@tauri-apps/api/event';
   import { devicePreviewStore } from '../../lib/stores/device-preview.svelte.js';
   import { getPresetById } from '../../lib/device-presets.js';
   import { lensResizeDeviceWebview, lensEvalDeviceJs, lensSetDeviceEmulation } from '../../lib/api.js';
@@ -213,6 +214,26 @@
     }
   });
 
+  // Sync device webviews when the main browser navigates.
+  // Listens for lens-url-changed (fired on every browser navigation, reload,
+  // dev server switch, etc.) and navigates all active device webviews to match.
+  let unlistenUrlSync = null;
+  listen('lens-url-changed', (event) => {
+    const url = event.payload?.url;
+    if (!url) return;
+    devicePreviewStore.setPreviewUrl(url);
+    // Clear emulation tracking so CDP re-applies after navigation
+    // (new page load clears device metrics override)
+    emulatedDevices.clear();
+    for (const device of devicePreviewStore.activeDevices) {
+      if (!device.webviewLabel) continue;
+      const safeUrl = JSON.stringify(url);
+      lensEvalDeviceJs(device.webviewLabel, `window.location.href=${safeUrl}`).catch(() => {});
+    }
+    // Re-apply CDP emulation after navigation settles
+    setTimeout(() => scheduleReposition(), 500);
+  }).then(fn => { unlistenUrlSync = fn; });
+
   onDestroy(() => {
     if (rafId) cancelAnimationFrame(rafId);
     if (resizeObserver) {
@@ -221,6 +242,7 @@
     }
     stopSyncPolling();
     emulatedDevices.clear();
+    if (unlistenUrlSync) unlistenUrlSync();
     devicePreviewStore.removeAllDevices();
   });
 </script>
