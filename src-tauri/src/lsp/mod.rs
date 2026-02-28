@@ -487,10 +487,7 @@ impl LspManager {
                     }
                 },
                 "workspace": {
-                    "workspaceFolders": {
-                        "supported": true,
-                        "changeNotifications": true
-                    }
+                    "workspaceFolders": true
                 }
             }
         });
