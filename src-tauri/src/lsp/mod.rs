@@ -24,7 +24,7 @@ static NODE_NOT_FOUND_EMITTED: AtomicBool = AtomicBool::new(false);
 use serde_json::Value;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::process::{Child, ChildStdin};
-use tokio::sync::{oneshot, Mutex};
+use tokio::sync::{oneshot, watch, Mutex};
 use tracing::{debug, info, warn};
 
 use types::{LspServerStatus, LspServerStatusEvent};
@@ -50,6 +50,9 @@ pub struct LspServer {
     pub project_root: String,
     pub last_error: Option<String>,
     pub stderr_lines: Arc<Mutex<Vec<String>>>,
+    /// Cancel sender for idle shutdown timer. When all documents close, a 60s
+    /// timer starts; sending on this channel cancels the pending shutdown.
+    pub idle_cancel: Option<watch::Sender<bool>>,
 }
 
 /// Manages all LSP server processes.
@@ -470,6 +473,7 @@ impl LspManager {
                 project_root: project_root.to_string(),
                 last_error: None,
                 stderr_lines: Arc::new(Mutex::new(Vec::new())),
+                idle_cancel: None,
             },
         );
 
@@ -500,6 +504,12 @@ impl LspManager {
             .get_mut(&server_key(lang_id, project_root))
             .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
 
+        // Cancel any pending idle shutdown timer
+        if let Some(tx) = server.idle_cancel.take() {
+            info!("Cancelling idle shutdown timer for '{}' — new document opened", lang_id);
+            let _ = tx.send(true);
+        }
+
         // Don't re-open if already tracked
         if server.open_docs.contains(uri) {
             return Ok(());
@@ -525,7 +535,10 @@ impl LspManager {
 
     /// Close a document in the LSP server.
     ///
-    /// If no more documents are open for this language, shuts down the server.
+    /// If no more documents are open for this language, starts a 60-second idle
+    /// shutdown timer. If a new document opens within that window the timer is
+    /// cancelled. This avoids expensive server restarts when the user is just
+    /// switching between files.
     pub async fn close_document(&mut self, uri: &str, lang_id: &str, project_root: &str) -> Result<(), String> {
         // Send didClose notification
         let key = server_key(lang_id, project_root);
@@ -541,26 +554,72 @@ impl LspManager {
 
             server.open_docs.remove(uri);
 
-            // If no more open docs, shut down the server
+            // If no more open docs, start the idle shutdown timer
             if server.open_docs.is_empty() {
                 info!(
-                    "No more open documents for '{}', shutting down server",
+                    "No more open documents for '{}', starting 60s idle shutdown timer",
                     lang_id
                 );
-                // We need to remove the server to shut it down
-                // (can't call shutdown_server while borrowing servers)
-            } else {
-                return Ok(());
-            }
-        }
 
-        // Shutdown server if no docs remain (done outside the borrow above)
-        if self
-            .servers
-            .get(&key)
-            .map_or(false, |s| s.open_docs.is_empty())
-        {
-            self.shutdown_server(lang_id, project_root).await?;
+                // Cancel any existing idle timer first
+                if let Some(old_tx) = server.idle_cancel.take() {
+                    let _ = old_tx.send(true);
+                }
+
+                // Create a watch channel for cancellation
+                let (tx, mut rx) = watch::channel(false);
+                server.idle_cancel = Some(tx);
+
+                // Spawn idle shutdown task
+                let app_handle = self.app_handle.clone();
+                let idle_lang_id = lang_id.to_string();
+                let idle_project_root = project_root.to_string();
+                let idle_key = key.clone();
+
+                tokio::spawn(async move {
+                    tokio::select! {
+                        _ = tokio::time::sleep(std::time::Duration::from_secs(60)) => {
+                            // Timer expired — shut down the idle server
+                            info!(
+                                "Idle shutdown timer expired for '{}' — shutting down server",
+                                idle_lang_id
+                            );
+                            let lsp_state: tauri::State<'_, LspManagerState> = app_handle.state();
+                            let mut manager = lsp_state.0.lock().await;
+
+                            // Double-check the server still exists and is still idle
+                            let still_idle = manager
+                                .servers
+                                .get(&idle_key)
+                                .map_or(false, |s| s.open_docs.is_empty());
+
+                            if still_idle {
+                                if let Err(e) = manager
+                                    .shutdown_server(&idle_lang_id, &idle_project_root)
+                                    .await
+                                {
+                                    warn!(
+                                        "Failed to idle-shutdown server for '{}': {}",
+                                        idle_lang_id, e
+                                    );
+                                }
+                            } else {
+                                debug!(
+                                    "Idle shutdown for '{}' skipped — server has open docs again",
+                                    idle_lang_id
+                                );
+                            }
+                        }
+                        _ = rx.changed() => {
+                            // Timer was cancelled — a new document was opened
+                            debug!(
+                                "Idle shutdown timer cancelled for '{}'",
+                                idle_lang_id
+                            );
+                        }
+                    }
+                });
+            }
         }
 
         Ok(())
