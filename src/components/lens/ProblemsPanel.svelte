@@ -7,7 +7,6 @@
    */
   import { lspDiagnosticsStore } from '../../lib/stores/lsp-diagnostics.svelte.js';
   import { tabsStore } from '../../lib/stores/tabs.svelte.js';
-  import { projectStore } from '../../lib/stores/project.svelte.js';
 
   /** @type {{ showErrors: boolean, showWarnings: boolean, showInfos: boolean, filterText: string }} */
   let { showErrors = true, showWarnings = true, showInfos = true, filterText = '' } = $props();

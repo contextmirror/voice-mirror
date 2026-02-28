@@ -55,8 +55,11 @@ function createLspDiagnosticsStore() {
   }
 
   return {
-    /** Get the raw diagnostics Map */
+    /** Get the summary diagnostics Map */
     get diagnostics() { return diagnostics; },
+
+    /** Get the raw diagnostics Map (full LSP diagnostic objects per file) */
+    get rawDiagnostics() { return rawDiagnostics; },
 
     /** Get error/warning counts for a specific file path */
     getForFile(filePath) {

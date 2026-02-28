@@ -143,6 +143,10 @@ describe('lsp-diagnostics.svelte.js: diagnostics getter', () => {
   it('has diagnostics getter', () => {
     assert.ok(src.includes('get diagnostics()'), 'Should have diagnostics getter');
   });
+
+  it('has rawDiagnostics getter', () => {
+    assert.ok(src.includes('get rawDiagnostics()'), 'Should expose rawDiagnostics publicly');
+  });
 });
 
 describe('lsp-diagnostics.svelte.js: raw diagnostics cache', () => {
