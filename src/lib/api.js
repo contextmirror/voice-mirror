@@ -741,6 +741,20 @@ export async function lspRequestRangeFormatting(path, rangeStartLine, rangeStart
   return invoke('lsp_request_range_formatting', { path, rangeStartLine, rangeStartChar, rangeEndLine, rangeEndChar, tabSize, insertSpaces, projectRoot });
 }
 
+// ============ LSP Server Management ============
+
+export async function lspGetServerList() {
+  return invoke('lsp_get_server_list');
+}
+
+export async function lspInstallServer(serverId) {
+  return invoke('lsp_install_server', { serverId });
+}
+
+export async function lspSetServerEnabled(serverId, enabled) {
+  return invoke('lsp_set_server_enabled', { serverId, enabled });
+}
+
 // ============ Output / Diagnostics ============
 
 export async function getOutputLogs(params) {

@@ -313,6 +313,9 @@ describe('api.js -- exported async functions', () => {
     'lspRequestFormatting',
     'lspRequestRangeFormatting',
     'lspRequestSignatureHelp',
+    'lspGetServerList',
+    'lspInstallServer',
+    'lspSetServerEnabled',
     'getOutputLogs',
   ];
 

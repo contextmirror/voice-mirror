@@ -643,6 +643,107 @@ pub async fn lsp_apply_workspace_edit(
     IpcResponse::ok(json!({ "filesChanged": files_changed }))
 }
 
+/// Get a list of all known LSP servers from the manifest with install status.
+///
+/// Returns an array of server objects (id, languageId, binary, installed).
+/// Does not require LspManagerState -- reads the manifest and checks PATH.
+#[tauri::command]
+pub async fn lsp_get_server_list(
+    _app: AppHandle,
+) -> Result<IpcResponse, ()> {
+    let servers = detection::detect_all();
+    let list: Vec<serde_json::Value> = servers
+        .iter()
+        .map(|s| {
+            json!({
+                "id": s.server_id,
+                "languageId": s.language_id,
+                "binary": s.binary,
+                "installed": s.installed,
+            })
+        })
+        .collect();
+    Ok(IpcResponse::ok(json!(list)))
+}
+
+/// Manually trigger installation of a specific LSP server by ID.
+///
+/// Loads the manifest, finds the server entry, and runs `npm install`.
+/// Emits `lsp-server-status` events for progress tracking.
+#[tauri::command]
+pub async fn lsp_install_server(
+    app: AppHandle,
+    server_id: String,
+) -> Result<IpcResponse, ()> {
+    let manifest = match crate::lsp::manifest::load_manifest() {
+        Ok(m) => m,
+        Err(e) => return Ok(IpcResponse::err(format!("Failed to load manifest: {}", e))),
+    };
+
+    let entry = match manifest.servers.get(&server_id) {
+        Some(e) => e,
+        None => return Ok(IpcResponse::err(format!("Unknown server: {}", server_id))),
+    };
+
+    let lsp_dir = match crate::lsp::installer::get_lsp_servers_dir() {
+        Ok(d) => d,
+        Err(e) => return Ok(IpcResponse::err(e)),
+    };
+
+    match crate::lsp::installer::install_server(
+        &server_id,
+        &entry.install.packages,
+        &entry.install.version,
+        &lsp_dir,
+        Some(&app),
+    )
+    .await
+    {
+        Ok(()) => Ok(IpcResponse::ok(json!({ "ok": true, "server": server_id }))),
+        Err(e) => Ok(IpcResponse::err(e)),
+    }
+}
+
+/// Toggle a server enabled/disabled in the user config.
+///
+/// Updates the `lspServers` config field and persists to disk using the
+/// same mechanism as `set_config`.
+#[tauri::command]
+pub fn lsp_set_server_enabled(
+    server_id: String,
+    enabled: bool,
+) -> IpcResponse {
+    use crate::commands::config::CONFIG;
+    use crate::config::persistence;
+    use crate::services::platform;
+
+    let mut guard = match CONFIG.lock() {
+        Ok(g) => g,
+        Err(e) => return IpcResponse::err(format!("Failed to lock config: {}", e)),
+    };
+
+    // Update the lsp_servers map
+    let override_val = guard
+        .lsp_servers
+        .entry(server_id.clone())
+        .or_insert_with(|| json!({}));
+
+    if let Some(obj) = override_val.as_object_mut() {
+        obj.insert("enabled".to_string(), json!(enabled));
+    } else {
+        // Value is not an object -- replace it
+        *override_val = json!({ "enabled": enabled });
+    }
+
+    // Persist to disk
+    let config_dir = platform::get_config_dir();
+    if let Err(e) = persistence::save_config(&config_dir, &guard) {
+        return IpcResponse::err(e);
+    }
+
+    IpcResponse::ok(json!({ "ok": true, "server": server_id, "enabled": enabled }))
+}
+
 /// Get the status of all running LSP servers.
 #[tauri::command]
 pub async fn lsp_get_status(
