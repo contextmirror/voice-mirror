@@ -76,17 +76,17 @@
   }
 
   /**
-   * Check if a device category is a phone (needs phone-style frame).
+   * Check if a device is a phone (needs phone-style frame).
    */
   function isPhone(preset) {
-    return preset.category === 'iPhone' || preset.category === 'Android Phone';
+    return preset.type === 'phone';
   }
 
   /**
-   * Check if a device category is a tablet.
+   * Check if a device is a tablet.
    */
   function isTablet(preset) {
-    return preset.category === 'iPad' || preset.category === 'Android Tablet';
+    return preset.type === 'tablet';
   }
 
   /**
