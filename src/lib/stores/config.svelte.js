@@ -109,6 +109,7 @@ const DEFAULT_CONFIG = {
     lastGreetingPeriod: null,
     lastSeenVersion: null,
   },
+  lspServers: {},
   ai: {
     provider: 'claude',
     autoStart: false,

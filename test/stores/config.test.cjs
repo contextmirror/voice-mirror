@@ -144,6 +144,12 @@ describe('config.svelte.js -- ai.endpoints', () => {
   });
 });
 
+describe('config.svelte.js: LSP server overrides', () => {
+  it('has lspServers in DEFAULT_CONFIG', () => {
+    assert.ok(src.includes('lspServers'), 'Should have lspServers config field');
+  });
+});
+
 describe('config.svelte.js -- store exports', () => {
   it('exports configStore', () => {
     assert.ok(src.includes('export const configStore'), 'Should export configStore');

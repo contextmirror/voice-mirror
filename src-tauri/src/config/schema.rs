@@ -33,6 +33,10 @@ pub struct AppConfig {
     pub projects: ProjectsConfig,
     #[serde(default)]
     pub editor: EditorConfig,
+    /// Per-server LSP overrides keyed by server ID (e.g. "typescript", "svelte").
+    /// Values are freeform objects merged over manifest defaults by `apply_overrides`.
+    #[serde(default)]
+    pub lsp_servers: HashMap<String, serde_json::Value>,
     #[serde(default)]
     pub device_preview: DevicePreviewConfig,
     #[serde(default)]
