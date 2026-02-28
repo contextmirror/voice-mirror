@@ -31,7 +31,20 @@
           }
         }
       },
-      "settings": {}
+      "settings": {
+        "svelte": {
+          "plugin": {
+            "svelte": {
+              "diagnostics": {
+                "enable": true
+              }
+            }
+          }
+        },
+        "typescript": {
+          "tsdk": "./node_modules/typescript/lib"
+        }
+      }
     },
     "typescript": {
       "name": "TypeScript Language Server",

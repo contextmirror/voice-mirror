@@ -12,7 +12,7 @@ use tauri::{AppHandle, Emitter};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{ChildStdin, ChildStdout};
 use tokio::sync::{oneshot, Mutex};
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 
 use super::types::{
     DiagnosticItem, DiagnosticPosition, DiagnosticRange, LspDiagnosticEvent,
@@ -141,6 +141,7 @@ pub fn spawn_reader_loop(
 
                         // This is a server→client request (has both "id" and "method")
                         if let Some(method) = msg.get("method").and_then(|v| v.as_str()) {
+                            info!("[{}] Server request: {} (id={})", lang_id, method, id);
                             handle_server_request(&stdin, &lang_id, id, method, &msg).await;
                             continue;
                         }
@@ -151,7 +152,7 @@ pub fn spawn_reader_loop(
                         if method == "textDocument/publishDiagnostics" {
                             handle_diagnostics(&app_handle, &lang_id, &msg);
                         } else {
-                            debug!("[{}] LSP notification: {}", lang_id, method);
+                            info!("[{}] LSP notification: {}", lang_id, method);
                         }
                     }
                 }
@@ -298,7 +299,10 @@ pub async fn send_notification(
 fn handle_diagnostics(app_handle: &AppHandle, lang_id: &str, msg: &Value) {
     let params = match msg.get("params") {
         Some(p) => p,
-        None => return,
+        None => {
+            warn!("[{}] publishDiagnostics missing params", lang_id);
+            return;
+        }
     };
 
     let uri = params
@@ -373,6 +377,13 @@ fn handle_diagnostics(app_handle: &AppHandle, lang_id: &str, msg: &Value) {
         language_id: lang_id.to_string(),
         diagnostics,
     };
+
+    info!(
+        "[{}] Publishing {} diagnostics for {}",
+        lang_id,
+        event.diagnostics.len(),
+        event.uri
+    );
 
     if let Err(e) = app_handle.emit("lsp-diagnostics", &event) {
         warn!("Failed to emit lsp-diagnostics event: {}", e);
