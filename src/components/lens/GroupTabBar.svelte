@@ -157,6 +157,11 @@
     return 'file';
   }
 
+  function handleTabsWheel(e) {
+    e.preventDefault();
+    e.currentTarget.scrollLeft += e.deltaY;
+  }
+
   // ── Drag/Drop for tab reorder ──
 
   function handleDragStart(e, tab) {
@@ -221,7 +226,7 @@
   {/if}
 
   <!-- Scrollable file tabs -->
-  <div class="tabs-scroll">
+  <div class="tabs-scroll" onwheel={handleTabsWheel}>
     {#each groupTabs as tab, i (tab.id)}
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div

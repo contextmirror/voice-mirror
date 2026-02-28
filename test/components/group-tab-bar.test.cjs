@@ -276,6 +276,18 @@ describe('GroupTabBar.svelte: save prompt on close', () => {
   });
 });
 
+// ============ Mouse wheel scroll ============
+
+describe('GroupTabBar.svelte: mouse wheel scroll', () => {
+  it('has onwheel handler on tabs-scroll container', () => {
+    assert.ok(src.includes('onwheel'), 'Should have onwheel handler');
+  });
+
+  it('converts vertical wheel delta to horizontal scroll', () => {
+    assert.ok(src.includes('deltaY') && src.includes('scrollLeft'), 'Should convert deltaY to scrollLeft');
+  });
+});
+
 // ============ Styling ============
 
 describe('GroupTabBar.svelte: styling', () => {
