@@ -9,6 +9,7 @@
 
 pub mod client;
 pub mod detection;
+pub mod installer;
 pub mod manifest;
 pub mod types;
 
