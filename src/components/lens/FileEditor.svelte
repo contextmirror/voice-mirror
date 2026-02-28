@@ -18,6 +18,7 @@
   import { createEditorLsp, LSP_EXTENSIONS, uriToRelativePath, lspPositionToOffset, mapCompletionKind } from '../../lib/editor-lsp.svelte.js';
   import { lspDiagnosticsStore } from '../../lib/stores/lsp-diagnostics.svelte.js';
   import { buildEditorExtensions } from '../../lib/editor-extensions.js';
+  import { navigationHistoryStore } from '../../lib/stores/navigation-history.svelte.js';
   import { gitGutterPlugin } from '../../lib/editor-git-gutter.js';
   import { loadLanguageExtension } from '../../lib/codemirror-languages.js';
   import { statusBarStore, getLanguageName } from '../../lib/stores/status-bar.svelte.js';
@@ -359,6 +360,14 @@
           const r = projectStore.activeProject?.path || null;
 
           try {
+            // Record departure point for back/forward navigation
+            navigationHistoryStore.pushLocation({
+              path: currentPath,
+              line,
+              character,
+              groupId,
+            });
+
             const result = await lspRequestDefinition(currentPath, line, character, r);
             if (!result?.data?.locations?.length) return true;
 
@@ -381,6 +390,39 @@
           return true;
         } : null,
         onFontZoom: (delta) => handleFontZoom(delta),
+        onNavigateBack: () => {
+          const loc = navigationHistoryStore.goBack();
+          if (!loc) return;
+          if (loc.path !== currentPath) {
+            const name = loc.path.split(/[/\\]/).pop() || loc.path;
+            tabsStore.openFile({ name, path: loc.path }, loc.groupId);
+          }
+          // Move cursor to stored position
+          if (view) {
+            const cmLine = view.state.doc.line(Math.min(loc.line + 1, view.state.doc.lines));
+            const pos = Math.min(cmLine.from + loc.character, cmLine.to);
+            view.dispatch({
+              selection: { anchor: pos },
+              scrollIntoView: true,
+            });
+          }
+        },
+        onNavigateForward: () => {
+          const loc = navigationHistoryStore.goForward();
+          if (!loc) return;
+          if (loc.path !== currentPath) {
+            const name = loc.path.split(/[/\\]/).pop() || loc.path;
+            tabsStore.openFile({ name, path: loc.path }, loc.groupId);
+          }
+          if (view) {
+            const cmLine = view.state.doc.line(Math.min(loc.line + 1, view.state.doc.lines));
+            const pos = Math.min(cmLine.from + loc.character, cmLine.to);
+            view.dispatch({
+              selection: { anchor: pos },
+              scrollIntoView: true,
+            });
+          }
+        },
         onCursorActivity: (update) => {
           const pos = update.state.selection.main.head;
           const lineInfo = update.state.doc.lineAt(pos);

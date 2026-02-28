@@ -28,6 +28,8 @@ import { createGitGutter } from './editor-git-gutter.js';
  * @param {function} [options.onClick] - Callback for Ctrl+Click go-to-definition (event, view)
  * @param {function} [options.onFontZoom] - Callback for font zoom (delta: +1, -1, or 0 to reset)
  * @param {function} [options.onCursorActivity] - Callback for cursor position changes (update)
+ * @param {function} [options.onNavigateBack] - Callback for Alt+Left navigation history back
+ * @param {function} [options.onNavigateForward] - Callback for Alt+Right navigation history forward
  * @returns {Array} CodeMirror extensions array
  */
 export function buildEditorExtensions(cm, lsp, options) {
@@ -45,6 +47,8 @@ export function buildEditorExtensions(cm, lsp, options) {
     getOriginalContent,
     onFontZoom,
     onCursorActivity,
+    onNavigateBack,
+    onNavigateForward,
   } = options;
 
   const extensions = [
@@ -114,6 +118,9 @@ export function buildEditorExtensions(cm, lsp, options) {
         { key: 'Ctrl--', run: () => { onFontZoom(-1); return true; } },
         { key: 'Ctrl-0', run: () => { onFontZoom(0); return true; } },
       ] : []),
+      // Navigation history: Alt+Left (back), Alt+Right (forward)
+      ...(onNavigateBack ? [{ key: 'Alt-Left', run: () => { onNavigateBack(); return true; } }] : []),
+      ...(onNavigateForward ? [{ key: 'Alt-Right', run: () => { onNavigateForward(); return true; } }] : []),
     ]),
   ];
 
