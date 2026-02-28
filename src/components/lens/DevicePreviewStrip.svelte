@@ -10,6 +10,8 @@
   import DevicePickerMenu from './DevicePickerMenu.svelte';
 
   let pickerVisible = $state(false);
+  let addBtnEl = $state(null);
+  let pickerAnchor = $state(null);
 </script>
 
 <div class="device-strip">
@@ -27,14 +29,20 @@
 
     <div class="add-wrapper">
       <button
+        bind:this={addBtnEl}
         class="add-btn"
         title="Add device"
         disabled={!devicePreviewStore.canAddDevice}
-        onclick={() => pickerVisible = !pickerVisible}
+        onclick={() => {
+          if (!pickerVisible && addBtnEl) {
+            pickerAnchor = addBtnEl.getBoundingClientRect();
+          }
+          pickerVisible = !pickerVisible;
+        }}
       >+</button>
 
-      {#if pickerVisible}
-        <DevicePickerMenu onClose={() => pickerVisible = false} />
+      {#if pickerVisible && pickerAnchor}
+        <DevicePickerMenu onClose={() => pickerVisible = false} anchorRect={pickerAnchor} />
       {/if}
     </div>
   </div>

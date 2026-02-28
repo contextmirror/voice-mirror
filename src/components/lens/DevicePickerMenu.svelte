@@ -8,7 +8,7 @@
   import { DEVICE_PRESETS, DEVICE_CATEGORIES } from '../../lib/device-presets.js';
   import { devicePreviewStore } from '../../lib/stores/device-preview.svelte.js';
 
-  let { onClose = () => {} } = $props();
+  let { onClose = () => {}, anchorRect = null } = $props();
 
   /**
    * Get presets for a given category.
@@ -44,7 +44,7 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="backdrop" onclick={onClose} onkeydown={() => {}}></div>
 
-<div class="picker-menu">
+<div class="picker-menu" style={anchorRect ? `position: fixed; bottom: ${window.innerHeight - anchorRect.top + 4}px; left: ${anchorRect.left}px;` : ''}>
   {#each DEVICE_CATEGORIES as category}
     <div class="category-header">{category}</div>
     {#each presetsForCategory(category) as preset}
@@ -75,9 +75,6 @@
   }
 
   .picker-menu {
-    position: absolute;
-    bottom: 100%;
-    left: 0;
     width: 280px;
     max-height: 400px;
     overflow-y: auto;
@@ -88,7 +85,6 @@
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
     z-index: 10002;
     -webkit-app-region: no-drag;
-    margin-bottom: 4px;
   }
 
   .category-header {
