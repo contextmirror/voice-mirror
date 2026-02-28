@@ -10,6 +10,7 @@
  * still work and delegate to the new group/instance model.
  */
 import { terminalSpawn, terminalKill, getConfig, setConfig } from '../api.js';
+import { auditTerminal } from '../audit-log.js';
 import { createLeaf, splitLeaf, removeLeaf, getAllInstanceIds, findLeaf, serialize, deserialize } from '../split-tree.js';
 
 function createTerminalTabsStore() {
@@ -293,6 +294,7 @@ function createTerminalTabsStore() {
      * @returns {Promise<string|null>} The group ID, or null on failure.
      */
     async addGroup(options = {}) {
+      auditTerminal('shell-created', { profileId: options.profileId || 'default' });
       try {
         const result = await terminalSpawn(options);
         if (!result?.success || !result?.data?.id) {
@@ -558,6 +560,7 @@ function createTerminalTabsStore() {
      * @param {string} groupId
      */
     setActiveGroup(groupId) {
+      auditTerminal('group-switched', { groupId });
       const group = groups.find(g => g.id === groupId);
       if (!group) return;
       activeGroupId = groupId;
@@ -1024,6 +1027,7 @@ function createTerminalTabsStore() {
      * @param {string} shellId
      */
     markExited(shellId) {
+      auditTerminal('shell-exited', { shellId });
       // Update instance if it exists
       const instance = Object.values(instances).find(inst => inst.shellId === shellId);
       if (instance) {

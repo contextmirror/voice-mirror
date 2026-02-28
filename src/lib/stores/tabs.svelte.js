@@ -8,6 +8,7 @@
  */
 
 import { editorGroupsStore } from './editor-groups.svelte.js';
+import { auditEditor } from '../audit-log.js';
 
 /**
  * Show a native Save/Don't Save/Cancel dialog for a dirty tab.
@@ -113,6 +114,7 @@ function createTabsStore() {
      * @param {number} [targetGroupId] - Group to open in (defaults to focused group)
      */
     openFile(entry, targetGroupId) {
+      auditEditor('file-opened', { path: entry.path });
       const groupId = targetGroupId ?? editorGroupsStore.focusedGroupId;
 
       // If file is already open in the target group, just focus it
@@ -259,6 +261,7 @@ function createTabsStore() {
       if (idx === -1) return;
 
       const closedTab = tabs[idx];
+      auditEditor('file-closed', { path: closedTab.path });
       const groupId = closedTab.groupId;
       const groupTabs = tabs.filter(t => t.groupId === groupId);
 
@@ -352,6 +355,7 @@ function createTabsStore() {
      * Set the active tab by ID. Updates the tab's group focus as well.
      */
     setActive(id) {
+      auditEditor('tab-switched', { path: id });
       const tab = tabs.find(t => t.id === id);
       if (tab) {
         activeTabId = id;
