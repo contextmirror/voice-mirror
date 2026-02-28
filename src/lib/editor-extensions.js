@@ -9,6 +9,104 @@ import { showMinimap } from '@replit/codemirror-minimap';
 import { createGitGutter } from './editor-git-gutter.js';
 
 /**
+ * Creates a CodeMirror ViewPlugin that underlines the word under the cursor
+ * when Ctrl (or Meta on Mac) is held, providing visual feedback for Ctrl+Click
+ * go-to-definition.
+ */
+function createDefinitionHintPlugin(cm) {
+  const { ViewPlugin, Decoration } = cm;
+
+  const hintMark = Decoration.mark({ class: 'cm-definition-hint' });
+
+  return ViewPlugin.fromClass(class {
+    decorations;
+    ctrlDown = false;
+    mouseX = 0;
+    mouseY = 0;
+
+    constructor(view) {
+      this.decorations = Decoration.set([]);
+      this.view = view;
+      this.handleKeyDown = this.handleKeyDown.bind(this);
+      this.handleKeyUp = this.handleKeyUp.bind(this);
+      this.handleMouseMove = this.handleMouseMove.bind(this);
+      this.handleMouseLeave = this.handleMouseLeave.bind(this);
+
+      view.dom.addEventListener('keydown', this.handleKeyDown);
+      view.dom.addEventListener('keyup', this.handleKeyUp);
+      view.dom.addEventListener('mousemove', this.handleMouseMove);
+      view.dom.addEventListener('mouseleave', this.handleMouseLeave);
+    }
+
+    handleKeyDown(e) {
+      if (e.key === 'Control' || e.key === 'Meta') {
+        this.ctrlDown = true;
+        this.updateDecoration();
+      }
+    }
+
+    handleKeyUp(e) {
+      if (e.key === 'Control' || e.key === 'Meta') {
+        this.ctrlDown = false;
+        this.decorations = Decoration.set([]);
+        this.view.requestMeasure();
+      }
+    }
+
+    handleMouseMove(e) {
+      this.mouseX = e.clientX;
+      this.mouseY = e.clientY;
+      if (this.ctrlDown) {
+        this.updateDecoration();
+      }
+    }
+
+    handleMouseLeave() {
+      this.ctrlDown = false;
+      this.decorations = Decoration.set([]);
+    }
+
+    updateDecoration() {
+      const pos = this.view.posAtCoords({ x: this.mouseX, y: this.mouseY });
+      if (pos == null) {
+        this.decorations = Decoration.set([]);
+        return;
+      }
+
+      // Find word boundaries at position
+      const { state } = this.view;
+      const line = state.doc.lineAt(pos);
+      const lineText = line.text;
+      const col = pos - line.from;
+
+      // Find word start/end using simple word boundary detection
+      let start = col;
+      let end = col;
+      while (start > 0 && /\w/.test(lineText[start - 1])) start--;
+      while (end < lineText.length && /\w/.test(lineText[end])) end++;
+
+      if (start === end) {
+        this.decorations = Decoration.set([]);
+        return;
+      }
+
+      const from = line.from + start;
+      const to = line.from + end;
+      this.decorations = Decoration.set([hintMark.range(from, to)]);
+    }
+
+    destroy() {
+      this.view.dom.removeEventListener('keydown', this.handleKeyDown);
+      this.view.dom.removeEventListener('keyup', this.handleKeyUp);
+      this.view.dom.removeEventListener('mousemove', this.handleMouseMove);
+      this.view.dom.removeEventListener('mouseleave', this.handleMouseLeave);
+    }
+  }, {
+    decorations: (v) => v.decorations,
+  });
+}
+
+/**
  * Build the full CodeMirror extensions array for the file editor.
  *
  * @param {object} cm - CodeMirror module cache (EditorView, basicSetup, EditorState,
@@ -154,6 +252,11 @@ export function buildEditorExtensions(cm, lsp, options) {
       { key: 'Mod-.', run: (v) => { lsp.handleCodeActions(v, filePath); return true; } },
       { key: 'Ctrl-Shift-Space', run: (v) => { lsp.requestSignatureHelp(v, filePath, null); return true; } },
     ]));
+  }
+
+  // Ctrl+hover definition underline hint
+  if (lsp.hasLsp) {
+    extensions.push(createDefinitionHintPlugin(cm));
   }
 
   // Context menu + optional Ctrl+Click go-to-definition

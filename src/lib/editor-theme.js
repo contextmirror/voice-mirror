@@ -196,6 +196,12 @@ const editorTheme = EditorView.theme({
   '.cm-git-peek-revert:hover': {
     backgroundColor: 'color-mix(in srgb, var(--danger) 25%, transparent)',
   },
+  // ── Ctrl+hover definition hint ──
+  '.cm-definition-hint': {
+    textDecoration: 'underline',
+    textDecorationColor: 'var(--accent)',
+    cursor: 'pointer',
+  },
 }, { dark: true });
 
 // ── Syntax highlighting ──
