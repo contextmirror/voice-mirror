@@ -20,8 +20,8 @@
 - [x] Task 1: Create server registry manifest (`lsp-servers.json`)
 - [x] Task 2: Create manifest parser (`manifest.rs`)
 - [x] Task 3: Create Node.js detection utility
-- [ ] Task 4: Create npm installer module (`installer.rs`)
-- [ ] Task 5: Rewrite detection module to use manifest
+- [x] Task 4: Create npm installer module (`installer.rs`)
+- [x] Task 5: Rewrite detection module to use manifest
 - [ ] Task 6: Wire installer into `ensure_server()` flow
 - [ ] Task 7: Pass `initializationOptions` from manifest on server init
 - [ ] Task 8: Handle `workspace/configuration` requests from servers

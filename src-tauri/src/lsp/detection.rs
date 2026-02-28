@@ -100,6 +100,9 @@ pub fn resolve_node_script(_info: &ServerInfo) -> Option<(String, Vec<String>)> 
 pub fn detect_for_extension(ext: &str) -> Option<ServerInfo> {
     let manifest = super::manifest::load_manifest().ok()?;
     let lsp_dir = super::installer::get_lsp_servers_dir().ok();
+    if lsp_dir.is_none() {
+        tracing::warn!("Could not determine lsp-servers dir; managed installs will not be detected");
+    }
     let (id, entry) = super::manifest::find_server_for_extension(&manifest, ext)?;
 
     // Try to find the binary: 1) PATH, 2) managed lsp-servers/
@@ -148,7 +151,10 @@ pub fn detect_all() -> Vec<ServerInfo> {
     let lsp_dir = super::installer::get_lsp_servers_dir().ok();
 
     let mut results = Vec::new();
-    for (id, entry) in &manifest.servers {
+    // Sort by server ID for deterministic ordering (HashMap iteration is random)
+    let mut entries: Vec<(&String, &super::manifest::ServerEntry)> = manifest.servers.iter().collect();
+    entries.sort_by_key(|(id, _)| id.as_str());
+    for (id, entry) in entries {
         if !entry.enabled {
             continue;
         }

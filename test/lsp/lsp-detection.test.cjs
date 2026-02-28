@@ -9,8 +9,11 @@ const src = fs.readFileSync(
 );
 
 describe('detection.rs: manifest-based routing', () => {
-  it('imports manifest module', () => {
-    assert.ok(src.includes('manifest'), 'Should import manifest module');
+  it('uses manifest module', () => {
+    assert.ok(
+      src.includes('super::manifest::') || src.includes('use super::manifest'),
+      'Should use manifest module'
+    );
   });
 
   it('no longer has hardcoded LANGUAGE_SERVERS constant', () => {
