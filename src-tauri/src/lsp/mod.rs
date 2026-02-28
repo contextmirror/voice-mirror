@@ -128,13 +128,10 @@ impl LspManager {
             server_info
         };
 
-        // Verify server is installed after potential auto-install attempt
-        if !server_info.installed {
-            return Err(format!(
-                "LSP server '{}' for '{}' is not installed after auto-install attempt",
-                server_info.binary, lang_id
-            ));
-        }
+        // Invariant: server_info.installed is always true here because:
+        // - the else branch only executes when it was already true
+        // - the if branch retries detect_for_extension which only returns Some when binary found
+        debug_assert!(server_info.installed, "ServerInfo should have installed=true after detection");
 
         info!(
             "Starting LSP server '{}' for language '{}'",
