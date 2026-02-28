@@ -169,9 +169,11 @@ function createCodeActionsGutter(cm, lsp, filePath) {
         const view = update.view;
         const line = view.state.doc.lineAt(view.state.selection.main.head);
 
-        // If cursor moved to a different line, clear lightbulb immediately
+        // If cursor moved to a different line, clear lightbulb (deferred to avoid dispatch-during-update)
         if (line.from !== this.lastLineFrom) {
-          view.dispatch({ effects: setLightbulbMarkers.of(RangeSet.empty) });
+          requestAnimationFrame(() => {
+            try { view.dispatch({ effects: setLightbulbMarkers.of(RangeSet.empty) }); } catch {}
+          });
         }
 
         this.debounceTimer = setTimeout(() => this.checkCodeActions(view), 400);
