@@ -146,3 +146,67 @@ describe('lsp-servers.json: shared packages', () => {
     }
   });
 });
+
+describe('lsp-servers.json: eslint entry', () => {
+  it('eslint entry exists', () => {
+    assert.ok(manifest.servers.eslint, 'Should have eslint server entry');
+  });
+
+  it('eslint has supplementary priority', () => {
+    assert.equal(
+      manifest.servers.eslint.priority,
+      'supplementary',
+      'ESLint should be a supplementary server'
+    );
+  });
+
+  it('eslint covers JS/TS extensions', () => {
+    const exts = manifest.servers.eslint.extensions;
+    assert.ok(exts.includes('.js'), 'Should cover .js');
+    assert.ok(exts.includes('.jsx'), 'Should cover .jsx');
+    assert.ok(exts.includes('.ts'), 'Should cover .ts');
+    assert.ok(exts.includes('.tsx'), 'Should cover .tsx');
+    assert.ok(exts.includes('.mjs'), 'Should cover .mjs');
+    assert.ok(exts.includes('.cjs'), 'Should cover .cjs');
+  });
+
+  it('eslint excludes .svelte', () => {
+    assert.ok(
+      manifest.servers.eslint.excludeExtensions.includes('.svelte'),
+      'ESLint should exclude .svelte'
+    );
+  });
+
+  it('eslint uses vscode-langservers-extracted', () => {
+    assert.ok(
+      manifest.servers.eslint.install.packages.includes('vscode-langservers-extracted'),
+      'ESLint should install from vscode-langservers-extracted'
+    );
+  });
+
+  it('eslint uses --stdio', () => {
+    assert.ok(
+      manifest.servers.eslint.args.includes('--stdio'),
+      'ESLint should use --stdio'
+    );
+  });
+
+  it('eslint command is vscode-eslint-language-server', () => {
+    assert.equal(
+      manifest.servers.eslint.command,
+      'vscode-eslint-language-server',
+      'ESLint should use vscode-eslint-language-server binary'
+    );
+  });
+
+  it('eslint has same JS/TS language IDs as typescript server', () => {
+    const eslintLangs = manifest.servers.eslint.languages;
+    const tsLangs = manifest.servers.typescript.languages;
+    for (const lang of tsLangs) {
+      assert.ok(
+        eslintLangs.includes(lang),
+        `ESLint should support ${lang} language`
+      );
+    }
+  });
+});

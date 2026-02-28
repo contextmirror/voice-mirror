@@ -69,6 +69,7 @@ pub fn load_manifest() -> Result<ServerManifest, String> {
 /// Find the best server for a file extension.
 /// Returns (server_id, server_entry) or None if no server handles this extension.
 /// Respects `excludeExtensions` -- a server won't be returned if the extension is excluded.
+/// Prefers `primary` servers over `supplementary` ones when multiple servers match.
 pub fn find_server_for_extension(
     manifest: &ServerManifest,
     ext: &str,
@@ -78,6 +79,8 @@ pub fn find_server_for_extension(
     } else {
         format!(".{}", ext.to_lowercase())
     };
+
+    let mut best: Option<(String, ServerEntry)> = None;
 
     for (id, entry) in &manifest.servers {
         if !entry.enabled {
@@ -95,10 +98,17 @@ pub fn find_server_for_extension(
             .iter()
             .any(|e| e.to_lowercase() == dot_ext)
         {
-            return Some((id.clone(), entry.clone()));
+            // Primary servers always win over supplementary
+            if entry.priority == "primary" {
+                return Some((id.clone(), entry.clone()));
+            }
+            // Keep the first supplementary match as fallback
+            if best.is_none() {
+                best = Some((id.clone(), entry.clone()));
+            }
         }
     }
-    None
+    best
 }
 
 /// Resolve the binary path for a server.
@@ -203,5 +213,27 @@ mod tests {
         assert!(entry.enabled);
         apply_overrides(&mut entry, &serde_json::json!({"enabled": false}));
         assert!(!entry.enabled);
+    }
+
+    #[test]
+    fn test_eslint_in_manifest() {
+        let manifest = load_manifest().unwrap();
+        assert!(manifest.servers.contains_key("eslint"), "Manifest should contain eslint");
+        let eslint = &manifest.servers["eslint"];
+        assert_eq!(eslint.priority, "supplementary");
+        assert_eq!(eslint.command, "vscode-eslint-language-server");
+        assert!(eslint.extensions.contains(&".js".to_string()));
+        assert!(eslint.extensions.contains(&".ts".to_string()));
+        assert!(eslint.exclude_extensions.contains(&".svelte".to_string()));
+    }
+
+    #[test]
+    fn test_primary_preferred_over_supplementary() {
+        let manifest = load_manifest().unwrap();
+        // Both typescript (primary) and eslint (supplementary) match .js
+        let result = find_server_for_extension(&manifest, "js");
+        assert!(result.is_some());
+        let (id, _) = result.unwrap();
+        assert_eq!(id, "typescript", "Primary server should be preferred over supplementary");
     }
 }

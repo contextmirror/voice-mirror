@@ -117,6 +117,24 @@
       "restartPolicy": "on-crash",
       "initializationOptions": {},
       "settings": {}
+    },
+    "eslint": {
+      "name": "ESLint Language Server",
+      "languages": ["javascript", "typescript", "javascriptreact", "typescriptreact"],
+      "extensions": [".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"],
+      "excludeExtensions": [".svelte"],
+      "install": {
+        "type": "npm",
+        "packages": ["vscode-langservers-extracted"],
+        "version": "^4.0"
+      },
+      "command": "vscode-eslint-language-server",
+      "args": ["--stdio"],
+      "priority": "supplementary",
+      "enabled": true,
+      "restartPolicy": "on-crash",
+      "initializationOptions": {},
+      "settings": {}
     }
   }
 }

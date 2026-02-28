@@ -315,5 +315,14 @@ mod tests {
         assert!(ids.contains(&"css"), "Should include css");
         assert!(ids.contains(&"html"), "Should include html");
         assert!(ids.contains(&"json"), "Should include json");
+        assert!(ids.contains(&"eslint"), "Should include eslint");
+    }
+
+    #[test]
+    fn test_primary_preferred_over_supplementary() {
+        // For .js, both typescript (primary) and eslint (supplementary) match.
+        // find_server_for_extension should return the primary server.
+        let info = detect_for_extension("js").unwrap();
+        assert_eq!(info.language_id, "typescript", "Primary server should be preferred for .js");
     }
 }
