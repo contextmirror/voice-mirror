@@ -74,18 +74,22 @@ function createDevicePreviewStore() {
       activeDevices.push(device);
 
       try {
+        // Create with tiny initial size — will be repositioned by DevicePreview component
+        // once the DOM placeholder is rendered and getBoundingClientRect() is available
         const result = await lensCreateDeviceWebview({
           presetId,
           url,
-          width: orientation === 'landscape' ? preset.height : preset.width,
-          height: orientation === 'landscape' ? preset.width : preset.height,
-          x: 0,
-          y: 0,
+          width: 1,
+          height: 1,
+          x: -10,
+          y: -10,
         });
         const d = activeDevices.find(d => d.presetId === presetId);
         if (d && result) {
           d.webviewLabel = result?.data?.label || result?.label || `device-${presetId}`;
         }
+        // Force reactive update so DevicePreview's $effect re-runs and repositions
+        activeDevices = [...activeDevices];
         return true;
       } catch (err) {
         console.error('[device-preview] Failed to create device webview:', err);
