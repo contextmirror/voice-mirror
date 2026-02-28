@@ -17,7 +17,7 @@
 | Task | Description | Status | Agent | Commit |
 |------|-------------|--------|-------|--------|
 | 1 | Status bar store (state + setters) | Done | agent | 7b7d4cca |
-| 2 | StatusBar component + CSS | Pending | — | — |
+| 2 | StatusBar component + CSS | Done | agent | eaca80f7 |
 | 3 | Mount in App.svelte | Pending | — | — |
 | 4 | FileEditor → store wiring | Pending | — | — |
 | 5 | R1 click → Go to Line | Pending | — | — |
