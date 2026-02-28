@@ -48,9 +48,8 @@ All 6 items from the second wave are done:
 |---|-----|----------|--------|
 | 1 | **Quick fix lightbulb in gutter** | Editor | Medium |
 | 2 | **Ctrl+Tab MRU tab cycling** | Tabs | Medium |
-| 3 | **Terminal inline rename** (replace prompt() dialog) | Tabs | Small |
-| ~~4~~ | ~~**Unsplit terminal preserves terminals**~~ (was killing them) | Terminal | ✅ Done |
-| 5 | **Text drag in editor** (unblock in main.js) | Drag | Small |
+| ~~3~~ | ~~**Unsplit terminal preserves terminals**~~ (was killing them) | Terminal | ✅ Done |
+| 4 | **Text drag in editor** (unblock in main.js) | Drag | Small |
 
 ---
 
@@ -383,8 +382,8 @@ Click to activate, close button (hover), middle-click close, right-click context
 
 | Gap | Priority | Notes |
 |-----|----------|-------|
-| **Drag to reorder** | P1 | Tab strip has no drag handlers (sidebar does) |
-| **Inline rename (double-click)** | P1 | Uses `prompt()` dialog instead of inline input |
+| ~~Drag to reorder~~ | ~~P1~~ | Removed — acceptable as-is |
+| ~~Inline rename (double-click)~~ | ~~P1~~ | Removed — prompt() dialog acceptable |
 | Close Others / Close to Right | P2 | Not in context menu |
 | Auto-detect terminal title | P3 | Static "Terminal N" unless manually renamed |
 
@@ -658,8 +657,8 @@ All P0 items completed (status bar done in prior work).
 | 11 | Quick fix lightbulb in gutter | Editor | Medium |
 | 12 | Ctrl+Tab MRU tab cycling | Tabs | Medium |
 | ~~13~~ | ~~Ctrl+PageUp/PageDown (prev/next tab)~~ | ~~Keyboards~~ | ✅ Done (Wave 2) |
-| 14 | Terminal inline rename (replace prompt() dialog) | Tabs | Small |
-| 15 | Terminal tab strip drag reorder | Drag | Medium |
+| ~~14~~ | ~~Terminal inline rename~~ | ~~Tabs~~ | Removed (acceptable as-is) |
+| ~~15~~ | ~~Terminal tab strip drag reorder~~ | ~~Drag~~ | Removed (acceptable as-is) |
 | 16 | File path breadcrumbs | Status Bar | Medium |
 | 17 | Sidebar badge counts (git changes, errors) | Status Bar | Medium |
 | 18 | Diagnostics panel (unified error list) | Status Bar | Medium-Large |
