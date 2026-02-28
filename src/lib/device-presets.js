@@ -8,7 +8,6 @@ export const DEVICE_CATEGORIES = [
     'iPad',
     'Android Phone',
     'Android Tablet',
-    'Desktop'
 ];
 
 const IPHONE_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
@@ -50,10 +49,6 @@ export const DEVICE_PRESETS = [
     { id: 'galaxy-tab-s9', name: 'Galaxy Tab S9', category: 'Android Tablet', width: 800, height: 1280, dpr: 2, userAgent: ANDROID_TABLET_UA },
     { id: 'pixel-tablet', name: 'Pixel Tablet', category: 'Android Tablet', width: 1200, height: 2000, dpr: 2, userAgent: ANDROID_TABLET_UA },
 
-    // Desktop (3 devices)
-    { id: 'desktop-laptop', name: 'Laptop (1366x768)', category: 'Desktop', width: 1366, height: 768, dpr: 1, userAgent: '' },
-    { id: 'desktop-fhd', name: 'Full HD (1920x1080)', category: 'Desktop', width: 1920, height: 1080, dpr: 1, userAgent: '' },
-    { id: 'desktop-2k', name: '2K (2560x1440)', category: 'Desktop', width: 2560, height: 1440, dpr: 1, userAgent: '' },
 ];
 
 /**

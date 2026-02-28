@@ -9,13 +9,13 @@ import {
 
 describe('device-presets', () => {
     describe('DEVICE_CATEGORIES', () => {
-        it('is an array with at least 5 categories', () => {
+        it('is an array with at least 4 categories', () => {
             assert.ok(Array.isArray(DEVICE_CATEGORIES));
-            assert.ok(DEVICE_CATEGORIES.length >= 5, `Expected 5+ categories, got ${DEVICE_CATEGORIES.length}`);
+            assert.ok(DEVICE_CATEGORIES.length >= 4, `Expected 4+ categories, got ${DEVICE_CATEGORIES.length}`);
         });
 
         it('contains expected category strings', () => {
-            const expected = ['iPhone', 'iPad', 'Android Phone', 'Android Tablet', 'Desktop'];
+            const expected = ['iPhone', 'iPad', 'Android Phone', 'Android Tablet'];
             for (const cat of expected) {
                 assert.ok(DEVICE_CATEGORIES.includes(cat), `Missing category: ${cat}`);
             }
@@ -116,9 +116,5 @@ describe('device-presets', () => {
             assert.ok(count >= 2, `Expected 2+ Android Tablet presets, got ${count}`);
         });
 
-        it('has at least 3 Desktop presets', () => {
-            const count = DEVICE_PRESETS.filter(p => p.category === 'Desktop').length;
-            assert.ok(count >= 3, `Expected 3+ Desktop presets, got ${count}`);
-        });
     });
 });
