@@ -189,6 +189,11 @@ export const IN_APP_SHORTCUTS = {
     label: 'Close active editor tab',
     category: 'in-app',
   },
+  'reopen-closed-tab': {
+    keys: 'Ctrl+Shift+T',
+    label: 'Reopen closed editor',
+    category: 'in-app',
+  },
   'toggle-sidebar': {
     keys: 'Ctrl+B',
     label: 'Toggle sidebar',
@@ -250,6 +255,9 @@ const actionHandlers = {
     if (tabsStore.activeTabId) {
       tabsStore.closeTab(tabsStore.activeTabId);
     }
+  },
+  'reopen-closed-tab': () => {
+    tabsStore.reopenClosedTab();
   },
   'toggle-sidebar': () => {
     navigationStore.toggleSidebar();
@@ -618,6 +626,13 @@ export function setupInAppShortcuts() {
     if (ctrl && event.key === 'w' && !event.shiftKey) {
       event.preventDefault();
       actionHandlers['close-tab']?.();
+      return;
+    }
+
+    // Ctrl+Shift+T -> Reopen closed editor tab
+    if (ctrl && event.shiftKey && event.key === 'T') {
+      event.preventDefault();
+      actionHandlers['reopen-closed-tab']?.();
       return;
     }
 

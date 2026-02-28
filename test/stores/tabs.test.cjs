@@ -361,6 +361,38 @@ describe('tabs.svelte.js: requestClose method', () => {
   });
 });
 
+// ── Closed tab history ──────────────────────────────────────────────────────
+
+describe('tabs.svelte.js: closed tab history', () => {
+  it('declares closedTabs state array', () => {
+    assert.ok(src.includes('closedTabs'), 'Should have closedTabs state');
+  });
+
+  it('has MAX_CLOSED_TABS constant of 20', () => {
+    assert.ok(src.includes('MAX_CLOSED_TABS') && src.includes('20'), 'Should limit closed tab history to 20');
+  });
+
+  it('pushes tab data onto closedTabs in closeTab before removing', () => {
+    assert.ok(src.includes('closedTabs') && src.includes('closeTab'), 'closeTab should interact with closedTabs');
+  });
+
+  it('skips untitled files in closed tab history', () => {
+    assert.ok(src.includes('untitled'), 'Should check for untitled prefix');
+  });
+
+  it('exports reopenClosedTab method', () => {
+    assert.ok(src.includes('reopenClosedTab'), 'Should export reopenClosedTab');
+  });
+
+  it('reopenClosedTab calls openFile with stored data', () => {
+    assert.ok(src.includes('reopenClosedTab') && src.includes('openFile'), 'reopenClosedTab should call openFile');
+  });
+
+  it('exposes canReopenTab getter', () => {
+    assert.ok(src.includes('canReopenTab'), 'Should have canReopenTab getter');
+  });
+});
+
 describe('tabs.svelte.js: diff tab support', () => {
   it('has openDiff method', () => {
     assert.ok(src.includes('openDiff('), 'Should have openDiff method');

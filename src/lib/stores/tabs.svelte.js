@@ -40,6 +40,10 @@ function createTabsStore() {
   let untitledCounter = 0;
   let previewEnabled = $state(true);
 
+  /** @type {Array<{path: string, type: string, groupId: number, title: string}>} */
+  let closedTabs = $state([]);
+  const MAX_CLOSED_TABS = 20;
+
   return {
     get tabs() { return tabs; },
     get activeTabId() { return activeTabId; },
@@ -237,6 +241,19 @@ function createTabsStore() {
         editorGroupsStore.setActiveTabForGroup(groupId, nextActiveId);
         if (groupId === editorGroupsStore.focusedGroupId) {
           activeTabId = nextActiveId;
+        }
+      }
+
+      // Push to closed tab history (skip untitled files)
+      if (!closedTab.path.startsWith('untitled:')) {
+        closedTabs.push({
+          path: closedTab.path,
+          type: closedTab.type,
+          groupId: closedTab.groupId,
+          title: closedTab.title,
+        });
+        if (closedTabs.length > MAX_CLOSED_TABS) {
+          closedTabs.splice(0, closedTabs.length - MAX_CLOSED_TABS);
         }
       }
 
@@ -498,6 +515,29 @@ function createTabsStore() {
           if (tab.preview) tab.preview = false;
         }
       }
+    },
+
+    /** Whether there are closed tabs to reopen */
+    get canReopenTab() { return closedTabs.length > 0; },
+
+    /**
+     * Reopen the most recently closed tab.
+     * @returns {boolean} true if a tab was reopened
+     */
+    reopenClosedTab() {
+      if (closedTabs.length === 0) return false;
+      const entry = closedTabs.pop();
+      // Check if group still exists, fall back to focused group
+      const targetGroup = editorGroupsStore.allGroupIds.includes(entry.groupId)
+        ? entry.groupId
+        : editorGroupsStore.focusedGroupId;
+      const name = entry.path.split(/[/\\]/).pop() || entry.path;
+      if (entry.type === 'diff') {
+        this.openDiff({ path: entry.path, status: 'modified' }, targetGroup);
+      } else {
+        this.openFile({ name, path: entry.path }, targetGroup);
+      }
+      return true;
     },
   };
 }

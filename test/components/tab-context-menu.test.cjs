@@ -230,6 +230,22 @@ describe('TabContextMenu.svelte: save prompt on close', () => {
   });
 });
 
+// ── Reopen closed tab ──────────────────────────────────────────────────────
+
+describe('TabContextMenu.svelte: reopen closed tab', () => {
+  it('has Reopen Closed Editor menu item', () => {
+    assert.ok(src.includes('Reopen Closed'), 'Should have Reopen Closed Editor item');
+  });
+
+  it('shows Ctrl+Shift+T shortcut hint', () => {
+    assert.ok(src.includes('Ctrl+Shift+T'), 'Should show Ctrl+Shift+T hint');
+  });
+
+  it('calls reopenClosedTab on click', () => {
+    assert.ok(src.includes('reopenClosedTab'), 'Should call reopenClosedTab');
+  });
+});
+
 describe('tabs.svelte.js: closeOthers and closeToRight', () => {
   it('has closeOthers method', () => {
     assert.ok(tabsSrc.includes('closeOthers'));

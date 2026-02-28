@@ -81,6 +81,11 @@
     tabsStore.closeAll();
   }
 
+  function handleReopenClosed() {
+    close();
+    tabsStore.reopenClosedTab();
+  }
+
   function handleCopyPath() {
     close();
     if (!tab?.path) return;
@@ -165,6 +170,10 @@
     </button>
     <button class="context-item" onclick={handleCloseAll} role="menuitem">
       Close All
+    </button>
+    <button class="context-item" onclick={handleReopenClosed} role="menuitem" disabled={!tabsStore.canReopenTab}>
+      Reopen Closed Editor
+      <span class="context-shortcut">Ctrl+Shift+T</span>
     </button>
 
     <div class="context-separator"></div>
