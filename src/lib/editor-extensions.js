@@ -107,6 +107,113 @@ function createDefinitionHintPlugin(cm) {
 }
 
 /**
+ * Creates a CodeMirror gutter that shows a lightbulb icon on the current
+ * line when LSP code actions are available. Debounces 400ms after cursor moves
+ * to avoid spamming the LSP server. Clicking the lightbulb opens the code actions menu.
+ */
+function createCodeActionsGutter(cm, lsp, filePath) {
+  const { ViewPlugin, gutter, GutterMarker, StateEffect, StateField, RangeSet } = cm;
+
+  const setLightbulbMarkers = StateEffect.define();
+
+  const lightbulbField = StateField.define({
+    create() { return RangeSet.empty; },
+    update(markers, tr) {
+      for (const e of tr.effects) {
+        if (e.is(setLightbulbMarkers)) return e.value;
+      }
+      if (tr.docChanged) return markers.map(tr.changes);
+      return markers;
+    },
+  });
+
+  class LightbulbMarker extends GutterMarker {
+    toDOM() {
+      const span = document.createElement('span');
+      span.className = 'cm-lightbulb';
+      span.textContent = '\u{1F4A1}';
+      span.title = 'Code Actions (Ctrl+.)';
+      return span;
+    }
+  }
+  const marker = new LightbulbMarker();
+
+  const lightbulbGutter = gutter({
+    class: 'cm-lightbulb-gutter',
+    markers: (v) => v.state.field(lightbulbField),
+    domEventHandlers: {
+      mousedown(view, line) {
+        const markers = view.state.field(lightbulbField);
+        let hasMarker = false;
+        markers.between(line.from, line.from + 1, () => { hasMarker = true; });
+        if (hasMarker) {
+          lsp.handleCodeActions(view, filePath);
+          return true;
+        }
+        return false;
+      },
+    },
+  });
+
+  const lightbulbPlugin = ViewPlugin.fromClass(class {
+    debounceTimer = 0;
+    lastLineFrom = -1;
+
+    constructor(view) {
+      this.checkCodeActions(view);
+    }
+
+    update(update) {
+      if (update.selectionSet || update.docChanged) {
+        clearTimeout(this.debounceTimer);
+        const view = update.view;
+        const line = view.state.doc.lineAt(view.state.selection.main.head);
+
+        // If cursor moved to a different line, clear lightbulb immediately
+        if (line.from !== this.lastLineFrom) {
+          view.dispatch({ effects: setLightbulbMarkers.of(RangeSet.empty) });
+        }
+
+        this.debounceTimer = setTimeout(() => this.checkCodeActions(view), 400);
+      }
+    }
+
+    async checkCodeActions(view) {
+      const { lspRequestCodeActions } = await import('../lib/api.js');
+      const { projectStore } = await import('../lib/stores/project.svelte.js');
+      const sel = view.state.selection.main;
+      const line = view.state.doc.lineAt(sel.head);
+      this.lastLineFrom = line.from;
+      const root = projectStore.activeProject?.path || null;
+      try {
+        const result = await lspRequestCodeActions(
+          filePath,
+          line.number - 1, sel.from - line.from,
+          line.number - 1, sel.to - line.from,
+          [],
+          root,
+        );
+        // Only set if cursor is still on the same line
+        const currentLine = view.state.doc.lineAt(view.state.selection.main.head);
+        if (currentLine.from === line.from && result?.data?.actions?.length) {
+          view.dispatch({ effects: setLightbulbMarkers.of(RangeSet.of([marker.range(line.from)])) });
+        } else {
+          view.dispatch({ effects: setLightbulbMarkers.of(RangeSet.empty) });
+        }
+      } catch {
+        view.dispatch({ effects: setLightbulbMarkers.of(RangeSet.empty) });
+      }
+    }
+
+    destroy() {
+      clearTimeout(this.debounceTimer);
+    }
+  });
+
+  return [lightbulbField, lightbulbGutter, lightbulbPlugin];
+}
+
+/**
  * Build the full CodeMirror extensions array for the file editor.
  *
  * @param {object} cm - CodeMirror module cache (EditorView, basicSetup, EditorState,
@@ -257,6 +364,11 @@ export function buildEditorExtensions(cm, lsp, options) {
   // Ctrl+hover definition underline hint
   if (lsp.hasLsp) {
     extensions.push(createDefinitionHintPlugin(cm));
+  }
+
+  // Lightbulb gutter — shows 💡 when code actions are available on the current line
+  if (lsp.hasLsp) {
+    extensions.push(...createCodeActionsGutter(cm, lsp, filePath));
   }
 
   // Context menu + optional Ctrl+Click go-to-definition

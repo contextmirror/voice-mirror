@@ -46,8 +46,8 @@ All 6 items from the second wave are done:
 
 | # | Fix | Category | Effort |
 |---|-----|----------|--------|
-| 1 | **Quick fix lightbulb in gutter** | Editor | Medium |
-| 2 | **Ctrl+Tab MRU tab cycling** | Tabs | Medium |
+| ~~1~~ | ~~**Quick fix lightbulb in gutter**~~ (💡 GutterMarker + debounced LSP probe) | Editor | ✅ Done |
+| ~~2~~ | ~~**Ctrl+Tab MRU tab cycling**~~ | ~~Tabs~~ | Removed (acceptable as-is) |
 | ~~3~~ | ~~**Unsplit terminal preserves terminals**~~ (was killing them) | Terminal | ✅ Done |
 | ~~4~~ | ~~**Text drag in editor**~~ | ~~Drag~~ | Removed (acceptable as-is) |
 
@@ -498,7 +498,7 @@ Click to activate, close button (hover), middle-click close, right-click context
 | Behavior | Priority | Notes |
 |----------|----------|-------|
 | ~~Ctrl+hover underline (definition hint)~~ | ~~Medium~~ | ✅ Done (Wave 2) — ViewPlugin with Ctrl key tracking, word detection, Decoration.mark, cm-definition-hint CSS |
-| **Quick fix lightbulb in gutter** | Medium | Code actions exist but no visual indicator |
+| ~~Quick fix lightbulb in gutter~~ | ~~Medium~~ | ✅ Done — 💡 GutterMarker with debounced LSP probe, click to open CodeActionsMenu |
 | Peek definition (Alt+F12) | Medium | Inline preview widget |
 | Inlay hints (LSP) | Medium | Type annotations displayed inline |
 | Diagnostic peek cycling (F8) | Low | No next-error navigation |
@@ -654,8 +654,8 @@ All P0 items completed (status bar done in prior work).
 |---|------|----------|--------|
 | ~~9~~ | ~~Back/forward navigation (Alt+Left/Right)~~ | ~~Editor~~ | ✅ Done (Wave 2) |
 | ~~10~~ | ~~Ctrl+hover underline (definition hint)~~ | ~~Editor~~ | ✅ Done (Wave 2) |
-| 11 | Quick fix lightbulb in gutter | Editor | Medium |
-| 12 | Ctrl+Tab MRU tab cycling | Tabs | Medium |
+| ~~11~~ | ~~Quick fix lightbulb in gutter~~ | ~~Editor~~ | ✅ Done |
+| ~~12~~ | ~~Ctrl+Tab MRU tab cycling~~ | ~~Tabs~~ | Removed (acceptable as-is) |
 | ~~13~~ | ~~Ctrl+PageUp/PageDown (prev/next tab)~~ | ~~Keyboards~~ | ✅ Done (Wave 2) |
 | ~~14~~ | ~~Terminal inline rename~~ | ~~Tabs~~ | Removed (acceptable as-is) |
 | ~~15~~ | ~~Terminal tab strip drag reorder~~ | ~~Drag~~ | Removed (acceptable as-is) |

@@ -202,6 +202,27 @@ const editorTheme = EditorView.theme({
     textDecorationColor: 'var(--accent)',
     cursor: 'pointer',
   },
+  // ── Lightbulb gutter (code actions) ──
+  '.cm-lightbulb-gutter': {
+    width: '16px',
+    minWidth: '16px',
+  },
+  '.cm-lightbulb-gutter .cm-gutterElement': {
+    padding: '0',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  '.cm-lightbulb': {
+    fontSize: '12px',
+    cursor: 'pointer',
+    opacity: '0.85',
+    lineHeight: '1',
+  },
+  '.cm-lightbulb:hover': {
+    opacity: '1',
+    transform: 'scale(1.15)',
+  },
 }, { dark: true });
 
 // ── Syntax highlighting ──
