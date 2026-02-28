@@ -14,7 +14,7 @@ import { navigationStore } from './navigation.svelte.js';
 import { tabsStore } from './tabs.svelte.js';
 
 // -- Constants --
-const GIT_POLL_INTERVAL = 5000;
+const GIT_POLL_INTERVAL = 15000;
 const LSP_POLL_INTERVAL = 10000;
 const MAX_NOTIFICATIONS = 100;
 

@@ -220,8 +220,8 @@ describe('status-bar.svelte.js: git polling', () => {
     assert.ok(src.includes('changes') && src.includes('length'), 'Should check changes.length for gitDirty');
   });
 
-  it('defines GIT_POLL_INTERVAL around 5000ms', () => {
-    assert.ok(src.includes('5000'), 'Should define git poll interval of 5000ms');
+  it('defines GIT_POLL_INTERVAL at 15000ms', () => {
+    assert.ok(src.includes('GIT_POLL_INTERVAL = 15000'), 'Should define git poll interval of 15000ms');
   });
 });
 

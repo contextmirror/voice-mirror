@@ -2,7 +2,7 @@ use super::super::IpcResponse;
 use super::{resolve_root, normalize_git_paths};
 use crate::util::find_project_root;
 use std::path::PathBuf;
-use tracing::info;
+use tracing::{debug, info};
 
 /// Get git status changes (added, modified, deleted files).
 ///
@@ -146,7 +146,7 @@ pub fn get_git_changes(root: Option<String>) -> IpcResponse {
         }));
     }
 
-    info!("get_git_changes: {} changes", changes.len());
+    debug!("get_git_changes: {} changes", changes.len());
     IpcResponse::ok(serde_json::json!({ "changes": changes, "branch": branch }))
 }
 
