@@ -27,10 +27,10 @@
 - [x] Task 8: Handle `workspace/configuration` requests from servers
 - [x] Task 9: Add `lsp_servers` config field for user overrides
 - [x] Task 10: Frontend — API wrappers for server management
-- [ ] Task 11: Frontend — Status bar install progress indicator
-- [ ] Task 12: Frontend — Notifications for install lifecycle
-- [ ] Task 13: Integration verification — full flow test
-- [ ] Task 14: Update docs (IDE-GAPS.md, CLAUDE.md)
+- [x] Task 11: Frontend — Status bar install progress indicator
+- [x] Task 12: Frontend — Notifications for install lifecycle
+- [x] Task 13: Integration verification — full flow test
+- [x] Task 14: Update docs (IDE-GAPS.md, CLAUDE.md)
 
 ### Phase 2: Lifecycle Management + LSP Tab UI _(plan after Phase 1)_
 - [ ] Crash recovery with exponential backoff

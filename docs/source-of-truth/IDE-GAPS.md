@@ -27,7 +27,7 @@ What's missing is everything that makes a "real IDE" feel seamless — the gaps 
 | Feature | VS Code | Zed | Voice Mirror | Status |
 |---------|---------|-----|-------------|--------|
 | Editor (syntax, save) | Full | Full | Full | **Feature Compete** |
-| LSP (diagnostics, hover, completion) | Full (29/29) | Full (26/29) | 11/29 features | See LSP table below |
+| LSP (diagnostics, hover, completion) | Full (29/29) | Full (26/29) | 14/29 features | See LSP table below |
 | Go-to-definition | Full | Full | Full | **Feature Compete** |
 | Find references | Full | Full | Full | **Feature Compete** |
 | Rename symbol | Full | Full | Full | **Feature Compete** |
@@ -92,16 +92,19 @@ What's missing is everything that makes a "real IDE" feel seamless — the gaps 
 | Document colors (CSS color picker) | Full | Full | Full | None | Low |
 | Folding ranges (LSP-aware) | Full | Full (kind support) | Full | None | Low |
 | **Infrastructure** | | | | | |
-| Multi-server per file | Full | Full (primary + supplementary) | Full | None | Low |
+| Manifest-driven server registry | N/A (built-in) | N/A (built-in) | N/A | Full (lsp-servers.json, 5 servers) | Done |
+| Auto-download LSP servers (npm) | Full (built-in) | Full (extensions) | Full | Full (npm install with --ignore-scripts) | Done |
+| Server config (initOptions + workspace/config) | Full | Full | Full | Full (manifest-driven) | Done |
+| Multi-server per file | Full | Full (primary + supplementary) | Full | None | Low (Phase 3) |
 | Remote LSP (SSH) | Full | Full (SshLspAdapter) | Full | None | Not planned |
-| Crash recovery (auto-restart) | Full (backoff) | Full | Full | None | Low |
+| Crash recovery (auto-restart) | Full (backoff) | Full | Full | None | Medium (Phase 2) |
 | Pull diagnostics (refresh) | Full | Full | Full | None | Low |
 
 ### Summary
 
 | Category | VS Code | Zed | Cursor | Voice Mirror |
 |----------|---------|-----|--------|-------------|
-| **Features implemented** | 29/29 | 26/29 | 29/29 | 11/29 |
+| **Features implemented** | 29/29 | 26/29 | 29/29 | 14/29 |
 | **Core editing** | Complete | Complete | Complete | Complete |
 | **Navigation** | Complete | Near-complete | Complete | Tier 1 done |
 | **Inline assistance** | Complete | Complete | Complete | Signature help done |
@@ -128,7 +131,7 @@ What's missing is everything that makes a "real IDE" feel seamless — the gaps 
 - Semantic tokens — marginal visual improvement over syntax highlighting
 - Document colors — niche (CSS-only)
 - Call/type hierarchy — complex UI for rare use cases
-- Multi-server — only matters for CSS-in-JS and similar edge cases
+- Multi-server — planned for Phase 3 (supplementary server support, diagnostic merging)
 - Remote LSP — Voice Mirror is a local desktop app
 - Selection range — CodeMirror has built-in smart selection
 
@@ -563,6 +566,7 @@ See `docs/archive/TERMINAL-GAP-ANALYSIS.md` for the complete 33-item gap list. T
 | Ctrl+PageUp/PageDown tab cycling | Tabs | prev/next editor tab shortcuts with wrap-around |
 | Tab drag to split zones | Drag | Custom MIME type, DropZoneOverlay for tab drags, 5-zone split on drop |
 | Problems panel (Ctrl+Shift+M) | LSP + Terminal | VS Code-style tree view grouped by file, severity/text filters, click-to-navigate, status bar click opens panel, tab badge |
+| LSP server management (Phase 1) | LSP | Manifest-driven registry (5 servers), npm auto-download, initOptions + workspace/config, user overrides, status bar install indicator |
 
 ### Open Gaps — Ranked by Impact
 
@@ -600,6 +604,6 @@ The gap list above looks daunting, but Voice Mirror doesn't need to close every 
 
 The strategy: close the top gaps so Lens is **comfortable enough** for real coding, then double down on the voice+AI features no one else has.
 
-**Done:** find/replace ✓, multi-cursor ✓, global search ✓, git stage+commit+push ✓, branch management ✓, dynamic sync ✓, document formatting ✓, signature help ✓, split editor ✓, command palette ✓, file tree git decorations ✓, LSP diagnostics in tree ✓, code minimap ✓, terminal tab close ✓, terminal grid splits (H+V) ✓, terminal find (Ctrl+F) ✓, clickable terminal links ✓, terminal persistence ✓, inline gutter change indicators ✓, closed tab history + Ctrl+Shift+T ✓, mouse wheel scroll on tab bar ✓, back/forward navigation (Alt+Left/Right) ✓, Ctrl+hover definition underline ✓, Ctrl+PageUp/PageDown tab cycling ✓, tab drag to split zones ✓, Problems panel (Ctrl+Shift+M) ✓.
+**Done:** find/replace ✓, multi-cursor ✓, global search ✓, git stage+commit+push ✓, branch management ✓, dynamic sync ✓, document formatting ✓, signature help ✓, split editor ✓, command palette ✓, file tree git decorations ✓, LSP diagnostics in tree ✓, code minimap ✓, terminal tab close ✓, terminal grid splits (H+V) ✓, terminal find (Ctrl+F) ✓, clickable terminal links ✓, terminal persistence ✓, inline gutter change indicators ✓, closed tab history + Ctrl+Shift+T ✓, mouse wheel scroll on tab bar ✓, back/forward navigation (Alt+Left/Right) ✓, Ctrl+hover definition underline ✓, Ctrl+PageUp/PageDown tab cycling ✓, tab drag to split zones ✓, Problems panel (Ctrl+Shift+M) ✓, LSP server management Phase 1 (manifest registry + auto-download) ✓.
 
 **Next wave:** hunk-level staging (stage individual diff chunks from the gutter). This is the remaining high-impact gap that separates "usable" from "daily driver." The terminal is now feature-compete with VS Code for core workflows.
