@@ -15,6 +15,7 @@ import {
 import { navigationStore } from './navigation.svelte.js';
 import { overlayStore } from './overlay.svelte.js';
 import { tabsStore } from './tabs.svelte.js';
+import { editorGroupsStore } from './editor-groups.svelte.js';
 import { layoutStore } from './layout.svelte.js';
 
 // ============ Default Shortcuts ============
@@ -184,6 +185,16 @@ export const IN_APP_SHORTCUTS = {
     label: 'Rename terminal',
     category: 'in-app',
   },
+  'prev-editor-tab': {
+    keys: 'Ctrl+PageUp',
+    label: 'Previous editor tab',
+    category: 'in-app',
+  },
+  'next-editor-tab': {
+    keys: 'Ctrl+PageDown',
+    label: 'Next editor tab',
+    category: 'in-app',
+  },
   'close-tab': {
     keys: 'Ctrl+W',
     label: 'Close active editor tab',
@@ -250,6 +261,24 @@ const actionHandlers = {
     }
     // Dispatch for modal handling
     window.dispatchEvent(new CustomEvent('shortcut:close-panel'));
+  },
+  'prev-editor-tab': () => {
+    const groupId = editorGroupsStore.focusedGroupId;
+    const groupTabs = tabsStore.getTabsForGroup(groupId);
+    if (groupTabs.length <= 1) return;
+    const activeId = editorGroupsStore.getActiveTabForGroup(groupId);
+    const idx = groupTabs.findIndex(t => t.id === activeId);
+    const prevIdx = idx <= 0 ? groupTabs.length - 1 : idx - 1;
+    tabsStore.setActive(groupTabs[prevIdx].id);
+  },
+  'next-editor-tab': () => {
+    const groupId = editorGroupsStore.focusedGroupId;
+    const groupTabs = tabsStore.getTabsForGroup(groupId);
+    if (groupTabs.length <= 1) return;
+    const activeId = editorGroupsStore.getActiveTabForGroup(groupId);
+    const idx = groupTabs.findIndex(t => t.id === activeId);
+    const nextIdx = idx >= groupTabs.length - 1 ? 0 : idx + 1;
+    tabsStore.setActive(groupTabs[nextIdx].id);
   },
   'close-tab': () => {
     if (tabsStore.activeTabId) {
@@ -619,6 +648,20 @@ export function setupInAppShortcuts() {
     if (ctrl && event.shiftKey && event.key === 'O') {
       event.preventDefault();
       actionHandlers['go-to-symbol']?.();
+      return;
+    }
+
+    // Ctrl+PageUp -> Previous editor tab
+    if (ctrl && event.key === 'PageUp') {
+      event.preventDefault();
+      actionHandlers['prev-editor-tab']?.();
+      return;
+    }
+
+    // Ctrl+PageDown -> Next editor tab
+    if (ctrl && event.key === 'PageDown') {
+      event.preventDefault();
+      actionHandlers['next-editor-tab']?.();
       return;
     }
 

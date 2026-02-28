@@ -639,6 +639,55 @@ describe('shortcuts: no key binding conflicts', () => {
   });
 });
 
+// ============ Tab cycling shortcuts (Ctrl+PageUp/PageDown) ============
+
+describe('shortcuts.svelte.js: tab cycling', () => {
+  it('defines prev-editor-tab shortcut with Ctrl+PageUp', () => {
+    assert.ok(src.includes('prev-editor-tab') && src.includes('PageUp'), 'Should have Ctrl+PageUp');
+  });
+
+  it('defines next-editor-tab shortcut with Ctrl+PageDown', () => {
+    assert.ok(src.includes('next-editor-tab') && src.includes('PageDown'), 'Should have Ctrl+PageDown');
+  });
+
+  it('has action handler for prev-editor-tab', () => {
+    assert.ok(src.includes("'prev-editor-tab'") && src.includes('setActive'), 'Should wire prev-editor-tab to setActive');
+  });
+
+  it('has action handler for next-editor-tab', () => {
+    assert.ok(src.includes("'next-editor-tab'") && src.includes('setActive'), 'Should wire next-editor-tab to setActive');
+  });
+
+  it('handles Ctrl+PageUp in keydown handler', () => {
+    assert.ok(
+      src.includes("event.key === 'PageUp'") || src.includes("key === 'PageUp'"),
+      'Should handle Ctrl+PageUp keydown event'
+    );
+    assert.ok(
+      src.includes("actionHandlers['prev-editor-tab']"),
+      'Should dispatch to prev-editor-tab action handler'
+    );
+  });
+
+  it('handles Ctrl+PageDown in keydown handler', () => {
+    assert.ok(
+      src.includes("event.key === 'PageDown'") || src.includes("key === 'PageDown'"),
+      'Should handle Ctrl+PageDown keydown event'
+    );
+    assert.ok(
+      src.includes("actionHandlers['next-editor-tab']"),
+      'Should dispatch to next-editor-tab action handler'
+    );
+  });
+
+  it('imports editorGroupsStore for tab cycling', () => {
+    assert.ok(
+      src.includes('editorGroupsStore'),
+      'Should import editorGroupsStore for tab group awareness'
+    );
+  });
+});
+
 // ============ Tauri event listeners ============
 
 describe('shortcuts: Tauri event listeners', () => {
