@@ -67,7 +67,7 @@
     const [
       { EditorView, basicSetup },
       { EditorState, EditorSelection },
-      { keymap, hoverTooltip },
+      { keymap, hoverTooltip, ViewPlugin, Decoration },
       { autocompletion },
       { setDiagnostics, lintGutter },
     ] = await Promise.all([
@@ -77,7 +77,7 @@
       import('@codemirror/autocomplete'),
       import('@codemirror/lint'),
     ]);
-    cmCache = { EditorView, basicSetup, EditorState, EditorSelection, keymap, hoverTooltip, autocompletion, setDiagnostics, lintGutter };
+    cmCache = { EditorView, basicSetup, EditorState, EditorSelection, keymap, hoverTooltip, ViewPlugin, Decoration, autocompletion, setDiagnostics, lintGutter };
     return cmCache;
   }
 

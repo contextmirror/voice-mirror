@@ -30,6 +30,45 @@ describe('editor-extensions.js: Ctrl+hover definition underline', () => {
   });
 });
 
+describe('editor-extensions.js: cm object dependencies', () => {
+  it('destructures ViewPlugin from cm parameter', () => {
+    assert.ok(src.includes('ViewPlugin') && src.includes('cm'), 'Should use ViewPlugin from cm');
+  });
+
+  it('destructures Decoration from cm parameter', () => {
+    assert.ok(src.includes('Decoration') && src.includes('cm'), 'Should use Decoration from cm');
+  });
+});
+
+const fileEditorSrc = fs.readFileSync(
+  path.join(__dirname, '../../src/components/lens/FileEditor.svelte'),
+  'utf-8'
+);
+
+describe('FileEditor.svelte: cm object includes ViewPlugin and Decoration', () => {
+  it('imports ViewPlugin from @codemirror/view', () => {
+    assert.ok(fileEditorSrc.includes('ViewPlugin'), 'loadCM should import ViewPlugin');
+  });
+
+  it('imports Decoration from @codemirror/view', () => {
+    assert.ok(fileEditorSrc.includes('Decoration'), 'loadCM should import Decoration');
+  });
+
+  it('includes ViewPlugin in cmCache object', () => {
+    assert.ok(
+      fileEditorSrc.includes('ViewPlugin') && fileEditorSrc.includes('cmCache'),
+      'cmCache should include ViewPlugin'
+    );
+  });
+
+  it('includes Decoration in cmCache object', () => {
+    assert.ok(
+      fileEditorSrc.includes('Decoration') && fileEditorSrc.includes('cmCache'),
+      'cmCache should include Decoration'
+    );
+  });
+});
+
 const themeSrc = fs.readFileSync(
   path.join(__dirname, '../../src/lib/editor-theme.js'),
   'utf-8'
