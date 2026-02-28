@@ -88,6 +88,12 @@ const DEFAULT_CONFIG = {
     formatOnSave: false,
     fontSize: 14,
   },
+  devicePreview: {
+    customDevices: [],
+    lastDevices: [],
+    syncEnabled: true,
+    orientation: 'portrait',
+  },
   workspace: {
     showChat: false,
     showTerminal: false,

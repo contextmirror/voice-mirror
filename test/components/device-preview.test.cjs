@@ -219,3 +219,28 @@ describe('LensWorkspace.svelte: device preview integration', () => {
     assert.ok(workspaceSrc.includes('devicePreviewRatio'), 'Should have devicePreviewRatio state');
   });
 });
+
+const schemaSrc = fs.readFileSync(path.join(__dirname, '../../src-tauri/src/config/schema.rs'), 'utf-8');
+const configStoreSrc = fs.readFileSync(path.join(__dirname, '../../src/lib/stores/config.svelte.js'), 'utf-8');
+
+describe('config: device preview settings', () => {
+  it('schema.rs has DevicePreviewConfig struct', () => {
+    assert.ok(schemaSrc.includes('pub struct DevicePreviewConfig'), 'Should have DevicePreviewConfig');
+  });
+
+  it('AppConfig has device_preview field', () => {
+    assert.ok(schemaSrc.includes('device_preview'), 'AppConfig should have device_preview field');
+  });
+
+  it('DevicePreviewConfig has custom_devices field', () => {
+    assert.ok(schemaSrc.includes('custom_devices'), 'Should store custom device presets');
+  });
+
+  it('DevicePreviewConfig has last_devices field', () => {
+    assert.ok(schemaSrc.includes('last_devices'), 'Should remember last-used devices');
+  });
+
+  it('DEFAULT_CONFIG has devicePreview section', () => {
+    assert.ok(configStoreSrc.includes('devicePreview'), 'DEFAULT_CONFIG should have devicePreview');
+  });
+});

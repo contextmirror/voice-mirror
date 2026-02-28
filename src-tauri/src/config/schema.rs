@@ -34,6 +34,8 @@ pub struct AppConfig {
     #[serde(default)]
     pub editor: EditorConfig,
     #[serde(default)]
+    pub device_preview: DevicePreviewConfig,
+    #[serde(default)]
     pub terminal_layout: Option<serde_json::Value>,
 }
 
@@ -418,6 +420,20 @@ impl Default for AiConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolProfile {
     pub groups: Vec<String>,
+}
+
+/// Device preview settings (custom presets, last-used devices).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DevicePreviewConfig {
+    #[serde(default)]
+    pub custom_devices: Vec<serde_json::Value>,
+    #[serde(default)]
+    pub last_devices: Vec<String>,
+    #[serde(default)]
+    pub sync_enabled: Option<bool>,
+    #[serde(default)]
+    pub orientation: Option<String>,
 }
 
 /// Editor settings (formatting, preview).
