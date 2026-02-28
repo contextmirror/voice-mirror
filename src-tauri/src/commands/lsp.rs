@@ -645,6 +645,23 @@ pub async fn lsp_apply_workspace_edit(
     IpcResponse::ok(json!({ "filesChanged": files_changed }))
 }
 
+/// Scan project files for a language and send didOpen to the LSP server.
+///
+/// This enables project-wide diagnostics by opening matching files in the
+/// background. Files are tracked separately from user-opened documents.
+#[tauri::command]
+pub async fn lsp_scan_project(
+    lang_id: String,
+    project_root: String,
+    state: State<'_, LspManagerState>,
+) -> Result<IpcResponse, ()> {
+    let mut manager = state.0.lock().await;
+    match manager.scan_project_files(&lang_id, &project_root).await {
+        Ok(count) => Ok(IpcResponse::ok(json!({"scanned": count}))),
+        Err(e) => Ok(IpcResponse::err(e)),
+    }
+}
+
 /// Get a list of all known LSP servers from the manifest with install status.
 ///
 /// Returns an array of server objects (id, languageId, binary, installed).

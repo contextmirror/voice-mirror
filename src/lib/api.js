@@ -741,6 +741,10 @@ export async function lspRequestRangeFormatting(path, rangeStartLine, rangeStart
   return invoke('lsp_request_range_formatting', { path, rangeStartLine, rangeStartChar, rangeEndLine, rangeEndChar, tabSize, insertSpaces, projectRoot });
 }
 
+export async function lspScanProject(langId, projectRoot) {
+  return invoke('lsp_scan_project', { langId, projectRoot });
+}
+
 // ============ LSP Server Management ============
 
 export async function lspGetServerList() {
