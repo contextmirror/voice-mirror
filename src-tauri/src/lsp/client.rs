@@ -6,6 +6,7 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Instant;
 
 use serde_json::Value;
 use tauri::{AppHandle, Emitter, Manager};
@@ -117,7 +118,7 @@ pub fn spawn_reader_loop(
     stdout: ChildStdout,
     app_handle: AppHandle,
     lang_id: String,
-    pending: Arc<Mutex<HashMap<i64, oneshot::Sender<Value>>>>,
+    pending: Arc<Mutex<HashMap<i64, (oneshot::Sender<Value>, Instant)>>>,
     stdin: Arc<Mutex<ChildStdin>>,
     server_key: String,
 ) {
@@ -132,7 +133,7 @@ pub fn spawn_reader_loop(
                         if msg.get("method").is_none() {
                             // This is a response to a request we sent
                             let mut pending_guard = pending.lock().await;
-                            if let Some(sender) = pending_guard.remove(&id) {
+                            if let Some((sender, _sent_at)) = pending_guard.remove(&id) {
                                 let _ = sender.send(msg);
                             } else {
                                 debug!("Received response for unknown request id={}", id);
@@ -371,7 +372,7 @@ async fn handle_server_request(
 /// writes the message, and returns the receiver.
 pub async fn send_request(
     stdin: &mut ChildStdin,
-    pending: &Arc<Mutex<HashMap<i64, oneshot::Sender<Value>>>>,
+    pending: &Arc<Mutex<HashMap<i64, (oneshot::Sender<Value>, Instant)>>>,
     method: &str,
     params: Value,
     next_id: &std::sync::atomic::AtomicI64,
@@ -388,7 +389,7 @@ pub async fn send_request(
     let (tx, rx) = oneshot::channel();
     {
         let mut pending_guard = pending.lock().await;
-        pending_guard.insert(id, tx);
+        pending_guard.insert(id, (tx, Instant::now()));
     }
 
     write_message(stdin, &msg).await?;

@@ -103,6 +103,7 @@ pub enum ServerState {
     Restarting,
     Stopping,
     Failed,
+    Unresponsive,
 }
 
 /// Status information for a single LSP server.

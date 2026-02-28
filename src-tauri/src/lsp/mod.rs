@@ -22,7 +22,7 @@ use std::time::Instant;
 static NODE_NOT_FOUND_EMITTED: AtomicBool = AtomicBool::new(false);
 
 use serde_json::Value;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 use tokio::process::{Child, ChildStdin};
 use tokio::sync::{oneshot, Mutex};
 use tracing::{debug, info, warn};
@@ -43,7 +43,7 @@ pub struct LspServer {
     pub open_docs: HashSet<String>,
     pub stdin: Arc<Mutex<ChildStdin>>,
     pub capabilities: Option<lsp_types::ServerCapabilities>,
-    pub pending_requests: Arc<Mutex<HashMap<i64, oneshot::Sender<Value>>>>,
+    pub pending_requests: Arc<Mutex<HashMap<i64, (oneshot::Sender<Value>, Instant)>>>,
     pub crash_count: u32,
     pub last_crash: Option<Instant>,
     pub state: types::ServerState,
@@ -306,7 +306,7 @@ impl LspManager {
             });
         }
 
-        let pending: Arc<Mutex<HashMap<i64, oneshot::Sender<Value>>>> =
+        let pending: Arc<Mutex<HashMap<i64, (oneshot::Sender<Value>, Instant)>>> =
             Arc::new(Mutex::new(HashMap::new()));
         let next_id = AtomicI64::new(1);
 
@@ -448,9 +448,13 @@ impl LspManager {
             server_info.binary, lang_id
         );
 
+        // Clone pending_requests Arc for the health check task
+        let health_pending = Arc::clone(&pending);
+        let health_key = server_key(lang_id, project_root);
+
         // Store the server
         self.servers.insert(
-            server_key(lang_id, project_root),
+            health_key.clone(),
             LspServer {
                 language_id: lang_id.to_string(),
                 binary: server_info.binary.clone(),
@@ -467,6 +471,14 @@ impl LspManager {
                 last_error: None,
                 stderr_lines: Arc::new(Mutex::new(Vec::new())),
             },
+        );
+
+        // Spawn health check task to detect stale/unresponsive requests
+        spawn_health_check(
+            self.app_handle.clone(),
+            health_key,
+            health_pending,
+            lang_id.to_string(),
         );
 
         // Emit status update
@@ -1294,6 +1306,77 @@ impl LspManager {
             other => other.to_string(),
         }
     }
+}
+
+/// Spawn a periodic health check task that detects stale (unresponsive) LSP requests.
+///
+/// Checks every 10 seconds for pending requests older than 30 seconds.
+/// If stale requests are found, marks the server as `Unresponsive` and emits
+/// an `lsp-server-unresponsive` event. The task stops when the server is removed
+/// from the manager (e.g., after shutdown or crash).
+fn spawn_health_check(
+    app_handle: AppHandle,
+    server_key: String,
+    pending: Arc<Mutex<HashMap<i64, (oneshot::Sender<Value>, Instant)>>>,
+    lang_id: String,
+) {
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(10));
+        // Skip the first immediate tick
+        interval.tick().await;
+
+        loop {
+            interval.tick().await;
+
+            // Check if the server is still alive in the manager
+            let lsp_state: tauri::State<'_, LspManagerState> = app_handle.state();
+            {
+                let manager = lsp_state.0.lock().await;
+                if !manager.servers.contains_key(&server_key) {
+                    debug!("[{}] Health check stopping — server no longer registered", lang_id);
+                    break;
+                }
+            }
+
+            // Scan pending requests for stale entries (>30s old)
+            let now = Instant::now();
+            let stale_count = {
+                let pending_guard = pending.lock().await;
+                pending_guard
+                    .values()
+                    .filter(|(_sender, sent_at)| now.duration_since(*sent_at).as_secs() > 30)
+                    .count()
+            };
+
+            if stale_count > 0 {
+                warn!(
+                    "[{}] Health check: {} stale request(s) older than 30s — server unresponsive",
+                    lang_id, stale_count
+                );
+
+                // Mark server as Unresponsive
+                {
+                    let mut manager = lsp_state.0.lock().await;
+                    if let Some(server) = manager.servers.get_mut(&server_key) {
+                        server.state = types::ServerState::Unresponsive;
+                    }
+                    manager.emit_status();
+                }
+
+                // Emit dedicated event for frontend notification
+                let _ = app_handle.emit(
+                    "lsp-server-unresponsive",
+                    serde_json::json!({
+                        "languageId": lang_id,
+                        "serverKey": server_key,
+                        "staleRequests": stale_count,
+                    }),
+                );
+            }
+        }
+
+        debug!("[{}] Health check task ended", lang_id);
+    });
 }
 
 /// Normalize a Location or LocationLink into a simple { uri, range } object.
