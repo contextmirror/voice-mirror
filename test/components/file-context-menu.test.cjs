@@ -195,8 +195,8 @@ describe('FileContextMenu.svelte -- positioning', () => {
     assert.ok(src.includes('window.innerHeight'), 'Should clamp to viewport height');
   });
 
-  it('uses Math.min for clamping', () => {
-    assert.ok(src.includes('Math.min(x, maxX)'), 'Should use Math.min for clamping');
+  it('uses getBoundingClientRect for dynamic clamping', () => {
+    assert.ok(src.includes('getBoundingClientRect'), 'Should measure actual menu size for clamping');
   });
 });
 

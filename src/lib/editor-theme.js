@@ -27,6 +27,7 @@ const editorTheme = EditorView.theme({
   '.cm-content': {
     caretColor: 'var(--cm-cursor)',
     fontFamily: 'var(--font-mono)',
+    fontSize: 'var(--cm-font-size, 14px)',
   },
   '.cm-cursor, .cm-dropCursor': {
     borderLeftColor: 'var(--cm-cursor)',
@@ -108,6 +109,119 @@ const editorTheme = EditorView.theme({
     background: 'var(--cm-selection)',
     borderTop: '1px solid var(--cm-accent, var(--accent))',
     borderBottom: '1px solid var(--cm-accent, var(--accent))',
+  },
+  // ── Git change gutter ──
+  // Git gutter bar styles are in editor-git-gutter.js baseTheme (avoids scoping issues)
+  // ── Git peek widget ──
+  '.cm-git-peek': {
+    backgroundColor: 'var(--cm-panel-bg, var(--bg-elevated))',
+    border: '1px solid var(--border)',
+    borderRadius: '4px',
+    margin: '4px 0 4px 24px',
+    overflow: 'hidden',
+    fontFamily: 'var(--font-mono)',
+    fontSize: '12px',
+    maxWidth: 'min(600px, calc(100% - 48px))',
+    minWidth: '280px',
+  },
+  '.cm-git-peek-header': {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '4px 8px',
+    backgroundColor: 'color-mix(in srgb, var(--accent) 10%, transparent)',
+    borderBottom: '1px solid var(--border)',
+    fontSize: '11px',
+    color: 'var(--cm-foreground)',
+  },
+  '.cm-git-peek-label': {
+    fontWeight: '600',
+  },
+  '.cm-git-peek-nav': {
+    display: 'flex',
+    gap: '2px',
+  },
+  '.cm-git-peek-btn': {
+    background: 'transparent',
+    border: 'none',
+    color: 'var(--cm-foreground)',
+    cursor: 'pointer',
+    padding: '2px 6px',
+    borderRadius: '3px',
+    fontSize: '12px',
+    lineHeight: '1',
+  },
+  '.cm-git-peek-btn:hover': {
+    backgroundColor: 'color-mix(in srgb, var(--accent) 15%, transparent)',
+  },
+  '.cm-git-peek-btn:disabled': {
+    opacity: '0.3',
+    cursor: 'default',
+  },
+  '.cm-git-peek-body': {
+    padding: '4px 0',
+    maxHeight: '200px',
+    overflow: 'auto',
+  },
+  '.cm-git-peek-line': {
+    padding: '0 8px',
+    lineHeight: '1.6',
+    whiteSpace: 'pre',
+    minWidth: 'fit-content',
+  },
+  '.cm-git-peek-line.removed': {
+    backgroundColor: 'color-mix(in srgb, var(--danger) 12%, transparent)',
+    color: 'var(--danger)',
+  },
+  '.cm-git-peek-line.added': {
+    backgroundColor: 'color-mix(in srgb, var(--ok) 12%, transparent)',
+    color: 'var(--ok)',
+  },
+  '.cm-git-peek-actions': {
+    padding: '4px 8px',
+    borderTop: '1px solid var(--border)',
+    display: 'flex',
+    justifyContent: 'flex-end',
+  },
+  '.cm-git-peek-revert': {
+    backgroundColor: 'color-mix(in srgb, var(--danger) 15%, transparent)',
+    color: 'var(--danger)',
+    border: '1px solid var(--danger)',
+    padding: '3px 10px',
+    borderRadius: '3px',
+    cursor: 'pointer',
+    fontSize: '11px',
+    fontWeight: '600',
+  },
+  '.cm-git-peek-revert:hover': {
+    backgroundColor: 'color-mix(in srgb, var(--danger) 25%, transparent)',
+  },
+  // ── Ctrl+hover definition hint ──
+  '.cm-definition-hint': {
+    textDecoration: 'underline',
+    textDecorationColor: 'var(--accent)',
+    cursor: 'pointer',
+  },
+  // ── Lightbulb gutter (code actions) ──
+  '.cm-lightbulb-gutter': {
+    width: '16px',
+    minWidth: '16px',
+  },
+  '.cm-lightbulb-gutter .cm-gutterElement': {
+    padding: '0',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  '.cm-lightbulb': {
+    fontSize: '12px',
+    cursor: 'pointer',
+    opacity: '0.85',
+    lineHeight: '1',
+  },
+  '.cm-lightbulb:hover': {
+    opacity: '1',
+    transform: 'scale(1.15)',
   },
 }, { dark: true });
 

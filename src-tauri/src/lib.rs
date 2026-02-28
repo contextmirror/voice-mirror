@@ -6,7 +6,7 @@ pub mod providers;
 pub mod services;
 pub mod util;
 pub mod voice;
-pub mod shell;
+pub mod terminal;
 pub mod lsp;
 
 use commands::ai as ai_cmds;
@@ -19,10 +19,11 @@ use commands::voice as voice_cmds;
 use commands::window as window_cmds;
 use commands::files as files_cmds;
 use commands::lens as lens_cmds;
-use commands::shell as shell_cmds;
+use commands::terminal as terminal_cmds;
 use commands::dev_server as dev_server_cmds;
 use commands::lsp as lsp_cmds;
 use commands::design as design_cmds;
+use commands::output as output_cmds;
 
 use providers::manager::AiManager;
 use providers::ProviderEvent;
@@ -92,6 +93,68 @@ fn migrate_electron_data() {
     }
 }
 
+/// Rotate the current log session directory to a timestamped archive,
+/// then prune archives beyond the retention limit.
+fn rotate_log_sessions() {
+    let logs_dir = services::platform::get_log_dir();
+    let current_dir = logs_dir.join("current");
+
+    // If current/ exists and has files, rotate it
+    if current_dir.exists() {
+        let has_files = std::fs::read_dir(&current_dir)
+            .map(|mut d| d.next().is_some())
+            .unwrap_or(false);
+
+        if has_files {
+            // Use epoch seconds for a unique, sortable archive name
+            let epoch_secs = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+
+            let archive_name = format!("session-{}", epoch_secs);
+            let archive_dir = logs_dir.join(&archive_name);
+
+            if let Err(e) = std::fs::rename(&current_dir, &archive_dir) {
+                warn!("Failed to rotate log session: {}", e);
+            } else {
+                info!("Rotated log session to {}", archive_name);
+            }
+        }
+    }
+
+    // Create fresh current/
+    let _ = std::fs::create_dir_all(&current_dir);
+
+    // Prune old sessions (keep 5 most recent)
+    let max_sessions = 5;
+    let mut sessions: Vec<_> = std::fs::read_dir(&logs_dir)
+        .into_iter()
+        .flatten()
+        .filter_map(|e| e.ok())
+        .filter(|e| {
+            e.file_name()
+                .to_str()
+                .map(|n| n.starts_with("session-"))
+                .unwrap_or(false)
+        })
+        .collect();
+
+    // Sort by name (epoch seconds sort lexicographically)
+    sessions.sort_by_key(|e| e.file_name());
+
+    if sessions.len() > max_sessions {
+        let to_remove = sessions.len() - max_sessions;
+        for entry in &sessions[..to_remove] {
+            if let Err(e) = std::fs::remove_dir_all(entry.path()) {
+                warn!("Failed to prune old log session {:?}: {}", entry.file_name(), e);
+            } else {
+                info!("Pruned old log session: {:?}", entry.file_name());
+            }
+        }
+    }
+}
+
 /// Check if a window at (x, y) with given dimensions fits entirely within any monitor.
 fn position_fits_monitor(window: &tauri::WebviewWindow, x: i32, y: i32, w: u32, h: u32) -> bool {
     window.available_monitors().unwrap_or_default().iter().any(|m| {
@@ -106,8 +169,9 @@ fn position_fits_monitor(window: &tauri::WebviewWindow, x: i32, y: i32, w: u32, 
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // Initialize structured logging (file + console)
-    services::logger::init();
+    // Initialize structured logging (file + console + output ring buffers)
+    let output_store = services::logger::init();
+    rotate_log_sessions();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_decorum::init())
@@ -190,13 +254,15 @@ pub fn run() {
             tabs: std::sync::Mutex::new(std::collections::HashMap::new()),
             active_tab_id: std::sync::Mutex::new(None),
             bounds: std::sync::Mutex::new(None),
+            device_webviews: std::sync::Mutex::new(Vec::new()),
         })
         .manage(services::file_watcher::FileWatcherState {
             handle: std::sync::Mutex::new(None),
         })
-        .manage(shell_cmds::ShellManagerState(std::sync::Mutex::new(
-            crate::shell::ShellManager::new(),
+        .manage(terminal_cmds::TerminalManagerState(std::sync::Mutex::new(
+            crate::terminal::TerminalManager::new(),
         )))
+        .manage(output_store)
         .invoke_handler(tauri::generate_handler![
             // Config
             config_cmds::get_config,
@@ -287,6 +353,13 @@ pub fn run() {
             lens_cmds::lens_set_visible,
             lens_cmds::lens_hard_refresh,
             lens_cmds::lens_clear_cache,
+            // Device Preview
+            lens_cmds::lens_create_device_webview,
+            lens_cmds::lens_close_device_webview,
+            lens_cmds::lens_close_all_device_webviews,
+            lens_cmds::lens_resize_device_webview,
+            lens_cmds::lens_eval_device_js,
+            lens_cmds::lens_set_device_emulation,
             // File tree
             files_cmds::list_directory,
             files_cmds::get_git_changes,
@@ -309,12 +382,19 @@ pub fn run() {
             files_cmds::git_commit,
             files_cmds::git_discard,
             files_cmds::git_push,
-            // Shell terminals
-            shell_cmds::shell_spawn,
-            shell_cmds::shell_input,
-            shell_cmds::shell_resize,
-            shell_cmds::shell_kill,
-            shell_cmds::shell_list,
+            files_cmds::git_ahead_behind,
+            files_cmds::git_fetch,
+            files_cmds::git_pull,
+            files_cmds::git_force_push,
+            files_cmds::git_list_branches,
+            files_cmds::git_checkout_branch,
+            // Terminal sessions
+            terminal_cmds::terminal_spawn,
+            terminal_cmds::terminal_input,
+            terminal_cmds::terminal_resize,
+            terminal_cmds::terminal_kill,
+            terminal_cmds::terminal_list,
+            terminal_cmds::terminal_detect_profiles,
             // File watcher
             services::file_watcher::start_file_watching,
             services::file_watcher::stop_file_watching,
@@ -335,6 +415,12 @@ pub fn run() {
             lsp_cmds::lsp_request_formatting,
             lsp_cmds::lsp_request_range_formatting,
             lsp_cmds::lsp_apply_workspace_edit,
+            lsp_cmds::lsp_scan_project,
+            lsp_cmds::lsp_get_server_list,
+            lsp_cmds::lsp_install_server,
+            lsp_cmds::lsp_set_server_enabled,
+            lsp_cmds::lsp_restart_server,
+            lsp_cmds::lsp_get_server_detail,
             lsp_cmds::lsp_get_status,
             lsp_cmds::lsp_shutdown,
             // Dev server detection + management
@@ -344,10 +430,19 @@ pub fn run() {
             // Design canvas overlay
             design_cmds::design_command,
             design_cmds::design_get_element,
+            // Output / diagnostics
+            output_cmds::get_output_logs,
+            output_cmds::log_frontend_error,
         ])
         .setup(|app| {
             // Migrate data from old Electron directory before anything reads it
             migrate_electron_data();
+
+            // Set app handle on OutputStore for live event emission
+            {
+                let output_store = app.state::<std::sync::Arc<crate::services::output::OutputStore>>();
+                output_store.set_app_handle(app.handle().clone());
+            }
 
             // Initialize LSP manager state (needs AppHandle)
             app.manage(lsp::LspManagerState::new(app.handle().clone()));
@@ -441,29 +536,29 @@ pub fn run() {
                 warn!("AI manager event receiver was already taken — event forwarding not started");
             }
 
-            // Shell terminal event forwarding loop
+            // Terminal event forwarding loop
             {
-                let shell_state = app.state::<shell_cmds::ShellManagerState>();
-                let shell_event_rx = {
-                    let mut manager = shell_state
+                let terminal_state = app.state::<terminal_cmds::TerminalManagerState>();
+                let terminal_event_rx = {
+                    let mut manager = terminal_state
                         .0
                         .lock()
-                        .map_err(|e| format!("Failed to lock shell manager during setup: {}", e))?;
+                        .map_err(|e| format!("Failed to lock terminal manager during setup: {}", e))?;
                     manager.take_event_rx()
                 };
 
-                if let Some(mut rx) = shell_event_rx {
-                    let app_handle_shell = app.handle().clone();
-                    info!("Starting shell event forwarding loop");
+                if let Some(mut rx) = terminal_event_rx {
+                    let app_handle_terminal = app.handle().clone();
+                    info!("Starting terminal event forwarding loop");
 
                     tauri::async_runtime::spawn(async move {
                         while let Some(event) = rx.recv().await {
-                            if app_handle_shell.emit("shell-output", &event).is_err() {
-                                warn!("Failed to emit shell-output event, stopping loop");
+                            if app_handle_terminal.emit("terminal-output", &event).is_err() {
+                                warn!("Failed to emit terminal-output event, stopping loop");
                                 break;
                             }
                         }
-                        info!("Shell event forwarding loop ended");
+                        info!("Terminal event forwarding loop ended");
                     });
                 }
             }
@@ -623,8 +718,8 @@ pub fn run() {
             // Mode-aware: dashboard saves to dashboardX/Y + panelWidth/Height,
             // orb saves to orbX/Y only (preserving dashboard dimensions).
             if let tauri::WindowEvent::CloseRequested { .. } = event {
-                // Kill all shell terminal sessions
-                if let Some(state) = _window.try_state::<shell_cmds::ShellManagerState>() {
+                // Kill all terminal sessions
+                if let Some(state) = _window.try_state::<terminal_cmds::TerminalManagerState>() {
                     if let Ok(mut manager) = state.0.lock() {
                         manager.kill_all();
                     }

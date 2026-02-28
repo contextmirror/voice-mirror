@@ -1,43 +1,40 @@
 <script>
   /**
-   * Terminal.svelte -- ghostty-web terminal for AI provider PTY output.
+   * Terminal.svelte -- ghostty-web terminal for user shell PTY sessions.
    *
-   * Mounts a ghostty-web Terminal instance, listens for Tauri `ai-output` events
-   * to write data to the terminal, and captures keyboard input to send back
-   * to the PTY via the `aiRawInput()` API wrapper. Uses ghostty-web's FitAddon
-   * to auto-resize the terminal to fill its container.
-   *
-   * ghostty-web provides an xterm.js-compatible API backed by Ghostty's
-   * battle-tested WASM VT100 parser.
+   * Each instance is tied to a shellId and filters terminal-output events
+   * by that ID. Used for user-created terminals and dev-server tabs.
    */
   import { init, Terminal, FitAddon } from 'ghostty-web';
   import { listen } from '@tauri-apps/api/event';
-  import { aiRawInput, aiPtyResize } from '../../lib/api.js';
+  import { terminalInput, terminalResize } from '../../lib/api.js';
   import { currentThemeName } from '../../lib/stores/theme.svelte.js';
-  import { aiStatusStore } from '../../lib/stores/ai-status.svelte.js';
+  import { terminalTabsStore } from '../../lib/stores/terminal-tabs.svelte.js';
+  import { devServerManager } from '../../lib/stores/dev-server-manager.svelte.js';
+  import { searchBuffer, nextMatch, prevMatch } from '../../lib/terminal-search.js';
+  import TerminalSearch from './TerminalSearch.svelte';
 
-  let { onRegisterActions = undefined } = $props();
+  let { shellId, visible = true, onRegisterActions } = $props();
 
-  // ---- State ----
   let containerEl = $state(null);
   let term = $state(null);
   let fitAddon = $state(null);
   let resizeObserver = $state(null);
-  let unlistenAiOutput = $state(null);
+  let unlistenShellOutput = $state(null);
   let resizeTimeout = $state(null);
   let lastPtyCols = $state(0);
   let lastPtyRows = $state(0);
   let initialized = $state(false);
   let pendingEvents = [];
-  let providerSwitchHandler = null;
 
-  // Provider switch: hide the canvas via direct DOM style during the transition
-  // so the user never sees garbled partial-frame renders from the TUI setup.
-  // We use direct DOM manipulation (not Svelte $state) because Svelte batches
-  // reactive DOM updates to the next microtask — by then the render loop has
-  // already painted garbled frames.
-  let switchRevealTimer = null;
-  let isSwitching = false;
+  // ---- Search state ----
+  let searchVisible = $state(false);
+  let searchQuery = $state('');
+  let searchMatches = $state([]);
+  let searchMatchCount = $state(0);
+  let currentMatchIndex = $state(0);
+  let searchCaseSensitive = $state(false);
+  let searchRegex = $state(false);
 
   // ---- CSS token -> ghostty-web theme mapping ----
 
@@ -102,13 +99,13 @@
     if (term.cols === lastPtyCols && term.rows === lastPtyRows) return;
     lastPtyCols = term.cols;
     lastPtyRows = term.rows;
-    aiPtyResize(term.cols, term.rows).catch((err) => {
+    terminalResize(shellId, term.cols, term.rows).catch((err) => {
       console.warn('[Terminal] PTY resize failed:', err);
     });
   }
 
   /**
-   * Fit the terminal to its container and notify the PTY of size changes.
+   * Fit the terminal to its container.
    */
   function fitTerminal() {
     if (!fitAddon || !term) return;
@@ -119,11 +116,97 @@
     }
   }
 
+  // ---- Search functions ----
+
+  /**
+   * Extract visible text lines from the terminal buffer.
+   * ghostty-web exposes buffer via term.buffer.active.
+   */
+  function runSearch(query) {
+    searchQuery = query;
+    if (!term || !query) {
+      searchMatches = [];
+      searchMatchCount = 0;
+      currentMatchIndex = 0;
+      return;
+    }
+
+    const buffer = term.buffer?.active;
+    if (!buffer) {
+      searchMatches = [];
+      searchMatchCount = 0;
+      currentMatchIndex = 0;
+      return;
+    }
+
+    const lineCount = buffer.length;
+    const getLine = (y) => {
+      const line = buffer.getLine(y);
+      return line ? line.translateToString(true) : null;
+    };
+
+    const result = searchBuffer(getLine, lineCount, query, {
+      caseSensitive: searchCaseSensitive,
+      regex: searchRegex,
+    });
+
+    searchMatches = result.matches;
+    searchMatchCount = result.total;
+    currentMatchIndex = result.total > 0 ? 0 : 0;
+  }
+
+  function handleSearchNext() {
+    if (searchMatchCount === 0) return;
+    currentMatchIndex = nextMatch(searchMatchCount, currentMatchIndex);
+    scrollToMatch(currentMatchIndex);
+  }
+
+  function handleSearchPrev() {
+    if (searchMatchCount === 0) return;
+    currentMatchIndex = prevMatch(searchMatchCount, currentMatchIndex);
+    scrollToMatch(currentMatchIndex);
+  }
+
+  function scrollToMatch(index) {
+    if (!term || !searchMatches[index]) return;
+    const match = searchMatches[index];
+    // Scroll the terminal to the match row if possible
+    const buffer = term.buffer?.active;
+    if (buffer) {
+      const viewportTop = buffer.viewportY;
+      const viewportBottom = viewportTop + term.rows;
+      if (match.row < viewportTop || match.row >= viewportBottom) {
+        // Scroll so match row is near the middle of the viewport
+        const targetY = Math.max(0, match.row - Math.floor(term.rows / 2));
+        term.scrollToLine(targetY);
+      }
+    }
+  }
+
+  function handleSearchClose() {
+    searchVisible = false;
+    searchQuery = '';
+    searchMatches = [];
+    searchMatchCount = 0;
+    currentMatchIndex = 0;
+    // Re-focus the terminal
+    if (term) term.focus();
+  }
+
+  function handleToggleCase() {
+    searchCaseSensitive = !searchCaseSensitive;
+    if (searchQuery) runSearch(searchQuery);
+  }
+
+  function handleToggleRegex() {
+    searchRegex = !searchRegex;
+    if (searchQuery) runSearch(searchQuery);
+  }
+
   // ---- Toolbar actions ----
 
   function handleClear() {
     if (!term) return;
-    // Send clear screen + clear scrollback + cursor home
     term.write('\x1b[2J\x1b[3J\x1b[H');
   }
 
@@ -145,8 +228,8 @@
     try {
       const text = await navigator.clipboard.readText();
       if (text) {
-        aiRawInput(text).catch((err) => {
-          console.warn('[Terminal] Paste/input failed:', err);
+        terminalInput(shellId, text).catch((err) => {
+          console.warn('[Terminal] Paste failed:', err);
         });
       }
     } catch (err) {
@@ -154,120 +237,61 @@
     }
   }
 
-  // Register toolbar actions for parent TerminalTabs
-  onRegisterActions?.({ clear: handleClear, copy: handleCopy, paste: handlePaste });
-
-  // ---- AI output handler ----
-
-  /**
-   * Strip SGR mouse event echoes from PTY output.
-   * On Windows, ConPTY can echo mouse tracking input back as output,
-   * with ESC and/or [ stripped. Cross-chunk splitting means a sequence
-   * like \x1b[<32;62;11M can arrive as "[" at the end of chunk N
-   * and "<32;62;11M" at the start of chunk N+1. Making both \x1b and [
-   * optional catches all variants:
-   *   \x1b[<btn;col;rowM  (full SGR sequence)
-   *   [<btn;col;rowM       (ESC stripped)
-   *   <btn;col;rowM         (ESC and [ stripped — cross-chunk split)
-   */
-  const SGR_MOUSE_ECHO_RE = /\x1b?\[?<\d+;\d+;\d+[Mm]/g;
-
-  /**
-   * Process a single ai-output event payload.
-   * Extracted so it can be called both from the live listener and
-   * when draining events buffered during the initialization gap.
-   * @param {{ type: string, text?: string, code?: number }} data
-   */
-  function handleAiOutput(data) {
+  function handleSelectAll() {
     if (!term) return;
+    term.selectAll();
+  }
 
-    switch (data.type) {
-      case 'clear':
-        term.write('\x1b[2J\x1b[3J\x1b[H');
-        break;
-      case 'start':
-        // Provider is ready. The terminal was frozen during the switch
-        // (see providerSwitchHandler) — all TUI output has been accumulating
-        // in the WASM buffer without rendering. Now we unfreeze after a delay
-        // to let the TUI finish its initial draw burst.
-        //
-        // CRITICAL: Before unfreezing, do a nuclear reset to discard any
-        // stale output from the OLD provider that leaked into the WASM buffer
-        // between the switch and this 'start' event. During the gap, the old
-        // process was still sending stdout before it exited, and those bytes
-        // were write()-ed to the fresh terminal — polluting it with content
-        // meant for the old layout. The reset wipes that slate clean.
-        if (isSwitching && term.reset) {
-          term.reset();
-          if (term.freeze) term.freeze();
-        }
-        isSwitching = false;
-        // Update cursor style for the new provider — Claude Code renders
-        // its own cursor, others (OpenCode) rely on the terminal cursor.
-        if (term && term.options) {
-          const isClaude = aiStatusStore.providerType === 'claude';
-          term.options.cursorStyle = isClaude ? 'none' : 'bar';
-          term.options.cursorBlink = !isClaude;
-        }
-        if (switchRevealTimer) clearTimeout(switchRevealTimer);
-        switchRevealTimer = setTimeout(() => {
-          switchRevealTimer = null;
-          if (term) {
-            // Unfreeze rendering first so the resize triggers a visible repaint
-            if (term.unfreeze) term.unfreeze();
-            fitTerminal();
-            resizePtyIfChanged();
-            // Automated "jiggle" — the ONE thing that always fixes the display.
-            // Resize by -1 row then restore on next frame. This forces the full
-            // WASM terminal resize path (text reflow + DirtyState.FULL + canvas
-            // reset + forceAll render) which consistently produces clean output.
-            // Every other approach (forceAll, forceDirty, freeze/unfreeze alone)
-            // has failed because they don't trigger WASM text reflow.
-            const savedCols = term.cols;
-            const savedRows = term.rows;
-            if (savedRows > 2) {
-              term.resize(savedCols, savedRows - 1);
-              requestAnimationFrame(() => {
-                if (term && !isSwitching) {
-                  term.resize(savedCols, savedRows);
-                  resizePtyIfChanged();
-                }
-              });
-            }
-          }
-          if (containerEl) containerEl.style.visibility = '';
-        }, 500);
-        break;
+  // ---- Context menu state ----
+  let ctxMenu = $state({ visible: false, x: 0, y: 0 });
+
+  function handleTerminalContextMenu(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    ctxMenu = { visible: true, x: event.clientX, y: event.clientY };
+  }
+
+  function closeCtxMenu() {
+    ctxMenu = { ...ctxMenu, visible: false };
+  }
+
+  function ctxCopy() { closeCtxMenu(); handleCopy(); }
+  function ctxPaste() { closeCtxMenu(); handlePaste(); }
+  function ctxSelectAll() { closeCtxMenu(); handleSelectAll(); }
+  function ctxClear() { closeCtxMenu(); handleClear(); }
+  function ctxFind() { closeCtxMenu(); searchVisible = true; }
+  function ctxSplitRight() { closeCtxMenu(); terminalTabsStore.splitInstance({ direction: 'horizontal' }); }
+  function ctxSplitDown() { closeCtxMenu(); terminalTabsStore.splitInstance({ direction: 'vertical' }); }
+
+  function handleDocumentClick() { if (ctxMenu.visible) closeCtxMenu(); }
+  function handleDocumentKeydown(e) { if (e.key === 'Escape' && ctxMenu.visible) closeCtxMenu(); }
+
+  // Register toolbar actions for parent TerminalTabs.
+  // Wrapped in $effect so we capture the latest prop value (not just initial).
+  $effect(() => {
+    onRegisterActions?.({ clear: handleClear, copy: handleCopy, paste: handlePaste });
+  });
+
+  // ---- Shell output handler ----
+
+  /**
+   * Process a single terminal-output event payload.
+   * Filters by shellId and handles stdout/exit events.
+   * @param {{ id: string, event_type?: string, type?: string, text?: string, code?: number }} data
+   */
+  function handleShellOutput(data) {
+    if (!term) return;
+    if (data.id !== shellId) return; // Filter by our session ID
+
+    switch (data.event_type || data.type) {
       case 'stdout':
-      case 'tui':
-      case 'stderr':
-        if (data.text) {
-          const cleaned = data.text.replace(SGR_MOUSE_ECHO_RE, '');
-          if (cleaned) term.write(cleaned);
-        }
+        if (data.text) term.write(data.text);
         break;
       case 'exit':
-        // During a provider switch, drop the exit event entirely.
-        // The old process's mode-reset sequences and "Process exited" message
-        // would pollute the new terminal's WASM buffer. The 'start' handler
-        // does a second reset to clear any leaked output.
-        if (isSwitching) break;
-        // Reset terminal modes on provider exit so stale state
-        // (mouse tracking, alt screen) doesn't leak to next provider.
-        // Use escape sequences here (not term.reset()) to preserve the
-        // exit message in the scrollback for user visibility.
-        term.write(
-          '\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l' + // Disable mouse tracking
-          '\x1b[?1049l' +  // Exit alternate screen
-          '\x1b[0m'        // Reset attributes
-        );
         term.writeln('');
-        term.writeln(`\x1b[33m[Process exited with code ${data.code ?? '?'}]\x1b[0m`);
-        if (switchRevealTimer) {
-          clearTimeout(switchRevealTimer);
-          switchRevealTimer = null;
-        }
-        if (containerEl) containerEl.style.visibility = '';
+        term.writeln(`\x1b[33m[Shell exited with code ${data.code ?? '?'}]\x1b[0m`);
+        terminalTabsStore.markExited(shellId);
+        devServerManager.handleShellExit(shellId, data.code);
         break;
     }
   }
@@ -277,8 +301,6 @@
   $effect(() => {
     if (!containerEl) return;
 
-    // ghostty-web requires async WASM initialization before creating terminals.
-    // We do this inside the $effect so it runs on mount.
     let cancelled = false;
 
     async function setup() {
@@ -289,11 +311,7 @@
 
       // Create ghostty-web Terminal instance
       const ghosttyTerm = new Terminal({
-        // Claude Code renders its own cursor — hide the terminal cursor to
-        // avoid a duplicate green bar. Other TUIs (OpenCode) rely on the
-        // terminal cursor for their input field.
-        cursorBlink: aiStatusStore.providerType !== 'claude',
-        cursorStyle: aiStatusStore.providerType === 'claude' ? 'none' : 'bar',
+        cursorBlink: true,
         fontSize: 13,
         fontFamily: getCssVar('--font-mono') || "'Cascadia Code', 'Fira Code', monospace",
         theme: buildTermTheme(),
@@ -317,29 +335,23 @@
       term = ghosttyTerm;
       fitAddon = fit;
 
-      // Send keyboard input to PTY.
-      // Suppress SGR mouse MOTION events (button 32-63) — ConPTY on Windows
-      // echoes these back as stdout, corrupting the terminal display.
-      // Clicks (button 0-31), releases (lowercase m), and scroll (button 64+)
-      // are still sent. Motion events are cosmetic (hover feedback) and not
-      // needed for TUI interaction.
+      // Keyboard input -> shell PTY
       ghosttyTerm.onData((data) => {
-        const motionMatch = data.match(/^\x1b\[<(\d+);\d+;\d+M$/);
-        if (motionMatch) {
-          const btn = parseInt(motionMatch[1], 10);
-          if (btn >= 32 && btn < 64) return; // Mouse motion — suppress
-        }
-        aiRawInput(data).catch((err) => {
+        terminalInput(shellId, data).catch((err) => {
           console.warn('[Terminal] PTY input failed:', err);
         });
       });
 
-      // Custom keyboard handler for Ctrl+C (copy selection) and Ctrl+V (paste)
-      // ghostty-web convention: return true = "handled, STOP processing"
-      //                         return false = "not handled, let terminal process"
+      // Custom keyboard handler for Ctrl+C (copy), Ctrl+V (paste), Ctrl+F (search)
       ghosttyTerm.attachCustomKeyEventHandler((event) => {
-        // Only intercept keydown to avoid double-firing
         if (event.type !== 'keydown') return false;
+
+        // Ctrl+F: toggle terminal search
+        if (event.ctrlKey && event.key === 'f' && !event.shiftKey && !event.altKey) {
+          searchVisible = !searchVisible;
+          if (!searchVisible) handleSearchClose();
+          return true; // Handled: prevent browser find
+        }
 
         // Ctrl+C: copy selected text if there is a selection
         if (event.ctrlKey && event.key === 'c' && !event.shiftKey && !event.altKey) {
@@ -364,20 +376,20 @@
         if (cols === lastPtyCols && rows === lastPtyRows) return;
         lastPtyCols = cols;
         lastPtyRows = rows;
-        aiPtyResize(cols, rows).catch((err) => {
+        terminalResize(shellId, cols, rows).catch((err) => {
           console.warn('[Terminal] PTY resize failed:', err);
         });
       });
 
-      // Listen for AI output events from Tauri backend
-      const unlisten = await listen('ai-output', (event) => {
+      // Listen for shell output events from Tauri backend
+      const unlisten = await listen('terminal-output', (event) => {
         if (!term) return;
         if (!initialized) {
           // Buffer events until terminal is fully initialized
           pendingEvents.push(event);
           return;
         }
-        handleAiOutput(event.payload);
+        handleShellOutput(event.payload);
       });
 
       if (cancelled) {
@@ -386,43 +398,7 @@
         return;
       }
 
-      unlistenAiOutput = unlisten;
-
-      // Pre-emptive canvas hide on provider switch.
-      // When the user switches providers, the new CLI process starts outputting
-      // immediately (startup banner, TUI setup), causing garbled partial-frame
-      // renders. Instead of trying to control the renderer, we simply hide the
-      // canvas container with CSS and reveal it once the provider is ready.
-      // This handler fires SYNCHRONOUSLY (dispatchEvent is sync) from _setStarting()
-      // in ai-status.svelte.js, BEFORE the Tauri command and BEFORE any stdout events.
-      providerSwitchHandler = () => {
-        if (!containerEl || !initialized) return;
-        // Hide the canvas INSTANTLY via direct DOM — bypasses Svelte's
-        // deferred reactive batching so the hide is synchronous.
-        containerEl.style.visibility = 'hidden';
-        isSwitching = true;
-        if (switchRevealTimer) {
-          clearTimeout(switchRevealTimer);
-          switchRevealTimer = null;
-        }
-        // Nuclear reset: free the old WASM terminal, create a fresh one,
-        // clear the canvas, restart the render loop. This puts the terminal
-        // in the exact same state as initial startup — which always renders
-        // cleanly. Without this, the old provider's canvas pixels, dirty-row
-        // tracking, and WASM buffer state leak into the new provider's render.
-        if (term) {
-          term.reset();
-          // Freeze rendering IMMEDIATELY after reset. The render loop keeps
-          // running but skips all drawing. Writes via write() still go to the
-          // WASM parser (maintaining terminal state), but the canvas is not
-          // updated. This prevents painting partial TUI frames during startup
-          // — the TUI sends 8-14 separate write() calls with escape sequence
-          // fragments, and each intermediate state looks garbled. We unfreeze
-          // in the 'start' handler to paint a single clean frame.
-          if (term.freeze) term.freeze();
-        }
-      };
-      window.addEventListener('ai-provider-switching', providerSwitchHandler);
+      unlistenShellOutput = unlisten;
 
       // Observe container resize for auto-fitting
       const observer = new ResizeObserver(() => {
@@ -430,6 +406,12 @@
         resizeTimeout = setTimeout(() => {
           fitTerminal();
           resizePtyIfChanged();
+          // Force a full canvas redraw on the next frame
+          if (term) {
+            requestAnimationFrame(() => {
+              term.write('');
+            });
+          }
         }, 150);
       });
       observer.observe(containerEl);
@@ -440,11 +422,11 @@
         requestAnimationFrame(() => {
           fitTerminal();
           resizePtyIfChanged();
-          // Gate: terminal is now fully initialized and ready for ai-output events
+          // Gate: terminal is now fully initialized
           initialized = true;
           // Replay any events that arrived during initialization
           for (const evt of pendingEvents) {
-            handleAiOutput(evt.payload);
+            handleShellOutput(evt.payload);
           }
           pendingEvents = [];
         });
@@ -452,28 +434,21 @@
     }
 
     setup().catch((err) => {
-      console.error('[Terminal] ghostty-web initialization failed:', err);
+      console.error('[Terminal] Init failed:', err);
     });
 
     // Cleanup on unmount
     return () => {
       cancelled = true;
-      // Immediately gate off event handlers before tearing down resources
       initialized = false;
-      isSwitching = false;
       if (resizeTimeout) clearTimeout(resizeTimeout);
-      if (switchRevealTimer) clearTimeout(switchRevealTimer);
       if (resizeObserver) {
         resizeObserver.disconnect();
         resizeObserver = null;
       }
-      if (providerSwitchHandler) {
-        window.removeEventListener('ai-provider-switching', providerSwitchHandler);
-        providerSwitchHandler = null;
-      }
-      if (unlistenAiOutput) {
-        unlistenAiOutput();
-        unlistenAiOutput = null;
+      if (unlistenShellOutput) {
+        unlistenShellOutput();
+        unlistenShellOutput = null;
       }
       if (term) {
         term.dispose();
@@ -486,6 +461,17 @@
     };
   });
 
+  // ---- Re-fit when becoming visible ----
+
+  $effect(() => {
+    if (visible && fitAddon && term) {
+      requestAnimationFrame(() => {
+        fitTerminal();
+        resizePtyIfChanged();
+      });
+    }
+  });
+
   // ---- Theme reactivity ----
 
   $effect(() => {
@@ -496,8 +482,7 @@
 
     // Small delay to let CSS variables settle after theme application
     requestAnimationFrame(() => {
-      const newTheme = buildTermTheme();
-      term.options.theme = newTheme;
+      term.options.theme = buildTermTheme();
 
       // Update font family in case it changed
       const fontMono = getCssVar('--font-mono');
@@ -511,8 +496,41 @@
   });
 </script>
 
-<div class="terminal-view">
-  <div class="terminal-container" bind:this={containerEl}></div>
+<svelte:document onclick={handleDocumentClick} onkeydown={handleDocumentKeydown} />
+
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div class="terminal-view" oncontextmenu={handleTerminalContextMenu}>
+  <TerminalSearch
+    visible={searchVisible}
+    onClose={handleSearchClose}
+    onSearch={runSearch}
+    onNext={handleSearchNext}
+    onPrev={handleSearchPrev}
+    matchCount={searchMatchCount}
+    currentMatch={currentMatchIndex}
+    caseSensitive={searchCaseSensitive}
+    regex={searchRegex}
+    onToggleCase={handleToggleCase}
+    onToggleRegex={handleToggleRegex}
+  />
+  <div class="terminal-container" class:ready={initialized} bind:this={containerEl}></div>
+
+  {#if ctxMenu.visible}
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="terminal-ctx-backdrop" onclick={closeCtxMenu} oncontextmenu={(e) => { e.preventDefault(); closeCtxMenu(); }}>
+      <div class="terminal-ctx-menu" role="menu" style="left:{ctxMenu.x}px;top:{ctxMenu.y}px;">
+        <button class="terminal-ctx-item" role="menuitem" onclick={ctxCopy}>Copy<span class="terminal-ctx-shortcut">Ctrl+C</span></button>
+        <button class="terminal-ctx-item" role="menuitem" onclick={ctxPaste}>Paste<span class="terminal-ctx-shortcut">Ctrl+V</span></button>
+        <button class="terminal-ctx-item" role="menuitem" onclick={ctxSelectAll}>Select All</button>
+        <div class="terminal-ctx-separator"></div>
+        <button class="terminal-ctx-item" role="menuitem" onclick={ctxClear}>Clear Terminal</button>
+        <button class="terminal-ctx-item" role="menuitem" onclick={ctxFind}>Find<span class="terminal-ctx-shortcut">Ctrl+F</span></button>
+        <div class="terminal-ctx-separator"></div>
+        <button class="terminal-ctx-item" role="menuitem" onclick={ctxSplitRight}>Split Right<span class="terminal-ctx-shortcut">Ctrl+Shift+5</span></button>
+        <button class="terminal-ctx-item" role="menuitem" onclick={ctxSplitDown}>Split Down<span class="terminal-ctx-shortcut">Ctrl+Shift+&minus;</span></button>
+      </div>
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -522,29 +540,80 @@
     height: 100%;
     overflow: hidden;
     background: var(--bg);
-    /* Visual spacing around terminal — applied here (not on inner container)
-       so ghostty-web's canvas fills the container exactly without clipping */
-    padding: 4px;
+    position: relative;
+    /* Minimal left/right padding so terminal text doesn't touch the edge.
+       No top padding — avoids visible gap between tab bar and terminal. */
+    padding: 0 4px;
   }
 
   .terminal-container {
     flex: 1;
     overflow: hidden;
-    /* Ensure ghostty-web fills the container */
     min-height: 0;
     position: relative;
-    /* Clip canvas rendering to container bounds */
     contain: strict;
+    border-top: none;
+    visibility: hidden;
   }
 
-  /* ghostty-web renders into a canvas; ensure it fills the container */
+  .terminal-container.ready {
+    visibility: visible;
+  }
+
   .terminal-container :global(canvas) {
     display: block;
   }
 
-  /* Prevent ghostty-web wrapper from overflowing */
   .terminal-container :global(.ghostty-web),
   .terminal-container :global(.xterm) {
     overflow: hidden !important;
+  }
+
+  /* ---- Context menu ---- */
+  .terminal-ctx-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+  }
+
+  .terminal-ctx-menu {
+    position: fixed;
+    z-index: 10000;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border, rgba(255,255,255,0.06));
+    border-radius: 6px;
+    padding: 4px 0;
+    min-width: 180px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  }
+
+  .terminal-ctx-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 6px 12px;
+    background: none;
+    border: none;
+    color: var(--text);
+    font-size: 12px;
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .terminal-ctx-item:hover {
+    background: rgba(255,255,255,0.06);
+  }
+
+  .terminal-ctx-shortcut {
+    color: var(--muted);
+    font-size: 11px;
+    margin-left: 24px;
+  }
+
+  .terminal-ctx-separator {
+    height: 1px;
+    background: var(--border, rgba(255,255,255,0.06));
+    margin: 4px 0;
   }
 </style>

@@ -28,6 +28,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-appender = "0.2"
 portable-pty = "0.8"
 reqwest = { version = "0.12", features = ["stream", "json"] }
+flate2 = "1"
 futures-util = "0.3"
 
 # File tree (.gitignore pattern matching)
@@ -59,6 +60,13 @@ uuid = { version = "1", features = ["v4"] }
 
 # Base64 encoding for screenshot data URLs
 base64 = "0.22"
+
+# Auth vault encryption (AES-256-GCM) + random key generation
+aes-gcm = "0.10"
+rand = "0.8"
+
+# Lazy static initialization (ref map, etc.)
+once_cell = "1"
 
 # Image encoding (bitmap → PNG) and thumbnail resize for native window capture
 image = { version = "0.25", default-features = false, features = ["png"] }

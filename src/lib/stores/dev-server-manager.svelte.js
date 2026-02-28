@@ -6,7 +6,7 @@
  * to cap concurrent running servers.
  */
 
-import { shellSpawn, shellInput, shellKill, probePort, lensNavigate, killPortProcess } from '../api.js';
+import { terminalSpawn, terminalInput, terminalKill, probePort, lensNavigate, killPortProcess } from '../api.js';
 import { terminalTabsStore } from './terminal-tabs.svelte.js';
 import { lensStore } from './lens.svelte.js';
 import { toastStore } from './toast.svelte.js';
@@ -212,7 +212,7 @@ function createDevServerManager() {
 
     // Spawn PTY
     try {
-      const result = await shellSpawn({ cwd: projectPath });
+      const result = await terminalSpawn({ cwd: projectPath });
       if (!result?.success || !result?.data?.id) {
         updateState(projectPath, { status: 'stopped' });
         toastStore.addToast({
@@ -246,7 +246,7 @@ function createDevServerManager() {
       }
 
       // Send start command
-      await shellInput(shellId, startCommand + '\n');
+      await terminalInput(shellId, startCommand + '\n');
 
       // Poll port (may be cancelled via cancelPoll)
       let ready = false;
@@ -290,6 +290,9 @@ function createDevServerManager() {
     const state = servers.get(projectPath);
     if (!state || !state.shellId) return;
 
+    const framework = state.framework;
+    const port = state.port;
+
     cancelPoll(projectPath);
     cancelIdleTimer(projectPath);
 
@@ -302,12 +305,45 @@ function createDevServerManager() {
     });
 
     try {
-      await shellKill(shellId);
+      await terminalKill(shellId);
     } catch (err) {
       console.warn('[dev-server-manager] Kill failed:', err);
     }
 
     terminalTabsStore.markExited(shellId);
+
+    toastStore.addToast({
+      message: `Stopped ${framework || 'dev server'}${port ? ` on :${port}` : ''}`,
+      severity: 'info',
+    });
+  }
+
+  /**
+   * Stop a dev server by its shell ID. Used when killing a terminal instance
+   * that happens to be a dev server (sidebar kill button, context menu).
+   * @param {string} shellId
+   */
+  async function stopServerByShellId(shellId) {
+    for (const [pp, state] of servers) {
+      if (state.shellId === shellId) {
+        await stopServer(pp);
+        return;
+      }
+    }
+  }
+
+  /**
+   * Check if a shell ID belongs to a running dev server.
+   * @param {string} shellId
+   * @returns {boolean}
+   */
+  function isDevServerShell(shellId) {
+    for (const [, state] of servers) {
+      if (state.shellId === shellId && (state.status === 'running' || state.status === 'starting' || state.status === 'idle')) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /**
@@ -495,9 +531,11 @@ function createDevServerManager() {
 
     startServer,
     stopServer,
+    stopServerByShellId,
     stopExternalServer,
     restartServer,
     getServerStatus,
+    isDevServerShell,
     handleShellExit,
     handleProjectSwitch,
 

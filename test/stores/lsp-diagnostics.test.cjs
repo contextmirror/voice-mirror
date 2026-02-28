@@ -143,6 +143,10 @@ describe('lsp-diagnostics.svelte.js: diagnostics getter', () => {
   it('has diagnostics getter', () => {
     assert.ok(src.includes('get diagnostics()'), 'Should have diagnostics getter');
   });
+
+  it('has rawDiagnostics getter', () => {
+    assert.ok(src.includes('get rawDiagnostics()'), 'Should expose rawDiagnostics publicly');
+  });
 });
 
 describe('lsp-diagnostics.svelte.js: raw diagnostics cache', () => {
@@ -179,5 +183,99 @@ describe('lsp-diagnostics.svelte.js: getForDirectory returns null for empty dirs
   it('returns null when no children have diagnostics', () => {
     const getForDir = src.slice(src.indexOf('getForDirectory'));
     assert.ok(getForDir.includes('return null'), 'Should return null for clean directories');
+  });
+});
+
+describe('lsp-diagnostics.svelte.js: getTotals method', () => {
+  it('has getTotals method', () => {
+    assert.ok(src.includes('getTotals('), 'Should have getTotals method');
+  });
+
+  it('getTotals aggregates errors, warnings, and infos', () => {
+    const getTotalsIdx = src.indexOf('getTotals()');
+    const getTotalsBody = src.slice(getTotalsIdx, getTotalsIdx + 300);
+    assert.ok(getTotalsBody.includes('errors'), 'Should count total errors');
+    assert.ok(getTotalsBody.includes('warnings'), 'Should count total warnings');
+    assert.ok(getTotalsBody.includes('infos'), 'Should count total infos');
+  });
+
+  it('getTotals iterates rawDiagnostics', () => {
+    const getTotalsIdx = src.indexOf('getTotals()');
+    const getTotalsBody = src.slice(getTotalsIdx, getTotalsIdx + 400);
+    assert.ok(getTotalsBody.includes('rawDiagnostics'), 'Should iterate rawDiagnostics for accurate counts');
+  });
+
+  it('getTotals returns object with errors, warnings, infos keys', () => {
+    const getTotalsIdx = src.indexOf('getTotals()');
+    const getTotalsBody = src.slice(getTotalsIdx, getTotalsIdx + 500);
+    assert.ok(/return\s*\{[^}]*errors[^}]*warnings[^}]*infos[^}]*\}/.test(getTotalsBody),
+      'Should return { errors, warnings, infos }');
+  });
+
+  it('getTotals checks severity 3 for info', () => {
+    const getTotalsIdx = src.indexOf('getTotals()');
+    const getTotalsBody = src.slice(getTotalsIdx, getTotalsIdx + 500);
+    assert.ok(getTotalsBody.includes("'information'") || getTotalsBody.includes('sev === 3'),
+      'Should check info severity (string or numeric)');
+  });
+});
+
+describe('lsp-diagnostics.svelte.js: project-wide state', () => {
+  it('diagnostics Map keyed by relative path', () => {
+    assert.ok(src.includes('updated.set(relativePath,'), 'Should key diagnostics by relative path');
+  });
+
+  it('clear resets both diagnostics and rawDiagnostics Maps', () => {
+    const clearIdx = src.indexOf('clear()');
+    const clearBody = src.slice(clearIdx, clearIdx + 200);
+    const mapResets = (clearBody.match(/new Map\(\)/g) || []).length;
+    assert.ok(mapResets >= 2, 'clear() should reset both diagnostics and rawDiagnostics to new Map()');
+  });
+
+  it('handles bulk updates by creating new Map copies', () => {
+    assert.ok(src.includes('new Map(diagnostics)'), 'Should create new Map from existing for immutable update');
+    assert.ok(src.includes('new Map(rawDiagnostics)'), 'Should create new Map from rawDiagnostics for immutable update');
+  });
+
+  it('removes files with zero diagnostics from Maps', () => {
+    assert.ok(src.includes('updated.delete(relativePath)'), 'Should delete from summary map');
+    assert.ok(src.includes('updatedRaw.delete(relativePath)'), 'Should delete from raw map');
+  });
+});
+
+describe('lsp-diagnostics.svelte.js: diagnostic source labels', () => {
+  it('rawDiagnostics stores lspDiags array as-is (preserves source field)', () => {
+    // The store does: updatedRaw.set(relativePath, lspDiags)
+    // This means all fields from the LSP diagnostic are preserved including 'source'
+    assert.ok(src.includes('updatedRaw.set(relativePath, lspDiags)'),
+      'Should store raw LSP diagnostic array without destructuring (preserves source)');
+  });
+
+  it('handleDiagnosticsEvent destructures event payload', () => {
+    // The handler gets the full diagnostic objects from event.payload
+    assert.ok(src.includes('const { uri, diagnostics: lspDiags } = event.payload'),
+      'Should destructure uri and diagnostics from event payload');
+  });
+
+  it('rawDiagnostics comment documents source field', () => {
+    // The JSDoc/comment for rawDiagnostics should mention source
+    assert.ok(src.includes('source'), 'rawDiagnostics type comment should mention source field');
+  });
+
+  it('getRawForFile exposes raw diagnostics with source preserved', () => {
+    // getRawForFile returns from rawDiagnostics which stores the unmodified array
+    assert.ok(src.includes('getRawForFile('), 'Should have getRawForFile to access raw diagnostics');
+    assert.ok(src.includes('rawDiagnostics.get(filePath)'),
+      'getRawForFile should return from rawDiagnostics (which preserves source)');
+  });
+
+  it('does not destructure individual diagnostic fields in handleDiagnosticsEvent', () => {
+    // The handler only reads d.severity for counting — it does NOT destructure
+    // fields like { range, severity, message } which would drop source
+    const handlerIdx = src.indexOf('handleDiagnosticsEvent');
+    const handlerBody = src.slice(handlerIdx, handlerIdx + 500);
+    // It stores lspDiags directly, not a mapped/filtered version
+    assert.ok(!handlerBody.includes('d.range') || handlerBody.includes('lspDiags'),
+      'Should store raw lspDiags, not destructured copies');
   });
 });

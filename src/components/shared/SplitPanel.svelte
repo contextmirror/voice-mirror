@@ -113,45 +113,31 @@
     align-items: center;
     justify-content: center;
     -webkit-app-region: no-drag;
+    background: transparent;
+    transition: background var(--duration-fast) var(--ease-out);
+  }
+  .split-handle:hover {
+    background: color-mix(in srgb, var(--accent) 30%, var(--bg));
+  }
+  .dragging > .split-handle {
+    background: color-mix(in srgb, var(--accent) 50%, var(--bg));
+  }
+  .split-handle:focus-visible {
+    background: color-mix(in srgb, var(--accent) 40%, var(--bg));
   }
   .horizontal > .split-handle {
     width: 4px;
     cursor: col-resize;
-    padding: 0 4px;
-    margin: 0 -4px;
+    border-left: 1px solid color-mix(in srgb, var(--text) 12%, var(--bg));
   }
   .vertical > .split-handle {
     height: 4px;
     cursor: row-resize;
-    padding: 4px 0;
-    margin: -4px 0;
+    border-top: 1px solid color-mix(in srgb, var(--text) 12%, var(--bg));
   }
 
   .handle-line {
-    background: var(--border);
-    border-radius: 2px;
-    opacity: 0;
-    transition: opacity var(--duration-fast) var(--ease-out);
-  }
-  .horizontal > .split-handle .handle-line {
-    width: 2px;
-    height: 32px;
-  }
-  .vertical > .split-handle .handle-line {
-    height: 2px;
-    width: 32px;
-  }
-  .split-handle:hover .handle-line,
-  .dragging .split-handle .handle-line {
-    opacity: 0.3;
-  }
-  .dragging .split-handle .handle-line {
-    opacity: 0.5;
-    background: var(--accent);
-  }
-  .split-handle:focus-visible .handle-line {
-    opacity: 0.5;
-    background: var(--accent);
+    display: none;
   }
 
   @media (prefers-reduced-motion: reduce) {

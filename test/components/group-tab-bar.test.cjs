@@ -179,11 +179,11 @@ describe('GroupTabBar.svelte: more actions menu', () => {
     assert.ok(src.includes('Ctrl+K W'), 'Should show Ctrl+K W shortcut');
   });
 
-  it('Close All closes all group tabs', () => {
+  it('Close All uses requestClose with save prompt for each tab', () => {
     assert.ok(src.includes('handleCloseAll'), 'Should have Close All handler');
     assert.ok(
-      src.includes('for (const tab of [...groupTabs]) tabsStore.closeTab(tab.id)'),
-      'Should iterate and close all tabs'
+      src.includes('tabsStore.requestClose(tab.id)'),
+      'Should use requestClose (with save prompt) for each tab'
     );
   });
 
@@ -219,6 +219,88 @@ describe('GroupTabBar.svelte: more actions menu', () => {
 
   it('has backdrop for closing the menu', () => {
     assert.ok(src.includes('closeMoreMenu'), 'Should have closeMoreMenu handler');
+  });
+});
+
+// ============ Middle-click to close ============
+
+describe('GroupTabBar.svelte: middle-click to close', () => {
+  it('has onauxclick handler on tab elements', () => {
+    assert.ok(
+      src.includes('onauxclick'),
+      'Should have onauxclick handler on tabs'
+    );
+  });
+
+  it('middle-click checks for button === 1', () => {
+    assert.ok(
+      src.includes('e.button === 1'),
+      'Should check for middle mouse button (button === 1)'
+    );
+  });
+
+  it('middle-click calls requestClose', () => {
+    // Find onauxclick usage that calls requestClose
+    assert.ok(
+      src.includes('onauxclick') && src.includes('requestClose'),
+      'Middle-click should call requestClose'
+    );
+  });
+});
+
+// ============ Save prompt on close ============
+
+describe('GroupTabBar.svelte: save prompt on close', () => {
+  it('close button uses requestClose instead of closeTab', () => {
+    // The close button should use requestClose (which shows save dialog for dirty tabs)
+    assert.ok(
+      src.includes('tabsStore.requestClose(tab.id)'),
+      'Close button should call requestClose'
+    );
+  });
+
+  it('handleCloseAll is async', () => {
+    assert.ok(
+      src.includes('async function handleCloseAll'),
+      'handleCloseAll should be async to await requestClose'
+    );
+  });
+
+  it('handleCloseAll breaks on cancel', () => {
+    const closeAllStart = src.indexOf('async function handleCloseAll');
+    const chunk = src.slice(closeAllStart, closeAllStart + 300);
+    assert.ok(
+      chunk.includes('if (!closed) break'),
+      'Should stop closing remaining tabs if user cancels'
+    );
+  });
+});
+
+// ============ Mouse wheel scroll ============
+
+describe('GroupTabBar.svelte: mouse wheel scroll', () => {
+  it('has onwheel handler on tabs-scroll container', () => {
+    assert.ok(src.includes('onwheel'), 'Should have onwheel handler');
+  });
+
+  it('converts vertical wheel delta to horizontal scroll', () => {
+    assert.ok(src.includes('deltaY') && src.includes('scrollLeft'), 'Should convert deltaY to scrollLeft');
+  });
+});
+
+// ============ Tab drag MIME type ============
+
+describe('GroupTabBar.svelte: tab drag MIME type', () => {
+  it('sets application/x-voice-mirror-tab MIME type on drag start', () => {
+    assert.ok(src.includes('application/x-voice-mirror-tab'), 'Should set custom tab MIME type');
+  });
+
+  it('dispatches tab-drag-start event', () => {
+    assert.ok(src.includes('tab-drag-start'), 'Should dispatch tab-drag-start event');
+  });
+
+  it('dispatches tab-drag-end event', () => {
+    assert.ok(src.includes('tab-drag-end'), 'Should dispatch tab-drag-end event');
   });
 });
 

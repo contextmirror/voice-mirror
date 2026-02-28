@@ -400,6 +400,34 @@ export async function lensCloseAllTabs() {
   return invoke('lens_close_all_tabs');
 }
 
+// ============ Device Preview ============
+
+export async function lensCreateDeviceWebview({ presetId, url, width, height, x, y }) {
+  return invoke('lens_create_device_webview', { presetId, url, width, height, x, y });
+}
+
+export async function lensCloseDeviceWebview(label) {
+  return invoke('lens_close_device_webview', { label });
+}
+
+export async function lensCloseAllDeviceWebviews() {
+  return invoke('lens_close_all_device_webviews');
+}
+
+export async function lensResizeDeviceWebview(label, x, y, width, height) {
+  return invoke('lens_resize_device_webview', { label, x, y, width, height });
+}
+
+/** Evaluate JS in a device-preview webview (fire-and-forget). Used for sync script injection and replay. */
+export async function lensEvalDeviceJs(label, js) {
+  return invoke('lens_eval_device_js', { label, js });
+}
+
+/** Set CDP device emulation on a device-preview webview (viewport, DPR, user agent, touch). */
+export async function lensSetDeviceEmulation(label, { width, height, deviceScaleFactor, mobile, userAgent, scale }) {
+  return invoke('lens_set_device_emulation', { label, width, height, deviceScaleFactor, mobile, userAgent, scale: scale ?? null });
+}
+
 // ============ Dev Server ============
 
 /**
@@ -484,6 +512,12 @@ export async function gitUnstageAll(root) { return invoke('git_unstage_all', { r
 export async function gitCommit(message, root) { return invoke('git_commit', { message, root: root || null }); }
 export async function gitDiscard(paths, root) { return invoke('git_discard', { paths, root: root || null }); }
 export async function gitPush(root) { return invoke('git_push', { root: root || null }); }
+export async function gitAheadBehind(root) { return invoke('git_ahead_behind', { root: root || null }); }
+export async function gitFetch(root) { return invoke('git_fetch', { root: root || null }); }
+export async function gitPull(rebase, root) { return invoke('git_pull', { rebase: rebase || false, root: root || null }); }
+export async function gitForcePush(root) { return invoke('git_force_push', { root: root || null }); }
+export async function gitListBranches(root) { return invoke('git_list_branches', { root: root || null }); }
+export async function gitCheckoutBranch(branch, root) { return invoke('git_checkout_branch', { branch, root: root || null }); }
 /**
  * Create a new file with optional content.
  * Errors if the file already exists. Creates parent directories as needed.
@@ -577,52 +611,64 @@ export async function stopFileWatching() {
   return invoke('stop_file_watching');
 }
 
-// ============ Shell Terminals ============
+// ============ Terminal ============
 
 /**
- * Spawn a new shell terminal session.
+ * Spawn a new terminal session.
  * @param {Object} [options]
  * @param {number} [options.cols] - Terminal columns.
  * @param {number} [options.rows] - Terminal rows.
  * @param {string} [options.cwd] - Working directory.
+ * @param {string} [options.profileId] - Terminal profile ID (shell).
  * @returns {Promise<Object>}
  */
-export async function shellSpawn(options = {}) {
-  return invoke('shell_spawn', {
+export async function terminalSpawn(options = {}) {
+  return invoke('terminal_spawn', {
     cols: options.cols || null,
     rows: options.rows || null,
     cwd: options.cwd || null,
+    profileId: options.profileId || null,
   });
 }
 
 /**
- * Send raw input to a shell terminal session.
- * @param {string} id - Shell session ID.
+ * Send raw input to a terminal session.
+ * @param {string} id - Terminal session ID.
  * @param {string} data - Raw input data.
  * @returns {Promise<Object>}
  */
-export async function shellInput(id, data) {
-  return invoke('shell_input', { id, data });
+export async function terminalInput(id, data) {
+  return invoke('terminal_input', { id, data });
 }
 
 /**
- * Resize a shell terminal session's PTY.
- * @param {string} id - Shell session ID.
+ * Resize a terminal session's PTY.
+ * @param {string} id - Terminal session ID.
  * @param {number} cols - New column count.
  * @param {number} rows - New row count.
  * @returns {Promise<Object>}
  */
-export async function shellResize(id, cols, rows) {
-  return invoke('shell_resize', { id, cols, rows });
+export async function terminalResize(id, cols, rows) {
+  return invoke('terminal_resize', { id, cols, rows });
 }
 
 /**
- * Kill a shell terminal session.
- * @param {string} id - Shell session ID.
+ * Kill a terminal session.
+ * @param {string} id - Terminal session ID.
  * @returns {Promise<Object>}
  */
-export async function shellKill(id) {
-  return invoke('shell_kill', { id });
+export async function terminalKill(id) {
+  return invoke('terminal_kill', { id });
+}
+
+/**
+ * Detect available terminal profiles (shells) on the system.
+ * Returns { success: boolean, data?: TerminalProfile[] }
+ * where TerminalProfile has { id, name, path, args, icon, color, is_default, is_builtin }.
+ * @returns {Promise<Object>}
+ */
+export async function terminalDetectProfiles() {
+  return invoke('terminal_detect_profiles');
 }
 
 // ============ LSP ============
@@ -693,4 +739,44 @@ export async function lspRequestFormatting(path, tabSize, insertSpaces, projectR
 
 export async function lspRequestRangeFormatting(path, rangeStartLine, rangeStartChar, rangeEndLine, rangeEndChar, tabSize, insertSpaces, projectRoot) {
   return invoke('lsp_request_range_formatting', { path, rangeStartLine, rangeStartChar, rangeEndLine, rangeEndChar, tabSize, insertSpaces, projectRoot });
+}
+
+export async function lspScanProject(langId, projectRoot) {
+  return invoke('lsp_scan_project', { langId, projectRoot });
+}
+
+// ============ LSP Server Management ============
+
+export async function lspGetServerList() {
+  return invoke('lsp_get_server_list');
+}
+
+export async function lspInstallServer(serverId) {
+  return invoke('lsp_install_server', { serverId });
+}
+
+export async function lspSetServerEnabled(serverId, enabled) {
+  return invoke('lsp_set_server_enabled', { serverId, enabled });
+}
+
+export async function lspRestartServer(langId, projectRoot) {
+  return invoke('lsp_restart_server', { langId, projectRoot });
+}
+
+export async function lspGetServerDetail(langId, projectRoot) {
+  return invoke('lsp_get_server_detail', { langId, projectRoot });
+}
+
+export async function lspShutdown() {
+  return invoke('lsp_shutdown');
+}
+
+// ============ Output / Diagnostics ============
+
+export async function getOutputLogs(params) {
+  return invoke('get_output_logs', { params });
+}
+
+export async function logFrontendError(params) {
+  return invoke('log_frontend_error', { params });
 }

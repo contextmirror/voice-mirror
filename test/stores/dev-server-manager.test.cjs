@@ -69,16 +69,16 @@ describe('dev-server-manager.svelte.js -- constant values', () => {
 // -- Imports --
 
 describe('dev-server-manager.svelte.js -- imports', () => {
-  it('imports shellSpawn from api', () => {
-    assert.ok(src.includes('shellSpawn'), 'Should import shellSpawn');
+  it('imports terminalSpawn from api', () => {
+    assert.ok(src.includes('terminalSpawn'), 'Should import terminalSpawn');
   });
 
-  it('imports shellInput from api', () => {
-    assert.ok(src.includes('shellInput'), 'Should import shellInput');
+  it('imports terminalInput from api', () => {
+    assert.ok(src.includes('terminalInput'), 'Should import terminalInput');
   });
 
-  it('imports shellKill from api', () => {
-    assert.ok(src.includes('shellKill'), 'Should import shellKill');
+  it('imports terminalKill from api', () => {
+    assert.ok(src.includes('terminalKill'), 'Should import terminalKill');
   });
 
   it('imports probePort from api', () => {
@@ -219,14 +219,14 @@ describe('dev-server-manager.svelte.js -- methods', () => {
 // -- Start server behavior --
 
 describe('dev-server-manager.svelte.js -- startServer behavior', () => {
-  it('calls shellSpawn with project cwd', () => {
+  it('calls terminalSpawn with project cwd', () => {
     const block = src.split('async function startServer')[1] || '';
-    assert.ok(block.includes('shellSpawn({ cwd: projectPath }'), 'Should spawn shell with projectPath cwd');
+    assert.ok(block.includes('terminalSpawn({ cwd: projectPath }'), 'Should spawn terminal with projectPath cwd');
   });
 
-  it('calls shellInput with start command', () => {
+  it('calls terminalInput with start command', () => {
     const block = src.split('async function startServer')[1] || '';
-    assert.ok(block.includes('shellInput(shellId,'), 'Should send start command via shellInput');
+    assert.ok(block.includes('terminalInput(shellId,'), 'Should send start command via terminalInput');
   });
 
   it('adds dev server tab via terminalTabsStore', () => {
@@ -265,14 +265,14 @@ describe('dev-server-manager.svelte.js -- stopServer behavior', () => {
   it('clears shellId before killing to prevent false crash detection', () => {
     const block = src.split('async function stopServer')[1]?.split('async function')[0] || '';
     const clearIdx = block.indexOf("shellId: null");
-    const killIdx = block.indexOf('shellKill(');
-    assert.ok(clearIdx > 0 && killIdx > 0, 'Should have both state clear and shellKill');
-    assert.ok(clearIdx < killIdx, 'Should clear shellId BEFORE calling shellKill');
+    const killIdx = block.indexOf('terminalKill(');
+    assert.ok(clearIdx > 0 && killIdx > 0, 'Should have both state clear and terminalKill');
+    assert.ok(clearIdx < killIdx, 'Should clear shellId BEFORE calling terminalKill');
   });
 
-  it('calls shellKill with captured shellId', () => {
+  it('calls terminalKill with captured shellId', () => {
     const block = src.split('async function stopServer')[1]?.split('async function')[0] || '';
-    assert.ok(block.includes('shellKill(shellId)'), 'Should call shellKill with captured shellId');
+    assert.ok(block.includes('terminalKill(shellId)'), 'Should call terminalKill with captured shellId');
   });
 
   it('marks tab as exited', () => {

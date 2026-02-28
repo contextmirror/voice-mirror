@@ -1,0 +1,200 @@
+const { describe, it } = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+
+const storeSrc = fs.readFileSync(
+  path.join(__dirname, '../../src/lib/stores/terminal-tabs.svelte.js'),
+  'utf-8'
+);
+
+describe('terminal-tabs store - split tree integration', () => {
+  it('imports split-tree module', () => {
+    assert.ok(storeSrc.includes("from '../split-tree.js'") || storeSrc.includes("from '../split-tree'"),
+      'should import split-tree');
+  });
+
+  it('groups have splitTree property', () => {
+    assert.ok(storeSrc.includes('splitTree'), 'groups should use splitTree');
+  });
+
+  it('addGroup creates initial leaf splitTree', () => {
+    assert.ok(storeSrc.includes('createLeaf'), 'addGroup should create a leaf');
+  });
+
+  it('splitInstance uses splitLeaf with direction parameter', () => {
+    assert.ok(storeSrc.includes('splitLeaf'), 'splitInstance should use splitLeaf');
+  });
+
+  it('supports split direction parameter', () => {
+    assert.ok(
+      storeSrc.includes("direction") && (storeSrc.includes("'horizontal'") || storeSrc.includes("'vertical'")),
+      'should support direction parameter'
+    );
+  });
+
+  it('killInstance uses removeLeaf', () => {
+    assert.ok(storeSrc.includes('removeLeaf'), 'killInstance should use removeLeaf');
+  });
+
+  it('maintains backward-compat instanceIds getter from splitTree', () => {
+    assert.ok(storeSrc.includes('getAllInstanceIds'), 'should derive instanceIds from splitTree');
+  });
+});
+
+const panelSrc = fs.readFileSync(
+  path.join(__dirname, '../../src/components/terminal/TerminalPanel.svelte'),
+  'utf-8'
+);
+
+describe('TerminalPanel - recursive split rendering', () => {
+  it('imports SplitPanel', () => {
+    assert.ok(panelSrc.includes('SplitPanel'), 'should import SplitPanel');
+  });
+
+  it('handles both leaf and split node types', () => {
+    assert.ok(panelSrc.includes("type === 'leaf'") || panelSrc.includes("'leaf'"),
+      'should check node type for rendering');
+  });
+
+  it('renders Terminal for leaf nodes', () => {
+    assert.ok(panelSrc.includes('Terminal') && panelSrc.includes('shellId'),
+      'should render Terminal component for leaves');
+  });
+
+  it('handles both horizontal and vertical splits', () => {
+    assert.ok(panelSrc.includes('direction'), 'should pass direction to SplitPanel');
+  });
+
+  it('uses recursive snippet or component for split nodes', () => {
+    assert.ok(
+      panelSrc.includes('#snippet') || panelSrc.includes('svelte:self'),
+      'should use recursive rendering'
+    );
+  });
+});
+
+const ctxSrc = fs.readFileSync(
+  path.join(__dirname, '../../src/components/terminal/TerminalContextMenu.svelte'),
+  'utf-8'
+);
+
+describe('TerminalContextMenu - split direction', () => {
+  it('offers Split Right option', () => {
+    assert.ok(ctxSrc.includes('Split Right') || ctxSrc.includes('split-right'),
+      'should have Split Right option');
+  });
+
+  it('offers Split Down option', () => {
+    assert.ok(ctxSrc.includes('Split Down') || ctxSrc.includes('split-down'),
+      'should have Split Down option');
+  });
+});
+
+describe('terminal-tabs store - persistence', () => {
+  it('has saveLayout method', () => {
+    assert.ok(storeSrc.includes('saveLayout'), 'should have saveLayout');
+  });
+
+  it('has restoreLayout method', () => {
+    assert.ok(storeSrc.includes('restoreLayout'), 'should have restoreLayout');
+  });
+
+  it('exports saveLayout in return object', () => {
+    assert.ok(storeSrc.includes('saveLayout,') || storeSrc.includes('saveLayout:'), 'should export saveLayout');
+  });
+
+  it('exports restoreLayout in return object', () => {
+    assert.ok(storeSrc.includes('restoreLayout,') || storeSrc.includes('restoreLayout:'), 'should export restoreLayout');
+  });
+
+  it('debounces save calls', () => {
+    assert.ok(
+      storeSrc.includes('setTimeout') && storeSrc.includes('clearTimeout'),
+      'should debounce saves with setTimeout/clearTimeout'
+    );
+  });
+
+  it('imports setConfig from api.js', () => {
+    assert.ok(storeSrc.includes('setConfig') && storeSrc.includes('api.js'), 'should import setConfig from api.js');
+  });
+
+  it('imports getConfig from api.js', () => {
+    assert.ok(storeSrc.includes('getConfig') && storeSrc.includes('api.js'), 'should import getConfig from api.js');
+  });
+
+  it('imports serialize from split-tree.js', () => {
+    assert.ok(storeSrc.includes('serialize') && storeSrc.includes('split-tree.js'), 'should import serialize');
+  });
+
+  it('imports deserialize from split-tree.js', () => {
+    assert.ok(storeSrc.includes('deserialize') && storeSrc.includes('split-tree.js'), 'should import deserialize');
+  });
+
+  it('saves layout via setConfig with terminalLayout key', () => {
+    assert.ok(storeSrc.includes('terminalLayout'), 'should save under terminalLayout config key');
+  });
+
+  it('calls debouncedSave in structural methods', () => {
+    const saveCallCount = (storeSrc.match(/debouncedSave\(\)/g) || []).length;
+    assert.ok(saveCallCount >= 5, 'should call debouncedSave in multiple structural methods, found ' + saveCallCount);
+  });
+
+  it('saves activeInstanceId per group', () => {
+    assert.ok(storeSrc.includes('activeInstanceId') && storeSrc.includes('saveLayout'),
+      'should include activeInstanceId in saved layout');
+  });
+
+  it('restoreLayout handles profile fallback on spawn failure', () => {
+    assert.ok(
+      storeSrc.includes("'default'") && storeSrc.includes('restoreLayout'),
+      'should fall back to default profile'
+    );
+  });
+
+  it('moveInstance calls debouncedSave', () => {
+    // Extract the moveInstance method body
+    const moveBlock = storeSrc.split('moveInstance(')[1]?.split('\n    },\n')[0] || '';
+    assert.ok(moveBlock.includes('debouncedSave()'), 'moveInstance should call debouncedSave');
+  });
+
+  it('splitGroup calls debouncedSave', () => {
+    const splitGroupBlock = storeSrc.split('async splitGroup(')[1]?.split('\n    },\n')[0] || '';
+    assert.ok(splitGroupBlock.includes('debouncedSave()'), 'splitGroup should call debouncedSave');
+  });
+});
+
+const panelSrc2 = fs.readFileSync(
+  path.join(__dirname, '../../src/components/terminal/TerminalPanel.svelte'),
+  'utf-8'
+);
+
+describe('TerminalPanel - persistence startup', () => {
+  it('calls restoreLayout on mount', () => {
+    assert.ok(panelSrc2.includes('restoreLayout'), 'should call restoreLayout');
+  });
+
+  it('falls back to addGroup if restore returns false', () => {
+    assert.ok(
+      panelSrc2.includes('if (!restored)') || panelSrc2.includes('!restored'),
+      'should fall back to addGroup when no saved layout'
+    );
+  });
+});
+
+const actionBarSrc = fs.readFileSync(
+  path.join(__dirname, '../../src/components/terminal/TerminalActionBar.svelte'),
+  'utf-8'
+);
+
+describe('TerminalActionBar - split direction', () => {
+  it('has Split Right option in dropdown', () => {
+    assert.ok(actionBarSrc.includes('Split Right') || actionBarSrc.includes('split right'),
+      'should have Split Right option');
+  });
+
+  it('has Split Down option in dropdown', () => {
+    assert.ok(actionBarSrc.includes('Split Down') || actionBarSrc.includes('split down'),
+      'should have Split Down option');
+  });
+});

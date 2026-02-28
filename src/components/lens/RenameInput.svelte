@@ -38,10 +38,26 @@
     node.focus();
     node.select();
   }
+
+  let renameEl = $state(null);
+
+  // Post-render: reposition if it overflows viewport
+  $effect(() => {
+    if (visible && renameEl) {
+      const rect = renameEl.getBoundingClientRect();
+      const pad = 4;
+      if (rect.bottom > window.innerHeight - pad) {
+        renameEl.style.top = `${Math.max(pad, window.innerHeight - rect.height - pad)}px`;
+      }
+      if (rect.right > window.innerWidth - pad) {
+        renameEl.style.left = `${Math.max(pad, window.innerWidth - rect.width - pad)}px`;
+      }
+    }
+  });
 </script>
 
 {#if visible}
-  <div class="rename-input" style="left: {x}px; top: {y}px;">
+  <div class="rename-input" style="left: {x}px; top: {y}px;" bind:this={renameEl}>
     <input
       type="text"
       bind:value={inputValue}

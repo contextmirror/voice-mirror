@@ -86,3 +86,60 @@ describe('main.js: global scrollbar jump-to-click', () => {
     assert.ok(src.includes('stopPropagation'), 'Should stop propagation');
   });
 });
+
+describe('main.js: global browser suppression -- context menu', () => {
+  it('blocks native context menu globally', () => {
+    assert.ok(src.includes("addEventListener('contextmenu'"), 'Should block context menu');
+  });
+  it('allows context menu on textarea and input', () => {
+    assert.ok(src.includes('TEXTAREA') && src.includes('INPUT'), 'Should whitelist form elements');
+  });
+  it('allows context menu on contentEditable', () => {
+    assert.ok(src.includes('isContentEditable'), 'Should whitelist contentEditable');
+  });
+  it('blocks context menu on ghostty-web textarea inside terminal', () => {
+    assert.ok(src.includes('terminal-container'), 'Should detect terminal-container ancestor');
+    assert.ok(src.includes('CANVAS'), 'Should also check canvas elements in terminals');
+  });
+});
+
+describe('main.js: global browser suppression -- keyboard shortcuts', () => {
+  it('blocks F5 refresh', () => {
+    assert.ok(src.includes("e.key === 'F5'"), 'Should block F5');
+  });
+  it('blocks Ctrl+R refresh', () => {
+    assert.ok(src.includes("e.key === 'r'") && src.includes('e.ctrlKey'), 'Should block Ctrl+R');
+  });
+  it('blocks Ctrl+U view source', () => {
+    assert.ok(src.includes("e.key === 'u'"), 'Should block Ctrl+U');
+  });
+  it('blocks Ctrl+S save page', () => {
+    assert.ok(src.includes("e.key === 's'"), 'Should block Ctrl+S');
+  });
+  it('blocks F7 caret browsing', () => {
+    assert.ok(src.includes("e.key === 'F7'"), 'Should block F7');
+  });
+  it('uses capture phase', () => {
+    const idx = src.indexOf("addEventListener('keydown'");
+    const chunk = src.slice(idx, idx + 1500);
+    assert.ok(chunk.includes(', true)'), 'Keydown listener should use capture phase');
+  });
+});
+
+describe('main.js: global browser suppression -- drag-and-drop', () => {
+  it('blocks browser text/image drag', () => {
+    assert.ok(src.includes("addEventListener('dragstart'"), 'Should block dragstart');
+  });
+  it('allows elements with explicit draggable=true', () => {
+    assert.ok(src.includes("draggable") && src.includes("'true'"), 'Should whitelist draggable elements');
+  });
+});
+
+describe('main.js: global browser suppression -- middle-click', () => {
+  it('blocks middle-click auto-scroll', () => {
+    assert.ok(src.includes('e.button !== 1'), 'Should detect middle button');
+  });
+  it('allows middle-click in terminal containers', () => {
+    assert.ok(src.includes('terminal-container'), 'Should whitelist terminal for middle-click paste');
+  });
+});

@@ -1,10 +1,10 @@
 <script>
   import { onDestroy, tick } from 'svelte';
   import { listen } from '@tauri-apps/api/event';
-  import { readFile, readExternalFile, writeFile, lspRequestDefinition, lspApplyWorkspaceEdit, writeUserMessage, aiPtyInput } from '../../lib/api.js';
+  import { readFile, readExternalFile, writeFile, getFileGitContent, lspRequestDefinition, lspApplyWorkspaceEdit, writeUserMessage, aiPtyInput } from '../../lib/api.js';
   import { tabsStore } from '../../lib/stores/tabs.svelte.js';
   import { projectStore } from '../../lib/stores/project.svelte.js';
-  import { configStore } from '../../lib/stores/config.svelte.js';
+  import { configStore, updateConfig } from '../../lib/stores/config.svelte.js';
   import { chatStore } from '../../lib/stores/chat.svelte.js';
   import { aiStatusStore } from '../../lib/stores/ai-status.svelte.js';
   import EditorContextMenu from './EditorContextMenu.svelte';
@@ -18,7 +18,10 @@
   import { createEditorLsp, LSP_EXTENSIONS, uriToRelativePath, lspPositionToOffset, mapCompletionKind } from '../../lib/editor-lsp.svelte.js';
   import { lspDiagnosticsStore } from '../../lib/stores/lsp-diagnostics.svelte.js';
   import { buildEditorExtensions } from '../../lib/editor-extensions.js';
+  import { navigationHistoryStore } from '../../lib/stores/navigation-history.svelte.js';
+  import { gitGutterPlugin } from '../../lib/editor-git-gutter.js';
   import { loadLanguageExtension } from '../../lib/codemirror-languages.js';
+  import { statusBarStore, getLanguageName } from '../../lib/stores/status-bar.svelte.js';
 
   let { tab, groupId = 1 } = $props();
 
@@ -63,8 +66,8 @@
     if (cmCache) return cmCache;
     const [
       { EditorView, basicSetup },
-      { EditorState, EditorSelection },
-      { keymap, hoverTooltip },
+      { EditorState, EditorSelection, StateEffect, StateField, RangeSet },
+      { keymap, hoverTooltip, ViewPlugin, Decoration, gutter, GutterMarker },
       { autocompletion },
       { setDiagnostics, lintGutter },
     ] = await Promise.all([
@@ -74,11 +77,70 @@
       import('@codemirror/autocomplete'),
       import('@codemirror/lint'),
     ]);
-    cmCache = { EditorView, basicSetup, EditorState, EditorSelection, keymap, hoverTooltip, autocompletion, setDiagnostics, lintGutter };
+    cmCache = { EditorView, basicSetup, EditorState, EditorSelection, StateEffect, StateField, RangeSet, keymap, hoverTooltip, ViewPlugin, Decoration, gutter, GutterMarker, autocompletion, setDiagnostics, lintGutter };
     return cmCache;
   }
 
   const loadLanguage = loadLanguageExtension;
+
+  // Range highlight decoration (VS Code-style rangeHighlight for Problems panel navigation)
+  let rangeHighlightEffect = null;
+  let clearRangeHighlightEffect = null;
+  let rangeHighlightField = null;
+  let rangeHighlightTimer = null;
+
+  function initRangeHighlight(cm) {
+    rangeHighlightEffect = cm.StateEffect.define();
+    clearRangeHighlightEffect = cm.StateEffect.define();
+
+    const highlightMark = cm.Decoration.mark({ class: 'cm-range-highlight' });
+    const highlightLine = cm.Decoration.line({ class: 'cm-range-highlight-line' });
+
+    rangeHighlightField = cm.StateField.define({
+      create() { return cm.RangeSet.empty; },
+      update(decos, tr) {
+        for (const e of tr.effects) {
+          if (e.is(clearRangeHighlightEffect)) return cm.RangeSet.empty;
+          if (e.is(rangeHighlightEffect)) {
+            const { from, to, wholeLine } = e.value;
+            if (wholeLine) {
+              // Highlight full lines
+              const marks = [];
+              for (let pos = from; pos <= to;) {
+                const line = tr.state.doc.lineAt(pos);
+                marks.push(highlightLine.range(line.from));
+                pos = line.to + 1;
+              }
+              return cm.RangeSet.of(marks);
+            }
+            if (from < to) return cm.RangeSet.of([highlightMark.range(from, to)]);
+            // Single point — highlight the whole line
+            const line = tr.state.doc.lineAt(from);
+            return cm.RangeSet.of([highlightLine.range(line.from)]);
+          }
+        }
+        // Clear on user selection change (typing, clicking elsewhere)
+        if (tr.selectionSet && !tr.effects.some(e => e.is(rangeHighlightEffect))) {
+          return cm.RangeSet.empty;
+        }
+        return decos;
+      },
+      provide: f => cm.EditorView.decorations.from(f),
+    });
+  }
+
+  function applyRangeHighlight(view, from, to) {
+    if (!rangeHighlightEffect || !view) return;
+    clearTimeout(rangeHighlightTimer);
+    const wholeLine = from === to;
+    view.dispatch({ effects: rangeHighlightEffect.of({ from, to, wholeLine }) });
+    // Auto-clear after 3 seconds
+    rangeHighlightTimer = setTimeout(() => {
+      if (view && clearRangeHighlightEffect) {
+        try { view.dispatch({ effects: clearRangeHighlightEffect.of(null) }); } catch {}
+      }
+    }, 3000);
+  }
 
   function sendAiMessage(text) {
     chatStore.addMessage('user', text);
@@ -94,6 +156,35 @@
     const root = projectStore.activeProject?.path || null;
     await lsp.formatDocument(view, currentPath, root);
   }
+
+  const DEFAULT_FONT_SIZE = 14;
+  const MIN_FONT_SIZE = 8;
+  const MAX_FONT_SIZE = 32;
+
+  function handleFontZoom(delta) {
+    const current = configStore.value?.editor?.fontSize ?? DEFAULT_FONT_SIZE;
+    let next;
+    if (delta === 0) {
+      next = DEFAULT_FONT_SIZE;
+    } else {
+      next = Math.max(MIN_FONT_SIZE, Math.min(MAX_FONT_SIZE, current + delta));
+    }
+    if (next !== current) {
+      updateConfig({ editor: { fontSize: next } });
+    }
+    // Immediately apply to DOM for responsiveness
+    if (editorEl) {
+      editorEl.style.setProperty('--cm-font-size', `${next}px`);
+    }
+  }
+
+  // Apply persisted font size when editor mounts or config changes
+  $effect(() => {
+    const size = configStore.value?.editor?.fontSize ?? DEFAULT_FONT_SIZE;
+    if (editorEl) {
+      editorEl.style.setProperty('--cm-font-size', `${size}px`);
+    }
+  });
 
   function handleGoToDefinition() {
     if (!view || !lsp.hasLsp || !currentPath) return;
@@ -126,6 +217,10 @@
       await writeFile(tab.path, content, root);
       tabsStore.setDirty(tab.id, false);
       lsp.saveFile(tab.path, content, root);
+
+      // Refresh git gutter after save (file on disk changed)
+      const gp = view?.plugin?.(gitGutterPlugin);
+      if (gp) gp.refreshOriginal();
     } catch (err) {
       console.error('[FileEditor] Save failed:', err);
     }
@@ -324,6 +419,14 @@
           const r = projectStore.activeProject?.path || null;
 
           try {
+            // Record departure point for back/forward navigation
+            navigationHistoryStore.pushLocation({
+              path: currentPath,
+              line,
+              character,
+              groupId,
+            });
+
             const result = await lspRequestDefinition(currentPath, line, character, r);
             if (!result?.data?.locations?.length) return true;
 
@@ -345,6 +448,52 @@
           } catch {}
           return true;
         } : null,
+        onFontZoom: (delta) => handleFontZoom(delta),
+        onNavigateBack: () => {
+          const loc = navigationHistoryStore.goBack();
+          if (!loc) return;
+          if (loc.path !== currentPath) {
+            const name = loc.path.split(/[/\\]/).pop() || loc.path;
+            tabsStore.openFile({ name, path: loc.path }, loc.groupId);
+          }
+          // Move cursor to stored position
+          if (view) {
+            const cmLine = view.state.doc.line(Math.min(loc.line + 1, view.state.doc.lines));
+            const pos = Math.min(cmLine.from + loc.character, cmLine.to);
+            view.dispatch({
+              selection: { anchor: pos },
+              scrollIntoView: true,
+            });
+          }
+        },
+        onNavigateForward: () => {
+          const loc = navigationHistoryStore.goForward();
+          if (!loc) return;
+          if (loc.path !== currentPath) {
+            const name = loc.path.split(/[/\\]/).pop() || loc.path;
+            tabsStore.openFile({ name, path: loc.path }, loc.groupId);
+          }
+          if (view) {
+            const cmLine = view.state.doc.line(Math.min(loc.line + 1, view.state.doc.lines));
+            const pos = Math.min(cmLine.from + loc.character, cmLine.to);
+            view.dispatch({
+              selection: { anchor: pos },
+              scrollIntoView: true,
+            });
+          }
+        },
+        onCursorActivity: (update) => {
+          const pos = update.state.selection.main.head;
+          const lineInfo = update.state.doc.lineAt(pos);
+          statusBarStore.setCursor(lineInfo.number, pos - lineInfo.from + 1);
+        },
+        getOriginalContent: isExternal ? null : async (filePath) => {
+          const root = projectStore.activeProject?.path || null;
+          try {
+            const result = await getFileGitContent(filePath, root);
+            return result?.data || result;
+          } catch { return null; }
+        },
       });
 
       if (langSupport && !Array.isArray(langSupport)) {
@@ -352,6 +501,10 @@
       } else if (Array.isArray(langSupport) && langSupport.length > 0) {
         extensions.splice(1, 0, ...langSupport);
       }
+
+      // Add range highlight decoration support (for Problems panel navigation)
+      initRangeHighlight(cm);
+      if (rangeHighlightField) extensions.push(rangeHighlightField);
 
       const state = cm.EditorState.create({
         doc: data.content,
@@ -371,6 +524,26 @@
         view = new cm.EditorView({ state, parent: editorEl });
         // Attach current path for LSP handler access
         view._lspPath = filePath;
+
+        // Initialize git gutter with file path
+        if (!isExternal && !isReadOnly && !isUntitled) {
+          const gp = view.plugin(gitGutterPlugin);
+          if (gp) gp.setPath(filePath);
+        }
+
+        // Status bar: set language and initial editor state
+        statusBarStore.setLanguage(getLanguageName(filePath));
+        statusBarStore.setEditorFocused(true);
+        statusBarStore.setEncoding('UTF-8');
+
+        // Detect EOL from content
+        const hasCarriageReturn = data.content?.includes('\r\n');
+        statusBarStore.setEol(hasCarriageReturn ? 'CRLF' : 'LF');
+
+        // Set initial cursor position
+        const initialPos = view.state.selection.main.head;
+        const initialLine = view.state.doc.lineAt(initialPos);
+        statusBarStore.setCursor(initialLine.number, initialPos - initialLine.from + 1);
       }
 
       // Open file in LSP (fire and forget)
@@ -473,6 +646,42 @@
     return () => { unlisten?.(); };
   });
 
+  // Apply pending cursor position (from Problems panel click-to-navigate)
+  $effect(() => {
+    const pending = tabsStore.pendingCursorPosition;
+    if (!pending || !view || pending.path !== currentPath) return;
+    // Defer to ensure editor content is loaded
+    requestAnimationFrame(() => {
+      try {
+        const lineNum = Math.min(Math.max(pending.line + 1, 1), view.state.doc.lines);
+        const line = view.state.doc.line(lineNum);
+        const anchor = line.from + Math.min(pending.character || 0, line.length);
+
+        // Compute end position for range highlight
+        let highlightEnd = anchor;
+        if (pending.endLine != null) {
+          const endLineNum = Math.min(Math.max(pending.endLine + 1, 1), view.state.doc.lines);
+          const endLine = view.state.doc.line(endLineNum);
+          highlightEnd = endLine.from + Math.min(pending.endCharacter || 0, endLine.length);
+        }
+
+        // Set cursor at start (not selection — the decoration handles the visual highlight)
+        const scrollEffect = cmCache?.EditorView?.scrollIntoView(anchor, { y: 'center' });
+        view.dispatch({
+          selection: { anchor },
+          ...(scrollEffect ? { effects: scrollEffect } : { scrollIntoView: true }),
+        });
+
+        // Apply VS Code-style range highlight decoration
+        applyRangeHighlight(view, anchor, highlightEnd);
+        view.focus();
+      } catch (e) {
+        // Ignore if line is out of range
+      }
+      tabsStore.clearPendingCursor();
+    });
+  });
+
   // Listen for outline symbol navigation (from OutlinePanel via LensWorkspace)
   // Scoped by groupId so each editor instance only handles its own events
   $effect(() => {
@@ -482,9 +691,11 @@
       const { line, character } = e.detail;
       try {
         const targetLine = view.state.doc.line(line + 1);
+        const anchor = targetLine.from + Math.min(character, targetLine.length);
+        const scrollEffect = cmCache?.EditorView?.scrollIntoView(anchor, { y: 'center' });
         view.dispatch({
-          selection: { anchor: targetLine.from + Math.min(character, targetLine.length) },
-          scrollIntoView: true,
+          selection: { anchor },
+          ...(scrollEffect ? { effects: scrollEffect } : { scrollIntoView: true }),
         });
         view.focus();
       } catch {}
@@ -515,6 +726,7 @@
     clearTimeout(sigHelpDebounce);
     lsp.destroy();
     view?.destroy();
+    statusBarStore.clearEditorState();
   });
 </script>
 
@@ -848,6 +1060,16 @@
 
   .file-editor :global(.cm-lintPoint-warning) {
     border-bottom-color: var(--warn);
+  }
+
+  /* VS Code-style range highlight for Problems panel navigation */
+  .file-editor :global(.cm-range-highlight) {
+    background-color: color-mix(in srgb, var(--accent) 25%, transparent);
+    border-radius: 2px;
+  }
+
+  .file-editor :global(.cm-range-highlight-line) {
+    background-color: color-mix(in srgb, var(--accent) 15%, transparent);
   }
 
 </style>

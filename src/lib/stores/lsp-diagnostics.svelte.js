@@ -55,8 +55,11 @@ function createLspDiagnosticsStore() {
   }
 
   return {
-    /** Get the raw diagnostics Map */
+    /** Get the summary diagnostics Map */
     get diagnostics() { return diagnostics; },
+
+    /** Get the raw diagnostics Map (full LSP diagnostic objects per file) */
+    get rawDiagnostics() { return rawDiagnostics; },
 
     /** Get error/warning counts for a specific file path */
     getForFile(filePath) {
@@ -81,6 +84,22 @@ function createLspDiagnosticsStore() {
     /** Get raw LSP diagnostics array for a specific file path */
     getRawForFile(filePath) {
       return rawDiagnostics.get(filePath) || null;
+    },
+
+    /** Get aggregate counts across all files */
+    getTotals() {
+      let errors = 0;
+      let warnings = 0;
+      let infos = 0;
+      for (const [, diags] of rawDiagnostics) {
+        for (const d of diags) {
+          const sev = d.severity;
+          if (sev === 'error' || sev === 1) errors++;
+          else if (sev === 'warning' || sev === 2) warnings++;
+          else if (sev === 'information' || sev === 3) infos++;
+        }
+      }
+      return { errors, warnings, infos };
     },
 
     /** Clear all diagnostics (e.g. on project switch) */

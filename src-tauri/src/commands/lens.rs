@@ -8,8 +8,17 @@ use tracing::{info, warn};
 /// Maximum number of browser tabs allowed.
 const MAX_TABS: usize = 8;
 
+/// Maximum number of device preview webviews allowed.
+const MAX_DEVICE_WEBVIEWS: usize = 3;
+
 /// A single browser tab backed by a native WebView2 instance.
 pub struct BrowserTab {
+    pub webview_label: String,
+}
+
+/// A device-preview webview tied to a responsive-design preset.
+pub struct DeviceWebview {
+    pub preset_id: String,
     pub webview_label: String,
 }
 
@@ -19,6 +28,8 @@ pub struct LensState {
     pub active_tab_id: Mutex<Option<String>>,
     /// Last-known webview bounds (x, y, width, height) in logical pixels.
     pub bounds: Mutex<Option<(f64, f64, f64, f64)>>,
+    /// Device-preview webviews for responsive design mode.
+    pub device_webviews: Mutex<Vec<DeviceWebview>>,
 }
 
 /// Get the active lens webview from state, or return an IpcResponse error.
@@ -396,32 +407,26 @@ pub fn lens_close_tab(
     IpcResponse::ok_empty()
 }
 
-/// Switch to a different browser tab. Hides the old active webview, shows the new one.
-#[tauri::command]
-pub fn lens_switch_tab(
-    app: AppHandle,
-    tab_id: String,
-    state: tauri::State<'_, LensState>,
-) -> IpcResponse {
+/// Core tab switching logic — hides old webview, shows new one, updates active ID.
+/// Callable from both Tauri commands and the browser bridge.
+pub fn switch_tab_impl(
+    app: &AppHandle,
+    tab_id: &str,
+    state: &LensState,
+) -> Result<(), String> {
     info!("[lens] Switching to tab {}", tab_id);
 
     // Get old active and verify new tab exists
     let (old_label, new_label) = {
-        let tabs = match state.tabs.lock() {
-            Ok(g) => g,
-            Err(e) => return IpcResponse::err(format!("Lock error: {}", e)),
-        };
-
-        let new_tab = match tabs.get(&tab_id) {
-            Some(t) => t,
-            None => return IpcResponse::err(format!("Tab {} not found", tab_id)),
-        };
+        let tabs = state.tabs.lock()
+            .map_err(|e| format!("Lock error: {}", e))?;
+        let new_tab = tabs.get(tab_id)
+            .ok_or_else(|| format!("Tab {} not found", tab_id))?;
         let new_label = new_tab.webview_label.clone();
 
         let active_id = state.active_tab_id.lock()
             .map(|g| g.clone())
             .unwrap_or(None);
-
         let old_label = active_id.and_then(|aid| {
             tabs.get(&aid).map(|t| t.webview_label.clone())
         });
@@ -451,14 +456,25 @@ pub fn lens_switch_tab(
 
     // Update active tab ID
     {
-        let mut active = match state.active_tab_id.lock() {
-            Ok(g) => g,
-            Err(e) => return IpcResponse::err(format!("Lock error: {}", e)),
-        };
-        *active = Some(tab_id);
+        let mut active = state.active_tab_id.lock()
+            .map_err(|e| format!("Lock error: {}", e))?;
+        *active = Some(tab_id.to_string());
     }
 
-    IpcResponse::ok_empty()
+    Ok(())
+}
+
+/// Switch to a different browser tab. Hides the old active webview, shows the new one.
+#[tauri::command]
+pub fn lens_switch_tab(
+    app: AppHandle,
+    tab_id: String,
+    state: tauri::State<'_, LensState>,
+) -> IpcResponse {
+    match switch_tab_impl(&app, &tab_id, &state) {
+        Ok(()) => IpcResponse::ok_empty(),
+        Err(e) => IpcResponse::err(e),
+    }
 }
 
 /// Close all browser tabs and their WebView2 instances. Called on component unmount.
@@ -814,5 +830,315 @@ pub fn lens_clear_cache(
             IpcResponse::ok_empty()
         }
         Err(e) => IpcResponse::err(format!("Failed to clear browsing data: {}", e)),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Device Preview webviews (responsive design mode)
+// ---------------------------------------------------------------------------
+
+/// Create a device-preview webview for a responsive-design preset.
+/// Each preset gets its own WebView2 child window sized to the device dimensions.
+/// Caps at `MAX_DEVICE_WEBVIEWS`.
+#[tauri::command]
+pub async fn lens_create_device_webview(
+    app: AppHandle,
+    preset_id: String,
+    url: String,
+    width: f64,
+    height: f64,
+    x: f64,
+    y: f64,
+    state: tauri::State<'_, LensState>,
+) -> Result<IpcResponse, String> {
+    info!(
+        "[lens] Creating device webview preset={} at ({},{}) {}x{} url={}",
+        preset_id, x, y, width, height, url
+    );
+
+    // Check limits and duplicates
+    {
+        let devices = state
+            .device_webviews
+            .lock()
+            .map_err(|e| format!("Lock error: {}", e))?;
+        if devices.len() >= MAX_DEVICE_WEBVIEWS {
+            return Ok(IpcResponse::err(format!(
+                "Maximum {} device webviews reached",
+                MAX_DEVICE_WEBVIEWS
+            )));
+        }
+        if devices.iter().any(|d| d.preset_id == preset_id) {
+            return Ok(IpcResponse::err(format!(
+                "Device webview for preset '{}' already exists",
+                preset_id
+            )));
+        }
+    }
+
+    let webview_label = format!("device-{}", preset_id);
+
+    // Create the WebView2 instance using the shared helper
+    let label = create_tab_webview(&app, &webview_label, &url, x, y, width, height).await?;
+
+    // Store in device_webviews vec
+    {
+        let mut devices = state
+            .device_webviews
+            .lock()
+            .map_err(|e| format!("Lock error: {}", e))?;
+        devices.push(DeviceWebview {
+            preset_id: preset_id.clone(),
+            webview_label: label.clone(),
+        });
+    }
+
+    Ok(IpcResponse::ok(serde_json::json!({
+        "label": label,
+        "presetId": preset_id,
+    })))
+}
+
+/// Close a single device-preview webview by its label.
+#[tauri::command]
+pub fn lens_close_device_webview(
+    app: AppHandle,
+    label: String,
+    state: tauri::State<'_, LensState>,
+) -> IpcResponse {
+    info!("[lens] Closing device webview: {}", label);
+
+    let mut devices = match state.device_webviews.lock() {
+        Ok(g) => g,
+        Err(e) => return IpcResponse::err(format!("Lock error: {}", e)),
+    };
+
+    let idx = match devices.iter().position(|d| d.webview_label == label) {
+        Some(i) => i,
+        None => return IpcResponse::err(format!("Device webview '{}' not found", label)),
+    };
+
+    devices.remove(idx);
+
+    if let Some(webview) = app.get_webview(&label) {
+        let _ = webview.close();
+    }
+
+    IpcResponse::ok_empty()
+}
+
+/// Close all device-preview webviews and clear the list.
+#[tauri::command]
+pub fn lens_close_all_device_webviews(
+    app: AppHandle,
+    state: tauri::State<'_, LensState>,
+) -> IpcResponse {
+    info!("[lens] Closing all device webviews");
+
+    let labels: Vec<String> = {
+        let mut devices = match state.device_webviews.lock() {
+            Ok(g) => g,
+            Err(e) => return IpcResponse::err(format!("Lock error: {}", e)),
+        };
+        let labels: Vec<String> = devices.iter().map(|d| d.webview_label.clone()).collect();
+        devices.clear();
+        labels
+    };
+
+    for label in &labels {
+        if let Some(webview) = app.get_webview(label) {
+            let _ = webview.close();
+        }
+    }
+
+    IpcResponse::ok_empty()
+}
+
+/// Reposition and resize a device-preview webview.
+#[tauri::command]
+pub fn lens_resize_device_webview(
+    app: AppHandle,
+    label: String,
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+    state: tauri::State<'_, LensState>,
+) -> IpcResponse {
+    // Verify the label exists in our tracked device webviews
+    {
+        let devices = match state.device_webviews.lock() {
+            Ok(g) => g,
+            Err(e) => return IpcResponse::err(format!("Lock error: {}", e)),
+        };
+        if !devices.iter().any(|d| d.webview_label == label) {
+            return IpcResponse::err(format!("Device webview '{}' not found", label));
+        }
+    }
+
+    let webview = match app.get_webview(&label) {
+        Some(w) => w,
+        None => return IpcResponse::err(format!("Webview '{}' not found", label)),
+    };
+
+    if let Err(e) = webview.set_position(Position::Logical(LogicalPosition::new(x, y))) {
+        return IpcResponse::err(format!("Failed to set position: {}", e));
+    }
+
+    match webview.set_size(Size::Logical(LogicalSize::new(width, height))) {
+        Ok(()) => IpcResponse::ok_empty(),
+        Err(e) => IpcResponse::err(format!("Failed to set size: {}", e)),
+    }
+}
+
+/// Call a Chrome DevTools Protocol method on a lens/device webview.
+/// Windows-only — uses the WebView2 COM API.
+#[cfg(windows)]
+async fn call_cdp_method_lens(
+    webview: &tauri::Webview,
+    method: &str,
+    params: &str,
+) -> Result<serde_json::Value, String> {
+    let (tx, rx) = tokio::sync::oneshot::channel::<Result<String, String>>();
+    let method_owned = method.to_string();
+    let params_owned = params.to_string();
+
+    webview
+        .with_webview(move |platform_webview| {
+            use webview2_com::CallDevToolsProtocolMethodCompletedHandler;
+            use windows_core::HSTRING;
+
+            unsafe {
+                let controller = platform_webview.controller();
+                let core_webview = match controller.CoreWebView2() {
+                    Ok(wv) => wv,
+                    Err(e) => {
+                        let _ = tx.send(Err(format!("CoreWebView2 failed: {:?}", e)));
+                        return;
+                    }
+                };
+
+                let method_h = HSTRING::from(method_owned.as_str());
+                let params_h = HSTRING::from(params_owned.as_str());
+                let handler = CallDevToolsProtocolMethodCompletedHandler::create(
+                    Box::new(move |hresult, result| {
+                        if hresult.is_ok() {
+                            let _ = tx.send(Ok(result));
+                        } else {
+                            let _ = tx.send(Err(format!("CDP call failed: {:?}", hresult)));
+                        }
+                        Ok(())
+                    }),
+                );
+
+                if let Err(e) = core_webview.CallDevToolsProtocolMethod(
+                    &method_h,
+                    &params_h,
+                    &handler,
+                ) {
+                    tracing::error!("[lens] CDP dispatch failed: {:?}", e);
+                }
+            }
+        })
+        .map_err(|e| format!("with_webview failed: {}", e))?;
+
+    match tokio::time::timeout(std::time::Duration::from_secs(10), rx).await {
+        Ok(Ok(Ok(result_str))) => {
+            serde_json::from_str(&result_str)
+                .or_else(|_| Ok(serde_json::json!({ "raw": result_str })))
+        }
+        Ok(Ok(Err(e))) => Err(e),
+        Ok(Err(_)) => Err("CDP channel closed unexpectedly".into()),
+        Err(_) => Err("CDP call timed out".into()),
+    }
+}
+
+/// Stub for non-Windows platforms.
+#[cfg(not(windows))]
+async fn call_cdp_method_lens(
+    _webview: &tauri::Webview,
+    _method: &str,
+    _params: &str,
+) -> Result<serde_json::Value, String> {
+    Err("CDP calls are only supported on Windows (WebView2)".into())
+}
+
+/// Set CDP device emulation on a device-preview webview.
+/// Calls Emulation.setDeviceMetricsOverride, Network.setUserAgentOverride,
+/// and (for mobile) Emulation.setTouchEmulationEnabled.
+#[tauri::command]
+pub async fn lens_set_device_emulation(
+    app: AppHandle,
+    label: String,
+    width: u32,
+    height: u32,
+    device_scale_factor: f64,
+    mobile: bool,
+    user_agent: String,
+    scale: Option<f64>,
+) -> Result<String, String> {
+    let webview = app.get_webview(&label)
+        .ok_or_else(|| format!("Webview '{}' not found", label))?;
+
+    // 1. Override device metrics (viewport size, DPR, mobile flag, scale)
+    // The `scale` parameter tells the rendering engine to render at the logical
+    // viewport size (e.g. 360x800) and then scale the output down to fit the
+    // physical window. Without it, the page lays out at the logical size but
+    // overflows the smaller physical window, causing scrollbars.
+    let mut metrics = serde_json::json!({
+        "width": width,
+        "height": height,
+        "deviceScaleFactor": device_scale_factor,
+        "mobile": mobile
+    });
+    if let Some(s) = scale {
+        metrics["scale"] = serde_json::json!(s);
+    }
+    call_cdp_method_lens(&webview, "Emulation.setDeviceMetricsOverride", &metrics.to_string()).await?;
+
+    // 2. Override user agent
+    if !user_agent.is_empty() {
+        let ua_params = serde_json::json!({
+            "userAgent": user_agent
+        });
+        call_cdp_method_lens(&webview, "Network.setUserAgentOverride", &ua_params.to_string()).await?;
+    }
+
+    // 3. Enable touch emulation for mobile devices
+    if mobile {
+        let touch_params = serde_json::json!({
+            "enabled": true,
+            "maxTouchPoints": 5
+        });
+        call_cdp_method_lens(&webview, "Emulation.setTouchEmulationEnabled", &touch_params.to_string()).await?;
+    }
+
+    info!("[lens] Device emulation set for {}: {}x{} dpr={} mobile={}", label, width, height, device_scale_factor, mobile);
+    Ok("ok".to_string())
+}
+
+/// Evaluate JavaScript in a specific device-preview webview (fire-and-forget).
+/// Used for injecting the interaction sync script and replaying events on sibling devices.
+#[tauri::command]
+pub async fn lens_eval_device_js(
+    app: AppHandle,
+    label: String,
+    js: String,
+    state: tauri::State<'_, LensState>,
+) -> Result<String, String> {
+    let exists = {
+        let devices = state.device_webviews.lock().map_err(|e| e.to_string())?;
+        devices.iter().any(|d| d.webview_label == label)
+    };
+
+    if !exists {
+        return Err(format!("Device webview '{}' not found", label));
+    }
+
+    if let Some(webview) = app.get_webview(&label) {
+        webview.eval(&js).map_err(|e| e.to_string())?;
+        Ok("ok".to_string())
+    } else {
+        Err(format!("Webview '{}' not found in app", label))
     }
 }

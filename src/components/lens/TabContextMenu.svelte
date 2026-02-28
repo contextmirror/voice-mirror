@@ -23,9 +23,21 @@
   let menuEl = $state(null);
 
   let menuStyle = $derived.by(() => {
-    const maxX = typeof window !== 'undefined' ? window.innerWidth - 220 : x;
-    const maxY = typeof window !== 'undefined' ? window.innerHeight - 320 : y;
-    return `left: ${Math.min(x, maxX)}px; top: ${Math.min(y, maxY)}px;`;
+    return `left: ${x}px; top: ${y}px;`;
+  });
+
+  // Post-render: measure actual menu size and reposition if it overflows
+  $effect(() => {
+    if (visible && menuEl) {
+      const rect = menuEl.getBoundingClientRect();
+      const pad = 4;
+      if (rect.bottom > window.innerHeight - pad) {
+        menuEl.style.top = `${Math.max(pad, window.innerHeight - rect.height - pad)}px`;
+      }
+      if (rect.right > window.innerWidth - pad) {
+        menuEl.style.left = `${Math.max(pad, window.innerWidth - rect.width - pad)}px`;
+      }
+    }
   });
 
   let hasPath = $derived(!!tab?.path);
@@ -63,7 +75,7 @@
 
   function handleClose() {
     close();
-    if (tab) tabsStore.closeTab(tab.id);
+    if (tab) tabsStore.requestClose(tab.id);
   }
 
   function handleCloseOthers() {
@@ -79,6 +91,11 @@
   function handleCloseAll() {
     close();
     tabsStore.closeAll();
+  }
+
+  function handleReopenClosed() {
+    close();
+    tabsStore.reopenClosedTab();
   }
 
   function handleCopyPath() {
@@ -165,6 +182,10 @@
     </button>
     <button class="context-item" onclick={handleCloseAll} role="menuitem">
       Close All
+    </button>
+    <button class="context-item" onclick={handleReopenClosed} role="menuitem" disabled={!tabsStore.canReopenTab}>
+      Reopen Closed Editor
+      <span class="context-shortcut">Ctrl+Shift+T</span>
     </button>
 
     <div class="context-separator"></div>

@@ -1,0 +1,159 @@
+{
+  "servers": {
+    "svelte": {
+      "name": "Svelte Language Server",
+      "languages": ["svelte"],
+      "extensions": [".svelte"],
+      "excludeExtensions": [],
+      "install": {
+        "type": "npm",
+        "packages": ["svelte-language-server", "typescript"],
+        "version": "^0.17"
+      },
+      "command": "svelteserver",
+      "args": ["--stdio"],
+      "priority": "primary",
+      "enabled": true,
+      "restartPolicy": "on-crash",
+      "initializationOptions": {
+        "configuration": {
+          "svelte": {
+            "plugin": {
+              "svelte": {
+                "diagnostics": {
+                  "enable": true
+                }
+              }
+            }
+          },
+          "typescript": {
+            "tsdk": "./node_modules/typescript/lib"
+          }
+        }
+      },
+      "settings": {
+        "svelte": {
+          "plugin": {
+            "svelte": {
+              "diagnostics": {
+                "enable": true
+              }
+            }
+          }
+        },
+        "typescript": {
+          "tsdk": "./node_modules/typescript/lib"
+        }
+      }
+    },
+    "typescript": {
+      "name": "TypeScript Language Server",
+      "languages": ["javascript", "typescript", "javascriptreact", "typescriptreact"],
+      "extensions": [".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"],
+      "excludeExtensions": [".svelte"],
+      "install": {
+        "type": "npm",
+        "packages": ["typescript-language-server", "typescript"],
+        "version": "^4.0"
+      },
+      "command": "typescript-language-server",
+      "args": ["--stdio"],
+      "priority": "primary",
+      "enabled": true,
+      "restartPolicy": "on-crash",
+      "initializationOptions": {},
+      "settings": {}
+    },
+    "css": {
+      "name": "CSS Language Server",
+      "languages": ["css", "scss", "less"],
+      "extensions": [".css", ".scss", ".less"],
+      "excludeExtensions": [".svelte"],
+      "install": {
+        "type": "npm",
+        "packages": ["vscode-langservers-extracted"],
+        "version": "^4.0"
+      },
+      "command": "vscode-css-language-server",
+      "args": ["--stdio"],
+      "priority": "primary",
+      "enabled": true,
+      "restartPolicy": "on-crash",
+      "initializationOptions": {},
+      "settings": {}
+    },
+    "html": {
+      "name": "HTML Language Server",
+      "languages": ["html"],
+      "extensions": [".html", ".htm"],
+      "excludeExtensions": [".svelte"],
+      "install": {
+        "type": "npm",
+        "packages": ["vscode-langservers-extracted"],
+        "version": "^4.0"
+      },
+      "command": "vscode-html-language-server",
+      "args": ["--stdio"],
+      "priority": "primary",
+      "enabled": true,
+      "restartPolicy": "on-crash",
+      "initializationOptions": {},
+      "settings": {}
+    },
+    "json": {
+      "name": "JSON Language Server",
+      "languages": ["json", "jsonc"],
+      "extensions": [".json", ".jsonc"],
+      "excludeExtensions": [],
+      "install": {
+        "type": "npm",
+        "packages": ["vscode-langservers-extracted"],
+        "version": "^4.0"
+      },
+      "command": "vscode-json-language-server",
+      "args": ["--stdio"],
+      "priority": "primary",
+      "enabled": true,
+      "restartPolicy": "on-crash",
+      "initializationOptions": {},
+      "settings": {}
+    },
+    "eslint": {
+      "name": "ESLint Language Server",
+      "languages": ["javascript", "typescript", "javascriptreact", "typescriptreact"],
+      "extensions": [".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"],
+      "excludeExtensions": [".svelte"],
+      "install": {
+        "type": "npm",
+        "packages": ["vscode-langservers-extracted"],
+        "version": "^4.0"
+      },
+      "command": "vscode-eslint-language-server",
+      "args": ["--stdio"],
+      "priority": "supplementary",
+      "enabled": true,
+      "restartPolicy": "on-crash",
+      "initializationOptions": {},
+      "settings": {}
+    },
+    "rust-analyzer": {
+      "name": "Rust Analyzer",
+      "languages": ["rust"],
+      "extensions": [".rs"],
+      "excludeExtensions": [],
+      "install": {
+        "type": "github-release",
+        "repo": "rust-lang/rust-analyzer",
+        "assetPattern": "rust-analyzer-{arch}-{os}.gz",
+        "version": "latest"
+      },
+      "command": "rust-analyzer",
+      "args": [],
+      "priority": "primary",
+      "enabled": true,
+      "restartPolicy": "on-crash",
+      "initializationOptions": {},
+      "settings": {}
+    }
+  }
+}

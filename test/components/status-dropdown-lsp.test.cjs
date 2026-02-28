@@ -19,7 +19,9 @@ describe('StatusDropdown LSP tab', () => {
     assert.ok(src.includes('lsp-server-row') || src.includes('lsp-dot'));
   });
   it('shows running status with green dot', () => {
-    assert.ok(src.includes('class:running'));
+    // New implementation uses dotClass() to map ServerState to CSS classes
+    assert.ok(src.includes('dotClass') || src.includes('class:running'),
+      'Should color-code status dot by state');
   });
   it('shows server binary name', () => {
     assert.ok(src.includes('server.binary') || src.includes('lsp-server-name'));

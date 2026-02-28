@@ -1,7 +1,7 @@
 use super::super::IpcResponse;
 use crate::util::find_project_root;
 use std::path::PathBuf;
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 /// List the contents of a directory within the project root.
 ///
@@ -120,7 +120,7 @@ pub fn list_directory(path: Option<String>, root: Option<String>) -> IpcResponse
     let mut result = dirs;
     result.append(&mut files);
 
-    info!(
+    debug!(
         "list_directory: {} ({} entries)",
         path.as_deref().unwrap_or("/"),
         result.len()

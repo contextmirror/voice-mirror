@@ -14,6 +14,9 @@ import {
 } from '../api.js';
 import { navigationStore } from './navigation.svelte.js';
 import { overlayStore } from './overlay.svelte.js';
+import { tabsStore } from './tabs.svelte.js';
+import { editorGroupsStore } from './editor-groups.svelte.js';
+import { layoutStore } from './layout.svelte.js';
 
 // ============ Default Shortcuts ============
 
@@ -31,12 +34,12 @@ export const DEFAULT_GLOBAL_SHORTCUTS = {
     category: 'global',
   },
   'toggle-mute': {
-    keys: 'Ctrl+Shift+M',
+    keys: 'Ctrl+Shift+U',
     label: 'Toggle mute',
     category: 'global',
   },
   'toggle-overlay': {
-    keys: 'Ctrl+Shift+O',
+    keys: 'Ctrl+Shift+Y',
     label: 'Toggle overlay mode',
     category: 'global',
   },
@@ -46,7 +49,7 @@ export const DEFAULT_GLOBAL_SHORTCUTS = {
     category: 'global',
   },
   'stats-dashboard': {
-    keys: 'Ctrl+Shift+M',
+    keys: 'Ctrl+Shift+D',
     label: 'Toggle stats dashboard',
     category: 'global',
   },
@@ -147,6 +150,71 @@ export const IN_APP_SHORTCUTS = {
     label: 'Go to symbol in editor',
     category: 'in-app',
   },
+  'new-terminal': {
+    keys: "Ctrl+Shift+'",
+    label: 'New terminal',
+    category: 'in-app',
+  },
+  'split-terminal': {
+    keys: 'Ctrl+Shift+5',
+    label: 'Split terminal',
+    category: 'in-app',
+  },
+  'toggle-terminal': {
+    keys: 'Ctrl+`',
+    label: 'Toggle terminal panel',
+    category: 'in-app',
+  },
+  'focus-prev-pane': {
+    keys: 'Alt+Left',
+    label: 'Focus previous terminal pane',
+    category: 'in-app',
+  },
+  'focus-next-pane': {
+    keys: 'Alt+Right',
+    label: 'Focus next terminal pane',
+    category: 'in-app',
+  },
+  'kill-terminal': {
+    keys: 'Delete',
+    label: 'Kill terminal',
+    category: 'in-app',
+  },
+  'rename-terminal': {
+    keys: 'F2',
+    label: 'Rename terminal',
+    category: 'in-app',
+  },
+  'prev-editor-tab': {
+    keys: 'Ctrl+PageUp',
+    label: 'Previous editor tab',
+    category: 'in-app',
+  },
+  'next-editor-tab': {
+    keys: 'Ctrl+PageDown',
+    label: 'Next editor tab',
+    category: 'in-app',
+  },
+  'close-tab': {
+    keys: 'Ctrl+W',
+    label: 'Close active editor tab',
+    category: 'in-app',
+  },
+  'reopen-closed-tab': {
+    keys: 'Ctrl+Shift+T',
+    label: 'Reopen closed editor',
+    category: 'in-app',
+  },
+  'toggle-sidebar': {
+    keys: 'Ctrl+B',
+    label: 'Toggle sidebar',
+    category: 'in-app',
+  },
+  'toggle-bottom-panel': {
+    keys: 'Ctrl+J',
+    label: 'Toggle bottom panel',
+    category: 'in-app',
+  },
 };
 
 // ============ Action Handlers ============
@@ -193,6 +261,38 @@ const actionHandlers = {
     }
     // Dispatch for modal handling
     window.dispatchEvent(new CustomEvent('shortcut:close-panel'));
+  },
+  'prev-editor-tab': () => {
+    const groupId = editorGroupsStore.focusedGroupId;
+    const groupTabs = tabsStore.getTabsForGroup(groupId);
+    if (groupTabs.length <= 1) return;
+    const activeId = editorGroupsStore.getActiveTabForGroup(groupId);
+    const idx = groupTabs.findIndex(t => t.id === activeId);
+    const prevIdx = idx <= 0 ? groupTabs.length - 1 : idx - 1;
+    tabsStore.setActive(groupTabs[prevIdx].id);
+  },
+  'next-editor-tab': () => {
+    const groupId = editorGroupsStore.focusedGroupId;
+    const groupTabs = tabsStore.getTabsForGroup(groupId);
+    if (groupTabs.length <= 1) return;
+    const activeId = editorGroupsStore.getActiveTabForGroup(groupId);
+    const idx = groupTabs.findIndex(t => t.id === activeId);
+    const nextIdx = idx >= groupTabs.length - 1 ? 0 : idx + 1;
+    tabsStore.setActive(groupTabs[nextIdx].id);
+  },
+  'close-tab': () => {
+    if (tabsStore.activeTabId) {
+      tabsStore.closeTab(tabsStore.activeTabId);
+    }
+  },
+  'reopen-closed-tab': () => {
+    tabsStore.reopenClosedTab();
+  },
+  'toggle-sidebar': () => {
+    navigationStore.toggleSidebar();
+  },
+  'toggle-bottom-panel': () => {
+    layoutStore.toggleTerminal();
   },
 };
 
@@ -398,6 +498,10 @@ export const shortcutsStore = createShortcutsStore();
  * @param {Function} handler - Action function to call when the shortcut fires.
  */
 export function setActionHandler(id, handler) {
+  if (handler === null || handler === undefined) {
+    delete actionHandlers[id];
+    return;
+  }
   if (typeof handler !== 'function') {
     console.warn('[shortcuts] Handler must be a function for:', id);
     return;
@@ -484,6 +588,41 @@ export function setupInAppShortcuts() {
       clearChord();
     }
 
+    // Ctrl+Shift+' -> New Terminal
+    if (ctrl && event.shiftKey && event.key === "'") {
+      event.preventDefault();
+      actionHandlers['new-terminal']?.();
+      return;
+    }
+
+    // Ctrl+Shift+5 -> Split Terminal
+    if (ctrl && event.shiftKey && event.key === '5') {
+      event.preventDefault();
+      actionHandlers['split-terminal']?.();
+      return;
+    }
+
+    // Ctrl+` -> Toggle Terminal Panel
+    if (ctrl && event.key === '`') {
+      event.preventDefault();
+      actionHandlers['toggle-terminal']?.();
+      return;
+    }
+
+    // Alt+Left -> Focus Previous Terminal Pane (no Ctrl to avoid Ctrl+K chord conflicts)
+    if (event.altKey && !ctrl && !event.shiftKey && event.key === 'ArrowLeft') {
+      event.preventDefault();
+      actionHandlers['focus-prev-pane']?.();
+      return;
+    }
+
+    // Alt+Right -> Focus Next Terminal Pane (no Ctrl to avoid Ctrl+K chord conflicts)
+    if (event.altKey && !ctrl && !event.shiftKey && event.key === 'ArrowRight') {
+      event.preventDefault();
+      actionHandlers['focus-next-pane']?.();
+      return;
+    }
+
     // Ctrl+Shift+F -> Search in files (works from any context including inputs)
     if (ctrl && event.shiftKey && event.key === 'F') {
       event.preventDefault();
@@ -509,6 +648,48 @@ export function setupInAppShortcuts() {
     if (ctrl && event.shiftKey && event.key === 'O') {
       event.preventDefault();
       actionHandlers['go-to-symbol']?.();
+      return;
+    }
+
+    // Ctrl+PageUp -> Previous editor tab
+    if (ctrl && event.key === 'PageUp') {
+      event.preventDefault();
+      actionHandlers['prev-editor-tab']?.();
+      return;
+    }
+
+    // Ctrl+PageDown -> Next editor tab
+    if (ctrl && event.key === 'PageDown') {
+      event.preventDefault();
+      actionHandlers['next-editor-tab']?.();
+      return;
+    }
+
+    // Ctrl+W -> Close active editor tab (prevent browser window close)
+    if (ctrl && event.key === 'w' && !event.shiftKey) {
+      event.preventDefault();
+      actionHandlers['close-tab']?.();
+      return;
+    }
+
+    // Ctrl+Shift+T -> Reopen closed editor tab
+    if (ctrl && event.shiftKey && event.key === 'T') {
+      event.preventDefault();
+      actionHandlers['reopen-closed-tab']?.();
+      return;
+    }
+
+    // Ctrl+B -> Toggle sidebar
+    if (ctrl && event.key === 'b' && !event.shiftKey) {
+      event.preventDefault();
+      actionHandlers['toggle-sidebar']?.();
+      return;
+    }
+
+    // Ctrl+J -> Toggle bottom panel
+    if (ctrl && event.key === 'j' && !event.shiftKey) {
+      event.preventDefault();
+      actionHandlers['toggle-bottom-panel']?.();
       return;
     }
 

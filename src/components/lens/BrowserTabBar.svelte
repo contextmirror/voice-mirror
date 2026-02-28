@@ -3,9 +3,31 @@
 
   let { onNewTab } = $props();
 
+  let contextMenu = $state({ visible: false, x: 0, y: 0, tabId: null });
+
   function handleClose(e, tabId) {
     e.stopPropagation();
     browserTabsStore.closeTab(tabId);
+  }
+
+  function handleContextMenu(e, tabId) {
+    e.preventDefault();
+    contextMenu = { visible: true, x: e.clientX, y: e.clientY, tabId };
+  }
+
+  function closeContextMenu() {
+    contextMenu = { visible: false, x: 0, y: 0, tabId: null };
+  }
+
+  function handleContextClose() {
+    const id = contextMenu.tabId;
+    closeContextMenu();
+    if (!id) return;
+    if (browserTabsStore.tabs.length > 1) {
+      browserTabsStore.closeTab(id);
+    } else {
+      browserTabsStore.resetTab(id);
+    }
   }
 
   function truncate(text, max = 24) {
@@ -21,6 +43,7 @@
       class:active={tab.id === browserTabsStore.activeTabId}
       class:loading={tab.loading}
       onclick={() => browserTabsStore.switchTab(tab.id)}
+      oncontextmenu={(e) => handleContextMenu(e, tab.id)}
       title={tab.url || tab.title}
     >
       <span class="browser-tab-title">{truncate(tab.title)}</span>
@@ -50,6 +73,16 @@
     </button>
   {/if}
 </div>
+
+{#if contextMenu.visible}
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="context-backdrop" onclick={closeContextMenu} oncontextmenu={(e) => { e.preventDefault(); closeContextMenu(); }}></div>
+  <div class="context-menu" style="left: {contextMenu.x}px; top: {contextMenu.y}px;">
+    <button class="context-item" onclick={handleContextClose}>
+      Close Tab
+    </button>
+  </div>
+{/if}
 
 <style>
   /* ── Zed-style underline indicator ── */
@@ -172,5 +205,45 @@
   .browser-tab-add:hover {
     background: color-mix(in srgb, var(--text) 8%, transparent);
     color: var(--text);
+  }
+
+  /* ── Context menu ── */
+  .context-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 10001;
+  }
+
+  .context-menu {
+    position: fixed;
+    z-index: 10002;
+    min-width: 140px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 0;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+    -webkit-app-region: no-drag;
+    font-family: var(--font-family);
+  }
+
+  .context-item {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    padding: 6px 12px;
+    border: none;
+    background: transparent;
+    color: var(--text);
+    font-size: 12px;
+    cursor: pointer;
+    text-align: left;
+    font-family: inherit;
+    -webkit-app-region: no-drag;
+  }
+
+  .context-item:hover {
+    background: var(--accent);
+    color: var(--bg);
   }
 </style>

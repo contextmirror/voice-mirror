@@ -33,6 +33,14 @@ pub struct AppConfig {
     pub projects: ProjectsConfig,
     #[serde(default)]
     pub editor: EditorConfig,
+    /// Per-server LSP overrides keyed by server ID (e.g. "typescript", "svelte").
+    /// Values are freeform objects merged over manifest defaults by `apply_overrides`.
+    #[serde(default)]
+    pub lsp_servers: HashMap<String, serde_json::Value>,
+    #[serde(default)]
+    pub device_preview: DevicePreviewConfig,
+    #[serde(default)]
+    pub terminal_layout: Option<serde_json::Value>,
 }
 
 /// Wake word detection settings.
@@ -416,6 +424,20 @@ impl Default for AiConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolProfile {
     pub groups: Vec<String>,
+}
+
+/// Device preview settings (custom presets, last-used devices).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DevicePreviewConfig {
+    #[serde(default)]
+    pub custom_devices: Vec<serde_json::Value>,
+    #[serde(default)]
+    pub last_devices: Vec<String>,
+    #[serde(default)]
+    pub sync_enabled: Option<bool>,
+    #[serde(default)]
+    pub orientation: Option<String>,
 }
 
 /// Editor settings (formatting, preview).

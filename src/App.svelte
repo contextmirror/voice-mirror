@@ -12,6 +12,11 @@
   import { writeUserMessage, aiPtyInput, pttPress, pttRelease, configurePttKey, configureDictationKey, injectText, showWindow, minimizeWindow } from './lib/api.js';
   import { chatStore } from './lib/stores/chat.svelte.js';
   import { PROVIDER_ICONS } from './lib/providers.js';
+  import { tabsStore } from './lib/stores/tabs.svelte.js';
+  import { terminalTabsStore } from './lib/stores/terminal-tabs.svelte.js';
+  import { devServerManager } from './lib/stores/dev-server-manager.svelte.js';
+  import { diagnosticsStore } from './lib/stores/diagnostics.svelte.js';
+  import { registerAllContracts } from './lib/health-contracts.js';
 
   import TitleBar from './components/shared/TitleBar.svelte';
   import Sidebar from './components/sidebar/Sidebar.svelte';
@@ -25,6 +30,7 @@
   import ResizeEdges from './components/shared/ResizeEdges.svelte';
   import StatsBar from './components/shared/StatsBar.svelte';
   import ToastContainer from './components/shared/ToastContainer.svelte';
+  import StatusBar from './components/shared/StatusBar.svelte';
 
   // Load config on mount and init event listeners
   $effect(() => {
@@ -91,6 +97,28 @@
       startVoiceEngine();
     }
   });
+
+  // ---- Health monitoring (Layer 2) ----
+  registerAllContracts({
+    getProjectPath: () => projectStore.activeProject?.path || null,
+    getOpenTabs: () => tabsStore.tabs,
+    getTerminalGroups: () => terminalTabsStore.groups,
+    getTerminalInstances: (groupId) => terminalTabsStore.getInstancesForGroup(groupId),
+    getLspStatus: () => {
+      try {
+        return { active: false }; // Will be enhanced as LSP system evolves
+      } catch { return null; }
+    },
+    getDevServers: () => {
+      try {
+        return {
+          runningCount: devServerManager.runningCount,
+          crashedServers: devServerManager.crashedServers,
+        };
+      } catch { return null; }
+    },
+  });
+  diagnosticsStore.startMonitoring();
 
   // ---- Stats dashboard visibility ----
   let statsVisible = $state(false);
@@ -218,6 +246,16 @@
       else if (key === ',') { navigationStore.setView('settings'); }
     }).then(fn => { unlistenFn = fn; });
     return () => { unlistenFn?.(); };
+  });
+
+  // Listen for status bar "Go to Line" click (R1 cursor position item)
+  $effect(() => {
+    const handleGoToLine = () => {
+      commandPaletteMode = 'goto-line';
+      commandPaletteVisible = true;
+    };
+    window.addEventListener('status-bar-go-to-line', handleGoToLine);
+    return () => window.removeEventListener('status-bar-go-to-line', handleGoToLine);
   });
 
   // Clean up on window close (bounds are saved by Rust's CloseRequested handler)
@@ -458,6 +496,7 @@
         {/if}
       </main>
     </div>
+    <StatusBar />
   </div>
 {/if}
 

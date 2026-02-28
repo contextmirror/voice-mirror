@@ -25,6 +25,35 @@
   let stagedChanges = $derived(gitChanges.filter(c => c.staged));
   let unstagedChanges = $derived(gitChanges.filter(c => c.unstaged || (!c.staged && !c.unstaged)));
 
+  // Git status lookup for file tree decorations (matches VS Code behavior)
+  // Maps file path → status ('added' | 'modified' | 'deleted' | 'renamed')
+  // and dir path → most relevant child status (for folder coloring)
+  // VS Code rule: deleted files do NOT propagate to parent folders
+  let gitStatusMap = $derived.by(() => {
+    const map = new Map();
+    for (const c of gitChanges) {
+      // File status — prefer unstaged (working tree) over staged
+      const raw = c.unstagedStatus || c.stagedStatus || c.status || 'modified';
+      // Normalize: renamed → added (VS Code treats renamed as green like added)
+      const status = raw === 'renamed' ? 'added' : raw;
+      map.set(c.path, status);
+      // Propagate to parent directories (skip deleted — VS Code doesn't propagate deletes)
+      if (status === 'deleted') continue;
+      const parts = c.path.split('/');
+      for (let i = 1; i < parts.length; i++) {
+        const dir = parts.slice(0, i).join('/');
+        const existing = map.get(dir);
+        if (!existing) {
+          map.set(dir, status);
+        } else if (existing !== 'modified' && status === 'modified') {
+          // Modified takes priority for folders (mixed changes = modified)
+          map.set(dir, 'modified');
+        }
+      }
+    }
+    return map;
+  });
+
   // Context menu state
   let contextMenu = $state({ visible: false, x: 0, y: 0, entry: null, isFolder: false, isChange: false });
 
@@ -74,6 +103,7 @@
   async function handleTreeChanged(event) {
     const { directories, root: rootChanged } = event.payload;
     const currentRoot = projectStore.activeProject?.path || null;
+    if (!currentRoot) return; // No project open, ignore stale watcher events
 
     if (rootChanged) {
       await loadRoot();
@@ -102,7 +132,10 @@
   }
 
   function handleGitChanged() {
-    loadGitChanges();
+    // Only reload if a project is still open (avoids stale data after project close)
+    if (projectStore.activeProject?.path) {
+      loadGitChanges();
+    }
   }
 
   async function loadRoot() {
@@ -521,6 +554,7 @@
         bind:editingValue
         {creatingIn}
         bind:creatingValue
+        {gitStatusMap}
         onToggle={toggleDir}
         onFileClick={handleFileClick}
         onFileDblClick={(entry) => onFileDblClick(entry)}
@@ -617,7 +651,6 @@
     height: 100%;
     overflow: hidden;
     background: var(--bg);
-    border-left: 1px solid var(--border);
   }
 
   .files-header {

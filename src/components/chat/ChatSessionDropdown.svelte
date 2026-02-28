@@ -12,6 +12,21 @@
 
   /** Context menu state */
   let contextMenu = $state({ visible: false, x: 0, y: 0, sessionId: null });
+  let contextMenuEl = $state(null);
+
+  // Post-render: reposition context menu if it overflows viewport
+  $effect(() => {
+    if (contextMenu.visible && contextMenuEl) {
+      const rect = contextMenuEl.getBoundingClientRect();
+      const pad = 4;
+      if (rect.bottom > window.innerHeight - pad) {
+        contextMenuEl.style.top = `${Math.max(pad, window.innerHeight - rect.height - pad)}px`;
+      }
+      if (rect.right > window.innerWidth - pad) {
+        contextMenuEl.style.left = `${Math.max(pad, window.innerWidth - rect.width - pad)}px`;
+      }
+    }
+  });
 
   /** Inline rename state */
   let renamingId = $state(null);
@@ -490,7 +505,9 @@
   {/if}
 
   {#if contextMenu.visible}
-    <div class="context-menu" style="left: {contextMenu.x}px; top: {contextMenu.y}px;" role="menu">
+    <!-- svelte-ignore binding_property_non_reactive -->
+    <div class="context-menu" style="left: {contextMenu.x}px; top: {contextMenu.y}px;" role="menu"
+      bind:this={contextMenuEl}>
       <button class="context-menu-item" onclick={startRename} role="menuitem">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>

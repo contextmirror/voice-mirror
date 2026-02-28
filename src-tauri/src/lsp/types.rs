@@ -4,7 +4,7 @@
 //! for communicating LSP data to the frontend via Tauri events.
 
 use lsp_types::DiagnosticSeverity;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use url::Url;
 
 /// Convert a relative file path and project root into a `file://` URI.
@@ -27,6 +27,16 @@ pub fn file_uri(relative_path: &str, project_root: &str) -> String {
             }
         }
     }
+}
+
+/// Convert a `file://` URI back to an absolute file path.
+///
+/// Returns `None` if the URI is not a valid `file://` URI.
+pub fn uri_to_file_path(uri: &str) -> Option<String> {
+    let url = Url::parse(uri).ok()?;
+    url.to_file_path()
+        .ok()
+        .map(|p| p.to_string_lossy().to_string())
 }
 
 /// Convert a `file://` URI back to a path relative to the project root.
@@ -83,14 +93,40 @@ pub struct DiagnosticPosition {
     pub character: u32,
 }
 
+/// Server lifecycle state.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub enum ServerState {
+    Stopped,
+    Starting,
+    Running,
+    Restarting,
+    Stopping,
+    Failed,
+    Unresponsive,
+}
+
 /// Status information for a single LSP server.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LspServerStatus {
     pub language_id: String,
     pub binary: String,
-    pub running: bool,
+    pub state: ServerState,
     pub open_docs_count: usize,
+    pub crash_count: u32,
+    pub project_root: String,
+    pub last_error: Option<String>,
+    pub pid: Option<u32>,
+    /// Keep for backward compat with frontend
+    pub running: bool,
+    /// Most recent stderr lines from the server process (last 5).
+    #[serde(default)]
+    pub stderr_lines: Vec<String>,
+    /// Server name from initialize response (serverInfo.name).
+    pub server_name: Option<String>,
+    /// Server version from initialize response (serverInfo.version).
+    pub version: Option<String>,
 }
 
 /// Emitted when LSP server status changes.

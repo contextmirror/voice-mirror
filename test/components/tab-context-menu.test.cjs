@@ -55,7 +55,7 @@ describe('TabContextMenu.svelte: props', () => {
 describe('TabContextMenu.svelte: close actions', () => {
   it('has Close button', () => {
     assert.ok(src.includes('handleClose'));
-    assert.ok(src.includes('closeTab'));
+    assert.ok(src.includes('requestClose'), 'Close should use requestClose (with save prompt)');
   });
   it('has Close Others button', () => {
     assert.ok(src.includes('handleCloseOthers'));
@@ -122,8 +122,8 @@ describe('TabContextMenu.svelte: menu behavior', () => {
     assert.ok(src.includes('handleClickOutside'));
   });
   it('clamps position to viewport', () => {
-    assert.ok(src.includes('Math.min'));
-    assert.ok(src.includes('window.innerWidth'));
+    assert.ok(src.includes('getBoundingClientRect'), 'Should measure menu for viewport clamping');
+    assert.ok(src.includes('window.innerHeight'), 'Should check viewport bounds');
   });
   it('has keyboard shortcut hint for Close', () => {
     assert.ok(src.includes('Ctrl+W'));
@@ -216,6 +216,33 @@ describe('TabContextMenu.svelte: split actions', () => {
       src.includes('Ctrl+\\') || src.includes('Ctrl+\\\\'),
       'Should show keyboard shortcut hint for Split Right'
     );
+  });
+});
+
+// ============ Save prompt ============
+
+describe('TabContextMenu.svelte: save prompt on close', () => {
+  it('handleClose uses requestClose for save prompt', () => {
+    assert.ok(
+      src.includes('requestClose'),
+      'Close action should use requestClose to prompt for unsaved changes'
+    );
+  });
+});
+
+// ── Reopen closed tab ──────────────────────────────────────────────────────
+
+describe('TabContextMenu.svelte: reopen closed tab', () => {
+  it('has Reopen Closed Editor menu item', () => {
+    assert.ok(src.includes('Reopen Closed'), 'Should have Reopen Closed Editor item');
+  });
+
+  it('shows Ctrl+Shift+T shortcut hint', () => {
+    assert.ok(src.includes('Ctrl+Shift+T'), 'Should show Ctrl+Shift+T hint');
+  });
+
+  it('calls reopenClosedTab on click', () => {
+    assert.ok(src.includes('reopenClosedTab'), 'Should call reopenClosedTab');
   });
 });
 

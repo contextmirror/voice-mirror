@@ -10,6 +10,7 @@
   import FileEditor from './FileEditor.svelte';
   import DiffViewer from './DiffViewer.svelte';
   import EditorPane from './EditorPane.svelte';
+  import DevicePreview from './DevicePreview.svelte';
   import SplitPanel from '../shared/SplitPanel.svelte';
   import ChatPanel from '../chat/ChatPanel.svelte';
   import TerminalTabs from '../terminal/TerminalTabs.svelte';
@@ -18,10 +19,11 @@
   import { layoutStore } from '../../lib/stores/layout.svelte.js';
   import { lensStore } from '../../lib/stores/lens.svelte.js';
   import { browserTabsStore } from '../../lib/stores/browser-tabs.svelte.js';
-  import { lensSetVisible, startFileWatching, stopFileWatching, lensCapturePreview } from '../../lib/api.js';
+  import { lensSetVisible, startFileWatching, stopFileWatching, lensCapturePreview, lspShutdown } from '../../lib/api.js';
   import { attachmentsStore } from '../../lib/stores/attachments.svelte.js';
   import { projectStore } from '../../lib/stores/project.svelte.js';
   import { lspDiagnosticsStore } from '../../lib/stores/lsp-diagnostics.svelte.js';
+  import { devicePreviewStore } from '../../lib/stores/device-preview.svelte.js';
   import { LSP_EXTENSIONS } from '../../lib/editor-lsp.svelte.js';
   import { setActionHandler } from '../../lib/stores/shortcuts.svelte.js';
 
@@ -33,9 +35,10 @@
 
   // Split ratios (will be persisted to config later)
   let chatRatio = $state(0.18);             // left column vs center+right
-  let chatVerticalRatio = $state(0.80);     // chat vs pixel agents placeholder
+  // chatVerticalRatio removed — pixel agents placeholder removed, chat is full height
   let centerRatio = $state(0.75);           // editor/preview vs terminal
   let previewRatio = $state(0.78);          // center column vs file tree
+  let devicePreviewRatio = $state(0.5);    // editor vs device preview
 
   // Browser is a fixed UI element, not a tab — follows the first (leftmost) group
   let showBrowser = $state(false);
@@ -190,6 +193,9 @@
     const path = projectStore.activeProject?.path;
     if (!path) return;
 
+    // Shut down LSP servers from previous project before starting new ones
+    lspShutdown().catch(() => {});
+
     lspDiagnosticsStore.clear();
     lspDiagnosticsStore.startListening(path).catch((err) => {
       console.warn('[LensWorkspace] Failed to start diagnostics listener:', err);
@@ -242,7 +248,7 @@
 
 {#snippet renderNode(node)}
   {#if node.type === 'leaf'}
-    <EditorPane groupId={node.groupId} showBrowser={node.groupId === firstGroupId ? showBrowser : false} onBrowserClick={node.groupId === firstGroupId ? () => { showBrowser = !showBrowser; } : null} />
+    <EditorPane groupId={node.groupId} showBrowser={node.groupId === firstGroupId ? showBrowser : false} onBrowserClick={node.groupId === firstGroupId ? () => { showBrowser = !showBrowser; } : null} onDevicePreviewClick={node.groupId === firstGroupId ? () => { devicePreviewStore.toggle(); } : null} showDevicePreview={node.groupId === firstGroupId ? devicePreviewStore.isOpen : false} />
   {:else}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div class="grid-branch" class:horizontal={node.direction === 'horizontal'} class:vertical={node.direction === 'vertical'}>
@@ -280,27 +286,10 @@
     <!-- Horizontal split: left-column (chat) | center+right -->
     <SplitPanel direction="horizontal" bind:ratio={chatRatio} minA={180} minB={400} collapseA={!layoutStore.showChat}>
       {#snippet panelA()}
-        <!-- Left column: chat (top) | pixel agents placeholder (bottom) -->
-        <SplitPanel direction="vertical" bind:ratio={chatVerticalRatio} minA={200} minB={60}>
-          {#snippet panelA()}
-            <div class="chat-area">
-              <ChatPanel {onSend} />
-            </div>
-          {/snippet}
-          {#snippet panelB()}
-            <div class="placeholder-area">
-              <div class="placeholder-content">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="24" height="24">
-                  <rect x="2" y="3" width="20" height="14" rx="2" />
-                  <circle cx="8" cy="10" r="2" />
-                  <circle cx="16" cy="10" r="2" />
-                  <path d="M9 14h6" />
-                </svg>
-                <span>Pixel Agents</span>
-              </div>
-            </div>
-          {/snippet}
-        </SplitPanel>
+        <!-- Left column: chat (full height) -->
+        <div class="chat-area">
+          <ChatPanel {onSend} />
+        </div>
       {/snippet}
       {#snippet panelB()}
         <!-- Horizontal split: center-column | file tree -->
@@ -310,34 +299,43 @@
             <SplitPanel direction="vertical" bind:ratio={centerRatio} minA={200} minB={80} collapseB={!layoutStore.showTerminal}>
               {#snippet panelA()}
                 <div class="preview-area">
-                  <!-- Editor Grid: always visible so GroupTabBar stays accessible -->
-                  <div class="editor-grid">
-                    {#if editorGroupsStore.maximizedGroupId !== null}
-                      <EditorPane groupId={editorGroupsStore.maximizedGroupId} showBrowser={editorGroupsStore.maximizedGroupId === firstGroupId ? showBrowser : false} onBrowserClick={editorGroupsStore.maximizedGroupId === firstGroupId ? () => { showBrowser = !showBrowser; } : null} />
-                    {:else}
-                      {@render renderNode(editorGroupsStore.gridRoot)}
-                    {/if}
-                    <!-- Workspace-level drop zone overlay for full-width ancestor splits -->
-                    {#if ancestorDropZone}
-                      <div class="ancestor-drop-overlay">
-                        <div class="ancestor-zone" class:top={ancestorDropZone === 'top'} class:bottom={ancestorDropZone === 'bottom'} class:left={ancestorDropZone === 'left'} class:right={ancestorDropZone === 'right'}></div>
-                      </div>
-                    {/if}
-                  </div>
+                  <SplitPanel direction="horizontal" bind:ratio={devicePreviewRatio} minA={300} minB={200} collapseB={!devicePreviewStore.isOpen}>
+                    {#snippet panelA()}
+                      <div class="editor-with-browser">
+                        <!-- Editor Grid: always visible so GroupTabBar stays accessible -->
+                        <div class="editor-grid">
+                          {#if editorGroupsStore.maximizedGroupId !== null}
+                            <EditorPane groupId={editorGroupsStore.maximizedGroupId} showBrowser={editorGroupsStore.maximizedGroupId === firstGroupId ? showBrowser : false} onBrowserClick={editorGroupsStore.maximizedGroupId === firstGroupId ? () => { showBrowser = !showBrowser; } : null} onDevicePreviewClick={editorGroupsStore.maximizedGroupId === firstGroupId ? () => { devicePreviewStore.toggle(); } : null} showDevicePreview={editorGroupsStore.maximizedGroupId === firstGroupId ? devicePreviewStore.isOpen : false} />
+                          {:else}
+                            {@render renderNode(editorGroupsStore.gridRoot)}
+                          {/if}
+                          <!-- Workspace-level drop zone overlay for full-width ancestor splits -->
+                          {#if ancestorDropZone}
+                            <div class="ancestor-drop-overlay">
+                              <div class="ancestor-zone" class:top={ancestorDropZone === 'top'} class:bottom={ancestorDropZone === 'bottom'} class:left={ancestorDropZone === 'left'} class:right={ancestorDropZone === 'right'}></div>
+                            </div>
+                          {/if}
+                        </div>
 
-                  <!-- Browser layer: overlays editor content when visible (tab bar stays above) -->
-                  <div class="preview-layer" class:visible={showBrowser}>
-                    <BrowserTabBar onNewTab={() => lensPreviewRef?.createNewTab()} />
-                    <LensToolbar />
-                    {#if lensStore.designMode}
-                      <DesignToolbar
-                        onSend={handleDesignSend}
-                        onElementSend={handleElementSend}
-                        onClose={() => lensStore.setDesignMode(false)}
-                      />
-                    {/if}
-                    <LensPreview bind:this={lensPreviewRef} />
-                  </div>
+                        <!-- Browser layer: overlays editor content when visible (tab bar stays above) -->
+                        <div class="preview-layer" class:visible={showBrowser}>
+                          <BrowserTabBar onNewTab={() => lensPreviewRef?.createNewTab()} />
+                          <LensToolbar />
+                          {#if lensStore.designMode}
+                            <DesignToolbar
+                              onSend={handleDesignSend}
+                              onElementSend={handleElementSend}
+                              onClose={() => lensStore.setDesignMode(false)}
+                            />
+                          {/if}
+                          <LensPreview bind:this={lensPreviewRef} />
+                        </div>
+                      </div>
+                    {/snippet}
+                    {#snippet panelB()}
+                      <DevicePreview />
+                    {/snippet}
+                  </SplitPanel>
                 </div>
               {/snippet}
               {#snippet panelB()}
@@ -391,6 +389,14 @@
   }
 
   .preview-area {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .editor-with-browser {
     display: flex;
     flex-direction: column;
     height: 100%;
@@ -495,7 +501,6 @@
     height: 100%;
     overflow: hidden;
     background: var(--bg);
-    border-right: 1px solid var(--border);
   }
 
   /* -- Terminal Panel -- */
@@ -506,34 +511,6 @@
     height: 100%;
     overflow: hidden;
     background: var(--bg);
-    border-top: 1px solid var(--border);
   }
 
-  /* -- Pixel Agents Placeholder -- */
-
-  .placeholder-area {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    height: 100%;
-    overflow: hidden;
-    background: var(--bg);
-    border-top: 1px solid var(--border);
-    border-right: 1px solid var(--border);
-  }
-
-  .placeholder-content {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 8px;
-    color: var(--muted);
-    font-size: 12px;
-    opacity: 0.5;
-    user-select: none;
-  }
-
-  .placeholder-content svg {
-    opacity: 0.6;
-  }
 </style>

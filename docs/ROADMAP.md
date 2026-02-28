@@ -17,7 +17,7 @@ Voice Mirror is a fully functional AI-native IDE built on **Tauri 2 + Rust + Sve
 - **Design mode**: Element capture with hidden context, parent chain, pseudo-class CSS extraction
 - **MCP binary**: Separate Rust binary, stdio JSON-RPC, named pipe IPC
 
-See `docs/implementation/IDE-GAPS.md` for detailed feature comparison vs VS Code / Zed / Cursor.
+See `docs/source-of-truth/IDE-GAPS.md` for detailed feature comparison vs VS Code / Zed / Cursor.
 
 ---
 

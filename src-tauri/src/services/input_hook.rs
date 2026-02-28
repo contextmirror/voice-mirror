@@ -14,7 +14,7 @@ use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU8, Ordering};
 use tauri::AppHandle;
 #[cfg(target_os = "windows")]
 use tauri::Emitter;
-use tracing::info;
+use tracing::{info, trace};
 #[cfg(target_os = "windows")]
 use tracing::{error, warn};
 
@@ -436,7 +436,7 @@ pub fn start_input_hook(app_handle: AppHandle) {
                     if msg.message == win32::WM_TIMER {
                         let (ptt_t, ptt_c) = PTT_BINDING.type_and_code();
                         let (dict_t, dict_c) = DICTATION_BINDING.type_and_code();
-                        info!(
+                        trace!(
                             "Input hook heartbeat: ptt=({},{}) dict=({},{})",
                             ptt_t, ptt_c, dict_t, dict_c
                         );

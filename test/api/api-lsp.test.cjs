@@ -92,3 +92,70 @@ describe('api.js LSP: signature help', () => {
     assert.ok(src.includes('lspRequestSignatureHelp(path'), 'Should accept path parameter');
   });
 });
+
+// ============ LSP Server Management ============
+
+describe('api.js LSP: server management', () => {
+  // --- lspGetServerList ---
+  it('exports lspGetServerList', () => {
+    assert.ok(
+      src.includes('export async function lspGetServerList('),
+      'Should export async function lspGetServerList()'
+    );
+  });
+
+  it('invokes lsp_get_server_list', () => {
+    assert.ok(
+      src.includes("invoke('lsp_get_server_list'"),
+      "lspGetServerList should invoke 'lsp_get_server_list'"
+    );
+  });
+
+  // --- lspInstallServer ---
+  it('exports lspInstallServer', () => {
+    assert.ok(
+      src.includes('export async function lspInstallServer('),
+      'Should export async function lspInstallServer()'
+    );
+  });
+
+  it('invokes lsp_install_server', () => {
+    assert.ok(
+      src.includes("invoke('lsp_install_server'"),
+      "lspInstallServer should invoke 'lsp_install_server'"
+    );
+  });
+
+  it('lspInstallServer accepts serverId parameter', () => {
+    assert.ok(
+      src.includes('lspInstallServer(serverId'),
+      'lspInstallServer should accept serverId parameter'
+    );
+  });
+
+  // --- lspSetServerEnabled ---
+  it('exports lspSetServerEnabled', () => {
+    assert.ok(
+      src.includes('export async function lspSetServerEnabled('),
+      'Should export async function lspSetServerEnabled()'
+    );
+  });
+
+  it('invokes lsp_set_server_enabled', () => {
+    assert.ok(
+      src.includes("invoke('lsp_set_server_enabled'"),
+      "lspSetServerEnabled should invoke 'lsp_set_server_enabled'"
+    );
+  });
+
+  it('lspSetServerEnabled accepts serverId and enabled parameters', () => {
+    assert.ok(
+      src.includes('lspSetServerEnabled(serverId'),
+      'lspSetServerEnabled should accept serverId parameter'
+    );
+    assert.ok(
+      src.includes('enabled'),
+      'lspSetServerEnabled should accept enabled parameter'
+    );
+  });
+});

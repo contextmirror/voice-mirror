@@ -8,6 +8,31 @@
  */
 
 import { editorGroupsStore } from './editor-groups.svelte.js';
+import { auditEditor } from '../audit-log.js';
+
+/**
+ * Show a native Save/Don't Save/Cancel dialog for a dirty tab.
+ * Uses Tauri's message dialog with three buttons.
+ * @param {string} filename
+ * @returns {Promise<string>} 'Save', "Don't Save", or 'Cancel'
+ */
+async function showDirtyCloseDialog(filename) {
+  try {
+    const { message } = await import('@tauri-apps/plugin-dialog');
+    const result = await message(
+      `Do you want to save changes to ${filename}?`,
+      {
+        title: 'Save Changes',
+        kind: 'warning',
+        buttons: { yes: 'Save', no: "Don't Save", cancel: 'Cancel' },
+      }
+    );
+    return result;
+  } catch {
+    // Fallback: no Tauri runtime (e.g. tests) — default to cancel
+    return 'Cancel';
+  }
+}
 
 function createTabsStore() {
   let tabs = $state([]);
@@ -16,11 +41,51 @@ function createTabsStore() {
   let untitledCounter = 0;
   let previewEnabled = $state(true);
 
+  /** @type {{ path: string, line: number, character: number, endLine?: number, endCharacter?: number } | null} */
+  let pendingCursorPosition = $state(null);
+
+  /** @type {Array<{path: string, type: string, groupId: number, title: string, status?: string|null}>} */
+  let closedTabs = $state([]);
+  const MAX_CLOSED_TABS = 20;
+
+  /**
+   * Push a tab onto the closed-tab history (skips untitled files).
+   * @param {{path: string, type: string, groupId: number, title: string, status?: string}} tab
+   */
+  function pushToClosedHistory(tab) {
+    if (!tab.path.startsWith('untitled:')) {
+      closedTabs.push({
+        path: tab.path,
+        type: tab.type,
+        groupId: tab.groupId,
+        title: tab.title,
+        status: tab.status || null,
+      });
+      if (closedTabs.length > MAX_CLOSED_TABS) {
+        closedTabs.shift();
+      }
+    }
+  }
+
   return {
     get tabs() { return tabs; },
     get activeTabId() { return activeTabId; },
     get activeTab() { return tabs.find(t => t.id === activeTabId) || null; },
     get previewEnabled() { return previewEnabled; },
+
+    /** Pending cursor position for cross-file navigation */
+    get pendingCursorPosition() { return pendingCursorPosition; },
+
+    /** Set a cursor position to navigate to after a file opens.
+     *  Optional endLine/endCharacter create a selection range (for diagnostic highlighting). */
+    setPendingCursor(path, line, character, endLine, endCharacter) {
+      pendingCursorPosition = { path, line, character, endLine, endCharacter };
+    },
+
+    /** Clear pending cursor (called by FileEditor after applying) */
+    clearPendingCursor() {
+      pendingCursorPosition = null;
+    },
 
     /**
      * Get all tabs belonging to a specific group.
@@ -49,6 +114,7 @@ function createTabsStore() {
      * @param {number} [targetGroupId] - Group to open in (defaults to focused group)
      */
     openFile(entry, targetGroupId) {
+      auditEditor('file-opened', { path: entry.path });
       const groupId = targetGroupId ?? editorGroupsStore.focusedGroupId;
 
       // If file is already open in the target group, just focus it
@@ -195,6 +261,7 @@ function createTabsStore() {
       if (idx === -1) return;
 
       const closedTab = tabs[idx];
+      auditEditor('file-closed', { path: closedTab.path });
       const groupId = closedTab.groupId;
       const groupTabs = tabs.filter(t => t.groupId === groupId);
 
@@ -216,6 +283,9 @@ function createTabsStore() {
         }
       }
 
+      // Push to closed tab history (skip untitled files)
+      pushToClosedHistory(closedTab);
+
       tabs.splice(idx, 1);
 
       // If this group has no more tabs, close the group (if it's not the last one)
@@ -230,9 +300,62 @@ function createTabsStore() {
     },
 
     /**
+     * Close a tab with a save prompt if the tab has unsaved changes.
+     * Shows a native dialog: Save / Don't Save / Cancel.
+     * - Save: triggers command:save event, waits for save, then closes.
+     * - Don't Save: closes without saving.
+     * - Cancel: keeps the tab open.
+     * @param {string} id - Tab ID to close
+     * @returns {Promise<boolean>} true if tab was closed, false if cancelled
+     */
+    async requestClose(id) {
+      const tab = tabs.find(t => t.id === id);
+      if (!tab) return true;
+
+      if (!tab.dirty) {
+        this.closeTab(id);
+        return true;
+      }
+
+      const result = await showDirtyCloseDialog(tab.title);
+
+      if (result === 'Save' || result === 'Yes') {
+        // Make this tab active so command:save targets the right editor
+        this.setActive(id);
+        // Dispatch save command and wait for dirty flag to clear
+        window.dispatchEvent(new CustomEvent('command:save'));
+        // Poll for dirty flag (save is async, usually completes in <100ms)
+        const saved = await new Promise(resolve => {
+          let attempts = 0;
+          const check = () => {
+            const t = tabs.find(t2 => t2.id === id);
+            if (!t || !t.dirty) { resolve(true); return; }
+            if (++attempts > 20) { resolve(false); return; }
+            setTimeout(check, 50);
+          };
+          // Small initial delay for the save to start
+          setTimeout(check, 50);
+        });
+        if (saved) {
+          this.closeTab(id);
+          return true;
+        }
+        // Save failed — keep tab open
+        return false;
+      } else if (result === "Don't Save" || result === 'No') {
+        this.closeTab(id);
+        return true;
+      }
+
+      // Cancel — keep tab open
+      return false;
+    },
+
+    /**
      * Set the active tab by ID. Updates the tab's group focus as well.
      */
     setActive(id) {
+      auditEditor('tab-switched', { path: id });
       const tab = tabs.find(t => t.id === id);
       if (tab) {
         activeTabId = id;
@@ -355,6 +478,10 @@ function createTabsStore() {
      * Close all tabs and reset editor groups.
      */
     closeAll() {
+      // Record all tabs in closed history before clearing
+      for (const tab of tabs) {
+        pushToClosedHistory(tab);
+      }
       tabs.length = 0;
       activeTabId = null;
       editorGroupsStore.reset();
@@ -368,9 +495,10 @@ function createTabsStore() {
       if (!tab) return;
       const groupId = tab.groupId;
 
-      // Remove other tabs in the same group
+      // Record tabs being removed, then splice them out
       for (let i = tabs.length - 1; i >= 0; i--) {
         if (tabs[i].groupId === groupId && tabs[i].id !== id) {
+          pushToClosedHistory(tabs[i]);
           tabs.splice(i, 1);
         }
       }
@@ -395,8 +523,10 @@ function createTabsStore() {
       // Get IDs of tabs to the right in this group
       const toRemove = new Set(groupTabs.slice(groupIdx + 1).map(t => t.id));
 
+      // Record tabs being removed, then splice them out
       for (let i = tabs.length - 1; i >= 0; i--) {
         if (toRemove.has(tabs[i].id)) {
+          pushToClosedHistory(tabs[i]);
           tabs.splice(i, 1);
         }
       }
@@ -422,6 +552,29 @@ function createTabsStore() {
           if (tab.preview) tab.preview = false;
         }
       }
+    },
+
+    /** Whether there are closed tabs to reopen */
+    get canReopenTab() { return closedTabs.length > 0; },
+
+    /**
+     * Reopen the most recently closed tab.
+     * @returns {boolean} true if a tab was reopened
+     */
+    reopenClosedTab() {
+      if (closedTabs.length === 0) return false;
+      const entry = closedTabs.pop();
+      // Check if group still exists, fall back to focused group
+      const targetGroup = editorGroupsStore.allGroupIds.includes(entry.groupId)
+        ? entry.groupId
+        : editorGroupsStore.focusedGroupId;
+      const name = entry.path.split(/[/\\]/).pop() || entry.path;
+      if (entry.type === 'diff') {
+        this.openDiff({ path: entry.path, status: entry.status || 'modified' }, targetGroup);
+      } else {
+        this.openFile({ name, path: entry.path }, targetGroup);
+      }
+      return true;
     },
   };
 }

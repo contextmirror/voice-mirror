@@ -9,9 +9,10 @@ pub mod tools;
 pub mod voice;
 pub mod window;
 pub mod lens;
-pub mod shell;
+pub mod terminal;
 pub mod lsp;
 pub mod design;
+pub mod output;
 
 use serde_json::Value;
 

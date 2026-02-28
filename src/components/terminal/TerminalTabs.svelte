@@ -1,18 +1,17 @@
 <script>
   /**
-   * TerminalTabs.svelte -- Tabbed terminal container with unified tab bar.
+   * TerminalTabs.svelte -- Bottom panel with 4 pinned tabs.
    *
    * Features:
-   * - Single bar: tabs (left) + toolbar actions (right)
-   * - Double-click tab to rename (inline input)
-   * - Right-click context menu (rename, clear, close)
-   * - Drag-to-reorder shell tabs (AI tab pinned at index 0)
-   * - Ctrl+Tab / Ctrl+Shift+Tab to cycle tabs
-   * - Smart shell numbering (fills gaps)
+   * - 4 permanent tabs: Voice Agent, Output, Terminal, Problems
+   * - Right-click context menus for Voice Agent and Output
+   * - Toolbar actions on the right side of the tab bar
+   * - Content area routing based on bottomPanelMode
+   * - Problems tab with severity filters, text filter, badge count, Ctrl+Shift+M shortcut
    */
   import { onMount } from 'svelte';
-  import Terminal from './Terminal.svelte';
-  import ShellTerminal from './ShellTerminal.svelte';
+  import AiTerminal from './AiTerminal.svelte';
+  import TerminalPanel from './TerminalPanel.svelte';
   import { terminalTabsStore } from '../../lib/stores/terminal-tabs.svelte.js';
   import { devServerManager } from '../../lib/stores/dev-server-manager.svelte.js';
   import { projectStore } from '../../lib/stores/project.svelte.js';
@@ -22,20 +21,65 @@
   import { configStore, updateConfig } from '../../lib/stores/config.svelte.js';
   import { toastStore } from '../../lib/stores/toast.svelte.js';
   import { PROVIDER_GROUPS, PROVIDER_ICONS, PROVIDER_NAMES } from '../../lib/providers.js';
+  import { setActionHandler } from '../../lib/stores/shortcuts.svelte.js';
+  import TerminalActionBar from './TerminalActionBar.svelte';
+  import OutputPanel from '../lens/OutputPanel.svelte';
+  import { outputStore } from '../../lib/stores/output.svelte.js';
+  import ProblemsPanel from '../lens/ProblemsPanel.svelte';
+  import { lspDiagnosticsStore } from '../../lib/stores/lsp-diagnostics.svelte.js';
+
+  // ---- Bottom panel mode: ai | output | terminal | problems ----
+  let bottomPanelMode = $state('ai');
+
+  // ---- Problems panel filter state ----
+  let problemsShowErrors = $state(true);
+  let problemsShowWarnings = $state(true);
+  let problemsShowInfos = $state(true);
+  let problemsFilterText = $state('');
+
+  // Derived totals for badge and toolbar
+  let problemsTotals = $derived(lspDiagnosticsStore.getTotals());
+  let problemsBadgeCount = $derived(problemsTotals.errors + problemsTotals.warnings);
+
+  // ---- Output channel dropdown (custom, theme-aware) ----
+  let channelDropdownOpen = $state(false);
+
+  function toggleChannelDropdown() {
+    channelDropdownOpen = !channelDropdownOpen;
+  }
+
+  function selectChannel(ch) {
+    outputStore.switchChannel(ch);
+    channelDropdownOpen = false;
+  }
+
+  // Close dropdown on outside click
+  $effect(() => {
+    if (!channelDropdownOpen) return;
+    function handleClick() { channelDropdownOpen = false; }
+    const timer = setTimeout(() => {
+      window.addEventListener('click', handleClick);
+    }, 0);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('click', handleClick);
+    };
+  });
+
 
   // ---- Terminal action registration ----
   let termActions = {};
 
   function handleClear() {
-    termActions[terminalTabsStore.activeTabId]?.clear();
+    termActions['ai']?.clear();
   }
 
   function handleCopy() {
-    termActions[terminalTabsStore.activeTabId]?.copy();
+    termActions['ai']?.copy();
   }
 
   function handlePaste() {
-    termActions[terminalTabsStore.activeTabId]?.paste();
+    termActions['ai']?.paste();
   }
 
   // ---- Voice button (AI tab only, CLI provider only) ----
@@ -47,7 +91,7 @@
   );
 
   let showVoiceButton = $derived(
-    terminalTabsStore.activeTabId === 'ai' &&
+    bottomPanelMode === 'ai' &&
     aiStatusStore.running && aiStatusStore.isCliProvider
   );
 
@@ -73,109 +117,7 @@
     }
   }
 
-  // ---- Shell tab management ----
-
-  async function handleAddShell() {
-    const cwd = projectStore.activeProject?.path || null;
-    await terminalTabsStore.addShellTab({ cwd });
-  }
-
-  // ---- Close confirmation for dev-server tabs ----
-
-  let closeConfirmVisible = $state(false);
-  let closeConfirmTab = $state(null);
-
-  /**
-   * Attempt to close a tab. If it's a running dev-server tab, show confirmation.
-   * Otherwise close immediately.
-   * @param {string} tabId
-   */
-  function requestCloseTab(tabId) {
-    if (tabId === 'ai') return;
-    const tab = terminalTabsStore.tabs.find(t => t.id === tabId);
-    if (tab && tab.type === 'dev-server' && tab.running) {
-      closeConfirmTab = tab;
-      closeConfirmVisible = true;
-    } else {
-      terminalTabsStore.closeTab(tabId);
-    }
-  }
-
-  /** Stop server, then close the tab */
-  async function confirmStopAndClose() {
-    const tab = closeConfirmTab;
-    closeConfirmVisible = false;
-    closeConfirmTab = null;
-    if (!tab) return;
-    const current = terminalTabsStore.tabs.find(t => t.id === tab.id);
-    if (!current) return;
-    if (tab.projectPath) {
-      try {
-        await devServerManager.stopServer(tab.projectPath);
-      } catch (err) {
-        console.error('[TerminalTabs] stopServer failed:', err);
-      }
-    }
-    terminalTabsStore.closeTab(tab.id);
-  }
-
-  /** Hide tab (keep process alive) */
-  function confirmHideTab() {
-    const tab = closeConfirmTab;
-    closeConfirmVisible = false;
-    closeConfirmTab = null;
-    if (!tab) return;
-    terminalTabsStore.hideTab(tab.id);
-  }
-
-  /** Cancel close confirmation */
-  function cancelCloseConfirm() {
-    closeConfirmVisible = false;
-    closeConfirmTab = null;
-  }
-
-  // ---- Tab renaming (double-click) ----
-
-  let editingTabId = $state(null);
-  let editValue = $state('');
-
-  function startRename(tabId) {
-    const tab = terminalTabsStore.tabs.find(t => t.id === tabId);
-    if (!tab) return;
-    editValue = tab.title;
-    editingTabId = tabId;
-  }
-
-  function saveRename() {
-    if (!editingTabId) return;
-    const trimmed = editValue.trim();
-    if (trimmed && trimmed !== terminalTabsStore.tabs.find(t => t.id === editingTabId)?.title) {
-      terminalTabsStore.renameTab(editingTabId, trimmed);
-    }
-    editingTabId = null;
-  }
-
-  function cancelRename() {
-    editingTabId = null;
-  }
-
-  function handleRenameKeydown(e) {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      saveRename();
-    } else if (e.key === 'Escape') {
-      e.preventDefault();
-      cancelRename();
-    }
-  }
-
-  /** Svelte action: auto-focus and select input text on mount */
-  function autofocus(node) {
-    node.focus();
-    node.select();
-  }
-
-  // ---- Right-click context menu ----
+  // ---- Right-click context menu (Voice Agent tab) ----
 
   let contextMenu = $state({ visible: false, x: 0, y: 0, tabId: null });
 
@@ -191,20 +133,8 @@
     contextMenu = { ...contextMenu, visible: false };
   }
 
-  function contextRename() {
-    startRename(contextMenu.tabId);
-    closeContextMenu();
-  }
-
   function contextClear() {
     termActions[contextMenu.tabId]?.clear();
-    closeContextMenu();
-  }
-
-  function contextClose() {
-    if (contextMenu.tabId !== 'ai') {
-      requestCloseTab(contextMenu.tabId);
-    }
     closeContextMenu();
   }
 
@@ -259,8 +189,8 @@
 
   // Close context menu on outside click
   $effect(() => {
-    if (!contextMenu.visible) return;
-    function handleClick() { closeContextMenu(); }
+    if (!contextMenu.visible && !outputContextMenu.visible) return;
+    function handleClick() { closeContextMenu(); closeOutputContextMenu(); }
     // Delay so the right-click itself doesn't close it
     const timer = setTimeout(() => {
       window.addEventListener('click', handleClick);
@@ -273,208 +203,378 @@
     };
   });
 
-  // ---- Drag-to-reorder (pointer-based) ----
+  // ---- Output tab context menu ----
 
-  let dragTabId = $state(null);
-  let dragOverTabId = $state(null);
-  let dragStartX = 0;
-  let dragActive = false;
+  let outputContextMenu = $state({ visible: false, x: 0, y: 0 });
 
-  function handleTabMousedown(e, tabId) {
-    // Only left-click, only shell tabs
-    if (e.button !== 0 || tabId === 'ai') return;
-    dragStartX = e.clientX;
-    dragActive = false;
-
-    const onMousemove = (/** @type {MouseEvent} */ moveEvt) => {
-      // 5px threshold before activating drag
-      if (!dragActive && Math.abs(moveEvt.clientX - dragStartX) < 5) return;
-      if (!dragActive) {
-        dragActive = true;
-        dragTabId = tabId;
-      }
-
-      // Find the tab element being hovered over
-      const els = document.elementsFromPoint(moveEvt.clientX, moveEvt.clientY);
-      const tabEl = els.find(el => el.closest?.('[data-tab-id]'));
-      const hoverTabEl = tabEl?.closest?.('[data-tab-id]') || tabEl;
-      const hoverId = hoverTabEl?.getAttribute?.('data-tab-id') || null;
-
-      if (hoverId && hoverId !== 'ai' && hoverId !== tabId) {
-        dragOverTabId = hoverId;
-      } else {
-        dragOverTabId = null;
-      }
-    };
-
-    const onMouseup = () => {
-      window.removeEventListener('mousemove', onMousemove);
-      window.removeEventListener('mouseup', onMouseup);
-
-      if (dragActive && dragOverTabId) {
-        terminalTabsStore.moveTab(dragTabId, dragOverTabId);
-      }
-      dragTabId = null;
-      dragOverTabId = null;
-      dragActive = false;
-    };
-
-    window.addEventListener('mousemove', onMousemove);
-    window.addEventListener('mouseup', onMouseup);
+  function showOutputContextMenu(e) {
+    e.preventDefault();
+    const estimatedHeight = 140;
+    const maxY = window.innerHeight - estimatedHeight;
+    const y = Math.min(e.clientY, Math.max(0, maxY));
+    outputContextMenu = { visible: true, x: e.clientX, y };
   }
 
-  // ---- Keyboard tab cycling (Ctrl+Tab / Ctrl+Shift+Tab) ----
+  function closeOutputContextMenu() {
+    outputContextMenu = { ...outputContextMenu, visible: false };
+  }
+
+  function outputContextClear() {
+    outputStore.clearChannel();
+    closeOutputContextMenu();
+  }
+
+  function outputContextCopyAll() {
+    const lines = outputStore.filteredEntries.map(e => {
+      const d = new Date(e.timestamp);
+      const time = d.toTimeString().slice(0, 8);
+      return `${time} [${e.level}] ${e.message}`;
+    });
+    navigator.clipboard.writeText(lines.join('\n')).catch(() => {});
+    closeOutputContextMenu();
+  }
+
+  function outputContextToggleWrap() {
+    outputStore.toggleWordWrap();
+    closeOutputContextMenu();
+  }
+
+  function outputContextToggleScrollLock() {
+    outputStore.setAutoScroll(!outputStore.autoScroll);
+    closeOutputContextMenu();
+  }
+
+  // ---- Keyboard: Ctrl+Tab / Ctrl+Shift+Tab to cycle panels ----
+
+  const panelOrder = ['ai', 'output', 'terminal', 'problems'];
 
   onMount(() => {
     function handleKeydown(e) {
       if (e.ctrlKey && e.key === 'Tab') {
         e.preventDefault();
         e.stopPropagation();
+        const idx = panelOrder.indexOf(bottomPanelMode);
         if (e.shiftKey) {
-          terminalTabsStore.prevTab();
+          bottomPanelMode = panelOrder[(idx - 1 + panelOrder.length) % panelOrder.length];
         } else {
-          terminalTabsStore.nextTab();
+          bottomPanelMode = panelOrder[(idx + 1) % panelOrder.length];
         }
+      }
+
+      // Ctrl+Shift+M → Toggle problems panel
+      if (e.ctrlKey && e.shiftKey && e.key === 'M') {
+        e.preventDefault();
+        e.stopPropagation();
+        bottomPanelMode = bottomPanelMode === 'problems' ? 'ai' : 'problems';
       }
     }
     window.addEventListener('keydown', handleKeydown, true);
-    return () => window.removeEventListener('keydown', handleKeydown, true);
+
+    function handleShowProblems() {
+      bottomPanelMode = 'problems';
+    }
+    window.addEventListener('status-bar-show-problems', handleShowProblems);
+
+    // Register toggle-terminal shortcut handler (Ctrl+`)
+    setActionHandler('toggle-terminal', () => {
+      if (bottomPanelMode === 'terminal') {
+        bottomPanelMode = 'ai';
+      } else {
+        bottomPanelMode = 'terminal';
+      }
+    });
+
+    return () => {
+      window.removeEventListener('keydown', handleKeydown, true);
+      window.removeEventListener('status-bar-show-problems', handleShowProblems);
+      setActionHandler('toggle-terminal', null);
+    };
   });
 </script>
 
 <div class="terminal-tabs-container">
-  <!-- Unified tab bar: tabs (left) + toolbar actions (right) -->
+  <!-- Unified tab bar: 3 pinned tabs (left) + toolbar actions (right) -->
   <div class="terminal-tab-bar">
-    {#each terminalTabsStore.tabs as tab (tab.id)}
-      <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <div
-        class="terminal-tab"
-        class:active={terminalTabsStore.activeTabId === tab.id}
-        class:exited={!tab.running}
-        class:drag-over={dragOverTabId === tab.id && dragTabId !== tab.id}
-        class:dragging={dragTabId === tab.id}
-        role="tab"
-        tabindex="0"
-        aria-selected={terminalTabsStore.activeTabId === tab.id}
-        data-tab-id={tab.id}
-        onclick={() => terminalTabsStore.setActive(tab.id)}
-        oncontextmenu={(e) => showContextMenu(e, tab.id)}
-        onmousedown={(e) => handleTabMousedown(e, tab.id)}
-        onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') terminalTabsStore.setActive(tab.id); }}
-        title={tab.title}
-      >
-        {#if tab.type === 'ai'}
-          <svg class="tab-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/><circle cx="9" cy="16" r="1" fill="currentColor"/><circle cx="15" cy="16" r="1" fill="currentColor"/>
-          </svg>
-        {:else}
-          <svg class="tab-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>
-          </svg>
-        {/if}
-
-        {#if editingTabId === tab.id}
-          <!-- Inline rename input -->
-          <input
-            class="tab-rename-input"
-            type="text"
-            bind:value={editValue}
-            onkeydown={handleRenameKeydown}
-            onblur={saveRename}
-            onclick={(e) => e.stopPropagation()}
-            use:autofocus
-          />
-        {:else}
-          <!-- svelte-ignore a11y_no_static_element_interactions -->
-          <span
-            class="tab-label"
-            ondblclick={(e) => { e.preventDefault(); startRename(tab.id); }}
-          >{tab.title}</span>
-        {/if}
-
-        {#if (tab.type === 'shell' || tab.type === 'dev-server') && editingTabId !== tab.id}
-          <button
-            class="tab-close"
-            onclick={(e) => { e.stopPropagation(); requestCloseTab(tab.id); }}
-            title="Close terminal"
-          >
-            <svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.5">
-              <line x1="2" y1="2" x2="10" y2="10"/><line x1="10" y1="2" x2="2" y2="10"/>
-            </svg>
-          </button>
-        {/if}
-      </div>
-    {/each}
-
-    <button class="tab-add" onclick={handleAddShell} title="New shell terminal" aria-label="New terminal">
-      <svg viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5">
-        <line x1="6" y1="1" x2="6" y2="11"/><line x1="1" y1="6" x2="11" y2="6"/>
+    <!-- Voice Agent tab (pinned) -->
+    <div
+      class="terminal-tab"
+      class:active={bottomPanelMode === 'ai'}
+      role="tab"
+      tabindex="0"
+      aria-selected={bottomPanelMode === 'ai'}
+      onclick={() => bottomPanelMode = 'ai'}
+      oncontextmenu={(e) => showContextMenu(e, 'ai')}
+      onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') bottomPanelMode = 'ai'; }}
+      title="Voice Agent"
+    >
+      <svg class="tab-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/><circle cx="9" cy="16" r="1" fill="currentColor"/><circle cx="15" cy="16" r="1" fill="currentColor"/>
       </svg>
-    </button>
+      <span class="tab-label">Voice Agent</span>
+    </div>
+
+    <!-- Output tab (pinned) -->
+    <div class="tab-divider"></div>
+    <div
+      class="terminal-tab"
+      class:active={bottomPanelMode === 'output'}
+      role="tab"
+      tabindex="0"
+      aria-selected={bottomPanelMode === 'output'}
+      onclick={() => bottomPanelMode = 'output'}
+      oncontextmenu={showOutputContextMenu}
+      onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') bottomPanelMode = 'output'; }}
+    >
+      <svg class="tab-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+      </svg>
+      <span class="tab-label">Output</span>
+    </div>
+
+    <!-- Terminal tab (pinned) -->
+    <div class="tab-divider"></div>
+    <div
+      class="terminal-tab"
+      class:active={bottomPanelMode === 'terminal'}
+      role="tab"
+      tabindex="0"
+      aria-selected={bottomPanelMode === 'terminal'}
+      onclick={() => bottomPanelMode = 'terminal'}
+      onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') bottomPanelMode = 'terminal'; }}
+    >
+      <span class="tab-label">Terminal</span>
+    </div>
+
+    <!-- Problems tab (pinned) -->
+    <div class="tab-divider"></div>
+    <div
+      class="terminal-tab"
+      class:active={bottomPanelMode === 'problems'}
+      role="tab"
+      tabindex="0"
+      aria-selected={bottomPanelMode === 'problems'}
+      onclick={() => bottomPanelMode = 'problems'}
+      onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') bottomPanelMode = 'problems'; }}
+      title="Problems (Ctrl+Shift+M)"
+    >
+      <svg class="tab-icon" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M7.56 1.44a.5.5 0 0 1 .88 0l6.5 12A.5.5 0 0 1 14.5 14h-13a.5.5 0 0 1-.44-.56l6.5-12z"/>
+        <line x1="8" y1="6" x2="8" y2="9"/><circle cx="8" cy="11" r="0.5" fill="currentColor"/>
+      </svg>
+      <span class="tab-label">Problems</span>
+      {#if problemsBadgeCount > 0}
+        <span class="problems-badge" class:warnings-only={problemsTotals.errors === 0}>{problemsBadgeCount}</span>
+      {/if}
+    </div>
 
     <!-- Spacer pushes toolbar actions to the right -->
     <div class="tab-bar-spacer"></div>
 
-    <!-- Voice button (only on AI tab with running CLI provider) -->
-    {#if showVoiceButton}
-      <button
-        class="voice-btn"
-        class:active={voiceActive}
-        onclick={handleStartVoice}
-        disabled={voiceLoading}
-        title={voiceActive ? 'Voice loop is active' : 'Start voice loop'}
-      >
-        {#if voiceActive}
-          <span class="voice-dot"></span>
-          <span class="voice-label">Voice</span>
-        {:else}
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
-            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-            <line x1="12" y1="19" x2="12" y2="23"/>
-            <line x1="8" y1="23" x2="16" y2="23"/>
+    {#if bottomPanelMode === 'terminal'}
+      <!-- Terminal action bar (split, +, ...) on the outer strip -->
+      <TerminalActionBar />
+    {:else if bottomPanelMode === 'output'}
+      <!-- Output controls (right side of tab bar, VS Code style) -->
+      <div class="output-controls">
+        <!-- Filter text input -->
+        <div class="output-filter-wrapper">
+          <input
+            class="output-filter-input"
+            type="text"
+            placeholder="Filter (e.g. text, !exclude)"
+            value={outputStore.filterText}
+            oninput={(e) => outputStore.setFilterText(e.target.value)}
+          />
+          <!-- Funnel icon (decorative, inside input) -->
+          <svg class="output-filter-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
           </svg>
-          <span class="voice-label">{voiceLoading ? '...' : 'Voice'}</span>
-        {/if}
-      </button>
-    {/if}
+        </div>
 
-    <!-- Toolbar actions -->
-    <div class="toolbar-actions">
-      <button class="toolbar-btn" onclick={handleClear} title="Clear terminal">
-        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/>
-          <line x1="18" y1="9" x2="12" y2="15"/><line x1="12" y1="9" x2="18" y2="15"/>
-        </svg>
-      </button>
-      <button class="toolbar-btn" onclick={handleCopy} title="Copy selection (Ctrl+C)">
-        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
-          <rect x="9" y="9" width="13" height="13" rx="2"/>
-          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-        </svg>
-      </button>
-      <button class="toolbar-btn" onclick={handlePaste} title="Paste (Ctrl+V)">
-        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
-          <rect x="8" y="2" width="8" height="4" rx="1"/>
-        </svg>
-      </button>
-    </div>
+        <!-- Custom channel dropdown -->
+        <div class="channel-dropdown-wrapper">
+          <button
+            class="channel-dropdown-trigger"
+            onclick={(e) => { e.stopPropagation(); toggleChannelDropdown(); }}
+            title="Select output channel"
+          >
+            <span>{outputStore.channelLabels[outputStore.activeChannel]}</span>
+            <svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.5">
+              <polyline points="3 4.5 6 7.5 9 4.5"/>
+            </svg>
+          </button>
+          {#if channelDropdownOpen}
+            <div class="channel-dropdown-menu">
+              {#each outputStore.channels as ch}
+                <button
+                  class="channel-dropdown-item"
+                  class:active={outputStore.activeChannel === ch}
+                  onclick={(e) => { e.stopPropagation(); selectChannel(ch); }}
+                >
+                  {outputStore.channelLabels[ch]}
+                  {#if outputStore.activeChannel === ch}
+                    <svg class="channel-check" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5">
+                      <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                  {/if}
+                </button>
+              {/each}
+            </div>
+          {/if}
+        </div>
+
+        <!-- Toolbar icon group (VS Code style) -->
+        <div class="toolbar-actions">
+          <!-- Word wrap toggle -->
+          <button
+            class="toolbar-btn"
+            class:toggled={outputStore.wordWrap}
+            onclick={() => outputStore.toggleWordWrap()}
+            title={outputStore.wordWrap ? 'Disable word wrap' : 'Enable word wrap'}
+          >
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M3 6h18"/><path d="M3 12h15a3 3 0 1 1 0 6h-4"/><polyline points="13 15 11 18 13 21"/><path d="M3 18h7"/>
+            </svg>
+          </button>
+
+          <!-- Lock scroll toggle -->
+          <button
+            class="toolbar-btn"
+            class:toggled={!outputStore.autoScroll}
+            onclick={() => outputStore.setAutoScroll(!outputStore.autoScroll)}
+            title={outputStore.autoScroll ? 'Turn on scroll lock' : 'Turn off scroll lock (auto-scroll)'}
+          >
+            {#if outputStore.autoScroll}
+              <!-- Unlocked (auto-scrolling) -->
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/>
+              </svg>
+            {:else}
+              <!-- Locked (scroll locked) -->
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+              </svg>
+            {/if}
+          </button>
+
+          <!-- Clear output -->
+          <button class="toolbar-btn" onclick={() => outputStore.clearChannel()} title="Clear output">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/>
+              <line x1="18" y1="9" x2="12" y2="15"/><line x1="12" y1="9" x2="18" y2="15"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    {:else if bottomPanelMode === 'ai'}
+      <!-- AI terminal controls -->
+      <!-- Voice button (only with running CLI provider) -->
+      {#if showVoiceButton}
+        <button
+          class="voice-btn"
+          class:active={voiceActive}
+          onclick={handleStartVoice}
+          disabled={voiceLoading}
+          title={voiceActive ? 'Voice loop is active' : 'Start voice loop'}
+        >
+          {#if voiceActive}
+            <span class="voice-dot"></span>
+            <span class="voice-label">Voice</span>
+          {:else}
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
+              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+              <line x1="12" y1="19" x2="12" y2="23"/>
+              <line x1="8" y1="23" x2="16" y2="23"/>
+            </svg>
+            <span class="voice-label">{voiceLoading ? '...' : 'Voice'}</span>
+          {/if}
+        </button>
+      {/if}
+
+      <!-- Toolbar actions -->
+      <div class="toolbar-actions">
+        <button class="toolbar-btn" onclick={handleClear} title="Clear terminal">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/>
+            <line x1="18" y1="9" x2="12" y2="15"/><line x1="12" y1="9" x2="18" y2="15"/>
+          </svg>
+        </button>
+        <button class="toolbar-btn" onclick={handleCopy} title="Copy selection (Ctrl+C)">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="9" y="9" width="13" height="13" rx="2"/>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+          </svg>
+        </button>
+        <button class="toolbar-btn" onclick={handlePaste} title="Paste (Ctrl+V)">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+            <rect x="8" y="2" width="8" height="4" rx="1"/>
+          </svg>
+        </button>
+      </div>
+    {:else if bottomPanelMode === 'problems'}
+      <div class="output-controls">
+        <!-- Text filter -->
+        <div class="output-filter-wrapper">
+          <input
+            class="output-filter-input problems-filter"
+            type="text"
+            placeholder="Filter (e.g. text, !exclude)"
+            value={problemsFilterText}
+            oninput={(e) => problemsFilterText = e.target.value}
+          />
+          <svg class="output-filter-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+          </svg>
+        </div>
+        <!-- Severity toggles -->
+        <div class="toolbar-actions">
+          <button
+            class="toolbar-btn severity-toggle"
+            class:toggled={problemsShowErrors}
+            onclick={() => problemsShowErrors = !problemsShowErrors}
+            title="Toggle errors"
+          >
+            <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5">
+              <circle cx="8" cy="8" r="6"/><line x1="5.5" y1="5.5" x2="10.5" y2="10.5"/><line x1="10.5" y1="5.5" x2="5.5" y2="10.5"/>
+            </svg>
+            <span class="severity-count">{problemsTotals.errors}</span>
+          </button>
+          <button
+            class="toolbar-btn severity-toggle"
+            class:toggled={problemsShowWarnings}
+            onclick={() => problemsShowWarnings = !problemsShowWarnings}
+            title="Toggle warnings"
+          >
+            <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M7.56 1.44a.5.5 0 0 1 .88 0l6.5 12A.5.5 0 0 1 14.5 14h-13a.5.5 0 0 1-.44-.56l6.5-12zM8 5v4M8 11v1" stroke-linecap="round"/>
+            </svg>
+            <span class="severity-count">{problemsTotals.warnings}</span>
+          </button>
+          <button
+            class="toolbar-btn severity-toggle"
+            class:toggled={problemsShowInfos}
+            onclick={() => problemsShowInfos = !problemsShowInfos}
+            title="Toggle info"
+          >
+            <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5">
+              <circle cx="8" cy="8" r="6"/><line x1="8" y1="5" x2="8" y2="9" stroke-linecap="round"/><circle cx="8" cy="11.5" r="0.8" fill="currentColor"/>
+            </svg>
+            <span class="severity-count">{problemsTotals.infos}</span>
+          </button>
+        </div>
+      </div>
+    {/if}
   </div>
 
-  <!-- Context menu -->
+  <!-- Voice Agent context menu -->
   {#if contextMenu.visible}
     <div
       class="context-menu"
       class:wide={contextMenu.tabId === 'ai'}
       style="left: {contextMenu.x}px; top: {contextMenu.y}px;"
     >
-      <button class="context-menu-item" onclick={contextRename}>
-        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
-        </svg>
-        Rename
-      </button>
       <button class="context-menu-item" onclick={contextClear}>
         <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/>
@@ -523,62 +623,88 @@
             Stop Provider
           </button>
         {/if}
-      {:else}
-        <div class="context-menu-divider"></div>
-        <button class="context-menu-item danger" onclick={contextClose}>
-          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
-          Close
-        </button>
       {/if}
     </div>
   {/if}
 
-  <!-- Close confirmation dialog for dev-server tabs -->
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div
-    class="close-confirm-overlay"
-    class:close-confirm-hidden={!closeConfirmVisible}
-    onkeydown={(e) => { if (e.key === 'Escape') cancelCloseConfirm(); }}
-  >
-    <div class="close-confirm-dialog" role="alertdialog" aria-modal="true" aria-label="Close dev server confirmation">
-      <div class="close-confirm-title">Dev server running</div>
-      <div class="close-confirm-message">
-        {closeConfirmTab?.framework || 'Server'}{closeConfirmTab?.port ? ` on :${closeConfirmTab.port}` : ''} is still running.
-      </div>
-      <div class="close-confirm-actions">
-        <button class="close-confirm-btn stop" type="button" onclick={confirmStopAndClose} aria-label="Stop server and close tab">
-          Stop Server
-        </button>
-        <button class="close-confirm-btn hide" type="button" onclick={confirmHideTab} aria-label="Hide tab but keep server running">
-          Hide Tab
-        </button>
-        <button class="close-confirm-btn cancel" type="button" onclick={cancelCloseConfirm} aria-label="Cancel closing">
-          Cancel
-        </button>
-      </div>
+  <!-- Output tab context menu -->
+  {#if outputContextMenu.visible}
+    <div
+      class="context-menu"
+      style="left: {outputContextMenu.x}px; top: {outputContextMenu.y}px;"
+    >
+      <button class="context-menu-item" onclick={outputContextClear}>
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/>
+          <line x1="18" y1="9" x2="12" y2="15"/><line x1="12" y1="9" x2="18" y2="15"/>
+        </svg>
+        Clear Output
+      </button>
+      <button class="context-menu-item" onclick={outputContextCopyAll}>
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+        </svg>
+        Copy All
+      </button>
+      <div class="context-menu-divider"></div>
+      <button class="context-menu-item" onclick={outputContextToggleWrap}>
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M3 6h18M3 12h15a3 3 0 1 1 0 6h-4"/><polyline points="16 16 14 18 16 20"/><path d="M3 18h7"/>
+        </svg>
+        Word Wrap
+        {#if outputStore.wordWrap}
+          <svg class="ctx-check" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+        {/if}
+      </button>
+      <button class="context-menu-item" onclick={outputContextToggleScrollLock}>
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+        </svg>
+        Scroll Lock
+        {#if !outputStore.autoScroll}
+          <svg class="ctx-check" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+        {/if}
+      </button>
+    </div>
+  {/if}
+
+  <!-- Content panels -->
+  <!-- AI terminal (always mounted, hidden when not active) -->
+  <div class="terminal-panels" class:hidden={bottomPanelMode !== 'ai'}>
+    <div class="terminal-panel">
+      <AiTerminal onRegisterActions={(actions) => { termActions['ai'] = actions; }} />
     </div>
   </div>
 
-  <!-- Terminal panels -->
-  <div class="terminal-panels">
-    <!-- AI terminal (always mounted) -->
-    <div class="terminal-panel" class:hidden={terminalTabsStore.activeTabId !== 'ai'}>
-      <Terminal onRegisterActions={(actions) => { termActions['ai'] = actions; }} />
+  <!-- Output panel -->
+  {#if bottomPanelMode === 'output'}
+    <div class="output-panel-container">
+      <OutputPanel />
     </div>
+  {/if}
 
-    <!-- Shell + dev-server terminals (mounted when tab exists, hidden when inactive) -->
-    {#each terminalTabsStore.tabs.filter(t => t.type === 'shell' || t.type === 'dev-server') as tab (tab.id)}
-      <div class="terminal-panel" class:hidden={terminalTabsStore.activeTabId !== tab.id}>
-        <ShellTerminal
-          shellId={tab.shellId}
-          visible={terminalTabsStore.activeTabId === tab.id}
-          onRegisterActions={(actions) => { termActions[tab.id] = actions; }}
-        />
-      </div>
-    {/each}
-  </div>
+  <!-- Terminal panel -->
+  {#if bottomPanelMode === 'terminal'}
+    <div class="terminal-panel-container">
+      <TerminalPanel />
+    </div>
+  {/if}
+
+  <!-- Problems panel -->
+  {#if bottomPanelMode === 'problems'}
+    <div class="problems-panel-container">
+      <ProblemsPanel
+        showErrors={problemsShowErrors}
+        showWarnings={problemsShowWarnings}
+        showInfos={problemsShowInfos}
+        filterText={problemsFilterText}
+      />
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -590,7 +716,7 @@
     position: relative;
   }
 
-  /* ── Unified tab bar ── */
+  /* -- Unified tab bar -- */
 
   .terminal-tab-bar {
     display: flex;
@@ -600,7 +726,7 @@
     height: 36px;
     min-height: 36px;
     background: var(--bg);
-    border-bottom: 1px solid color-mix(in srgb, var(--border) 40%, transparent);
+    border-bottom: none;
     user-select: none;
   }
 
@@ -613,7 +739,7 @@
     min-width: 8px;
   }
 
-  /* ── Tabs ── */
+  /* -- Tabs -- */
 
   .terminal-tab {
     display: flex;
@@ -645,19 +771,6 @@
     font-weight: 500;
   }
 
-  .terminal-tab.exited {
-    opacity: 0.5;
-  }
-
-  .terminal-tab.dragging {
-    opacity: 0.4;
-  }
-
-  .terminal-tab.drag-over {
-    border-left: 2px solid var(--accent);
-    padding-left: 8px;
-  }
-
   .tab-icon {
     flex-shrink: 0;
   }
@@ -668,68 +781,15 @@
     cursor: inherit;
   }
 
-  /* ── Inline rename input ── */
-
-  .tab-rename-input {
-    background: var(--bg);
-    border: 1px solid var(--accent);
-    border-radius: 3px;
-    color: var(--text);
-    font-size: 12px;
-    font-family: var(--font-family);
-    padding: 1px 4px;
-    width: 80px;
-    outline: none;
-  }
-
-  .tab-close {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 16px;
+  .tab-divider {
+    width: 1px;
     height: 16px;
-    background: transparent;
-    border: none;
-    color: var(--muted);
-    cursor: pointer;
-    padding: 0;
-    border-radius: 4px;
-    margin-left: 2px;
-    opacity: 0;
-    transition: opacity 0.1s, color 0.15s, background 0.15s;
-  }
-
-  .terminal-tab:hover .tab-close {
-    opacity: 1;
-  }
-
-  .tab-close:hover {
-    background: color-mix(in srgb, var(--danger) 20%, transparent);
-    color: var(--danger);
-  }
-
-  .tab-add {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 24px;
-    height: 24px;
-    border: none;
-    border-radius: 6px;
-    background: transparent;
-    color: var(--muted);
-    cursor: pointer;
+    background: color-mix(in srgb, var(--border) 30%, transparent);
+    margin: 0 4px;
     flex-shrink: 0;
-    margin-left: 2px;
-    transition: background 0.12s ease, color 0.12s ease;
   }
 
-  .tab-add:hover {
-    background: color-mix(in srgb, var(--text) 8%, transparent);
-    color: var(--text);
-  }
-
-  /* ── Toolbar actions (right side) ── */
+  /* -- Toolbar actions (right side) -- */
 
   .toolbar-actions {
     display: flex;
@@ -755,12 +815,17 @@
     background: color-mix(in srgb, var(--text) 8%, transparent);
   }
 
+  .toolbar-btn.toggled {
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+
   .toolbar-btn:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 1px;
   }
 
-  /* ── Voice button ── */
+  /* -- Voice button -- */
 
   .voice-btn {
     display: inline-flex;
@@ -814,7 +879,7 @@
     50% { opacity: 0.4; }
   }
 
-  /* ── Context menu ── */
+  /* -- Context menu -- */
 
   .context-menu {
     position: fixed;
@@ -918,7 +983,141 @@
     flex-shrink: 0;
   }
 
-  /* ── Terminal panels ── */
+  /* -- Output controls (in tab bar, right side) -- */
+
+  .output-controls {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  /* -- Output filter input -- */
+
+  .output-filter-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+
+  .output-filter-input {
+    width: 180px;
+    padding: 2px 8px 2px 24px;
+    background: color-mix(in srgb, var(--text) 6%, transparent);
+    border: 1px solid color-mix(in srgb, var(--border) 40%, transparent);
+    border-radius: 4px;
+    color: var(--text);
+    font-size: 11px;
+    font-family: var(--font-family);
+    outline: none;
+    transition: border-color 0.15s, background 0.15s;
+  }
+
+  .output-filter-input::placeholder {
+    color: var(--muted);
+    opacity: 0.7;
+  }
+
+  .output-filter-input:focus {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--text) 8%, transparent);
+  }
+
+  .output-filter-icon {
+    position: absolute;
+    left: 6px;
+    pointer-events: none;
+    color: var(--muted);
+    opacity: 0.6;
+  }
+
+  /* -- Custom channel dropdown -- */
+
+  .channel-dropdown-wrapper {
+    position: relative;
+  }
+
+  .channel-dropdown-trigger {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    background: color-mix(in srgb, var(--text) 6%, transparent);
+    border: 1px solid color-mix(in srgb, var(--border) 40%, transparent);
+    border-radius: 4px;
+    color: var(--text);
+    font-size: 11px;
+    font-family: var(--font-family);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: border-color 0.15s, background 0.15s;
+  }
+
+  .channel-dropdown-trigger:hover {
+    background: color-mix(in srgb, var(--text) 10%, transparent);
+    border-color: color-mix(in srgb, var(--border) 60%, transparent);
+  }
+
+  .channel-dropdown-menu {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 4px);
+    min-width: 160px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border, rgba(255,255,255,0.1));
+    border-radius: 6px;
+    padding: 4px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+    z-index: 10000;
+  }
+
+  .channel-dropdown-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 6px 10px;
+    background: none;
+    border: none;
+    border-radius: 4px;
+    color: var(--text);
+    font-size: 12px;
+    font-family: var(--font-family);
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+
+  .channel-dropdown-item:hover {
+    background: color-mix(in srgb, var(--text) 8%, transparent);
+  }
+
+  .channel-dropdown-item.active {
+    color: var(--accent);
+  }
+
+  .channel-check {
+    color: var(--accent);
+    flex-shrink: 0;
+  }
+
+  /* -- Output panel container -- */
+
+  .output-panel-container {
+    flex: 1;
+    overflow: hidden;
+    min-height: 0;
+    border-top: 1px solid color-mix(in srgb, var(--text) 12%, var(--bg));
+  }
+
+  /* -- Terminal panel container -- */
+
+  .terminal-panel-container {
+    flex: 1;
+    overflow: hidden;
+    min-height: 0;
+    border-top: 1px solid color-mix(in srgb, var(--text) 12%, var(--bg));
+  }
+
+  /* -- Terminal panels -- */
 
   .terminal-panels {
     flex: 1;
@@ -932,89 +1131,47 @@
     inset: 0;
   }
 
+  .terminal-panels.hidden {
+    display: none;
+  }
+
   .terminal-panel.hidden {
     display: none;
   }
 
-  /* ── Close confirmation dialog ── */
-
-  .close-confirm-overlay {
-    position: absolute;
-    inset: 0;
-    z-index: 100;
-    display: flex;
+  /* -- Problems badge -- */
+  .problems-badge {
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    background: rgba(0, 0, 0, 0.5);
-  }
-
-  .close-confirm-overlay.close-confirm-hidden {
-    display: none !important;
-  }
-
-  .close-confirm-dialog {
-    background: var(--bg-elevated);
-    border: 1px solid var(--border, rgba(255,255,255,0.1));
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
     border-radius: 8px;
-    padding: 16px;
-    min-width: 260px;
-    max-width: 340px;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
-  }
-
-  .close-confirm-title {
-    font-size: 13px;
+    background: var(--danger);
+    color: #fff;
+    font-size: 10px;
     font-weight: 600;
-    color: var(--text);
-    margin-bottom: 6px;
+    line-height: 1;
+    margin-left: 2px;
   }
 
-  .close-confirm-message {
-    font-size: 12px;
-    color: var(--muted);
-    margin-bottom: 12px;
+  .problems-badge.warnings-only {
+    background: var(--warn);
   }
 
-  .close-confirm-actions {
-    display: flex;
-    gap: 6px;
+  .severity-toggle {
+    gap: 2px;
   }
 
-  .close-confirm-btn {
-    flex: 1;
-    padding: 5px 10px;
+  .severity-count {
     font-size: 11px;
-    font-weight: 500;
-    font-family: var(--font-family);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    background: transparent;
-    cursor: pointer;
-    transition: background 0.15s;
-    -webkit-app-region: no-drag;
   }
 
-  .close-confirm-btn.stop {
-    color: var(--danger, #ef4444);
-    border-color: color-mix(in srgb, var(--danger, #ef4444) 40%, transparent);
-  }
-  .close-confirm-btn.stop:hover {
-    background: color-mix(in srgb, var(--danger, #ef4444) 12%, transparent);
-  }
-
-  .close-confirm-btn.hide {
-    color: var(--accent);
-    border-color: color-mix(in srgb, var(--accent) 40%, transparent);
-  }
-  .close-confirm-btn.hide:hover {
-    background: color-mix(in srgb, var(--accent) 12%, transparent);
-  }
-
-  .close-confirm-btn.cancel {
-    color: var(--muted);
-  }
-  .close-confirm-btn.cancel:hover {
-    background: rgba(255,255,255,0.06);
+  .problems-panel-container {
+    flex: 1;
+    overflow: hidden;
+    min-height: 0;
   }
 
   @media (prefers-reduced-motion: reduce) {

@@ -54,6 +54,18 @@ pub enum McpToApp {
         /// Action-specific arguments.
         args: serde_json::Value,
     },
+    /// Query output logs from the Tauri app's ring buffers.
+    GetLogs {
+        request_id: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        channel: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        level: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        last: Option<usize>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        search: Option<String>,
+    },
 }
 
 /// Messages sent FROM the Tauri app TO the MCP binary.
@@ -100,6 +112,12 @@ pub enum AppToMcp {
         /// Error message if success is false.
         #[serde(skip_serializing_if = "Option::is_none")]
         error: Option<String>,
+    },
+    /// Response to GetLogs with formatted log text.
+    LogEntries {
+        request_id: String,
+        /// Formatted log text (ready for MCP output).
+        text: String,
     },
 }
 

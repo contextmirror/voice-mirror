@@ -110,8 +110,9 @@ describe('LensWorkspace.svelte', () => {
     assert.ok(src.includes('<TerminalTabs'));
   });
 
-  it('has pixel agents placeholder area', () => {
-    assert.ok(src.includes('placeholder-area'), 'Should have placeholder-area div');
+  it('has chat area at full height (no pixel agents placeholder)', () => {
+    assert.ok(src.includes('chat-area'), 'Should have chat-area div');
+    assert.ok(!src.includes('placeholder-area'), 'Pixel agents placeholder removed');
   });
 
   // Files panel (FileTree component)
@@ -320,6 +321,21 @@ describe('LensWorkspace.svelte', () => {
     );
   });
 
+  // LSP cleanup on project switch
+  it('calls lspShutdown on project switch', () => {
+    assert.ok(
+      src.includes('lspShutdown'),
+      'Should shut down LSP servers when switching projects'
+    );
+  });
+
+  it('imports lspShutdown from api', () => {
+    assert.ok(
+      src.includes('lspShutdown'),
+      'Should import lspShutdown'
+    );
+  });
+
   // CSS
   it('has workspace-content with flex and margins', () => {
     assert.ok(src.includes('.workspace-content'));
@@ -329,11 +345,11 @@ describe('LensWorkspace.svelte', () => {
   it('uses flex column layout', () => {
     assert.ok(src.includes('flex-direction: column'));
   });
-  it('has chat-area with border-right', () => {
-    assert.ok(src.includes('border-right'));
+  it('chat-area has no border-right (SplitPanel handle provides border)', () => {
+    assert.ok(!src.includes('border-right'), 'SplitPanel handle is the border source');
   });
-  it('has terminal-area with border-top', () => {
-    assert.ok(src.includes('border-top'));
+  it('terminal-area has no border-top (SplitPanel handle provides border)', () => {
+    assert.ok(!src.includes('border-top: 1px solid var(--border)'), 'SplitPanel handle is the border source');
   });
 
 });

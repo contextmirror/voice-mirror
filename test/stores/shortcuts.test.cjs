@@ -69,9 +69,10 @@ describe('shortcuts: exports', () => {
 describe('shortcuts: DEFAULT_GLOBAL_SHORTCUTS entries', () => {
   const expectedGlobals = [
     { id: 'toggle-voice', keys: 'Ctrl+Shift+;', label: 'Toggle voice recording' },
-    { id: 'toggle-mute', keys: 'Ctrl+Shift+M', label: 'Toggle mute' },
-    { id: 'toggle-overlay', keys: 'Ctrl+Shift+O', label: 'Toggle overlay mode' },
+    { id: 'toggle-mute', keys: 'Ctrl+Shift+U', label: 'Toggle mute' },
+    { id: 'toggle-overlay', keys: 'Ctrl+Shift+Y', label: 'Toggle overlay mode' },
     { id: 'toggle-window', keys: 'Ctrl+Shift+H', label: 'Show/hide window' },
+    { id: 'stats-dashboard', keys: 'Ctrl+Shift+D', label: 'Toggle stats dashboard' },
   ];
 
   for (const { id, keys, label } of expectedGlobals) {
@@ -110,6 +111,16 @@ describe('shortcuts: IN_APP_SHORTCUTS entries', () => {
     { id: 'close-panel', keys: 'Escape', label: 'Close current panel/modal' },
     { id: 'open-file-search', keys: 'F1', label: 'Search files and commands' },
     { id: 'open-text-search', keys: 'Ctrl+Shift+F', label: 'Search in files' },
+    { id: 'new-terminal', keys: "Ctrl+Shift+'", label: 'New terminal' },
+    { id: 'split-terminal', keys: 'Ctrl+Shift+5', label: 'Split terminal' },
+    { id: 'toggle-terminal', keys: 'Ctrl+`', label: 'Toggle terminal panel' },
+    { id: 'focus-prev-pane', keys: 'Alt+Left', label: 'Focus previous terminal pane' },
+    { id: 'focus-next-pane', keys: 'Alt+Right', label: 'Focus next terminal pane' },
+    { id: 'kill-terminal', keys: 'Delete', label: 'Kill terminal' },
+    { id: 'rename-terminal', keys: 'F2', label: 'Rename terminal' },
+    { id: 'close-tab', keys: 'Ctrl+W', label: 'Close active editor tab' },
+    { id: 'toggle-sidebar', keys: 'Ctrl+B', label: 'Toggle sidebar' },
+    { id: 'toggle-bottom-panel', keys: 'Ctrl+J', label: 'Toggle bottom panel' },
   ];
 
   for (const { id, keys, label } of expectedInApp) {
@@ -293,6 +304,69 @@ describe('shortcuts: setupInAppShortcuts', () => {
       'Should call event.preventDefault() on matched shortcuts'
     );
   });
+
+  it('handles Ctrl+Shift+\' for new-terminal', () => {
+    assert.ok(
+      src.includes("event.key === \"'\"") || src.includes("event.key === '\\''"),
+      'Should handle Ctrl+Shift+\' for new-terminal'
+    );
+    assert.ok(
+      src.includes("actionHandlers['new-terminal']"),
+      'Should dispatch to new-terminal action handler'
+    );
+  });
+
+  it('handles Ctrl+Shift+5 for split-terminal', () => {
+    assert.ok(
+      src.includes("event.key === '5'"),
+      'Should handle Ctrl+Shift+5 for split-terminal'
+    );
+    assert.ok(
+      src.includes("actionHandlers['split-terminal']"),
+      'Should dispatch to split-terminal action handler'
+    );
+  });
+
+  it('handles Ctrl+` for toggle-terminal', () => {
+    assert.ok(
+      src.includes("event.key === '`'"),
+      'Should handle Ctrl+` for toggle-terminal'
+    );
+    assert.ok(
+      src.includes("actionHandlers['toggle-terminal']"),
+      'Should dispatch to toggle-terminal action handler'
+    );
+  });
+
+  it('handles Alt+Left for focus-prev-pane', () => {
+    assert.ok(
+      src.includes('event.altKey') && src.includes("event.key === 'ArrowLeft'"),
+      'Should handle Alt+Left for focus-prev-pane'
+    );
+    assert.ok(
+      src.includes("actionHandlers['focus-prev-pane']"),
+      'Should dispatch to focus-prev-pane action handler'
+    );
+  });
+
+  it('handles Alt+Right for focus-next-pane', () => {
+    assert.ok(
+      src.includes('event.altKey') && src.includes("event.key === 'ArrowRight'"),
+      'Should handle Alt+Right for focus-next-pane'
+    );
+    assert.ok(
+      src.includes("actionHandlers['focus-next-pane']"),
+      'Should dispatch to focus-next-pane action handler'
+    );
+  });
+
+  it('Alt+Left/Right requires no Ctrl modifier to avoid chord conflicts', () => {
+    // The Alt+Arrow handlers should check !ctrl to avoid conflict with Ctrl+K chord
+    assert.ok(
+      src.includes("event.altKey && !ctrl") || src.includes("altKey && !ctrl"),
+      'Alt+Arrow handlers should require no Ctrl modifier'
+    );
+  });
 });
 
 // ============ Handler registration ============
@@ -323,6 +397,17 @@ describe('shortcuts: handler registration', () => {
     assert.ok(
       src.includes('return actionHandlers[id]'),
       'getActionHandler should return from actionHandlers'
+    );
+  });
+
+  it('setActionHandler accepts null to unregister a handler', () => {
+    assert.ok(
+      src.includes('handler === null') || src.includes('handler === undefined'),
+      'setActionHandler should accept null/undefined for unregistration'
+    );
+    assert.ok(
+      src.includes('delete actionHandlers[id]'),
+      'Should delete the handler entry when null is passed'
     );
   });
 });
@@ -393,6 +478,212 @@ describe('shortcuts: split editor keybindings', () => {
     assert.ok(
       src.includes('.cm-editor'),
       'Should check for .cm-editor to skip shortcuts inside CodeMirror'
+    );
+  });
+});
+
+// ============ New keyboard shortcuts (Ctrl+W, Ctrl+B, Ctrl+J) ============
+
+describe('shortcuts: close-tab (Ctrl+W)', () => {
+  it('has close-tab in IN_APP_SHORTCUTS', () => {
+    assert.ok(
+      src.includes("'close-tab'") || src.includes('"close-tab"'),
+      'IN_APP_SHORTCUTS should contain close-tab'
+    );
+  });
+
+  it('handles Ctrl+W for close-tab', () => {
+    assert.ok(
+      src.includes("event.key === 'w'"),
+      'Should handle Ctrl+W for close-tab'
+    );
+    assert.ok(
+      src.includes("actionHandlers['close-tab']"),
+      'Should dispatch to close-tab action handler'
+    );
+  });
+
+  it('Ctrl+W calls preventDefault to avoid closing browser window', () => {
+    // The Ctrl+W handler should be before the INPUT guard and call preventDefault
+    const ctrlWIndex = src.indexOf("event.key === 'w'");
+    const preventIndex = src.indexOf('event.preventDefault()', ctrlWIndex);
+    assert.ok(
+      ctrlWIndex > 0 && preventIndex > ctrlWIndex && preventIndex - ctrlWIndex < 200,
+      'Ctrl+W handler should call preventDefault shortly after the key check'
+    );
+  });
+
+  it('close-tab handler calls tabsStore.closeTab', () => {
+    assert.ok(
+      src.includes('tabsStore.closeTab(tabsStore.activeTabId)'),
+      'close-tab handler should call tabsStore.closeTab with activeTabId'
+    );
+  });
+
+  it('imports tabsStore', () => {
+    assert.ok(
+      src.includes("import { tabsStore }") || src.includes("from './tabs.svelte.js'"),
+      'Should import tabsStore from tabs.svelte.js'
+    );
+  });
+});
+
+describe('shortcuts: toggle-sidebar (Ctrl+B)', () => {
+  it('has toggle-sidebar in IN_APP_SHORTCUTS', () => {
+    assert.ok(
+      src.includes("'toggle-sidebar'") || src.includes('"toggle-sidebar"'),
+      'IN_APP_SHORTCUTS should contain toggle-sidebar'
+    );
+  });
+
+  it('handles Ctrl+B for toggle-sidebar', () => {
+    assert.ok(
+      src.includes("event.key === 'b'"),
+      'Should handle Ctrl+B for toggle-sidebar'
+    );
+    assert.ok(
+      src.includes("actionHandlers['toggle-sidebar']"),
+      'Should dispatch to toggle-sidebar action handler'
+    );
+  });
+
+  it('toggle-sidebar handler calls navigationStore.toggleSidebar', () => {
+    assert.ok(
+      src.includes('navigationStore.toggleSidebar()'),
+      'toggle-sidebar handler should call navigationStore.toggleSidebar()'
+    );
+  });
+});
+
+describe('shortcuts: toggle-bottom-panel (Ctrl+J)', () => {
+  it('has toggle-bottom-panel in IN_APP_SHORTCUTS', () => {
+    assert.ok(
+      src.includes("'toggle-bottom-panel'") || src.includes('"toggle-bottom-panel"'),
+      'IN_APP_SHORTCUTS should contain toggle-bottom-panel'
+    );
+  });
+
+  it('handles Ctrl+J for toggle-bottom-panel', () => {
+    assert.ok(
+      src.includes("event.key === 'j'"),
+      'Should handle Ctrl+J for toggle-bottom-panel'
+    );
+    assert.ok(
+      src.includes("actionHandlers['toggle-bottom-panel']"),
+      'Should dispatch to toggle-bottom-panel action handler'
+    );
+  });
+
+  it('toggle-bottom-panel handler calls layoutStore.toggleTerminal', () => {
+    assert.ok(
+      src.includes('layoutStore.toggleTerminal()'),
+      'toggle-bottom-panel handler should call layoutStore.toggleTerminal()'
+    );
+  });
+
+  it('imports layoutStore', () => {
+    assert.ok(
+      src.includes("import { layoutStore }") || src.includes("from './layout.svelte.js'"),
+      'Should import layoutStore from layout.svelte.js'
+    );
+  });
+});
+
+// ============ Shortcut conflict resolution ============
+
+describe('shortcuts: no key binding conflicts', () => {
+  it('toggle-mute does NOT use Ctrl+Shift+M (freed for IDE use)', () => {
+    // Extract the toggle-mute block
+    const toggleMuteIdx = src.indexOf("'toggle-mute'");
+    const nextEntryIdx = src.indexOf("'toggle-overlay'");
+    const toggleMuteBlock = src.slice(toggleMuteIdx, nextEntryIdx);
+    assert.ok(
+      !toggleMuteBlock.includes("Ctrl+Shift+M"),
+      'toggle-mute should NOT use Ctrl+Shift+M (conflicts with VS Code Problems panel)'
+    );
+  });
+
+  it('toggle-overlay does NOT use Ctrl+Shift+O (freed for go-to-symbol)', () => {
+    // Extract the toggle-overlay block (global)
+    const toggleOverlayIdx = src.indexOf("'toggle-overlay'");
+    const nextEntryIdx = src.indexOf("'toggle-window'");
+    const toggleOverlayBlock = src.slice(toggleOverlayIdx, nextEntryIdx);
+    assert.ok(
+      !toggleOverlayBlock.includes("Ctrl+Shift+O"),
+      'toggle-overlay should NOT use Ctrl+Shift+O (conflicts with go-to-symbol)'
+    );
+  });
+
+  it('stats-dashboard does NOT use Ctrl+Shift+M', () => {
+    const dashIdx = src.indexOf("'stats-dashboard'");
+    const dashEnd = src.indexOf('}', dashIdx + 50);
+    const dashBlock = src.slice(dashIdx, dashEnd);
+    assert.ok(
+      !dashBlock.includes("Ctrl+Shift+M"),
+      'stats-dashboard should NOT use Ctrl+Shift+M'
+    );
+  });
+
+  it('no two DEFAULT_GLOBAL_SHORTCUTS share the same key binding', () => {
+    // Extract key strings from DEFAULT_GLOBAL_SHORTCUTS
+    const globalBlock = src.slice(
+      src.indexOf('DEFAULT_GLOBAL_SHORTCUTS'),
+      src.indexOf('IN_APP_SHORTCUTS')
+    );
+    const keyMatches = [...globalBlock.matchAll(/keys:\s*'([^']+)'/g)].map(m => m[1]);
+    const unique = new Set(keyMatches);
+    assert.equal(
+      keyMatches.length, unique.size,
+      `Global shortcuts should have unique keys, found: ${keyMatches.join(', ')}`
+    );
+  });
+});
+
+// ============ Tab cycling shortcuts (Ctrl+PageUp/PageDown) ============
+
+describe('shortcuts.svelte.js: tab cycling', () => {
+  it('defines prev-editor-tab shortcut with Ctrl+PageUp', () => {
+    assert.ok(src.includes('prev-editor-tab') && src.includes('PageUp'), 'Should have Ctrl+PageUp');
+  });
+
+  it('defines next-editor-tab shortcut with Ctrl+PageDown', () => {
+    assert.ok(src.includes('next-editor-tab') && src.includes('PageDown'), 'Should have Ctrl+PageDown');
+  });
+
+  it('has action handler for prev-editor-tab', () => {
+    assert.ok(src.includes("'prev-editor-tab'") && src.includes('setActive'), 'Should wire prev-editor-tab to setActive');
+  });
+
+  it('has action handler for next-editor-tab', () => {
+    assert.ok(src.includes("'next-editor-tab'") && src.includes('setActive'), 'Should wire next-editor-tab to setActive');
+  });
+
+  it('handles Ctrl+PageUp in keydown handler', () => {
+    assert.ok(
+      src.includes("event.key === 'PageUp'") || src.includes("key === 'PageUp'"),
+      'Should handle Ctrl+PageUp keydown event'
+    );
+    assert.ok(
+      src.includes("actionHandlers['prev-editor-tab']"),
+      'Should dispatch to prev-editor-tab action handler'
+    );
+  });
+
+  it('handles Ctrl+PageDown in keydown handler', () => {
+    assert.ok(
+      src.includes("event.key === 'PageDown'") || src.includes("key === 'PageDown'"),
+      'Should handle Ctrl+PageDown keydown event'
+    );
+    assert.ok(
+      src.includes("actionHandlers['next-editor-tab']"),
+      'Should dispatch to next-editor-tab action handler'
+    );
+  });
+
+  it('imports editorGroupsStore for tab cycling', () => {
+    assert.ok(
+      src.includes('editorGroupsStore'),
+      'Should import editorGroupsStore for tab group awareness'
     );
   });
 });

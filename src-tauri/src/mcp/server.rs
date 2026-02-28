@@ -358,6 +358,7 @@ async fn route_tool_call(
         }
         "voice_listen" => handlers::core::handle_voice_listen(args, data_dir, router).await,
         "voice_status" => handlers::core::handle_voice_status(args, data_dir).await,
+        "get_logs" => handlers::core::handle_get_logs(args, data_dir, router).await,
 
         // ---- Memory tools ----
         "memory_search" => handlers::memory::handle_memory_search(args, data_dir).await,
@@ -367,23 +368,19 @@ async fn route_tool_call(
         "memory_stats" => handlers::memory::handle_memory_stats(args, data_dir).await,
         "memory_flush" => handlers::memory::handle_memory_flush(args, data_dir).await,
 
-        // ---- Browser tools ----
-        "browser_start" => handlers::browser::handle_browser_start(args, data_dir, router).await,
-        "browser_stop" => handlers::browser::handle_browser_stop(args, data_dir).await,
-        "browser_status" => handlers::browser::handle_browser_status(args, data_dir, router).await,
-        "browser_tabs" => handlers::browser::handle_browser_tabs(args, data_dir, router).await,
-        "browser_open" => handlers::browser::handle_browser_open(args, data_dir, router).await,
-        "browser_close_tab" => handlers::browser::handle_browser_close_tab(args, data_dir, router).await,
-        "browser_focus" => handlers::browser::handle_browser_focus(args, data_dir, router).await,
-        "browser_navigate" => handlers::browser::handle_browser_navigate(args, data_dir, router).await,
-        "browser_screenshot" => handlers::browser::handle_browser_screenshot(args, data_dir, router).await,
-        "browser_snapshot" => handlers::browser::handle_browser_snapshot(args, data_dir, router).await,
-        "browser_act" => handlers::browser::handle_browser_act(args, data_dir, router).await,
-        "browser_console" => handlers::browser::handle_browser_console(args, data_dir, router).await,
-        "browser_search" => handlers::browser::handle_browser_search(args, data_dir).await,
-        "browser_fetch" => handlers::browser::handle_browser_fetch(args, data_dir).await,
-        "browser_cookies" => handlers::browser::handle_browser_cookies(args, data_dir, router).await,
-        "browser_storage" => handlers::browser::handle_browser_storage(args, data_dir, router).await,
+        // ---- Browser control (unified tool) ----
+        "browser_action" => {
+            let action = args.get("action").and_then(|v| v.as_str()).unwrap_or("");
+            if action.is_empty() {
+                McpToolResult::error("'action' parameter is required for browser_action")
+            } else {
+                match action {
+                    "search" => handlers::browser::handle_browser_search(&args, data_dir).await,
+                    "fetch" => handlers::browser::handle_browser_fetch(&args, data_dir).await,
+                    _ => handlers::browser::handle_browser_control(action, &args, data_dir, router).await,
+                }
+            }
+        }
 
         // ---- Capture tools ----
         "capture_list_windows" => handlers::capture::handle_capture_list_windows(args, data_dir, router).await,
@@ -496,8 +493,8 @@ mod tests {
         let resp = handle_tools_list(json!(1), &state);
         let result = resp.result.unwrap();
         let tools = result["tools"].as_array().unwrap();
-        // Default: core (4) + capture (2) = 6 always-loaded tools
-        assert_eq!(tools.len(), 6);
+        // Default: core (5) + capture (2) = 7 always-loaded tools
+        assert_eq!(tools.len(), 7);
     }
 
     #[test]
@@ -512,16 +509,16 @@ mod tests {
     fn test_enabled_groups_loads_tools_at_startup() {
         // BUG-005 Fix 1: ENABLED_GROUPS should pre-load tool groups
         let mut registry = ToolRegistry::new();
-        // Default: always-loaded groups = core (4) + capture (2) = 6
-        assert_eq!(registry.list_tools().len(), 6);
+        // Default: always-loaded groups = core (5) + capture (2) = 7
+        assert_eq!(registry.list_tools().len(), 7);
 
         // Apply enabled groups (simulating ENABLED_GROUPS env var)
         // always_loaded groups (core, capture) are always included
         registry.apply_enabled_groups("core,memory");
         let tools = registry.list_tools();
 
-        // Should have core (4) + memory (6) + capture (2) = 12
-        assert_eq!(tools.len(), 12);
+        // Should have core (5) + memory (6) + capture (2) = 13
+        assert_eq!(tools.len(), 13);
         let tool_names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
         assert!(tool_names.contains(&"memory_search"));
         assert!(tool_names.contains(&"capture_window"));
@@ -542,10 +539,10 @@ mod tests {
         let resp = handle_tools_list(json!(1), &state);
         let result = resp.result.unwrap();
         let tools = result["tools"].as_array().unwrap();
-        // core (4) + capture (2) + browser (16) = 22
-        assert!(tools.len() > 6, "Should have more than default 6 tools");
+        // core (5) + capture (2) + browser (1) = 8
+        assert!(tools.len() > 7, "Should have more than default 7 tools");
         let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
-        assert!(names.contains(&"browser_start"));
+        assert!(names.contains(&"browser_action"));
     }
 
     #[test]

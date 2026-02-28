@@ -4,7 +4,7 @@
  * Manages multiple WebView2 browser tabs inside the Lens preview panel.
  * Each tab has its own native WebView2 instance on the backend.
  */
-import { lensCreateTab, lensCloseTab, lensSwitchTab } from '../api.js';
+import { lensCreateTab, lensCloseTab, lensSwitchTab, lensNavigate } from '../api.js';
 
 const MAX_TABS = 8;
 let counter = 0;
@@ -105,6 +105,26 @@ function createBrowserTabsStore() {
     },
 
     /**
+     * Reset a tab back to blank (about:blank). Used when closing the last remaining tab.
+     * @param {string} id
+     */
+    async resetTab(id) {
+      const tab = tabs.find(t => t.id === id);
+      if (!tab) return;
+
+      try {
+        await lensNavigate('about:blank');
+      } catch (err) {
+        console.warn('[browser-tabs] Failed to navigate to about:blank:', err);
+      }
+
+      tab.url = 'about:blank';
+      tab.inputUrl = 'about:blank';
+      tab.title = 'New Tab';
+      tab.loading = false;
+    },
+
+    /**
      * Switch to a different browser tab.
      * @param {string} id
      */
@@ -120,6 +140,16 @@ function createBrowserTabsStore() {
       }
 
       activeTabId = id;
+    },
+
+    /**
+     * Set active tab directly (from MCP-initiated tab switch, no backend call needed).
+     * @param {string} id
+     */
+    setActiveTabDirect(id) {
+      if (tabs.find(t => t.id === id)) {
+        activeTabId = id;
+      }
     },
 
     /**

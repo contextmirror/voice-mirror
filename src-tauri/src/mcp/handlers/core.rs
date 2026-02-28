@@ -918,6 +918,129 @@ fn format_time(iso: &str) -> String {
     iso.to_string()
 }
 
+/// `get_logs` -- Query output channel logs.
+/// Tries named pipe first (fast path). Falls back to reading JSONL files from disk.
+pub async fn handle_get_logs(
+    args: &Value,
+    _data_dir: &Path,
+    router: Option<&Arc<PipeRouter>>,
+) -> McpToolResult {
+    if let Some(router) = router {
+        return handle_get_logs_via_pipe(args, router).await;
+    }
+    handle_get_logs_via_files(args)
+}
+
+/// Query logs via named pipe (original implementation).
+async fn handle_get_logs_via_pipe(
+    args: &Value,
+    router: &Arc<PipeRouter>,
+) -> McpToolResult {
+    let request_id = generate_request_id_for_logs();
+    let channel = args.get("channel").and_then(|v| v.as_str()).map(String::from);
+    let level = args.get("level").and_then(|v| v.as_str()).map(String::from);
+    let last = args.get("last").and_then(|v| v.as_u64()).map(|n| n as usize);
+    let search = args.get("search").and_then(|v| v.as_str()).map(String::from);
+
+    // Register waiter BEFORE sending (same pattern as browser/capture tools)
+    let rx = router.wait_for_browser_response(&request_id).await;
+
+    let msg = McpToApp::GetLogs {
+        request_id: request_id.clone(),
+        channel,
+        level,
+        last,
+        search,
+    };
+
+    if let Err(e) = router.send(&msg).await {
+        router.remove_waiter(&request_id).await;
+        return McpToolResult::error(format!("Failed to send log request: {}", e));
+    }
+
+    // Wait for response with 5s timeout
+    match tokio::time::timeout(Duration::from_secs(5), rx).await {
+        Ok(Ok(AppToMcp::LogEntries { text, .. })) => McpToolResult::text(text),
+        Ok(Ok(_)) => McpToolResult::error("Unexpected response type from app"),
+        Ok(Err(_)) => McpToolResult::error("Log response channel closed unexpectedly"),
+        Err(_) => {
+            router.remove_waiter(&request_id).await;
+            McpToolResult::error("Log query timed out after 5 seconds")
+        }
+    }
+}
+
+/// Query logs by reading JSONL files directly (pipe-free fallback).
+fn handle_get_logs_via_files(args: &Value) -> McpToolResult {
+    use crate::services::output::{Channel, LogFileWriter};
+    use crate::services::platform;
+
+    let logs_dir = platform::get_log_dir().join("current");
+
+    if !logs_dir.exists() {
+        return McpToolResult::error(
+            "Log directory not found. Is the Voice Mirror app running?",
+        );
+    }
+
+    let channel = args.get("channel").and_then(|v| v.as_str());
+    let level = args.get("level").and_then(|v| v.as_str());
+    let last = args.get("last").and_then(|v| v.as_u64()).map(|n| n as usize);
+    let search = args.get("search").and_then(|v| v.as_str());
+
+    match channel {
+        Some(ch_str) => {
+            if let Some(ch) = Channel::from_str(ch_str) {
+                let (entries, total) = LogFileWriter::read_channel(
+                    &logs_dir,
+                    ch,
+                    level,
+                    last.or(Some(100)),
+                    search,
+                );
+                let lines: Vec<String> = entries.iter().map(|e| e.format_line()).collect();
+                let count = lines.len();
+                let mut result = lines.join("\n");
+                result.push_str(&format!(
+                    "\n\n--- {} entries (filtered from {} total, via file fallback) ---",
+                    count, total
+                ));
+                McpToolResult::text(result)
+            } else {
+                McpToolResult::error(format!(
+                    "Unknown channel: {}. Available: app, cli, voice, mcp, browser",
+                    ch_str
+                ))
+            }
+        }
+        None => {
+            let summaries = LogFileWriter::read_summary(&logs_dir);
+            let mut text = String::from("Output Channels (via file fallback):\n");
+            for s in &summaries {
+                text.push_str(&format!(
+                    "  {:<8} {:>4} entries ({} error, {} warn, {} info)\n",
+                    format!("{}:", s.channel),
+                    s.total, s.error, s.warn, s.info
+                ));
+            }
+            McpToolResult::text(text)
+        }
+    }
+}
+
+/// Generate a unique request ID for log queries (same pattern as browser/capture).
+fn generate_request_id_for_logs() -> String {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::time::SystemTime;
+    static LOGS_REQUEST_COUNTER: AtomicU64 = AtomicU64::new(0);
+    let ts = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+    let n = LOGS_REQUEST_COUNTER.fetch_add(1, Ordering::Relaxed);
+    format!("logs-{}-{}", ts, n)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

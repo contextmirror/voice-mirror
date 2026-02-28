@@ -553,6 +553,119 @@ describe('FileEditor.svelte: markdown preview config', () => {
   });
 });
 
+describe('editor-extensions.js: indentWithTab', () => {
+  it('imports indentWithTab from @codemirror/commands', () => {
+    assert.ok(
+      extSrc.includes("import { indentWithTab } from '@codemirror/commands'"),
+      'Should import indentWithTab from @codemirror/commands'
+    );
+  });
+
+  it('includes indentWithTab in keymap', () => {
+    assert.ok(
+      extSrc.includes('indentWithTab'),
+      'Should include indentWithTab in keymap'
+    );
+  });
+});
+
+describe('editor-extensions.js: F12 go-to-definition', () => {
+  it('has F12 keybinding for go-to-definition', () => {
+    assert.ok(
+      extSrc.includes("'F12'"),
+      'Should have F12 keybinding'
+    );
+  });
+
+  it('calls handleGoToDefinition on F12', () => {
+    assert.ok(
+      extSrc.includes('lsp.handleGoToDefinition(v, v.state.selection.main.head)'),
+      'Should call lsp.handleGoToDefinition with cursor position on F12'
+    );
+  });
+});
+
+describe('editor-extensions.js: font zoom keybindings', () => {
+  it('accepts onFontZoom option', () => {
+    assert.ok(
+      extSrc.includes('onFontZoom'),
+      'Should accept onFontZoom callback option'
+    );
+  });
+
+  it('has Ctrl+= for zoom in', () => {
+    assert.ok(
+      extSrc.includes("'Ctrl-='"),
+      'Should have Ctrl+= keybinding for zoom in'
+    );
+  });
+
+  it('has Ctrl+- for zoom out', () => {
+    assert.ok(
+      extSrc.includes("'Ctrl--'"),
+      'Should have Ctrl+- keybinding for zoom out'
+    );
+  });
+
+  it('has Ctrl+0 for zoom reset', () => {
+    assert.ok(
+      extSrc.includes("'Ctrl-0'"),
+      'Should have Ctrl+0 keybinding for zoom reset'
+    );
+  });
+
+  it('calls onFontZoom with delta values', () => {
+    assert.ok(
+      extSrc.includes('onFontZoom(1)') && extSrc.includes('onFontZoom(-1)') && extSrc.includes('onFontZoom(0)'),
+      'Should call onFontZoom with +1 (zoom in), -1 (zoom out), and 0 (reset)'
+    );
+  });
+
+  it('conditionally adds zoom bindings only when onFontZoom is provided', () => {
+    assert.ok(
+      extSrc.includes('onFontZoom ?'),
+      'Should only add zoom keybindings when onFontZoom callback is provided'
+    );
+  });
+});
+
+describe('FileEditor.svelte: font zoom integration', () => {
+  it('imports updateConfig from config store', () => {
+    assert.ok(
+      src.includes('updateConfig') && src.includes('config.svelte.js'),
+      'Should import updateConfig from config store'
+    );
+  });
+
+  it('has handleFontZoom function', () => {
+    assert.ok(
+      src.includes('function handleFontZoom'),
+      'Should have handleFontZoom function'
+    );
+  });
+
+  it('applies --cm-font-size CSS variable', () => {
+    assert.ok(
+      src.includes('--cm-font-size'),
+      'Should set --cm-font-size CSS variable on editor element'
+    );
+  });
+
+  it('has min and max font size bounds', () => {
+    assert.ok(
+      src.includes('MIN_FONT_SIZE') && src.includes('MAX_FONT_SIZE'),
+      'Should clamp font size to min/max bounds'
+    );
+  });
+
+  it('passes onFontZoom to buildEditorExtensions', () => {
+    assert.ok(
+      src.includes('onFontZoom:'),
+      'Should pass onFontZoom callback to buildEditorExtensions'
+    );
+  });
+});
+
 describe('FileEditor.svelte: markdown link safety', () => {
   it('imports open from @tauri-apps/plugin-shell', () => {
     assert.ok(
@@ -591,5 +704,22 @@ describe('FileEditor.svelte: markdown link safety', () => {
       chunk.includes('e.preventDefault()'),
       'Should prevent default link navigation'
     );
+  });
+});
+
+describe('FileEditor.svelte: pendingCursorPosition', () => {
+  it('imports tabsStore for pending cursor', () => {
+    assert.ok(
+      src.includes('tabsStore') && src.includes('pendingCursorPosition'),
+      'Should check tabsStore.pendingCursorPosition'
+    );
+  });
+
+  it('dispatches cursor position from pending', () => {
+    assert.ok(src.includes('clearPendingCursor'), 'Should clear pending cursor after applying');
+  });
+
+  it('uses scrollIntoView when applying pending cursor', () => {
+    assert.ok(src.includes('scrollIntoView'), 'Should scroll to the cursor position');
   });
 });

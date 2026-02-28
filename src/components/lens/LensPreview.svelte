@@ -14,6 +14,7 @@
   let unlistenUrl = null;
   let unlistenOpenTab = null;
   let unlistenTitle = null;
+  let unlistenFocusTab = null;
   let setupDone = false;
   const LOADING_TIMEOUT_MS = 15000;
   let loadingTimer = null;
@@ -93,6 +94,8 @@
     const project = projectStore.activeProject;
     const currentIndex = projectStore.activeIndex;
     if (!project) {
+      // Reset detection guard so re-adding the same project triggers detection again
+      lastDetectedProject = null;
       previousProjectIndex = currentIndex;
       return;
     }
@@ -191,38 +194,47 @@
       // Auto-start logic for stopped servers
       const stoppedServer = servers.find(s => !s.running);
       if (stoppedServer) {
-        const autoStart = project.autoStartServer;
-        if (autoStart === null || autoStart === undefined) {
-          // Never asked — show consent toast
-          toastStore.addToast({
-            message: `${stoppedServer.framework || 'Dev server'} on :${stoppedServer.port} is not running.`,
-            severity: 'info',
-            key: 'dev-server-consent-' + project.path,
-            actions: [
-              {
-                label: 'Always start',
-                callback: () => {
-                  projectStore.updateActiveField('autoStartServer', true);
-                  devServerManager.startServer(stoppedServer, project.path, packageManager);
+        // Skip the offer if the dev server manager already has this server as running/starting
+        // (can happen when detection re-fires while a server is mid-start)
+        const existingState = devServerManager.getServerStatus(project.path);
+        if (existingState && (existingState.status === 'running' || existingState.status === 'starting')) {
+          console.log('[lens] Server already running/starting, skipping offer');
+        } else {
+          const autoStart = project.autoStartServer;
+          console.log('[lens] Auto-start check:', { autoStart, framework: stoppedServer.framework, port: stoppedServer.port });
+          if (autoStart === null || autoStart === undefined) {
+            // Never asked (or "Start once" was used before) — show consent toast
+            toastStore.addToast({
+              message: `${stoppedServer.framework || 'Dev server'} on :${stoppedServer.port} is not running. Start it?`,
+              severity: 'warning',
+              key: 'dev-server-consent-' + project.path,
+              duration: 0, // Don't auto-dismiss — user must choose
+              actions: [
+                {
+                  label: 'Always start',
+                  callback: () => {
+                    projectStore.updateActiveField('autoStartServer', true);
+                    devServerManager.startServer(stoppedServer, project.path, packageManager);
+                  },
                 },
-              },
-              {
-                label: 'Start once',
-                callback: () => {
-                  devServerManager.startServer(stoppedServer, project.path, packageManager);
+                {
+                  label: 'Start once',
+                  callback: () => {
+                    devServerManager.startServer(stoppedServer, project.path, packageManager);
+                  },
                 },
-              },
-              {
-                label: 'Not now',
-                callback: () => {},
-              },
-            ],
-          });
-        } else if (autoStart === true) {
-          // User opted in — auto-start silently
-          devServerManager.startServer(stoppedServer, project.path, packageManager);
+                {
+                  label: 'Not now',
+                  callback: () => {},
+                },
+              ],
+            });
+          } else if (autoStart === true) {
+            // User opted in — auto-start silently
+            devServerManager.startServer(stoppedServer, project.path, packageManager);
+          }
+          // autoStart === false → do nothing
         }
-        // autoStart === false → do nothing
       }
     } catch (err) {
       console.error('[lens] Dev server detection failed:', err);
@@ -338,6 +350,15 @@
       }
     });
 
+    // Listen for MCP-initiated tab switches (browser_action tab_switch)
+    unlistenFocusTab = await listen('lens-focus-tab', (event) => {
+      const tabId = event.payload?.tabId;
+      if (tabId) {
+        // Update frontend tab bar to reflect the active tab
+        browserTabsStore.setActiveTabDirect(tabId);
+      }
+    });
+
     // Observe container resize — this serves two purposes:
     // 1. Sync webview bounds when the panel is resized
     // 2. Trigger first tab creation when the container becomes visible
@@ -379,6 +400,10 @@
     if (unlistenTitle) {
       unlistenTitle();
       unlistenTitle = null;
+    }
+    if (unlistenFocusTab) {
+      unlistenFocusTab();
+      unlistenFocusTab = null;
     }
     lensCloseAllTabs().catch(() => {});
     browserTabsStore.clearAll();

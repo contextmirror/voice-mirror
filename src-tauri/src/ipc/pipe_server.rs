@@ -294,6 +294,52 @@ fn dispatch_message(msg: McpToApp, app_handle: &AppHandle) {
                 }
             });
         }
+        McpToApp::GetLogs { request_id, channel, level, last, search } => {
+            info!("[PipeServer] GetLogs request: id={}, channel={:?}", request_id, channel);
+            let app = app_handle.clone();
+            tauri::async_runtime::spawn(async move {
+                use tauri::Manager;
+                let text = if let Some(store) = app.try_state::<std::sync::Arc<crate::services::output::OutputStore>>() {
+                    match &channel {
+                        Some(ch_str) => {
+                            if let Some(ch) = crate::services::output::Channel::from_str(ch_str) {
+                                let (entries, total) = store.query(
+                                    ch,
+                                    level.as_deref(),
+                                    last.or(Some(100)),
+                                    search.as_deref(),
+                                );
+                                let lines: Vec<String> = entries.iter().map(|e| e.format_line()).collect();
+                                let count = lines.len();
+                                let mut result = lines.join("\n");
+                                result.push_str(&format!("\n\n--- {} entries (filtered from {} total) ---", count, total));
+                                result
+                            } else {
+                                format!("Unknown channel: {}. Available: app, cli, voice, mcp, browser", ch_str)
+                            }
+                        }
+                        None => {
+                            let summaries = store.summary();
+                            let mut text = String::from("Output Channels:\n");
+                            for s in &summaries {
+                                text.push_str(&format!(
+                                    "  {:<8} {:>4} entries ({} error, {} warn, {} info)\n",
+                                    format!("{}:", s.channel),
+                                    s.total, s.error, s.warn, s.info
+                                ));
+                            }
+                            text
+                        }
+                    }
+                } else {
+                    "OutputStore not available".into()
+                };
+
+                if let Some(pipe_state) = app.try_state::<PipeServerState>() {
+                    let _ = pipe_state.send(AppToMcp::LogEntries { request_id, text });
+                }
+            });
+        }
     }
 }
 

@@ -6,13 +6,14 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Instant;
 
 use serde_json::Value;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{ChildStdin, ChildStdout};
 use tokio::sync::{oneshot, Mutex};
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 
 use super::types::{
     DiagnosticItem, DiagnosticPosition, DiagnosticRange, LspDiagnosticEvent,
@@ -105,17 +106,21 @@ pub async fn read_message(reader: &mut BufReader<ChildStdout>) -> Option<Value> 
 
 /// Spawn a tokio task that reads LSP messages from stdout and dispatches them.
 ///
-/// - Responses (messages with an `id` field): routed to the matching oneshot sender
-///   in `pending_requests`.
+/// - Responses (messages with an `id` field, no `method`): routed to the matching
+///   oneshot sender in `pending_requests`.
+/// - Server requests (messages with both `id` and `method`): handled inline.
+///   Currently supports `workspace/configuration`.
 /// - Notifications with method `textDocument/publishDiagnostics`: parsed and emitted
 ///   as a `lsp-diagnostics` Tauri event.
 /// - Other notifications: logged and ignored.
-/// - EOF: emits `lsp-server-error` event.
+/// - EOF: triggers crash recovery with exponential backoff (max 5 restarts).
 pub fn spawn_reader_loop(
     stdout: ChildStdout,
     app_handle: AppHandle,
     lang_id: String,
-    pending: Arc<Mutex<HashMap<i64, oneshot::Sender<Value>>>>,
+    pending: Arc<Mutex<HashMap<i64, (oneshot::Sender<Value>, Instant)>>>,
+    stdin: Arc<Mutex<ChildStdin>>,
+    server_key: String,
 ) {
     tokio::spawn(async move {
         let mut reader = BufReader::new(stdout);
@@ -128,11 +133,18 @@ pub fn spawn_reader_loop(
                         if msg.get("method").is_none() {
                             // This is a response to a request we sent
                             let mut pending_guard = pending.lock().await;
-                            if let Some(sender) = pending_guard.remove(&id) {
+                            if let Some((sender, _sent_at)) = pending_guard.remove(&id) {
                                 let _ = sender.send(msg);
                             } else {
                                 debug!("Received response for unknown request id={}", id);
                             }
+                            continue;
+                        }
+
+                        // This is a server→client request (has both "id" and "method")
+                        if let Some(method) = msg.get("method").and_then(|v| v.as_str()) {
+                            info!("[{}] Server request: {} (id={})", lang_id, method, id);
+                            handle_server_request(&stdin, &lang_id, id, method, &msg).await;
                             continue;
                         }
                     }
@@ -142,13 +154,15 @@ pub fn spawn_reader_loop(
                         if method == "textDocument/publishDiagnostics" {
                             handle_diagnostics(&app_handle, &lang_id, &msg);
                         } else {
-                            debug!("[{}] LSP notification: {}", lang_id, method);
+                            info!("[{}] LSP notification: {}", lang_id, method);
                         }
                     }
                 }
                 None => {
                     // EOF — server process has exited or pipe broken
                     warn!("[{}] LSP server stdout closed (EOF)", lang_id);
+
+                    // Emit error event for frontend notification
                     let _ = app_handle.emit(
                         "lsp-server-error",
                         serde_json::json!({
@@ -156,6 +170,119 @@ pub fn spawn_reader_loop(
                             "error": "LSP server process exited unexpectedly"
                         }),
                     );
+
+                    // --- Crash recovery with exponential backoff ---
+                    let lsp_state: tauri::State<'_, super::LspManagerState> =
+                        app_handle.state();
+
+                    // Extract crash info from the dead server (lock scope limited)
+                    let recovery_info: Option<(Vec<String>, String, u32)> = {
+                        let mut manager: tokio::sync::MutexGuard<'_, super::LspManager> =
+                            lsp_state.0.lock().await;
+                        if let Some(crashed) = manager.servers.remove(&server_key) {
+                            let mut crash_count: u32 = crashed.crash_count + 1;
+
+                            // Reset if last crash was > 60s ago (server was stable)
+                            if let Some(prev) = crashed.last_crash {
+                                if prev.elapsed().as_secs() > 60 {
+                                    crash_count = 1;
+                                }
+                            }
+
+                            let docs: Vec<String> =
+                                crashed.open_docs.iter().cloned().collect();
+                            Some((docs, crashed.project_root.clone(), crash_count))
+                        } else {
+                            None
+                        }
+                    }; // Lock released here — don't hold it during backoff sleep
+
+                    if let Some((open_docs, project_root, crash_count)) = recovery_info {
+                        if crash_count >= 5 {
+                            warn!(
+                                "[{}] Server crashed {} times — giving up",
+                                lang_id, crash_count
+                            );
+                            let _ = app_handle.emit(
+                                "lsp-server-failed",
+                                serde_json::json!({
+                                    "languageId": lang_id,
+                                    "crashCount": crash_count,
+                                }),
+                            );
+                        } else {
+                            // Exponential backoff: 1s, 2s, 4s, 8s, capped at 30s
+                            let backoff_secs: u64 = std::cmp::min(
+                                2u64.pow(crash_count.saturating_sub(1)),
+                                30,
+                            );
+                            info!(
+                                "[{}] Restarting in {}s (crash #{})...",
+                                lang_id, backoff_secs, crash_count
+                            );
+                            tokio::time::sleep(std::time::Duration::from_secs(
+                                backoff_secs,
+                            ))
+                            .await;
+
+                            // Re-lock and restart
+                            let mut manager: tokio::sync::MutexGuard<'_, super::LspManager> =
+                                lsp_state.0.lock().await;
+                            match manager
+                                .ensure_server(&lang_id, &project_root)
+                                .await
+                            {
+                                Ok(()) => {
+                                    info!("[{}] Restarted successfully", lang_id);
+
+                                    // Transfer crash tracking to the new server
+                                    let new_key = super::server_key(
+                                        &lang_id,
+                                        &project_root,
+                                    );
+                                    if let Some(server) =
+                                        manager.servers.get_mut(&new_key)
+                                    {
+                                        server.crash_count = crash_count;
+                                        server.last_crash =
+                                            Some(std::time::Instant::now());
+                                    }
+
+                                    // Replay open documents
+                                    let doc_count = open_docs.len();
+                                    for uri in &open_docs {
+                                        if let Some(file_path) =
+                                            super::types::uri_to_file_path(uri)
+                                        {
+                                            if let Ok(content) =
+                                                std::fs::read_to_string(&file_path)
+                                            {
+                                                let _ = manager
+                                                    .open_document(
+                                                        uri,
+                                                        &lang_id,
+                                                        &content,
+                                                        &project_root,
+                                                    )
+                                                    .await;
+                                            }
+                                        }
+                                    }
+                                    info!(
+                                        "[{}] Replayed {} open documents",
+                                        lang_id, doc_count
+                                    );
+                                }
+                                Err(e) => {
+                                    warn!(
+                                        "[{}] Failed to restart: {}",
+                                        lang_id, e
+                                    );
+                                }
+                            }
+                        }
+                    }
+
                     break;
                 }
             }
@@ -165,13 +292,87 @@ pub fn spawn_reader_loop(
     });
 }
 
+/// Send a JSON-RPC response back to the server (for server→client requests).
+async fn send_response(stdin: &Arc<Mutex<ChildStdin>>, id: i64, result: Value) {
+    let response = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": id,
+        "result": result,
+    });
+    let mut stdin_guard = stdin.lock().await;
+    if let Err(e) = write_message(&mut *stdin_guard, &response).await {
+        warn!("Failed to send response for request id={}: {}", id, e);
+    }
+}
+
+/// Handle a server→client request.
+///
+/// Currently supports:
+/// - `workspace/configuration`: returns settings from the manifest for each
+///   requested section (params.items[].section).
+async fn handle_server_request(
+    stdin: &Arc<Mutex<ChildStdin>>,
+    lang_id: &str,
+    id: i64,
+    method: &str,
+    msg: &Value,
+) {
+    match method {
+        "workspace/configuration" => {
+            debug!("[{}] Handling workspace/configuration request (id={})", lang_id, id);
+
+            // Load settings from manifest for this server.
+            // lang_id is the server key (e.g. "typescript", "css"), not an LSP languageId.
+            let settings = super::manifest::load_manifest()
+                .ok()
+                .and_then(|manifest| manifest.servers.get(lang_id).cloned())
+                .map(|entry| entry.settings)
+                .unwrap_or(Value::Object(serde_json::Map::new()));
+
+            // Build result array — one value per requested item
+            let items = msg
+                .get("params")
+                .and_then(|p| p.get("items"))
+                .and_then(|i| i.as_array());
+
+            let result = if let Some(items) = items {
+                Value::Array(
+                    items
+                        .iter()
+                        .map(|item| {
+                            let section = item.get("section").and_then(|s| s.as_str()).unwrap_or("");
+                            if section.is_empty() {
+                                // Empty section = return all settings
+                                settings.clone()
+                            } else if let Some(val) = settings.get(section) {
+                                val.clone()
+                            } else {
+                                Value::Null
+                            }
+                        })
+                        .collect(),
+                )
+            } else {
+                Value::Array(vec![])
+            };
+
+            send_response(stdin, id, result).await;
+        }
+        _ => {
+            debug!("[{}] Unhandled server request: {} (id={})", lang_id, method, id);
+            // Respond with null for unrecognized requests to avoid blocking the server
+            send_response(stdin, id, Value::Null).await;
+        }
+    }
+}
+
 /// Send a JSON-RPC request to the LSP server.
 ///
 /// Builds the request envelope, registers a oneshot channel for the response,
 /// writes the message, and returns the receiver.
 pub async fn send_request(
     stdin: &mut ChildStdin,
-    pending: &Arc<Mutex<HashMap<i64, oneshot::Sender<Value>>>>,
+    pending: &Arc<Mutex<HashMap<i64, (oneshot::Sender<Value>, Instant)>>>,
     method: &str,
     params: Value,
     next_id: &std::sync::atomic::AtomicI64,
@@ -188,7 +389,7 @@ pub async fn send_request(
     let (tx, rx) = oneshot::channel();
     {
         let mut pending_guard = pending.lock().await;
-        pending_guard.insert(id, tx);
+        pending_guard.insert(id, (tx, Instant::now()));
     }
 
     write_message(stdin, &msg).await?;
@@ -215,7 +416,10 @@ pub async fn send_notification(
 fn handle_diagnostics(app_handle: &AppHandle, lang_id: &str, msg: &Value) {
     let params = match msg.get("params") {
         Some(p) => p,
-        None => return,
+        None => {
+            warn!("[{}] publishDiagnostics missing params", lang_id);
+            return;
+        }
     };
 
     let uri = params
@@ -290,6 +494,13 @@ fn handle_diagnostics(app_handle: &AppHandle, lang_id: &str, msg: &Value) {
         language_id: lang_id.to_string(),
         diagnostics,
     };
+
+    info!(
+        "[{}] Publishing {} diagnostics for {}",
+        lang_id,
+        event.diagnostics.len(),
+        event.uri
+    );
 
     if let Err(e) = app_handle.emit("lsp-diagnostics", &event) {
         warn!("Failed to emit lsp-diagnostics event: {}", e);

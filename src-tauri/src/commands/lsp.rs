@@ -21,10 +21,11 @@ fn extension_from_path(path: &str) -> Option<String> {
         .map(|ext| ext.to_string_lossy().to_string())
 }
 
-/// Open a file in the LSP server for the appropriate language.
+/// Open a file in ALL matching LSP servers for the appropriate language.
 ///
-/// Detects the language from the file extension, ensures the server is running,
-/// and sends a `textDocument/didOpen` notification.
+/// Detects ALL servers from the file extension (primary + supplementary),
+/// ensures each server is running, and sends a `textDocument/didOpen`
+/// notification to each. The primary server's language ID is returned.
 #[tauri::command]
 pub async fn lsp_open_file(
     path: String,
@@ -38,29 +39,35 @@ pub async fn lsp_open_file(
         None => return Ok(IpcResponse::err("Could not determine file extension")),
     };
 
-    let lang_id = match detection::language_id_for_extension(&ext) {
-        Some(id) => id.to_string(),
-        None => return Ok(IpcResponse::err(format!("No LSP support for .{} files", ext))),
-    };
-
     let uri = types::file_uri(&path, &project_root);
 
     let mut manager = state.0.lock().await;
 
-    if let Err(e) = manager.ensure_server(&lang_id, &project_root).await {
-        return Ok(IpcResponse::err(e));
+    // Start ALL matching servers (primary + supplementary)
+    let started = match manager.ensure_servers_for_extension(&ext, &project_root).await {
+        Ok(s) if s.is_empty() => {
+            return Ok(IpcResponse::err(format!("No LSP servers available for .{} files", ext)));
+        }
+        Ok(s) => s,
+        Err(e) => return Ok(IpcResponse::err(e)),
+    };
+
+    // Send didOpen to ALL started servers
+    let primary_lang_id = started[0].clone(); // First is always primary (sorted)
+    for server_id in &started {
+        if let Err(e) = manager.open_document(&uri, server_id, &content, &project_root).await {
+            tracing::warn!("Failed to open document in '{}' server: {}", server_id, e);
+        }
     }
 
-    match manager.open_document(&uri, &lang_id, &content).await {
-        Ok(()) => Ok(IpcResponse::ok(json!({ "languageId": lang_id, "uri": uri }))),
-        Err(e) => Ok(IpcResponse::err(e)),
-    }
+    Ok(IpcResponse::ok(json!({ "languageId": primary_lang_id, "uri": uri })))
 }
 
-/// Close a file in the LSP server.
+/// Close a file in ALL LSP servers that have it open.
 ///
-/// Sends a `textDocument/didClose` notification. If no more documents are open
-/// for the language, the server is shut down.
+/// Sends a `textDocument/didClose` notification to every running server
+/// that tracks this URI. If no more documents are open for a server,
+/// its idle shutdown timer starts.
 #[tauri::command]
 pub async fn lsp_close_file(
     path: String,
@@ -72,21 +79,33 @@ pub async fn lsp_close_file(
         None => return Ok(IpcResponse::err("Could not determine file extension")),
     };
 
-    let lang_id = match detection::language_id_for_extension(&ext) {
-        Some(id) => id.to_string(),
-        None => return Ok(IpcResponse::ok_empty()),
-    };
-
     let uri = types::file_uri(&path, &project_root);
 
-    let mut manager = state.0.lock().await;
-    match manager.close_document(&uri, &lang_id).await {
-        Ok(()) => Ok(IpcResponse::ok_empty()),
-        Err(e) => Ok(IpcResponse::err(e)),
+    // Find all server IDs that match this extension
+    let lang_ids = detection::language_ids_for_extension(&ext);
+    if lang_ids.is_empty() {
+        return Ok(IpcResponse::ok_empty());
     }
+
+    let mut manager = state.0.lock().await;
+
+    // Close in all matching servers that are currently running
+    for lang_id in &lang_ids {
+        let key = crate::lsp::server_key(lang_id, &project_root);
+        // Only close if server exists and has this document open
+        let has_doc = manager.servers.get(&key)
+            .map_or(false, |s| s.open_docs.contains(&uri) || s.background_docs.contains(&uri));
+        if has_doc {
+            if let Err(e) = manager.close_document(&uri, lang_id, &project_root).await {
+                tracing::warn!("Failed to close document in '{}' server: {}", lang_id, e);
+            }
+        }
+    }
+
+    Ok(IpcResponse::ok_empty())
 }
 
-/// Notify the LSP server of file content changes.
+/// Notify ALL matching LSP servers of file content changes.
 #[tauri::command]
 pub async fn lsp_change_file(
     path: String,
@@ -100,24 +119,34 @@ pub async fn lsp_change_file(
         None => return Ok(IpcResponse::err("Could not determine file extension")),
     };
 
-    let lang_id = match detection::language_id_for_extension(&ext) {
-        Some(id) => id.to_string(),
-        None => return Ok(IpcResponse::ok_empty()),
-    };
-
     let uri = types::file_uri(&path, &project_root);
 
-    let mut manager = state.0.lock().await;
-    match manager
-        .change_document(&uri, &lang_id, &content, version)
-        .await
-    {
-        Ok(()) => Ok(IpcResponse::ok_empty()),
-        Err(e) => Ok(IpcResponse::err(e)),
+    let lang_ids = detection::language_ids_for_extension(&ext);
+    if lang_ids.is_empty() {
+        return Ok(IpcResponse::ok_empty());
     }
+
+    let mut manager = state.0.lock().await;
+
+    // Send didChange to all running servers that have this document open
+    for lang_id in &lang_ids {
+        let key = crate::lsp::server_key(lang_id, &project_root);
+        let has_doc = manager.servers.get(&key)
+            .map_or(false, |s| s.open_docs.contains(&uri));
+        if has_doc {
+            if let Err(e) = manager
+                .change_document(&uri, lang_id, &content, version, &project_root)
+                .await
+            {
+                tracing::warn!("Failed to send didChange to '{}' server: {}", lang_id, e);
+            }
+        }
+    }
+
+    Ok(IpcResponse::ok_empty())
 }
 
-/// Notify the LSP server that a file was saved.
+/// Notify ALL matching LSP servers that a file was saved.
 #[tauri::command]
 pub async fn lsp_save_file(
     path: String,
@@ -130,18 +159,28 @@ pub async fn lsp_save_file(
         None => return Ok(IpcResponse::err("Could not determine file extension")),
     };
 
-    let lang_id = match detection::language_id_for_extension(&ext) {
-        Some(id) => id.to_string(),
-        None => return Ok(IpcResponse::ok_empty()),
-    };
-
     let uri = types::file_uri(&path, &project_root);
 
-    let mut manager = state.0.lock().await;
-    match manager.save_document(&uri, &lang_id, &content).await {
-        Ok(()) => Ok(IpcResponse::ok_empty()),
-        Err(e) => Ok(IpcResponse::err(e)),
+    let lang_ids = detection::language_ids_for_extension(&ext);
+    if lang_ids.is_empty() {
+        return Ok(IpcResponse::ok_empty());
     }
+
+    let mut manager = state.0.lock().await;
+
+    // Send didSave to all running servers that have this document open
+    for lang_id in &lang_ids {
+        let key = crate::lsp::server_key(lang_id, &project_root);
+        let has_doc = manager.servers.get(&key)
+            .map_or(false, |s| s.open_docs.contains(&uri));
+        if has_doc {
+            if let Err(e) = manager.save_document(&uri, lang_id, &content, &project_root).await {
+                tracing::warn!("Failed to send didSave to '{}' server: {}", lang_id, e);
+            }
+        }
+    }
+
+    Ok(IpcResponse::ok_empty())
 }
 
 /// Request completion items at a position in a file.
@@ -167,7 +206,7 @@ pub async fn lsp_request_completion(
 
     let mut manager = state.0.lock().await;
     match manager
-        .request_completion(&uri, &lang_id, line, character)
+        .request_completion(&uri, &lang_id, line, character, &project_root)
         .await
     {
         Ok(result) => Ok(IpcResponse::ok(result)),
@@ -198,7 +237,7 @@ pub async fn lsp_request_hover(
 
     let mut manager = state.0.lock().await;
     match manager
-        .request_hover(&uri, &lang_id, line, character)
+        .request_hover(&uri, &lang_id, line, character, &project_root)
         .await
     {
         Ok(result) => Ok(IpcResponse::ok(result)),
@@ -229,7 +268,7 @@ pub async fn lsp_request_signature_help(
 
     let mut manager = state.0.lock().await;
     match manager
-        .request_signature_help(&uri, &lang_id, line, character)
+        .request_signature_help(&uri, &lang_id, line, character, &project_root)
         .await
     {
         Ok(result) => Ok(IpcResponse::ok(result)),
@@ -260,7 +299,7 @@ pub async fn lsp_request_definition(
 
     let mut manager = state.0.lock().await;
     match manager
-        .request_definition(&uri, &lang_id, line, character)
+        .request_definition(&uri, &lang_id, line, character, &project_root)
         .await
     {
         Ok(result) => Ok(IpcResponse::ok(result)),
@@ -289,7 +328,7 @@ pub async fn lsp_request_document_symbols(
 
     let mut manager = state.0.lock().await;
     match manager
-        .request_document_symbols(&uri, &lang_id)
+        .request_document_symbols(&uri, &lang_id, &project_root)
         .await
     {
         Ok(result) => Ok(IpcResponse::ok(result)),
@@ -320,7 +359,7 @@ pub async fn lsp_request_references(
 
     let mut manager = state.0.lock().await;
     match manager
-        .request_references(&uri, &lang_id, line, character)
+        .request_references(&uri, &lang_id, line, character, &project_root)
         .await
     {
         Ok(result) => Ok(IpcResponse::ok(result)),
@@ -362,6 +401,7 @@ pub async fn lsp_request_code_actions(
             range_end_line,
             range_end_char,
             diagnostics,
+            &project_root,
         )
         .await
     {
@@ -393,7 +433,7 @@ pub async fn lsp_prepare_rename(
 
     let mut manager = state.0.lock().await;
     match manager
-        .request_prepare_rename(&uri, &lang_id, line, character)
+        .request_prepare_rename(&uri, &lang_id, line, character, &project_root)
         .await
     {
         Ok(result) => Ok(IpcResponse::ok(result)),
@@ -425,7 +465,7 @@ pub async fn lsp_rename(
 
     let mut manager = state.0.lock().await;
     match manager
-        .request_rename(&uri, &lang_id, line, character, &new_name)
+        .request_rename(&uri, &lang_id, line, character, &new_name, &project_root)
         .await
     {
         Ok(result) => Ok(IpcResponse::ok(result)),
@@ -456,7 +496,7 @@ pub async fn lsp_request_formatting(
 
     let mut manager = state.0.lock().await;
     match manager
-        .request_formatting(&uri, &lang_id, tab_size, insert_spaces)
+        .request_formatting(&uri, &lang_id, tab_size, insert_spaces, &project_root)
         .await
     {
         Ok(result) => Ok(IpcResponse::ok(result)),
@@ -500,6 +540,7 @@ pub async fn lsp_request_range_formatting(
             range_end_char,
             tab_size,
             insert_spaces,
+            &project_root,
         )
         .await
     {
@@ -641,6 +682,196 @@ pub async fn lsp_apply_workspace_edit(
     }
 
     IpcResponse::ok(json!({ "filesChanged": files_changed }))
+}
+
+/// Scan project files for a language and send didOpen to the LSP server.
+///
+/// This enables project-wide diagnostics by opening matching files in the
+/// background. Files are tracked separately from user-opened documents.
+#[tauri::command]
+pub async fn lsp_scan_project(
+    lang_id: String,
+    project_root: String,
+    state: State<'_, LspManagerState>,
+) -> Result<IpcResponse, ()> {
+    let mut manager = state.0.lock().await;
+    match manager.scan_project_files(&lang_id, &project_root).await {
+        Ok(count) => Ok(IpcResponse::ok(json!({"scanned": count}))),
+        Err(e) => Ok(IpcResponse::err(e)),
+    }
+}
+
+/// Get a list of all known LSP servers from the manifest with install status.
+///
+/// Returns an array of server objects (id, languageId, binary, installed).
+/// Does not require LspManagerState -- reads the manifest and checks PATH.
+#[tauri::command]
+pub async fn lsp_get_server_list(
+    _app: AppHandle,
+) -> Result<IpcResponse, ()> {
+    let servers = detection::detect_all();
+    let list: Vec<serde_json::Value> = servers
+        .iter()
+        .map(|s| {
+            json!({
+                "id": s.server_id,
+                "languageId": s.language_id,
+                "binary": s.binary,
+                "installed": s.installed,
+            })
+        })
+        .collect();
+    Ok(IpcResponse::ok(json!(list)))
+}
+
+/// Manually trigger installation of a specific LSP server by ID.
+///
+/// Loads the manifest, finds the server entry, and runs the appropriate
+/// install method (npm or github-release).
+/// Emits `lsp-install-status` events for progress tracking.
+#[tauri::command]
+pub async fn lsp_install_server(
+    app: AppHandle,
+    server_id: String,
+) -> Result<IpcResponse, ()> {
+    let manifest = match crate::lsp::manifest::load_manifest() {
+        Ok(m) => m,
+        Err(e) => return Ok(IpcResponse::err(format!("Failed to load manifest: {}", e))),
+    };
+
+    let entry = match manifest.servers.get(&server_id) {
+        Some(e) => e,
+        None => return Ok(IpcResponse::err(format!("Unknown server: {}", server_id))),
+    };
+
+    let lsp_dir = match crate::lsp::installer::get_lsp_servers_dir() {
+        Ok(d) => d,
+        Err(e) => return Ok(IpcResponse::err(e)),
+    };
+
+    let result = match entry.install.install_type.as_str() {
+        "npm" => {
+            crate::lsp::installer::install_server(
+                &server_id,
+                &entry.install.packages,
+                &entry.install.version,
+                &lsp_dir,
+                Some(&app),
+            )
+            .await
+        }
+        "github-release" => {
+            crate::lsp::installer::install_github_release(
+                &server_id,
+                &entry.install.repo,
+                &entry.install.asset_pattern,
+                &entry.install.version,
+                &lsp_dir,
+                Some(&app),
+            )
+            .await
+        }
+        other => Err(format!("Unknown install type: {}", other)),
+    };
+
+    match result {
+        Ok(()) => Ok(IpcResponse::ok(json!({ "ok": true, "server": server_id }))),
+        Err(e) => Ok(IpcResponse::err(e)),
+    }
+}
+
+/// Toggle a server enabled/disabled in the user config.
+///
+/// Updates the `lspServers` config field and persists to disk using the
+/// same mechanism as `set_config`.
+#[tauri::command]
+pub fn lsp_set_server_enabled(
+    server_id: String,
+    enabled: bool,
+) -> IpcResponse {
+    use crate::commands::config::CONFIG;
+    use crate::config::persistence;
+    use crate::services::platform;
+
+    let mut guard = match CONFIG.lock() {
+        Ok(g) => g,
+        Err(e) => return IpcResponse::err(format!("Failed to lock config: {}", e)),
+    };
+
+    // Update the lsp_servers map
+    let override_val = guard
+        .lsp_servers
+        .entry(server_id.clone())
+        .or_insert_with(|| json!({}));
+
+    if let Some(obj) = override_val.as_object_mut() {
+        obj.insert("enabled".to_string(), json!(enabled));
+    } else {
+        // Value is not an object -- replace it
+        *override_val = json!({ "enabled": enabled });
+    }
+
+    // Persist to disk
+    let config_dir = platform::get_config_dir();
+    if let Err(e) = persistence::save_config(&config_dir, &guard) {
+        return IpcResponse::err(e);
+    }
+
+    IpcResponse::ok(json!({ "ok": true, "server": server_id, "enabled": enabled }))
+}
+
+/// Restart a specific LSP server (shut down + re-launch).
+#[tauri::command]
+pub async fn lsp_restart_server(
+    lang_id: String,
+    project_root: String,
+    state: State<'_, LspManagerState>,
+) -> Result<IpcResponse, ()> {
+    let mut manager = state.0.lock().await;
+    manager.shutdown_server(&lang_id, &project_root).await.ok();
+    match manager.ensure_server(&lang_id, &project_root).await {
+        Ok(()) => Ok(IpcResponse::ok(json!({"restarted": true}))),
+        Err(e) => Ok(IpcResponse::err(e)),
+    }
+}
+
+/// Get detailed information about a specific running LSP server.
+///
+/// Returns full stderr buffer, open document URIs, crash count, etc.
+#[tauri::command]
+pub async fn lsp_get_server_detail(
+    lang_id: String,
+    project_root: String,
+    state: State<'_, LspManagerState>,
+) -> Result<IpcResponse, ()> {
+    let manager = state.0.lock().await;
+    let key = crate::lsp::server_key(&lang_id, &project_root);
+    match manager.servers.get(&key) {
+        Some(server) => {
+            let stderr = server
+                .stderr_lines
+                .try_lock()
+                .map(|buf| buf.clone())
+                .unwrap_or_default();
+            Ok(IpcResponse::ok(json!({
+                "languageId": server.language_id,
+                "binary": server.binary,
+                "state": server.state,
+                "projectRoot": server.project_root,
+                "version": server.version,
+                "serverName": server.server_name,
+                "crashCount": server.crash_count,
+                "lastError": server.last_error,
+                "openDocs": server.open_docs.iter().collect::<Vec<_>>(),
+                "stderrLines": stderr,
+                "pid": server.process.id(),
+            })))
+        }
+        None => Ok(IpcResponse::err(format!(
+            "No server found for {} in {}",
+            lang_id, project_root
+        ))),
+    }
 }
 
 /// Get the status of all running LSP servers.

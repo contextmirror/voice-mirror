@@ -141,10 +141,17 @@ describe('api.js -- critical Tauri command names', () => {
     'git_commit',
     'git_discard',
     'git_push',
+    'git_ahead_behind',
+    'git_fetch',
+    'git_pull',
+    'git_force_push',
+    // Terminal profiles
+    'terminal_detect_profiles',
     // LSP
     'lsp_request_formatting',
     'lsp_request_range_formatting',
     'lsp_request_signature_help',
+    'lsp_scan_project',
   ];
 
   for (const cmd of criticalCommands) {
@@ -238,6 +245,13 @@ describe('api.js -- exported async functions', () => {
     'lensCloseTab',
     'lensSwitchTab',
     'lensCloseAllTabs',
+    // Device Preview
+    'lensCreateDeviceWebview',
+    'lensCloseDeviceWebview',
+    'lensCloseAllDeviceWebviews',
+    'lensResizeDeviceWebview',
+    'lensEvalDeviceJs',
+    'lensSetDeviceEmulation',
     // GPU / Model Management
     'detectGpu',
     'listSttModels',
@@ -270,11 +284,18 @@ describe('api.js -- exported async functions', () => {
     'gitCommit',
     'gitDiscard',
     'gitPush',
-    // Shell Terminals
-    'shellSpawn',
-    'shellInput',
-    'shellResize',
-    'shellKill',
+    'gitAheadBehind',
+    'gitFetch',
+    'gitPull',
+    'gitForcePush',
+    'gitListBranches',
+    'gitCheckoutBranch',
+    // Terminals
+    'terminalSpawn',
+    'terminalInput',
+    'terminalResize',
+    'terminalKill',
+    'terminalDetectProfiles',
     // LSP
     'lspOpenFile',
     'lspCloseFile',
@@ -293,6 +314,15 @@ describe('api.js -- exported async functions', () => {
     'lspRequestFormatting',
     'lspRequestRangeFormatting',
     'lspRequestSignatureHelp',
+    'lspScanProject',
+    'lspGetServerList',
+    'lspInstallServer',
+    'lspSetServerEnabled',
+    'lspRestartServer',
+    'lspGetServerDetail',
+    'lspShutdown',
+    'getOutputLogs',
+    'logFrontendError',
   ];
 
   for (const fn of expectedExports) {
@@ -316,7 +346,7 @@ describe('api.js -- exported async functions', () => {
 });
 
 describe('api.js -- section organization', () => {
-  const sections = ['Config', 'Window', 'Voice', 'AI', 'Inbox', 'Chat', 'Screenshot', 'Tools', 'Shortcuts', 'Performance Stats', 'Config Migration', 'Design Overlay', 'Lens', 'Browser Tabs', 'Dev Server', 'GPU / Model Management', 'Files', 'Shell Terminals', 'LSP'];
+  const sections = ['Config', 'Window', 'Voice', 'AI', 'Inbox', 'Chat', 'Screenshot', 'Tools', 'Shortcuts', 'Performance Stats', 'Config Migration', 'Design Overlay', 'Lens', 'Browser Tabs', 'Dev Server', 'GPU / Model Management', 'Files', 'Terminal', 'LSP', 'Output / Diagnostics'];
 
   for (const section of sections) {
     it(`has "${section}" section comment`, () => {

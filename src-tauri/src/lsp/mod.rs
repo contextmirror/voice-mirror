@@ -9,20 +9,53 @@
 
 pub mod client;
 pub mod detection;
+pub mod installer;
+pub mod manifest;
 pub mod types;
 
 use std::collections::{HashMap, HashSet};
-use std::sync::atomic::AtomicI64;
+use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 
+/// Once-per-session flag: emit `lsp-node-not-found` only once.
+static NODE_NOT_FOUND_EMITTED: AtomicBool = AtomicBool::new(false);
+
+/// Maximum number of stderr lines retained per server for diagnostic display.
+const MAX_STDERR_LINES: usize = 50;
+
+/// Maximum number of files to scan for background diagnostics.
+const MAX_SCAN_FILES: usize = 500;
+
+/// Directories to skip during project file scanning.
+const SKIP_DIRS: &[&str] = &[
+    "node_modules",
+    ".git",
+    "dist",
+    "build",
+    "target",
+    ".svelte-kit",
+    "__pycache__",
+];
+
+/// Number of didOpen notifications to send per batch during background scanning.
+const SCAN_BATCH_SIZE: usize = 10;
+
+/// Delay in milliseconds between batches of background didOpen notifications.
+const SCAN_BATCH_DELAY_MS: u64 = 100;
+
 use serde_json::Value;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 use tokio::process::{Child, ChildStdin};
-use tokio::sync::{oneshot, Mutex};
-use tracing::{info, warn};
+use tokio::sync::{oneshot, watch, Mutex};
+use tracing::{debug, info, warn};
 
 use types::{LspServerStatus, LspServerStatusEvent};
+
+/// Build a composite key for the server HashMap: "lang_id::project_root"
+pub(crate) fn server_key(lang_id: &str, project_root: &str) -> String {
+    format!("{}::{}", lang_id, project_root)
+}
 
 /// A running LSP server process.
 pub struct LspServer {
@@ -31,11 +64,26 @@ pub struct LspServer {
     pub process: Child,
     pub next_id: AtomicI64,
     pub open_docs: HashSet<String>,
-    pub stdin: ChildStdin,
+    /// URIs of files opened via background project scan (not user-opened).
+    /// When the user opens one of these files in the editor, it gets promoted
+    /// to `open_docs` (didClose + didOpen with fresh editor content).
+    pub background_docs: HashSet<String>,
+    pub stdin: Arc<Mutex<ChildStdin>>,
     pub capabilities: Option<lsp_types::ServerCapabilities>,
-    pub pending_requests: Arc<Mutex<HashMap<i64, oneshot::Sender<Value>>>>,
+    pub pending_requests: Arc<Mutex<HashMap<i64, (oneshot::Sender<Value>, Instant)>>>,
     pub crash_count: u32,
     pub last_crash: Option<Instant>,
+    pub state: types::ServerState,
+    pub project_root: String,
+    pub last_error: Option<String>,
+    pub stderr_lines: Arc<Mutex<Vec<String>>>,
+    /// Cancel sender for idle shutdown timer. When all documents close, a 60s
+    /// timer starts; sending on this channel cancels the pending shutdown.
+    pub idle_cancel: Option<watch::Sender<bool>>,
+    /// Server name from initialize response (serverInfo.name).
+    pub server_name: Option<String>,
+    /// Server version from initialize response (serverInfo.version).
+    pub version: Option<String>,
 }
 
 /// Manages all LSP server processes.
@@ -66,7 +114,7 @@ impl LspManager {
         lang_id: &str,
         project_root: &str,
     ) -> Result<(), String> {
-        if self.servers.contains_key(lang_id) {
+        if self.servers.contains_key(&server_key(lang_id, project_root)) {
             return Ok(());
         }
 
@@ -76,12 +124,89 @@ impl LspManager {
         )
         .ok_or_else(|| format!("No LSP server configured for language '{}'", lang_id))?;
 
-        if !server_info.installed {
-            return Err(format!(
-                "LSP server '{}' for '{}' is not installed (not found on PATH)",
-                server_info.binary, lang_id
-            ));
-        }
+        // If server binary not found, attempt auto-install
+        let server_info = if !server_info.installed {
+            // Load manifest to get install config
+            let manifest = manifest::load_manifest()
+                .map_err(|e| format!("Failed to load LSP manifest: {}", e))?;
+
+            let server_id = server_info
+                .server_id
+                .as_deref()
+                .ok_or_else(|| "No server_id for auto-install".to_string())?;
+
+            let entry = manifest
+                .servers
+                .get(server_id)
+                .ok_or_else(|| format!("Server '{}' not found in manifest", server_id))?;
+
+            // Get install directory
+            let lsp_dir = installer::get_lsp_servers_dir()
+                .map_err(|e| format!("Failed to get LSP servers directory: {}", e))?;
+
+            // Install the server using the appropriate method
+            info!(
+                "Auto-installing LSP server '{}' for language '{}'",
+                server_id, lang_id
+            );
+
+            match entry.install.install_type.as_str() {
+                "npm" => {
+                    // Check if Node.js is available (only needed for npm installs)
+                    let node_status = installer::detect_node();
+                    if !node_status.available {
+                        // Emit lsp-node-not-found event once per session
+                        if NODE_NOT_FOUND_EMITTED
+                            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+                            .is_ok()
+                        {
+                            let _ = self.app_handle.emit("lsp-node-not-found", ());
+                        }
+                        return Err(format!(
+                            "LSP server '{}' requires Node.js for installation. Install Node.js from nodejs.org",
+                            server_info.binary
+                        ));
+                    }
+
+                    installer::install_server(
+                        server_id,
+                        &entry.install.packages,
+                        &entry.install.version,
+                        &lsp_dir,
+                        Some(&self.app_handle),
+                    )
+                    .await?;
+                }
+                "github-release" => {
+                    installer::install_github_release(
+                        server_id,
+                        &entry.install.repo,
+                        &entry.install.asset_pattern,
+                        &entry.install.version,
+                        &lsp_dir,
+                        Some(&self.app_handle),
+                    )
+                    .await?;
+                }
+                other => {
+                    return Err(format!(
+                        "Unknown install type '{}' for server '{}'",
+                        other, server_id
+                    ));
+                }
+            }
+
+            // Retry detection after install
+            detection::detect_for_extension(&self.extension_for_language(lang_id))
+                .ok_or_else(|| format!("Server '{}' still not found after install", server_id))?
+        } else {
+            server_info
+        };
+
+        // Invariant: server_info.installed is always true here because:
+        // - the else branch only executes when it was already true
+        // - the if branch retries detect_for_extension which only returns Some when binary found
+        debug_assert!(server_info.installed, "ServerInfo should have installed=true after detection");
 
         info!(
             "Starting LSP server '{}' for language '{}'",
@@ -150,19 +275,25 @@ impl LspManager {
             ));
         }
 
-        let mut stdin = process
+        let stdin = process
             .stdin
             .take()
             .ok_or("Failed to get LSP server stdin")?;
+        let stdin = Arc::new(Mutex::new(stdin));
         let stdout = process
             .stdout
             .take()
             .ok_or("Failed to get LSP server stdout")?;
 
+        // Shared buffer for stderr lines — cloned into the task below, also
+        // stored on LspServer so get_status() can read recent lines.
+        let stderr_buf: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+
         // Spawn a task to log stderr output (deduped + rate-limited)
         if let Some(stderr) = process.stderr.take() {
             let lang_id_clone = lang_id.to_string();
             let binary_clone = server_info.binary.clone();
+            let stderr_buf_clone = stderr_buf.clone();
             tokio::spawn(async move {
                 use tokio::io::{AsyncBufReadExt, BufReader};
                 let mut reader = BufReader::new(stderr);
@@ -179,31 +310,65 @@ impl LspManager {
                             if trimmed.is_empty() {
                                 continue;
                             }
-                            if trimmed == last_msg {
+
+                            // Capture the raw line into the shared buffer (capped)
+                            {
+                                let mut buf = stderr_buf_clone.lock().await;
+                                if buf.len() >= MAX_STDERR_LINES {
+                                    buf.remove(0);
+                                }
+                                buf.push(trimmed.to_string());
+                            }
+
+                            // Strip leading timestamp for dedup comparison
+                            // rust-analyzer format: "2026-02-28T16:49:56.717Z  WARN ..."
+                            let msg_body = if trimmed.len() > 30 && trimmed.as_bytes()[4] == b'-' {
+                                // Skip past "YYYY-MM-DDTHH:MM:SS.fffffffZ  "
+                                trimmed.find("  ").map_or(trimmed, |i| &trimmed[i..]).trim()
+                            } else {
+                                trimmed
+                            };
+
+                            if msg_body == last_msg {
                                 repeat_count += 1;
                                 continue;
                             }
+
                             // Flush previous repeated message
                             if repeat_count > 0 {
-                                warn!(
+                                debug!(
                                     "[{}/{}] stderr: (repeated {} more times)",
                                     lang_id_clone, binary_clone, repeat_count
                                 );
                                 repeat_count = 0;
                             }
-                            warn!(
-                                "[{}/{}] stderr: {}",
-                                lang_id_clone, binary_clone, trimmed
-                            );
+
+                            // Downgrade known-noisy LSP messages to debug level
+                            let is_noise = msg_body.contains("notify error: Input watch path")
+                                || msg_body.contains("inference diagnostic in desugared")
+                                || msg_body.contains("overly long loop turn");
+
+                            if is_noise {
+                                debug!(
+                                    "[{}/{}] stderr: {}",
+                                    lang_id_clone, binary_clone, msg_body
+                                );
+                            } else {
+                                warn!(
+                                    "[{}/{}] stderr: {}",
+                                    lang_id_clone, binary_clone, trimmed
+                                );
+                            }
+
                             last_msg.clear();
-                            last_msg.push_str(trimmed);
+                            last_msg.push_str(msg_body);
                         }
                         Err(_) => break,
                     }
                 }
                 // Flush any remaining repeats
                 if repeat_count > 0 {
-                    warn!(
+                    debug!(
                         "[{}/{}] stderr: (repeated {} more times)",
                         lang_id_clone, binary_clone, repeat_count
                     );
@@ -211,7 +376,7 @@ impl LspManager {
             });
         }
 
-        let pending: Arc<Mutex<HashMap<i64, oneshot::Sender<Value>>>> =
+        let pending: Arc<Mutex<HashMap<i64, (oneshot::Sender<Value>, Instant)>>> =
             Arc::new(Mutex::new(HashMap::new()));
         let next_id = AtomicI64::new(1);
 
@@ -222,15 +387,39 @@ impl LspManager {
             self.app_handle.clone(),
             lang_id.to_string(),
             Arc::clone(&pending),
+            Arc::clone(&stdin),
+            server_key(lang_id, project_root),
         );
 
         // Build the root URI for the project
         let root_uri = types::file_uri("", project_root);
 
+        // Load initializationOptions from the manifest entry (if available).
+        // This is critical for servers like Svelte LS that need configuration
+        // (e.g., diagnostics enable, TypeScript SDK path) at init time.
+        let init_options = manifest::load_manifest()
+            .ok()
+            .and_then(|m| {
+                server_info
+                    .server_id
+                    .as_deref()
+                    .and_then(|id| m.servers.get(id).cloned())
+            })
+            .map(|entry| entry.initialization_options)
+            .unwrap_or(serde_json::Value::Null);
+
         // Send initialize request
         let init_params = serde_json::json!({
             "processId": std::process::id(),
             "rootUri": root_uri,
+            "workspaceFolders": [{
+                "uri": root_uri,
+                "name": std::path::Path::new(project_root)
+                    .file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_else(|| project_root.to_string()),
+            }],
+            "initializationOptions": init_options,
             "capabilities": {
                 "textDocument": {
                     "synchronization": {
@@ -296,11 +485,17 @@ impl LspManager {
                     "publishDiagnostics": {
                         "relatedInformation": false
                     }
+                },
+                "workspace": {
+                    "workspaceFolders": {
+                        "supported": true,
+                        "changeNotifications": true
+                    }
                 }
             }
         });
 
-        let rx = client::send_request(&mut stdin, &pending, "initialize", init_params, &next_id)
+        let rx = client::send_request(&mut *stdin.lock().await, &pending, "initialize", init_params, &next_id)
             .await?;
 
         // Wait for the initialize response (with timeout)
@@ -315,35 +510,123 @@ impl LspManager {
             .and_then(|r| r.get("capabilities"))
             .and_then(|c| serde_json::from_value::<lsp_types::ServerCapabilities>(c.clone()).ok());
 
+        // Extract server name and version from serverInfo in the response
+        let server_name = response
+            .get("result")
+            .and_then(|r| r.get("serverInfo"))
+            .and_then(|si| si.get("name"))
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
+        let version = response
+            .get("result")
+            .and_then(|r| r.get("serverInfo"))
+            .and_then(|si| si.get("version"))
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
+        if let Some(ref name) = server_name {
+            if let Some(ref ver) = version {
+                info!("LSP serverInfo: {} v{}", name, ver);
+            } else {
+                info!("LSP serverInfo: {} (no version)", name);
+            }
+        }
+
         // Send initialized notification
-        client::send_notification(&mut stdin, "initialized", serde_json::json!({})).await?;
+        client::send_notification(&mut *stdin.lock().await, "initialized", serde_json::json!({})).await?;
 
         info!(
             "LSP server '{}' initialized for language '{}'",
             server_info.binary, lang_id
         );
 
+        // Clone pending_requests Arc for the health check task
+        let health_pending = Arc::clone(&pending);
+        let health_key = server_key(lang_id, project_root);
+
         // Store the server
         self.servers.insert(
-            lang_id.to_string(),
+            health_key.clone(),
             LspServer {
                 language_id: lang_id.to_string(),
                 binary: server_info.binary.clone(),
                 process,
                 next_id,
                 open_docs: HashSet::new(),
+                background_docs: HashSet::new(),
                 stdin,
                 capabilities,
                 pending_requests: pending,
                 crash_count: 0,
                 last_crash: None,
+                state: types::ServerState::Running,
+                project_root: project_root.to_string(),
+                last_error: None,
+                stderr_lines: stderr_buf,
+                idle_cancel: None,
+                server_name,
+                version,
             },
+        );
+
+        // Spawn health check task to detect stale/unresponsive requests
+        spawn_health_check(
+            self.app_handle.clone(),
+            health_key,
+            health_pending,
+            lang_id.to_string(),
         );
 
         // Emit status update
         self.emit_status();
 
+        // Trigger background project scan (non-blocking).
+        // Spawns a task that waits for the server to finish initialization
+        // before scanning project files for diagnostics.
+        let scan_lang = lang_id.to_string();
+        let scan_root = project_root.to_string();
+        let scan_app = self.app_handle.clone();
+        tokio::spawn(async move {
+            // Small delay to let server finish initialization
+            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+            let lsp_state: tauri::State<'_, LspManagerState> = scan_app.state();
+            let mut manager = lsp_state.0.lock().await;
+            if let Err(e) = manager.scan_project_files(&scan_lang, &scan_root).await {
+                warn!("Background scan failed for '{}': {}", scan_lang, e);
+            }
+        });
+
         Ok(())
+    }
+
+    /// Ensure ALL servers matching a file extension are running (primary + supplementary).
+    ///
+    /// Loads the manifest, finds all matching servers for the extension, and starts
+    /// each one. Returns the list of server IDs (lang_ids) that were successfully
+    /// started or were already running. Logs warnings for servers that fail to start
+    /// but does not fail the entire operation — partial success is acceptable.
+    pub async fn ensure_servers_for_extension(
+        &mut self,
+        ext: &str,
+        project_root: &str,
+    ) -> Result<Vec<String>, String> {
+        let server_infos = detection::detect_all_for_extension(ext);
+
+        if server_infos.is_empty() {
+            return Err(format!("No LSP servers configured for .{} files", ext));
+        }
+
+        let mut started = Vec::new();
+        for info in &server_infos {
+            let server_id = info.language_id.clone();
+            if let Err(e) = self.ensure_server(&server_id, project_root).await {
+                warn!("Failed to start '{}' server for .{}: {}", server_id, ext, e);
+            } else {
+                started.push(server_id);
+            }
+        }
+        Ok(started)
     }
 
     /// Open a document in the LSP server.
@@ -352,19 +635,42 @@ impl LspManager {
         uri: &str,
         lang_id: &str,
         content: &str,
+        project_root: &str,
     ) -> Result<(), String> {
         let server = self
             .servers
-            .get_mut(lang_id)
+            .get_mut(&server_key(lang_id, project_root))
             .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
 
-        // Don't re-open if already tracked
+        // Cancel any pending idle shutdown timer
+        if let Some(tx) = server.idle_cancel.take() {
+            info!("Cancelling idle shutdown timer for '{}' — new document opened", lang_id);
+            let _ = tx.send(true);
+        }
+
+        // Background → foreground promotion: if the file was opened via background
+        // scan, close the stale background version first so we can re-open it with
+        // the user's fresh editor content.
+        if server.background_docs.contains(uri) {
+            info!("Promoting background doc to foreground: {}", uri);
+            client::send_notification(
+                &mut *server.stdin.lock().await,
+                "textDocument/didClose",
+                serde_json::json!({
+                    "textDocument": { "uri": uri }
+                }),
+            )
+            .await?;
+            server.background_docs.remove(uri);
+        }
+
+        // Don't re-open if already tracked as a user-opened doc
         if server.open_docs.contains(uri) {
             return Ok(());
         }
 
         client::send_notification(
-            &mut server.stdin,
+            &mut *server.stdin.lock().await,
             "textDocument/didOpen",
             serde_json::json!({
                 "textDocument": {
@@ -383,12 +689,16 @@ impl LspManager {
 
     /// Close a document in the LSP server.
     ///
-    /// If no more documents are open for this language, shuts down the server.
-    pub async fn close_document(&mut self, uri: &str, lang_id: &str) -> Result<(), String> {
+    /// If no more documents are open for this language, starts a 60-second idle
+    /// shutdown timer. If a new document opens within that window the timer is
+    /// cancelled. This avoids expensive server restarts when the user is just
+    /// switching between files.
+    pub async fn close_document(&mut self, uri: &str, lang_id: &str, project_root: &str) -> Result<(), String> {
         // Send didClose notification
-        if let Some(server) = self.servers.get_mut(lang_id) {
+        let key = server_key(lang_id, project_root);
+        if let Some(server) = self.servers.get_mut(&key) {
             client::send_notification(
-                &mut server.stdin,
+                &mut *server.stdin.lock().await,
                 "textDocument/didClose",
                 serde_json::json!({
                     "textDocument": { "uri": uri }
@@ -397,27 +707,74 @@ impl LspManager {
             .await?;
 
             server.open_docs.remove(uri);
+            server.background_docs.remove(uri);
 
-            // If no more open docs, shut down the server
-            if server.open_docs.is_empty() {
+            // If no more open docs (user or background), start the idle shutdown timer
+            if server.open_docs.is_empty() && server.background_docs.is_empty() {
                 info!(
-                    "No more open documents for '{}', shutting down server",
+                    "No more open documents for '{}', starting 60s idle shutdown timer",
                     lang_id
                 );
-                // We need to remove the server to shut it down
-                // (can't call shutdown_server while borrowing servers)
-            } else {
-                return Ok(());
-            }
-        }
 
-        // Shutdown server if no docs remain (done outside the borrow above)
-        if self
-            .servers
-            .get(lang_id)
-            .map_or(false, |s| s.open_docs.is_empty())
-        {
-            self.shutdown_server(lang_id).await?;
+                // Cancel any existing idle timer first
+                if let Some(old_tx) = server.idle_cancel.take() {
+                    let _ = old_tx.send(true);
+                }
+
+                // Create a watch channel for cancellation
+                let (tx, mut rx) = watch::channel(false);
+                server.idle_cancel = Some(tx);
+
+                // Spawn idle shutdown task
+                let app_handle = self.app_handle.clone();
+                let idle_lang_id = lang_id.to_string();
+                let idle_project_root = project_root.to_string();
+                let idle_key = key.clone();
+
+                tokio::spawn(async move {
+                    tokio::select! {
+                        _ = tokio::time::sleep(std::time::Duration::from_secs(60)) => {
+                            // Timer expired — shut down the idle server
+                            info!(
+                                "Idle shutdown timer expired for '{}' — shutting down server",
+                                idle_lang_id
+                            );
+                            let lsp_state: tauri::State<'_, LspManagerState> = app_handle.state();
+                            let mut manager = lsp_state.0.lock().await;
+
+                            // Double-check the server still exists and is still idle
+                            let still_idle = manager
+                                .servers
+                                .get(&idle_key)
+                                .map_or(false, |s| s.open_docs.is_empty());
+
+                            if still_idle {
+                                if let Err(e) = manager
+                                    .shutdown_server(&idle_lang_id, &idle_project_root)
+                                    .await
+                                {
+                                    warn!(
+                                        "Failed to idle-shutdown server for '{}': {}",
+                                        idle_lang_id, e
+                                    );
+                                }
+                            } else {
+                                debug!(
+                                    "Idle shutdown for '{}' skipped — server has open docs again",
+                                    idle_lang_id
+                                );
+                            }
+                        }
+                        _ = rx.changed() => {
+                            // Timer was cancelled — a new document was opened
+                            debug!(
+                                "Idle shutdown timer cancelled for '{}'",
+                                idle_lang_id
+                            );
+                        }
+                    }
+                });
+            }
         }
 
         Ok(())
@@ -430,14 +787,15 @@ impl LspManager {
         lang_id: &str,
         content: &str,
         version: i32,
+        project_root: &str,
     ) -> Result<(), String> {
         let server = self
             .servers
-            .get_mut(lang_id)
+            .get_mut(&server_key(lang_id, project_root))
             .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
 
         client::send_notification(
-            &mut server.stdin,
+            &mut *server.stdin.lock().await,
             "textDocument/didChange",
             serde_json::json!({
                 "textDocument": { "uri": uri, "version": version },
@@ -453,10 +811,11 @@ impl LspManager {
         uri: &str,
         lang_id: &str,
         content: &str,
+        project_root: &str,
     ) -> Result<(), String> {
         let server = self
             .servers
-            .get_mut(lang_id)
+            .get_mut(&server_key(lang_id, project_root))
             .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
 
         // Include text in didSave if the server asked for it
@@ -490,7 +849,7 @@ impl LspManager {
             })
         };
 
-        client::send_notification(&mut server.stdin, "textDocument/didSave", params).await
+        client::send_notification(&mut *server.stdin.lock().await, "textDocument/didSave", params).await
     }
 
     /// Request completion items at a position.
@@ -500,10 +859,11 @@ impl LspManager {
         lang_id: &str,
         line: u32,
         character: u32,
+        project_root: &str,
     ) -> Result<Value, String> {
         let server = self
             .servers
-            .get_mut(lang_id)
+            .get_mut(&server_key(lang_id, project_root))
             .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
 
         let params = serde_json::json!({
@@ -512,7 +872,7 @@ impl LspManager {
         });
 
         let rx = client::send_request(
-            &mut server.stdin,
+            &mut *server.stdin.lock().await,
             &server.pending_requests,
             "textDocument/completion",
             params,
@@ -547,10 +907,11 @@ impl LspManager {
         lang_id: &str,
         line: u32,
         character: u32,
+        project_root: &str,
     ) -> Result<Value, String> {
         let server = self
             .servers
-            .get_mut(lang_id)
+            .get_mut(&server_key(lang_id, project_root))
             .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
 
         let params = serde_json::json!({
@@ -559,7 +920,7 @@ impl LspManager {
         });
 
         let rx = client::send_request(
-            &mut server.stdin,
+            &mut *server.stdin.lock().await,
             &server.pending_requests,
             "textDocument/hover",
             params,
@@ -614,10 +975,11 @@ impl LspManager {
         lang_id: &str,
         line: u32,
         character: u32,
+        project_root: &str,
     ) -> Result<Value, String> {
         let server = self
             .servers
-            .get_mut(lang_id)
+            .get_mut(&server_key(lang_id, project_root))
             .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
 
         let params = serde_json::json!({
@@ -626,7 +988,7 @@ impl LspManager {
         });
 
         let rx = client::send_request(
-            &mut server.stdin,
+            &mut *server.stdin.lock().await,
             &server.pending_requests,
             "textDocument/signatureHelp",
             params,
@@ -655,10 +1017,11 @@ impl LspManager {
         lang_id: &str,
         line: u32,
         character: u32,
+        project_root: &str,
     ) -> Result<Value, String> {
         let server = self
             .servers
-            .get_mut(lang_id)
+            .get_mut(&server_key(lang_id, project_root))
             .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
 
         let params = serde_json::json!({
@@ -667,7 +1030,7 @@ impl LspManager {
         });
 
         let rx = client::send_request(
-            &mut server.stdin,
+            &mut *server.stdin.lock().await,
             &server.pending_requests,
             "textDocument/definition",
             params,
@@ -705,10 +1068,11 @@ impl LspManager {
         &mut self,
         uri: &str,
         lang_id: &str,
+        project_root: &str,
     ) -> Result<Value, String> {
         let server = self
             .servers
-            .get_mut(lang_id)
+            .get_mut(&server_key(lang_id, project_root))
             .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
 
         let params = serde_json::json!({
@@ -716,7 +1080,7 @@ impl LspManager {
         });
 
         let rx = client::send_request(
-            &mut server.stdin,
+            &mut *server.stdin.lock().await,
             &server.pending_requests,
             "textDocument/documentSymbol",
             params,
@@ -748,10 +1112,11 @@ impl LspManager {
         lang_id: &str,
         line: u32,
         character: u32,
+        project_root: &str,
     ) -> Result<Value, String> {
         let server = self
             .servers
-            .get_mut(lang_id)
+            .get_mut(&server_key(lang_id, project_root))
             .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
 
         let params = serde_json::json!({
@@ -761,7 +1126,7 @@ impl LspManager {
         });
 
         let rx = client::send_request(
-            &mut server.stdin,
+            &mut *server.stdin.lock().await,
             &server.pending_requests,
             "textDocument/references",
             params,
@@ -796,10 +1161,11 @@ impl LspManager {
         range_end_line: u32,
         range_end_char: u32,
         diagnostics: Value,
+        project_root: &str,
     ) -> Result<Value, String> {
         let server = self
             .servers
-            .get_mut(lang_id)
+            .get_mut(&server_key(lang_id, project_root))
             .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
 
         let params = serde_json::json!({
@@ -814,7 +1180,7 @@ impl LspManager {
         });
 
         let rx = client::send_request(
-            &mut server.stdin,
+            &mut *server.stdin.lock().await,
             &server.pending_requests,
             "textDocument/codeAction",
             params,
@@ -846,10 +1212,11 @@ impl LspManager {
         lang_id: &str,
         line: u32,
         character: u32,
+        project_root: &str,
     ) -> Result<Value, String> {
         let server = self
             .servers
-            .get_mut(lang_id)
+            .get_mut(&server_key(lang_id, project_root))
             .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
 
         let params = serde_json::json!({
@@ -858,7 +1225,7 @@ impl LspManager {
         });
 
         let rx = client::send_request(
-            &mut server.stdin,
+            &mut *server.stdin.lock().await,
             &server.pending_requests,
             "textDocument/prepareRename",
             params,
@@ -897,10 +1264,11 @@ impl LspManager {
         line: u32,
         character: u32,
         new_name: &str,
+        project_root: &str,
     ) -> Result<Value, String> {
         let server = self
             .servers
-            .get_mut(lang_id)
+            .get_mut(&server_key(lang_id, project_root))
             .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
 
         let params = serde_json::json!({
@@ -910,7 +1278,7 @@ impl LspManager {
         });
 
         let rx = client::send_request(
-            &mut server.stdin,
+            &mut *server.stdin.lock().await,
             &server.pending_requests,
             "textDocument/rename",
             params,
@@ -944,10 +1312,11 @@ impl LspManager {
         lang_id: &str,
         tab_size: u32,
         insert_spaces: bool,
+        project_root: &str,
     ) -> Result<Value, String> {
         let server = self
             .servers
-            .get_mut(lang_id)
+            .get_mut(&server_key(lang_id, project_root))
             .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
 
         let params = serde_json::json!({
@@ -959,7 +1328,7 @@ impl LspManager {
         });
 
         let rx = client::send_request(
-            &mut server.stdin,
+            &mut *server.stdin.lock().await,
             &server.pending_requests,
             "textDocument/formatting",
             params,
@@ -995,10 +1364,11 @@ impl LspManager {
         range_end_char: u32,
         tab_size: u32,
         insert_spaces: bool,
+        project_root: &str,
     ) -> Result<Value, String> {
         let server = self
             .servers
-            .get_mut(lang_id)
+            .get_mut(&server_key(lang_id, project_root))
             .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
 
         let params = serde_json::json!({
@@ -1014,7 +1384,7 @@ impl LspManager {
         });
 
         let rx = client::send_request(
-            &mut server.stdin,
+            &mut *server.stdin.lock().await,
             &server.pending_requests,
             "textDocument/rangeFormatting",
             params,
@@ -1039,27 +1409,168 @@ impl LspManager {
         Ok(serde_json::json!({ "edits": edits }))
     }
 
+    /// Scan the project directory for files matching the server's extensions
+    /// and send `textDocument/didOpen` for each, enabling project-wide diagnostics.
+    ///
+    /// Files are tracked in `background_docs` separately from user-opened `open_docs`.
+    /// Returns the number of files scanned.
+    pub async fn scan_project_files(
+        &mut self,
+        lang_id: &str,
+        project_root: &str,
+    ) -> Result<usize, String> {
+        // Load the manifest to get extensions for this server
+        let manifest = manifest::load_manifest()
+            .map_err(|e| format!("Failed to load manifest: {}", e))?;
+
+        let ext = self.extension_for_language(lang_id);
+        let (_server_id, entry) = manifest::find_server_for_extension(&manifest, &ext)
+            .ok_or_else(|| format!("No manifest entry for language '{}'", lang_id))?;
+
+        // Collect matching files from the project
+        let extensions: Vec<String> = entry.extensions.iter()
+            .map(|e| e.trim_start_matches('.').to_lowercase())
+            .collect();
+        let files = collect_matching_files(project_root, &extensions, MAX_SCAN_FILES);
+
+        if files.is_empty() {
+            info!("Background scan for '{}': no matching files found", lang_id);
+            return Ok(0);
+        }
+
+        info!(
+            "Background scan for '{}': found {} matching files in '{}'",
+            lang_id,
+            files.len(),
+            project_root
+        );
+
+        let key = server_key(lang_id, project_root);
+        let mut scanned = 0;
+
+        for (i, file_path) in files.iter().enumerate() {
+            let uri = types::file_uri(file_path, project_root);
+
+            // Skip if already open (user-opened or previously background-scanned)
+            {
+                let server = match self.servers.get(&key) {
+                    Some(s) => s,
+                    None => return Err("Server no longer running".to_string()),
+                };
+                if server.open_docs.contains(&uri) || server.background_docs.contains(&uri) {
+                    continue;
+                }
+            }
+
+            // Read the file content
+            let content = match tokio::fs::read_to_string(file_path).await {
+                Ok(c) => c,
+                Err(_) => continue, // Skip unreadable files
+            };
+
+            // Determine the LSP languageId for this specific file
+            let file_ext = std::path::Path::new(file_path)
+                .extension()
+                .map(|e| e.to_string_lossy().to_string())
+                .unwrap_or_default();
+            let file_lang_id = detection::language_id_for_extension(&file_ext)
+                .and_then(|id| {
+                    // Look up the actual languageId from the manifest (e.g. "javascript" vs "typescript")
+                    let m = manifest::load_manifest().ok()?;
+                    let e = m.servers.get(&id)?;
+                    // Find which language corresponds to this extension
+                    for lang in &e.languages {
+                        // Use the first language if the extension matches
+                        return Some(lang.clone());
+                    }
+                    None
+                })
+                .unwrap_or_else(|| lang_id.to_string());
+
+            // Send didOpen for this background file
+            let server = match self.servers.get_mut(&key) {
+                Some(s) => s,
+                None => return Err("Server no longer running".to_string()),
+            };
+
+            if let Err(e) = client::send_notification(
+                &mut *server.stdin.lock().await,
+                "textDocument/didOpen",
+                serde_json::json!({
+                    "textDocument": {
+                        "uri": uri,
+                        "languageId": file_lang_id,
+                        "version": 1,
+                        "text": content
+                    }
+                }),
+            )
+            .await
+            {
+                warn!("Background scan: failed to open '{}': {}", file_path, e);
+                continue;
+            }
+
+            server.background_docs.insert(uri);
+            scanned += 1;
+
+            // Stagger batches to avoid flooding the LSP server
+            if (i + 1) % SCAN_BATCH_SIZE == 0 && (i + 1) < files.len() {
+                tokio::time::sleep(std::time::Duration::from_millis(SCAN_BATCH_DELAY_MS)).await;
+            }
+        }
+
+        info!(
+            "Background scan for '{}': opened {} files for diagnostics",
+            lang_id, scanned
+        );
+
+        Ok(scanned)
+    }
+
     /// Get status information for all servers.
     pub fn get_status(&self) -> Vec<LspServerStatus> {
         self.servers
             .values()
-            .map(|s| LspServerStatus {
-                language_id: s.language_id.clone(),
-                binary: s.binary.clone(),
-                running: true,
-                open_docs_count: s.open_docs.len(),
+            .map(|s| {
+                // Read last 5 stderr lines without blocking (try_lock on tokio Mutex)
+                let recent_stderr = s
+                    .stderr_lines
+                    .try_lock()
+                    .map(|buf| {
+                        let len = buf.len();
+                        let start = if len > 5 { len - 5 } else { 0 };
+                        buf[start..].to_vec()
+                    })
+                    .unwrap_or_default();
+
+                LspServerStatus {
+                    language_id: s.language_id.clone(),
+                    binary: s.binary.clone(),
+                    state: s.state.clone(),
+                    open_docs_count: s.open_docs.len(),
+                    crash_count: s.crash_count,
+                    project_root: s.project_root.clone(),
+                    last_error: s.last_error.clone(),
+                    pid: s.process.id(),
+                    running: s.state == types::ServerState::Running,
+                    stderr_lines: recent_stderr,
+                    server_name: s.server_name.clone(),
+                    version: s.version.clone(),
+                }
             })
             .collect()
     }
 
     /// Shut down a specific language server.
-    pub async fn shutdown_server(&mut self, lang_id: &str) -> Result<(), String> {
-        if let Some(mut server) = self.servers.remove(lang_id) {
+    pub async fn shutdown_server(&mut self, lang_id: &str, project_root: &str) -> Result<(), String> {
+        let key = server_key(lang_id, project_root);
+        if let Some(mut server) = self.servers.remove(&key) {
             info!("Shutting down LSP server for '{}'", lang_id);
 
             // Send shutdown request
             let rx = client::send_request(
-                &mut server.stdin,
+                &mut *server.stdin.lock().await,
                 &server.pending_requests,
                 "shutdown",
                 Value::Null,
@@ -1074,7 +1585,7 @@ impl LspManager {
 
             // Send exit notification
             let _ =
-                client::send_notification(&mut server.stdin, "exit", Value::Null).await;
+                client::send_notification(&mut *server.stdin.lock().await, "exit", Value::Null).await;
 
             // Give it a moment, then kill if still running
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
@@ -1089,12 +1600,36 @@ impl LspManager {
 
     /// Shut down all running LSP servers.
     pub async fn shutdown_all(&mut self) {
-        let lang_ids: Vec<String> = self.servers.keys().cloned().collect();
-        for lang_id in lang_ids {
-            if let Err(e) = self.shutdown_server(&lang_id).await {
-                warn!("Error shutting down LSP server '{}': {}", lang_id, e);
+        let keys: Vec<String> = self.servers.keys().cloned().collect();
+        for key in keys {
+            if let Some(mut server) = self.servers.remove(&key) {
+                info!("Shutting down LSP server '{}' (key: {})", server.language_id, key);
+
+                // Send shutdown request
+                let rx = client::send_request(
+                    &mut *server.stdin.lock().await,
+                    &server.pending_requests,
+                    "shutdown",
+                    Value::Null,
+                    &server.next_id,
+                )
+                .await;
+
+                // Wait up to 2 seconds for shutdown response
+                if let Ok(rx) = rx {
+                    let _ = tokio::time::timeout(std::time::Duration::from_secs(2), rx).await;
+                }
+
+                // Send exit notification
+                let _ =
+                    client::send_notification(&mut *server.stdin.lock().await, "exit", Value::Null).await;
+
+                // Give it a moment, then kill if still running
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                let _ = server.process.kill().await;
             }
         }
+        self.emit_status();
     }
 
     /// Emit a status update event for all servers.
@@ -1111,7 +1646,7 @@ impl LspManager {
     fn extension_for_language(&self, lang_id: &str) -> String {
         match lang_id {
             "typescript" => "ts".to_string(),
-            "rust" => "rs".to_string(),
+            "rust" | "rust-analyzer" => "rs".to_string(),
             "python" => "py".to_string(),
             "css" => "css".to_string(),
             "html" => "html".to_string(),
@@ -1120,6 +1655,141 @@ impl LspManager {
             other => other.to_string(),
         }
     }
+}
+
+/// Recursively collect files matching the given extensions from a project directory.
+///
+/// Skips directories in `SKIP_DIRS` and stops once `max_files` are collected.
+/// Returns absolute file paths.
+fn collect_matching_files(
+    project_root: &str,
+    extensions: &[String],
+    max_files: usize,
+) -> Vec<String> {
+    let mut result = Vec::new();
+    let root = std::path::Path::new(project_root);
+    collect_matching_files_recursive(root, extensions, max_files, &mut result);
+    result
+}
+
+/// Recursive helper for `collect_matching_files`.
+fn collect_matching_files_recursive(
+    dir: &std::path::Path,
+    extensions: &[String],
+    max_files: usize,
+    result: &mut Vec<String>,
+) {
+    if result.len() >= max_files {
+        return;
+    }
+
+    let entries = match std::fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(_) => return,
+    };
+
+    for entry in entries {
+        if result.len() >= max_files {
+            return;
+        }
+
+        let entry = match entry {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+
+        let path = entry.path();
+
+        if path.is_dir() {
+            // Skip ignored directories
+            let dir_name = path
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_default();
+            if SKIP_DIRS.contains(&dir_name.as_str()) || dir_name.starts_with('.') {
+                continue;
+            }
+            collect_matching_files_recursive(&path, extensions, max_files, result);
+        } else if path.is_file() {
+            if let Some(ext) = path.extension() {
+                let ext_str = ext.to_string_lossy().to_lowercase();
+                if extensions.contains(&ext_str) {
+                    result.push(path.to_string_lossy().to_string());
+                }
+            }
+        }
+    }
+}
+
+/// Spawn a periodic health check task that detects stale (unresponsive) LSP requests.
+///
+/// Checks every 10 seconds for pending requests older than 30 seconds.
+/// If stale requests are found, marks the server as `Unresponsive` and emits
+/// an `lsp-server-unresponsive` event. The task stops when the server is removed
+/// from the manager (e.g., after shutdown or crash).
+fn spawn_health_check(
+    app_handle: AppHandle,
+    server_key: String,
+    pending: Arc<Mutex<HashMap<i64, (oneshot::Sender<Value>, Instant)>>>,
+    lang_id: String,
+) {
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(10));
+        // Skip the first immediate tick
+        interval.tick().await;
+
+        loop {
+            interval.tick().await;
+
+            // Check if the server is still alive in the manager
+            let lsp_state: tauri::State<'_, LspManagerState> = app_handle.state();
+            {
+                let manager = lsp_state.0.lock().await;
+                if !manager.servers.contains_key(&server_key) {
+                    debug!("[{}] Health check stopping — server no longer registered", lang_id);
+                    break;
+                }
+            }
+
+            // Scan pending requests for stale entries (>30s old)
+            let now = Instant::now();
+            let stale_count = {
+                let pending_guard = pending.lock().await;
+                pending_guard
+                    .values()
+                    .filter(|(_sender, sent_at)| now.duration_since(*sent_at).as_secs() > 30)
+                    .count()
+            };
+
+            if stale_count > 0 {
+                warn!(
+                    "[{}] Health check: {} stale request(s) older than 30s — server unresponsive",
+                    lang_id, stale_count
+                );
+
+                // Mark server as Unresponsive
+                {
+                    let mut manager = lsp_state.0.lock().await;
+                    if let Some(server) = manager.servers.get_mut(&server_key) {
+                        server.state = types::ServerState::Unresponsive;
+                    }
+                    manager.emit_status();
+                }
+
+                // Emit dedicated event for frontend notification
+                let _ = app_handle.emit(
+                    "lsp-server-unresponsive",
+                    serde_json::json!({
+                        "languageId": lang_id,
+                        "serverKey": server_key,
+                        "staleRequests": stale_count,
+                    }),
+                );
+            }
+        }
+
+        debug!("[{}] Health check task ended", lang_id);
+    });
 }
 
 /// Normalize a Location or LocationLink into a simple { uri, range } object.

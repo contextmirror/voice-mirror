@@ -5,6 +5,7 @@
  */
 
 import { lensNavigate, lensGoBack, lensGoForward, lensReload } from '../api.js';
+import { auditNav } from '../audit-log.js';
 
 const DEFAULT_URL = 'about:blank';
 
@@ -66,6 +67,7 @@ function createLensStore() {
     },
 
     async navigate(rawUrl) {
+      auditNav('view-switched', { view: 'lens', url: rawUrl });
       let normalized = rawUrl.trim();
       if (!normalized) return;
       if (/^(https?:\/\/|about:)/i.test(normalized)) {

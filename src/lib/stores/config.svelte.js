@@ -86,6 +86,13 @@ const DEFAULT_CONFIG = {
   editor: {
     markdownPreview: true,
     formatOnSave: false,
+    fontSize: 14,
+  },
+  devicePreview: {
+    customDevices: [],
+    lastDevices: [],
+    syncEnabled: true,
+    orientation: 'portrait',
   },
   workspace: {
     showChat: false,
@@ -102,6 +109,7 @@ const DEFAULT_CONFIG = {
     lastGreetingPeriod: null,
     lastSeenVersion: null,
   },
+  lspServers: {},
   ai: {
     provider: 'claude',
     autoStart: false,

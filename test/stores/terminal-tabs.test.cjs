@@ -49,8 +49,8 @@ describe('terminal-tabs.svelte.js -- methods', () => {
     assert.ok(src.includes('setActive('), 'Should have setActive method');
   });
 
-  it('has addShellTab method', () => {
-    assert.ok(src.includes('addShellTab('), 'Should have addShellTab method');
+  it('has addTerminalTab method', () => {
+    assert.ok(src.includes('addTerminalTab('), 'Should have addTerminalTab method');
   });
 
   it('has closeTab method', () => {
@@ -80,21 +80,21 @@ describe('terminal-tabs.svelte.js -- methods', () => {
 
 describe('terminal-tabs.svelte.js -- tab cycling', () => {
   it('nextTab wraps around with modulo', () => {
-    assert.ok(src.includes('% tabs.length'), 'nextTab should wrap around');
+    assert.ok(src.includes('% groups.length'), 'nextTab should wrap around through groups');
   });
 
-  it('prevTab wraps to last tab', () => {
-    assert.ok(src.includes('tabs.length - 1'), 'prevTab should wrap to end');
+  it('prevTab wraps to last group', () => {
+    assert.ok(src.includes('groups.length - 1'), 'prevTab should wrap to end');
   });
 });
 
 describe('terminal-tabs.svelte.js -- smart numbering', () => {
-  it('has nextShellNumber function', () => {
-    assert.ok(src.includes('nextShellNumber'), 'Should have nextShellNumber');
+  it('has nextTerminalNumber function', () => {
+    assert.ok(src.includes('nextTerminalNumber'), 'Should have nextTerminalNumber');
   });
 
-  it('fills gaps in shell numbering', () => {
-    assert.ok(src.includes("match(/^Shell (\\d+)$/)"), 'Should parse existing shell numbers');
+  it('fills gaps in terminal numbering', () => {
+    assert.ok(src.includes("match(/^Terminal (\\d+)$/)"), 'Should parse existing terminal numbers');
   });
 
   it('uses Set for existing numbers', () => {
@@ -173,20 +173,20 @@ describe('terminal-tabs.svelte.js -- behavior', () => {
     assert.ok(src.includes("if (id === 'ai') return"), 'Should prevent closing AI tab');
   });
 
-  it('imports shellSpawn from api', () => {
-    assert.ok(src.includes('shellSpawn'), 'Should import shellSpawn');
+  it('imports terminalSpawn from api', () => {
+    assert.ok(src.includes('terminalSpawn'), 'Should import terminalSpawn');
   });
 
-  it('imports shellKill from api', () => {
-    assert.ok(src.includes('shellKill'), 'Should import shellKill');
+  it('imports terminalKill from api', () => {
+    assert.ok(src.includes('terminalKill'), 'Should import terminalKill');
   });
 
-  it('calls shellSpawn in addShellTab', () => {
-    assert.ok(src.includes('await shellSpawn('), 'Should call shellSpawn');
+  it('calls terminalSpawn in addTerminalTab', () => {
+    assert.ok(src.includes('await terminalSpawn('), 'Should call terminalSpawn');
   });
 
-  it('calls shellKill in closeTab', () => {
-    assert.ok(src.includes('await shellKill('), 'Should call shellKill');
+  it('calls terminalKill in closeTab', () => {
+    assert.ok(src.includes('await terminalKill('), 'Should call terminalKill');
   });
 });
 

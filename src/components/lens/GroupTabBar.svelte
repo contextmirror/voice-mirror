@@ -6,7 +6,7 @@
   import { renameEntry } from '../../lib/api.js';
   import TabContextMenu from './TabContextMenu.svelte';
 
-  let { groupId = 1, onBrowserClick = null, showBrowser = false } = $props();
+  let { groupId = 1, onBrowserClick = null, showBrowser = false, onDevicePreviewClick = null, showDevicePreview = false } = $props();
 
   let tabMenu = $state({ visible: false, x: 0, y: 0, tab: null });
   let splitMenu = $state({ visible: false, x: 0, y: 0 });
@@ -116,9 +116,12 @@
     if (handler) handler();
   }
 
-  function handleCloseAll() {
+  async function handleCloseAll() {
     closeMoreMenu();
-    for (const tab of [...groupTabs]) tabsStore.closeTab(tab.id);
+    for (const tab of [...groupTabs]) {
+      const closed = await tabsStore.requestClose(tab.id);
+      if (!closed) break; // User cancelled — stop closing remaining tabs
+    }
   }
 
   function handleCloseSaved() {
@@ -154,11 +157,23 @@
     return 'file';
   }
 
+  function handleTabsWheel(e) {
+    e.preventDefault();
+    e.currentTarget.scrollLeft += e.deltaY;
+  }
+
   // ── Drag/Drop for tab reorder ──
 
   function handleDragStart(e, tab) {
     e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', JSON.stringify({ tabId: tab.id, sourceGroupId: groupId }));
+    const data = JSON.stringify({ tabId: tab.id, sourceGroupId: groupId });
+    e.dataTransfer.setData('text/plain', data);
+    e.dataTransfer.setData('application/x-voice-mirror-tab', data);
+    window.dispatchEvent(new CustomEvent('tab-drag-start'));
+  }
+
+  function handleDragEnd() {
+    window.dispatchEvent(new CustomEvent('tab-drag-end'));
   }
 
   function handleDragOver(e, index) {
@@ -218,7 +233,7 @@
   {/if}
 
   <!-- Scrollable file tabs -->
-  <div class="tabs-scroll">
+  <div class="tabs-scroll" onwheel={handleTabsWheel}>
     {#each groupTabs as tab, i (tab.id)}
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
@@ -233,9 +248,11 @@
         draggable="true"
         onclick={() => handleTabClick(tab)}
         ondblclick={() => tabsStore.pinTab(tab.id)}
+        onauxclick={(e) => { if (e.button === 1) { e.preventDefault(); tabsStore.requestClose(tab.id); } }}
         oncontextmenu={(e) => handleTabContextMenu(e, tab)}
         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleTabClick(tab); }}
         ondragstart={(e) => handleDragStart(e, tab)}
+        ondragend={handleDragEnd}
         ondragover={(e) => handleDragOver(e, i)}
         ondragleave={handleDragLeave}
         ondrop={(e) => handleDrop(e, i)}
@@ -290,7 +307,7 @@
         <button
           class="tab-action"
           class:pinned={!tab.preview}
-          onclick={(e) => { e.stopPropagation(); tabsStore.closeTab(tab.id); }}
+          onclick={(e) => { e.stopPropagation(); tabsStore.requestClose(tab.id); }}
           aria-label="Close tab"
         >
           <svg class="icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
@@ -313,6 +330,14 @@
 
   <!-- Right-side action buttons (VS Code style) -->
   <div class="editor-actions">
+    {#if onDevicePreviewClick}
+      <button class="action-btn" class:active={showDevicePreview} onclick={onDevicePreviewClick} aria-label="Device Preview" title="Device Preview">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/>
+        </svg>
+      </button>
+    {/if}
+
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <button class="action-btn" class:active={hasSplit} onclick={handleSplitEditor} oncontextmenu={handleSplitContextMenu} aria-label="Split editor right" title="Split editor right (Ctrl+\) — right-click for more">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -426,12 +451,12 @@
     height: 36px;
     flex-shrink: 0;
     background: var(--bg);
-    border-bottom: 1px solid color-mix(in srgb, var(--border) 40%, transparent);
+    border-bottom: 1px solid color-mix(in srgb, var(--text) 12%, var(--bg));
     -webkit-app-region: no-drag;
   }
 
   .group-tab-bar.focused {
-    border-bottom: 1px solid var(--accent);
+    border-bottom: 1px solid color-mix(in srgb, var(--text) 12%, var(--bg));
   }
 
   /* Browser: permanent fixed tab on the far left */
