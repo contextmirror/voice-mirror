@@ -544,6 +544,9 @@
         const initialPos = view.state.selection.main.head;
         const initialLine = view.state.doc.lineAt(initialPos);
         statusBarStore.setCursor(initialLine.number, initialPos - initialLine.from + 1);
+
+        // Apply pending cursor if Problems panel or similar set one before file loaded
+        applyPendingCursor();
       }
 
       // Open file in LSP (fire and forget)
@@ -646,40 +649,51 @@
     return () => { unlisten?.(); };
   });
 
-  // Apply pending cursor position (from Problems panel click-to-navigate)
-  $effect(() => {
+  /**
+   * Apply a pending cursor position to the current editor view.
+   * Used by both the $effect (for already-open files) and loadFile (for newly opened files).
+   */
+  function applyPendingCursor() {
     const pending = tabsStore.pendingCursorPosition;
     if (!pending || !view || pending.path !== currentPath) return;
-    // Defer to ensure editor content is loaded
-    requestAnimationFrame(() => {
-      try {
-        const lineNum = Math.min(Math.max(pending.line + 1, 1), view.state.doc.lines);
-        const line = view.state.doc.line(lineNum);
-        const anchor = line.from + Math.min(pending.character || 0, line.length);
+    try {
+      const lineNum = Math.min(Math.max(pending.line + 1, 1), view.state.doc.lines);
+      const line = view.state.doc.line(lineNum);
+      const anchor = line.from + Math.min(pending.character || 0, line.length);
 
-        // Compute end position for range highlight
-        let highlightEnd = anchor;
-        if (pending.endLine != null) {
-          const endLineNum = Math.min(Math.max(pending.endLine + 1, 1), view.state.doc.lines);
-          const endLine = view.state.doc.line(endLineNum);
-          highlightEnd = endLine.from + Math.min(pending.endCharacter || 0, endLine.length);
-        }
-
-        // Set cursor at start (not selection — the decoration handles the visual highlight)
-        const scrollEffect = cmCache?.EditorView?.scrollIntoView(anchor, { y: 'center' });
-        view.dispatch({
-          selection: { anchor },
-          ...(scrollEffect ? { effects: scrollEffect } : { scrollIntoView: true }),
-        });
-
-        // Apply VS Code-style range highlight decoration
-        applyRangeHighlight(view, anchor, highlightEnd);
-        view.focus();
-      } catch (e) {
-        // Ignore if line is out of range
+      // Compute end position for range highlight
+      let highlightEnd = anchor;
+      if (pending.endLine != null) {
+        const endLineNum = Math.min(Math.max(pending.endLine + 1, 1), view.state.doc.lines);
+        const endLine = view.state.doc.line(endLineNum);
+        highlightEnd = endLine.from + Math.min(pending.endCharacter || 0, endLine.length);
       }
-      tabsStore.clearPendingCursor();
-    });
+
+      // Set cursor at start (not selection — the decoration handles the visual highlight)
+      const scrollEffect = cmCache?.EditorView?.scrollIntoView(anchor, { y: 'center' });
+      view.dispatch({
+        selection: { anchor },
+        ...(scrollEffect ? { effects: scrollEffect } : { scrollIntoView: true }),
+      });
+
+      // Apply VS Code-style range highlight decoration
+      applyRangeHighlight(view, anchor, highlightEnd);
+      view.focus();
+    } catch (e) {
+      // Ignore if line is out of range
+    }
+    tabsStore.clearPendingCursor();
+  }
+
+  // Apply pending cursor position (from Problems panel click-to-navigate).
+  // Note: `view` is not $state so the effect won't re-run when view is created.
+  // For new files, applyPendingCursor() is called directly after view creation in loadFile().
+  // This effect handles the case where the file is already open and view already exists.
+  $effect(() => {
+    const pending = tabsStore.pendingCursorPosition;
+    if (!pending || pending.path !== currentPath) return;
+    // Defer one frame to let any tab-switch rendering settle
+    requestAnimationFrame(() => applyPendingCursor());
   });
 
   // Listen for outline symbol navigation (from OutlinePanel via LensWorkspace)

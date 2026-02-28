@@ -90,15 +90,8 @@
     const endCharacter = diag.range?.end?.character;
     const fileName = filePath.split(/[/\\]/).pop() || filePath;
 
-    // Open the file first (activates the tab), THEN set the cursor position.
-    // If we set pending cursor before openFile, the $effect in the already-mounted
-    // FileEditor won't re-trigger because the reactive dependency didn't change
-    // after the tab became active.
+    tabsStore.setPendingCursor(filePath, line, character, endLine, endCharacter);
     tabsStore.openFile({ name: fileName, path: filePath });
-    // Use microtask to ensure the tab switch has propagated before setting cursor
-    queueMicrotask(() => {
-      tabsStore.setPendingCursor(filePath, line, character, endLine, endCharacter);
-    });
   }
 
   function severityIcon(sev) {
@@ -239,7 +232,7 @@
     width: 100%;
     padding: 3px 8px;
     border: none;
-    background: color-mix(in srgb, var(--text) 5%, transparent);
+    background: color-mix(in srgb, var(--text) 5%, var(--bg));
     color: var(--text-strong);
     font-size: 12px;
     font-family: var(--font-family);
@@ -253,7 +246,7 @@
   }
 
   .file-group-header:hover {
-    background: color-mix(in srgb, var(--text) 10%, transparent);
+    background: color-mix(in srgb, var(--text) 10%, var(--bg));
   }
 
   .chevron {
