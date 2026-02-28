@@ -661,7 +661,7 @@ All P0 items completed (status bar done in prior work).
 | ~~15~~ | ~~Terminal tab strip drag reorder~~ | ~~Drag~~ | Removed (acceptable as-is) |
 | 16 | File path breadcrumbs | Status Bar | Medium |
 | 17 | Sidebar badge counts (git changes, errors) | Status Bar | Medium |
-| 18 | Diagnostics panel (unified error list) | Status Bar | Medium-Large |
+| 18 | Diagnostics panel (unified error list) | Status Bar | Medium-Large | See `docs/implementation/LSP-CONFIG-GAPS.md` |
 | 19 | Editor context menu: Toggle Comment, Format | Context Menus | Small |
 | 20 | Diff context menu: Revert Hunk | Context Menus | Medium |
 | 21 | File tree: Stage/Unstage/Discard on changes | Context Menus | Small |
