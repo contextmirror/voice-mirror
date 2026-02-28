@@ -95,7 +95,8 @@
       {/if}
 
       <!-- L2: Diagnostics -->
-      <button class="sb-item" title="Errors and Warnings">
+      <button class="sb-item" title="Errors and Warnings"
+        onclick={() => window.dispatchEvent(new CustomEvent('status-bar-show-problems'))}>
         <span class="diag-errors" class:has-errors={statusBarStore.diagErrors > 0}>
           <svg class="sb-icon" viewBox="0 0 16 16" fill="currentColor">
             <circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.5"/>

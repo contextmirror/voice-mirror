@@ -469,6 +469,19 @@ describe('FileEditor.svelte: status bar wiring', () => {
   });
 });
 
+// ──────────────────────────────────────────────────
+// Task 6: Diagnostics click → Problems panel
+// ──────────────────────────────────────────────────
+
+describe('StatusBar.svelte: problems panel link', () => {
+  it('dispatches status-bar-show-problems event on diagnostics click', () => {
+    assert.ok(
+      src.includes('status-bar-show-problems'),
+      'Should dispatch event to open problems panel'
+    );
+  });
+});
+
 const EXT_SRC = fs.readFileSync(path.join(__dirname, '../../src/lib/editor-extensions.js'), 'utf-8');
 
 describe('editor-extensions.js: cursor activity callback', () => {
