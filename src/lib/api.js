@@ -755,6 +755,10 @@ export async function lspSetServerEnabled(serverId, enabled) {
   return invoke('lsp_set_server_enabled', { serverId, enabled });
 }
 
+export async function lspShutdown() {
+  return invoke('lsp_shutdown');
+}
+
 // ============ Output / Diagnostics ============
 
 export async function getOutputLogs(params) {

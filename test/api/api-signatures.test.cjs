@@ -316,6 +316,7 @@ describe('api.js -- exported async functions', () => {
     'lspGetServerList',
     'lspInstallServer',
     'lspSetServerEnabled',
+    'lspShutdown',
     'getOutputLogs',
     'logFrontendError',
   ];

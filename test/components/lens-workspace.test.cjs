@@ -321,6 +321,21 @@ describe('LensWorkspace.svelte', () => {
     );
   });
 
+  // LSP cleanup on project switch
+  it('calls lspShutdown on project switch', () => {
+    assert.ok(
+      src.includes('lspShutdown'),
+      'Should shut down LSP servers when switching projects'
+    );
+  });
+
+  it('imports lspShutdown from api', () => {
+    assert.ok(
+      src.includes('lspShutdown'),
+      'Should import lspShutdown'
+    );
+  });
+
   // CSS
   it('has workspace-content with flex and margins', () => {
     assert.ok(src.includes('.workspace-content'));

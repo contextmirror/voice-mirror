@@ -19,7 +19,7 @@
   import { layoutStore } from '../../lib/stores/layout.svelte.js';
   import { lensStore } from '../../lib/stores/lens.svelte.js';
   import { browserTabsStore } from '../../lib/stores/browser-tabs.svelte.js';
-  import { lensSetVisible, startFileWatching, stopFileWatching, lensCapturePreview } from '../../lib/api.js';
+  import { lensSetVisible, startFileWatching, stopFileWatching, lensCapturePreview, lspShutdown } from '../../lib/api.js';
   import { attachmentsStore } from '../../lib/stores/attachments.svelte.js';
   import { projectStore } from '../../lib/stores/project.svelte.js';
   import { lspDiagnosticsStore } from '../../lib/stores/lsp-diagnostics.svelte.js';
@@ -192,6 +192,9 @@
   $effect(() => {
     const path = projectStore.activeProject?.path;
     if (!path) return;
+
+    // Shut down LSP servers from previous project before starting new ones
+    lspShutdown().catch(() => {});
 
     lspDiagnosticsStore.clear();
     lspDiagnosticsStore.startListening(path).catch((err) => {
