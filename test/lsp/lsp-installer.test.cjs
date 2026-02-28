@@ -55,10 +55,10 @@ describe('installer.rs: npm install', () => {
 });
 
 describe('installer.rs: status events', () => {
-  it('emits lsp-server-status events', () => {
+  it('emits lsp-install-status events', () => {
     assert.ok(
-      src.includes('lsp-server-install-status') || src.includes('lsp-server-status'),
-      'Should emit status events'
+      src.includes('lsp-install-status'),
+      'Should emit install status events'
     );
   });
 });

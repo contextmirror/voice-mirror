@@ -103,7 +103,17 @@ pub fn detect_for_extension(ext: &str) -> Option<ServerInfo> {
     if lsp_dir.is_none() {
         tracing::warn!("Could not determine lsp-servers dir; managed installs will not be detected");
     }
-    let (id, entry) = super::manifest::find_server_for_extension(&manifest, ext)?;
+    let (id, mut entry) = super::manifest::find_server_for_extension(&manifest, ext)?;
+
+    // Apply user config overrides (e.g. enabled: false)
+    if let Ok(guard) = crate::commands::config::CONFIG.lock() {
+        if let Some(overrides) = guard.lsp_servers.get(&id) {
+            super::manifest::apply_overrides(&mut entry, overrides);
+        }
+    }
+    if !entry.enabled {
+        return None;
+    }
 
     // Try to find the binary: 1) PATH, 2) managed lsp-servers/
     let resolved = if let Some(ref dir) = lsp_dir {
@@ -150,11 +160,22 @@ pub fn detect_all() -> Vec<ServerInfo> {
     };
     let lsp_dir = super::installer::get_lsp_servers_dir().ok();
 
+    // Load user overrides from config
+    let overrides = crate::commands::config::CONFIG
+        .lock()
+        .ok()
+        .map(|guard| guard.lsp_servers.clone())
+        .unwrap_or_default();
+
     let mut results = Vec::new();
     // Sort by server ID for deterministic ordering (HashMap iteration is random)
-    let mut entries: Vec<(&String, &super::manifest::ServerEntry)> = manifest.servers.iter().collect();
-    entries.sort_by_key(|(id, _)| id.as_str());
-    for (id, entry) in entries {
+    let mut entries: Vec<(String, super::manifest::ServerEntry)> = manifest.servers.into_iter().collect();
+    entries.sort_by(|(a, _), (b, _)| a.cmp(b));
+    for (id, mut entry) in entries {
+        // Apply user config overrides (e.g. enabled: false)
+        if let Some(ov) = overrides.get(&id) {
+            super::manifest::apply_overrides(&mut entry, ov);
+        }
         if !entry.enabled {
             continue;
         }

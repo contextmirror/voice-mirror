@@ -203,15 +203,11 @@ async fn handle_server_request(
         "workspace/configuration" => {
             debug!("[{}] Handling workspace/configuration request (id={})", lang_id, id);
 
-            // Load settings from manifest for this language's server
+            // Load settings from manifest for this server.
+            // lang_id is the server key (e.g. "typescript", "css"), not an LSP languageId.
             let settings = super::manifest::load_manifest()
                 .ok()
-                .and_then(|manifest| {
-                    // Find the server entry that handles this language
-                    manifest.servers.into_values().find(|entry| {
-                        entry.languages.iter().any(|l| l == lang_id)
-                    })
-                })
+                .and_then(|manifest| manifest.servers.get(lang_id).cloned())
                 .map(|entry| entry.settings)
                 .unwrap_or(Value::Object(serde_json::Map::new()));
 

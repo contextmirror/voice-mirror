@@ -491,8 +491,8 @@ describe('StatusBar.svelte: LSP install status', () => {
     assert.ok(src.includes("from '@tauri-apps/api/event'"), 'Should import listen from Tauri');
   });
 
-  it('listens for lsp-server-status events', () => {
-    assert.ok(src.includes('lsp-server-status'), 'Should listen for install status events');
+  it('listens for lsp-install-status events', () => {
+    assert.ok(src.includes('lsp-install-status'), 'Should listen for install status events');
   });
 
   it('has lspInstall state', () => {
@@ -520,7 +520,7 @@ describe('StatusBar.svelte: LSP install status', () => {
   });
 
   it('uses $effect for event listener lifecycle', () => {
-    // The lsp-server-status listener should be inside a $effect with cleanup
+    // The lsp-install-status listener should be inside a $effect with cleanup
     const effectCount = (src.match(/\$effect/g) || []).length;
     assert.ok(effectCount >= 4, 'Should have at least 4 $effect blocks (existing 3 + install listener)');
   });

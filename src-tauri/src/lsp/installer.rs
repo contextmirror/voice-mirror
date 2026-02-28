@@ -129,7 +129,7 @@ pub async fn install_server(
     // Emit installing status
     if let Some(app) = app_handle {
         let _ = app.emit(
-            "lsp-server-status",
+            "lsp-install-status",
             serde_json::json!({
                 "server": server_id,
                 "status": "installing",
@@ -191,7 +191,7 @@ pub async fn install_server(
 
         if let Some(app) = app_handle {
             let _ = app.emit(
-                "lsp-server-status",
+                "lsp-install-status",
                 serde_json::json!({
                     "server": server_id,
                     "status": "install_failed",
@@ -207,7 +207,7 @@ pub async fn install_server(
 
     if let Some(app) = app_handle {
         let _ = app.emit(
-            "lsp-server-status",
+            "lsp-install-status",
             serde_json::json!({
                 "server": server_id,
                 "status": "installed",

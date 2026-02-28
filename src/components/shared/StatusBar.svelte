@@ -87,9 +87,8 @@
   // -- LSP install status listener --
   $effect(() => {
     let unlisten;
-    listen('lsp-server-status', (event) => {
+    listen('lsp-install-status', (event) => {
       const payload = event.payload;
-      // Only handle install lifecycle events (have server + status + message fields)
       if (payload?.server && payload?.status && payload?.message) {
         // Clear any pending auto-clear timer
         if (installClearTimer) {
