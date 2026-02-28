@@ -25,6 +25,7 @@
   import ResizeEdges from './components/shared/ResizeEdges.svelte';
   import StatsBar from './components/shared/StatsBar.svelte';
   import ToastContainer from './components/shared/ToastContainer.svelte';
+  import StatusBar from './components/shared/StatusBar.svelte';
 
   // Load config on mount and init event listeners
   $effect(() => {
@@ -458,6 +459,7 @@
         {/if}
       </main>
     </div>
+    <StatusBar />
   </div>
 {/if}
 
