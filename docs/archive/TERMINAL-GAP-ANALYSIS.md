@@ -61,7 +61,7 @@ Voice Mirror's terminal system implements the **core essentials** well — PTY m
 | Resize panes by keyboard | ✅ `ResizePaneLeft/Right/Up/Down` (4-cell increments) | ❌ Mouse drag only | Medium |
 | Size to content width | ✅ Auto-fit terminal width to content | ❌ Not implemented | Low |
 | Set exact dimensions | ✅ `SetDimensions` (cols × rows) | ❌ Not implemented | Low |
-| Join/unsplit commands | ✅ `Join`, `Unsplit`, `JoinActiveTab` | ⚠️ Only `unsplitGroup` (keeps active, kills rest) | Low |
+| Join/unsplit commands | ✅ `Join`, `Unsplit`, `JoinActiveTab` | ✅ `unsplitGroup` (keeps active, moves rest to own groups) | Low |
 
 ### 3. Tabs & Sidebar
 

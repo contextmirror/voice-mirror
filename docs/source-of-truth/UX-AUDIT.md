@@ -49,7 +49,7 @@ All 6 items from the second wave are done:
 | 1 | **Quick fix lightbulb in gutter** | Editor | Medium |
 | 2 | **Ctrl+Tab MRU tab cycling** | Tabs | Medium |
 | 3 | **Terminal inline rename** (replace prompt() dialog) | Tabs | Small |
-| 4 | **Terminal tab strip drag reorder** | Drag | Medium |
+| ~~4~~ | ~~**Unsplit terminal preserves terminals**~~ (was killing them) | Terminal | ✅ Done |
 | 5 | **Text drag in editor** (unblock in main.js) | Drag | Small |
 
 ---

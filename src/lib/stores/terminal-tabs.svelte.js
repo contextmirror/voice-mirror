@@ -463,35 +463,33 @@ function createTerminalTabsStore() {
     },
 
     /**
-     * Keep only the active instance in a group, kill all others.
+     * Unsplit a group: keep the active instance in the group, move all others
+     * to their own new groups (preserving running terminals, like VS Code).
      * @param {string} groupId
      */
-    async unsplitGroup(groupId) {
+    unsplitGroup(groupId) {
       const group = groups.find(g => g.id === groupId);
-      if (!group) return;
+      if (!group || group.instanceIds.length <= 1) return;
 
-      // Determine which instance to keep (active in group, or first)
+      // Determine which instance to keep in the current group
       const keepId = (activeGroupId === groupId && activeInstanceId && group.instanceIds.includes(activeInstanceId))
         ? activeInstanceId
         : group.instanceIds[0];
 
-      const toKill = group.instanceIds.filter(id => id !== keepId);
+      const toMove = group.instanceIds.filter(id => id !== keepId);
 
-      for (const id of toKill) {
+      // Move each displaced terminal to its own new group (don't kill!)
+      const groupIdx = groups.findIndex(g => g.id === groupId);
+      for (const id of toMove) {
         const inst = instances[id];
-        if (inst?.shellId && inst.running) {
-          try {
-            await terminalKill(inst.shellId);
-          } catch (err) {
-            console.warn('[terminal-tabs] Failed to kill split instance:', err);
-          }
+        if (inst) {
+          const newGroupId = generateGroupId();
+          inst.groupId = newGroupId;
+          groups = [...groups, createGroupObj(newGroupId, createLeaf(id))];
         }
-        const { [id]: _, ...rest } = instances;
-        instances = rest;
       }
 
-      // Rebuild group as a single leaf
-      const groupIdx = groups.findIndex(g => g.id === groupId);
+      // Collapse the original group to a single leaf
       if (groupIdx !== -1) {
         groups[groupIdx].splitTree = createLeaf(keepId);
         groups = [...groups];
@@ -501,6 +499,7 @@ function createTerminalTabsStore() {
         activeInstanceId = keepId;
       }
 
+      instances = { ...instances }; // trigger reactivity for updated groupIds
       syncLegacyTabs();
       debouncedSave();
     },

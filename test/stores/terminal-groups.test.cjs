@@ -228,6 +228,34 @@ describe('terminal-tabs.svelte.js -- moveInstance method', () => {
   });
 });
 
+describe('terminal-tabs.svelte.js -- unsplitGroup preserves terminals', () => {
+  it('unsplitGroup does NOT call terminalKill', () => {
+    const block = src.split('unsplitGroup(')[1]?.split('\n    },')[0] || '';
+    assert.ok(!block.includes('terminalKill'), 'unsplitGroup should NOT kill terminals — it should move them');
+  });
+  it('unsplitGroup creates new groups for displaced terminals', () => {
+    const block = src.split('unsplitGroup(')[1]?.split('\n    },')[0] || '';
+    assert.ok(block.includes('createGroupObj'), 'Should create new groups for moved terminals');
+    assert.ok(block.includes('generateGroupId'), 'Should generate new group IDs');
+  });
+  it('unsplitGroup updates groupId on moved instances', () => {
+    const block = src.split('unsplitGroup(')[1]?.split('\n    },')[0] || '';
+    assert.ok(block.includes('inst.groupId'), 'Should update instance groupId when moving');
+  });
+  it('unsplitGroup collapses original group to single leaf', () => {
+    const block = src.split('unsplitGroup(')[1]?.split('\n    },')[0] || '';
+    assert.ok(block.includes('createLeaf(keepId)'), 'Should collapse group to single leaf');
+  });
+  it('unsplitGroup is synchronous (no async/await needed)', () => {
+    assert.ok(src.includes('unsplitGroup(groupId)'), 'Should be synchronous — no PTY operations');
+    assert.ok(!src.includes('async unsplitGroup'), 'Should NOT be async — just reorganizes groups');
+  });
+  it('unsplitGroup early-returns for single-instance groups', () => {
+    const block = src.split('unsplitGroup(')[1]?.split('\n    },')[0] || '';
+    assert.ok(block.includes('instanceIds.length <= 1'), 'Should skip if only 1 instance');
+  });
+});
+
 describe('terminal-tabs.svelte.js -- pane focus wrapping', () => {
   it('focusPreviousPane wraps to end', () => {
     const block = src.split('focusPreviousPane')[1]?.split('\n    },')[0] || '';
