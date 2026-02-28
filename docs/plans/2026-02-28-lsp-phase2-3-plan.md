@@ -422,11 +422,16 @@ git commit -m "feat(lsp): send workspaceFolders in initialize request"
 ### Task 5: Crash recovery with exponential backoff
 
 **Files:**
-- Modify: `src-tauri/src/lsp/mod.rs` (add restart logic, crash channel)
-- Modify: `src-tauri/src/lsp/client.rs:116-176` (reader loop crash notification)
+- Modify: `src-tauri/src/lsp/mod.rs` (add restart logic, crash handler task)
+- Modify: `src-tauri/src/lsp/client.rs:116-176` (reader loop crash recovery via AppHandle state)
 - Test: `test/lsp/lsp-crash-recovery.test.cjs` (create)
 
-**Context:** The reader loop in `client.rs` detects EOF but can't access `LspManager`. We need a channel from the reader loop back to the manager to trigger restart.
+**Context:** The reader loop in `client.rs` detects EOF but doesn't recover. It already receives `AppHandle`, which can access `LspManagerState` via `app_handle.state::<LspManagerState>()` — this is the same pattern used by AI and Terminal event loops in `lib.rs` (lines 460-534).
+
+**Critical details:**
+- Crashed server entries remain in `self.servers` HashMap, blocking restarts (the `contains_key` check at line 74 prevents re-init)
+- `open_docs` must be preserved before removing the crashed server, then replayed after restart
+- No frontend component currently listens for `lsp-server-error` — crash recovery must happen entirely in the backend
 
 **Step 1: Write the failing test**
 
@@ -464,13 +469,18 @@ describe('mod.rs: crash recovery', () => {
     assert.ok(modSrc.includes('last_crash') && modSrc.includes('crash_count = 0'),
       'Should reset crash_count after stable period');
   });
+
+  it('preserves open_docs for replay after restart', () => {
+    assert.ok(modSrc.includes('open_docs') && modSrc.includes('replay'),
+      'Should replay open documents after restart');
+  });
 });
 
-describe('client.rs: crash notification channel', () => {
-  it('sends crash notification when reader loop exits', () => {
+describe('client.rs: crash recovery via AppHandle state', () => {
+  it('accesses LspManagerState from reader loop on crash', () => {
     assert.ok(
-      clientSrc.includes('crash_tx') || clientSrc.includes('crash_sender') || clientSrc.includes('crash_notify'),
-      'Reader loop should notify on crash via channel'
+      clientSrc.includes('LspManagerState') || clientSrc.includes('lsp_manager'),
+      'Reader loop should access LspManagerState via app_handle.state()'
     );
   });
 });
@@ -480,24 +490,78 @@ describe('client.rs: crash notification channel', () => {
 
 **Step 3: Implement**
 
-**Strategy:** Use a `tokio::sync::mpsc` channel. When the reader loop detects EOF, it sends the `server_key` on the crash channel. A background task in LspManager listens for crash events and triggers restart with backoff.
+**Strategy:** The reader loop already has `AppHandle`. On EOF, use `app_handle.state::<LspManagerState>()` to lock the manager, extract the crashed server's `open_docs` and `project_root`, remove the stale entry, and spawn a restart task with backoff.
+
+In `client.rs` — update `spawn_reader_loop()`:
+1. Add `server_key: String` parameter (the `lang_id::project_root` composite key)
+2. On EOF (line 159-169), instead of just emitting an event:
+```rust
+// Access LspManagerState via AppHandle (same pattern as AI/Terminal loops in lib.rs)
+let lsp_state = app_handle.state::<super::LspManagerState>();
+let mut manager = lsp_state.0.lock().await;
+
+// Extract crash info before removing
+if let Some(crashed) = manager.servers.remove(&server_key) {
+    let open_docs: Vec<String> = crashed.open_docs.iter().cloned().collect();
+    let background_docs: Vec<String> = crashed.background_docs.iter().cloned().collect();
+    let project_root = crashed.project_root.clone();
+    let mut crash_count = crashed.crash_count + 1;
+    let last_crash = Instant::now();
+
+    // Reset crash count if last crash was >60s ago (stable period)
+    if let Some(prev) = crashed.last_crash {
+        if last_crash.duration_since(prev).as_secs() > CRASH_RESET_SECS {
+            crash_count = 1;
+        }
+    }
+
+    manager.emit_status();
+    drop(manager); // Release lock before sleeping
+
+    if crash_count >= MAX_CRASHES {
+        warn!("[{}] Server crashed {} times — marking as Failed", lang_id, crash_count);
+        // Re-lock to set Failed state (insert a tombstone entry or emit event)
+        let _ = app_handle.emit("lsp-server-failed", json!({
+            "languageId": lang_id,
+            "crashCount": crash_count,
+        }));
+    } else {
+        let backoff = std::cmp::min(2u64.pow(crash_count - 1), MAX_BACKOFF_SECS);
+        info!("[{}] Server crashed (count={}), restarting in {}s", lang_id, crash_count, backoff);
+        tokio::time::sleep(Duration::from_secs(backoff)).await;
+
+        // Restart: re-lock, call ensure_server, replay open_docs
+        let mut manager = lsp_state.0.lock().await;
+        if let Ok(()) = manager.ensure_server(&lang_id, &project_root).await {
+            // Transfer crash tracking to new server
+            if let Some(server) = manager.servers.get_mut(&server_key) {
+                server.crash_count = crash_count;
+                server.last_crash = Some(last_crash);
+            }
+            // Replay open documents
+            for uri in &open_docs {
+                // Read file content from disk for replay
+                if let Some(content) = read_file_from_uri(uri, &project_root) {
+                    let _ = manager.open_document(uri, &lang_id, &content, &project_root).await;
+                }
+            }
+            info!("[{}] Restarted, replayed {} open docs", lang_id, open_docs.len());
+        }
+    }
+}
+```
 
 In `mod.rs`:
+1. Pass `server_key` to `spawn_reader_loop()` call.
+2. Add `restart_server()` convenience method.
+3. Add `read_file_from_uri()` helper that converts `file://` URI to path and reads content.
 
-1. Add `crash_tx: mpsc::Sender<String>` to `LspServer` struct.
-2. In `ensure_server()`, create the channel and pass `crash_tx` to `spawn_reader_loop()`.
-3. Spawn a crash handler task that:
-   - Receives server_key from crash channel
-   - Updates `crash_count` and `last_crash`
-   - If `crash_count < 5`, sleeps for backoff duration, then calls `restart_server()`
-   - If `crash_count >= 5`, sets state to `Failed`, emits notification
-4. Add `restart_server()` method that removes the old server entry, then calls `ensure_server()` again.
-5. In the crash handler, reset `crash_count` to 0 if `last_crash` was more than 60s ago.
-
-In `client.rs`:
-
-1. Add `crash_tx: mpsc::Sender<String>` parameter to `spawn_reader_loop()`.
-2. On EOF (line 159-169), send the server_key on the crash channel before breaking.
+**Constants:**
+```rust
+const MAX_CRASHES: u32 = 5;
+const CRASH_RESET_SECS: u64 = 60;
+const MAX_BACKOFF_SECS: u64 = 30;
+```
 
 **Constants:**
 ```rust
@@ -1070,6 +1134,12 @@ Add to `LspServer`:
 ```rust
 pub background_docs: HashSet<String>,  // URIs opened for background diagnostics
 ```
+
+**Background→foreground promotion:** When the user opens a file that's already in `background_docs`, the `open_document()` method must:
+1. Check if URI is in `background_docs`
+2. If yes: send `didClose` first (closes the stale background version), remove from `background_docs`
+3. Then proceed with normal `didOpen` (fresh content from editor, added to `open_docs`)
+This ensures the server sees the latest content, not the disk snapshot from the background scan.
 
 Add `scan_project_files()` method to `LspManager`:
 
