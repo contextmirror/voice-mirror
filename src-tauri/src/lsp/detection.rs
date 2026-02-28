@@ -1,7 +1,8 @@
 //! LSP server discovery and detection.
 //!
-//! Maps file extensions to known language servers and checks
-//! whether the server binary is available on PATH.
+//! Maps file extensions to language servers using the embedded manifest
+//! (lsp-servers.json) and checks whether the server binary is available
+//! on PATH or in the managed lsp-servers/ directory.
 
 /// Information about a known language server.
 #[derive(Debug, Clone)]
@@ -10,8 +11,10 @@ pub struct ServerInfo {
     pub binary: String,
     pub args: Vec<String>,
     pub installed: bool,
-    /// The full resolved path from `which` (may be a .cmd on Windows).
+    /// The full resolved path from `which` or managed dir (may be a .cmd on Windows).
     pub resolved_path: Option<std::path::PathBuf>,
+    /// The server ID from the manifest (e.g., "typescript", "svelte").
+    pub server_id: Option<String>,
 }
 
 /// On Windows, npm-installed servers are `.cmd` batch wrappers that break
@@ -89,95 +92,84 @@ pub fn resolve_node_script(_info: &ServerInfo) -> Option<(String, Vec<String>)> 
     None
 }
 
-/// Known language servers: (extensions, language_id, binary, args).
-const LANGUAGE_SERVERS: &[(&[&str], &str, &str, &[&str])] = &[
-    (
-        &["js", "jsx", "mjs", "cjs", "ts", "tsx"],
-        "typescript",
-        "typescript-language-server",
-        &["--stdio"],
-    ),
-    (&["rs"], "rust", "rust-analyzer", &[]),
-    (
-        &["py"],
-        "python",
-        "pyright-langserver",
-        &["--stdio"],
-    ),
-    (
-        &["css", "scss"],
-        "css",
-        "vscode-css-language-server",
-        &["--stdio"],
-    ),
-    (
-        &["html", "svelte"],
-        "html",
-        "vscode-html-language-server",
-        &["--stdio"],
-    ),
-    (
-        &["json"],
-        "json",
-        "vscode-json-language-server",
-        &["--stdio"],
-    ),
-    (&["md", "markdown"], "markdown", "marksman", &[]),
-];
-
 /// Detect the language server for a given file extension.
 ///
-/// Checks if the server binary exists on PATH via `which::which()`.
+/// Uses the embedded manifest to find the best server, then checks
+/// if the binary exists on PATH or in the managed lsp-servers/ directory.
 /// Returns `None` if no server is configured for the extension.
 pub fn detect_for_extension(ext: &str) -> Option<ServerInfo> {
-    let ext_lower = ext.to_lowercase();
-    for &(extensions, language_id, binary, args) in LANGUAGE_SERVERS {
-        if extensions.contains(&ext_lower.as_str()) {
-            let resolved = which::which(binary).ok();
-            let installed = resolved.is_some();
-            return Some(ServerInfo {
-                language_id: language_id.to_string(),
-                binary: binary.to_string(),
-                args: args.iter().map(|s| s.to_string()).collect(),
-                installed,
-                resolved_path: resolved,
-            });
-        }
-    }
-    None
+    let manifest = super::manifest::load_manifest().ok()?;
+    let lsp_dir = super::installer::get_lsp_servers_dir().ok();
+    let (id, entry) = super::manifest::find_server_for_extension(&manifest, ext)?;
+
+    // Try to find the binary: 1) PATH, 2) managed lsp-servers/
+    let resolved = if let Some(ref dir) = lsp_dir {
+        super::manifest::find_binary_path(&entry.command, dir)
+    } else {
+        which::which(&entry.command).ok()
+    };
+
+    let installed = resolved.is_some();
+
+    // Use the server ID as the language_id (e.g., "typescript", "css").
+    // This matches the keys used in LspManager.servers and extension_for_language().
+    // Note: entry.languages contains LSP languageIds (e.g., "javascript", "typescript")
+    // which are used in textDocument/didOpen, but we need the server key here.
+    let language_id = id.clone();
+
+    Some(ServerInfo {
+        language_id,
+        binary: entry.command.clone(),
+        args: entry.args.clone(),
+        installed,
+        resolved_path: resolved,
+        server_id: Some(id),
+    })
 }
 
-/// Look up just the language ID for a file extension, without checking PATH.
-pub fn language_id_for_extension(ext: &str) -> Option<&'static str> {
-    let ext_lower = ext.to_lowercase();
-    for &(extensions, language_id, _, _) in LANGUAGE_SERVERS {
-        if extensions.contains(&ext_lower.as_str()) {
-            return Some(language_id);
-        }
-    }
-    None
+/// Look up just the language ID (server key) for a file extension, without checking PATH.
+///
+/// Returns the server ID from the manifest (e.g., "typescript", "css", "svelte").
+/// Returns `None` if no server is configured for the extension.
+pub fn language_id_for_extension(ext: &str) -> Option<String> {
+    let manifest = super::manifest::load_manifest().ok()?;
+    let (id, _) = super::manifest::find_server_for_extension(&manifest, ext)?;
+    Some(id)
 }
 
 /// Check all known language servers and report which are installed.
+///
+/// Iterates all enabled servers from the manifest and checks binary availability.
 pub fn detect_all() -> Vec<ServerInfo> {
-    // Deduplicate by language_id (each server appears once)
-    let mut seen = std::collections::HashSet::new();
+    let manifest = match super::manifest::load_manifest() {
+        Ok(m) => m,
+        Err(_) => return Vec::new(),
+    };
+    let lsp_dir = super::installer::get_lsp_servers_dir().ok();
+
     let mut results = Vec::new();
-
-    for &(_, language_id, binary, args) in LANGUAGE_SERVERS {
-        if seen.insert(language_id) {
-            let resolved = which::which(binary).ok();
-            let installed = resolved.is_some();
-            results.push(ServerInfo {
-                language_id: language_id.to_string(),
-                binary: binary.to_string(),
-                args: args.iter().map(|s| s.to_string()).collect(),
-                installed,
-                resolved_path: resolved,
-            });
+    for (id, entry) in &manifest.servers {
+        if !entry.enabled {
+            continue;
         }
-    }
 
+        let resolved = if let Some(ref dir) = lsp_dir {
+            super::manifest::find_binary_path(&entry.command, dir)
+        } else {
+            which::which(&entry.command).ok()
+        };
+        let installed = resolved.is_some();
+        let language_id = id.clone();
+
+        results.push(ServerInfo {
+            language_id,
+            binary: entry.command.clone(),
+            args: entry.args.clone(),
+            installed,
+            resolved_path: resolved,
+            server_id: Some(id.clone()),
+        });
+    }
     results
 }
 
@@ -194,22 +186,8 @@ mod tests {
             assert_eq!(info.language_id, "typescript");
             assert_eq!(info.binary, "typescript-language-server");
             assert_eq!(info.args, vec!["--stdio"]);
+            assert_eq!(info.server_id.as_deref(), Some("typescript"));
         }
-    }
-
-    #[test]
-    fn test_rust_extension() {
-        let info = detect_for_extension("rs").unwrap();
-        assert_eq!(info.language_id, "rust");
-        assert_eq!(info.binary, "rust-analyzer");
-        assert!(info.args.is_empty());
-    }
-
-    #[test]
-    fn test_python_extension() {
-        let info = detect_for_extension("py").unwrap();
-        assert_eq!(info.language_id, "python");
-        assert_eq!(info.binary, "pyright-langserver");
     }
 
     #[test]
@@ -217,30 +195,30 @@ mod tests {
         for ext in &["css", "scss"] {
             let info = detect_for_extension(ext).unwrap();
             assert_eq!(info.language_id, "css");
+            assert_eq!(info.server_id.as_deref(), Some("css"));
         }
     }
 
     #[test]
-    fn test_html_extensions() {
-        for ext in &["html", "svelte"] {
-            let info = detect_for_extension(ext).unwrap();
-            assert_eq!(info.language_id, "html");
-        }
+    fn test_svelte_extension() {
+        let info = detect_for_extension("svelte").unwrap();
+        assert_eq!(info.language_id, "svelte");
+        assert_eq!(info.server_id.as_deref(), Some("svelte"));
+        assert_eq!(info.binary, "svelteserver");
+    }
+
+    #[test]
+    fn test_html_extension() {
+        let info = detect_for_extension("html").unwrap();
+        assert_eq!(info.language_id, "html");
+        assert_eq!(info.server_id.as_deref(), Some("html"));
     }
 
     #[test]
     fn test_json_extension() {
         let info = detect_for_extension("json").unwrap();
         assert_eq!(info.language_id, "json");
-    }
-
-    #[test]
-    fn test_markdown_extensions() {
-        for ext in &["md", "markdown"] {
-            let info = detect_for_extension(ext).unwrap();
-            assert_eq!(info.language_id, "markdown");
-            assert_eq!(info.binary, "marksman");
-        }
+        assert_eq!(info.server_id.as_deref(), Some("json"));
     }
 
     #[test]
@@ -251,18 +229,20 @@ mod tests {
 
     #[test]
     fn test_case_insensitive() {
-        let info = detect_for_extension("RS").unwrap();
-        assert_eq!(info.language_id, "rust");
+        // Extensions in the manifest are lowercase, but lookup should be
+        // case-insensitive (find_server_for_extension lowercases the input).
+        let info = detect_for_extension("CSS").unwrap();
+        assert_eq!(info.language_id, "css");
 
-        let info = detect_for_extension("Py").unwrap();
-        assert_eq!(info.language_id, "python");
+        let info = detect_for_extension("Json").unwrap();
+        assert_eq!(info.language_id, "json");
     }
 
     #[test]
     fn test_language_id_for_extension() {
-        assert_eq!(language_id_for_extension("rs"), Some("rust"));
-        assert_eq!(language_id_for_extension("ts"), Some("typescript"));
-        assert_eq!(language_id_for_extension("py"), Some("python"));
+        assert_eq!(language_id_for_extension("ts"), Some("typescript".to_string()));
+        assert_eq!(language_id_for_extension("css"), Some("css".to_string()));
+        assert_eq!(language_id_for_extension("svelte"), Some("svelte".to_string()));
         assert_eq!(language_id_for_extension("xyz"), None);
     }
 
@@ -274,5 +254,25 @@ mod tests {
         ids.sort();
         ids.dedup();
         assert_eq!(ids.len(), before, "detect_all should not have duplicate language IDs");
+    }
+
+    #[test]
+    fn test_detect_all_has_server_ids() {
+        let all = detect_all();
+        for info in &all {
+            assert!(info.server_id.is_some(), "All detect_all entries should have server_id");
+        }
+    }
+
+    #[test]
+    fn test_detect_all_covers_manifest_servers() {
+        let all = detect_all();
+        let ids: Vec<&str> = all.iter().filter_map(|s| s.server_id.as_deref()).collect();
+        // All enabled manifest servers should appear
+        assert!(ids.contains(&"typescript"), "Should include typescript");
+        assert!(ids.contains(&"svelte"), "Should include svelte");
+        assert!(ids.contains(&"css"), "Should include css");
+        assert!(ids.contains(&"html"), "Should include html");
+        assert!(ids.contains(&"json"), "Should include json");
     }
 }
