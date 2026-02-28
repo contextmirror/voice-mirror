@@ -204,4 +204,41 @@ describe('lsp-diagnostics.svelte.js: getTotals method', () => {
     const getTotalsBody = src.slice(getTotalsIdx, getTotalsIdx + 400);
     assert.ok(getTotalsBody.includes('rawDiagnostics'), 'Should iterate rawDiagnostics for accurate counts');
   });
+
+  it('getTotals returns object with errors, warnings, infos keys', () => {
+    const getTotalsIdx = src.indexOf('getTotals()');
+    const getTotalsBody = src.slice(getTotalsIdx, getTotalsIdx + 500);
+    assert.ok(/return\s*\{[^}]*errors[^}]*warnings[^}]*infos[^}]*\}/.test(getTotalsBody),
+      'Should return { errors, warnings, infos }');
+  });
+
+  it('getTotals checks severity 3 for info', () => {
+    const getTotalsIdx = src.indexOf('getTotals()');
+    const getTotalsBody = src.slice(getTotalsIdx, getTotalsIdx + 500);
+    assert.ok(getTotalsBody.includes("'information'") || getTotalsBody.includes('sev === 3'),
+      'Should check info severity (string or numeric)');
+  });
+});
+
+describe('lsp-diagnostics.svelte.js: project-wide state', () => {
+  it('diagnostics Map keyed by relative path', () => {
+    assert.ok(src.includes('updated.set(relativePath,'), 'Should key diagnostics by relative path');
+  });
+
+  it('clear resets both diagnostics and rawDiagnostics Maps', () => {
+    const clearIdx = src.indexOf('clear()');
+    const clearBody = src.slice(clearIdx, clearIdx + 200);
+    const mapResets = (clearBody.match(/new Map\(\)/g) || []).length;
+    assert.ok(mapResets >= 2, 'clear() should reset both diagnostics and rawDiagnostics to new Map()');
+  });
+
+  it('handles bulk updates by creating new Map copies', () => {
+    assert.ok(src.includes('new Map(diagnostics)'), 'Should create new Map from existing for immutable update');
+    assert.ok(src.includes('new Map(rawDiagnostics)'), 'Should create new Map from rawDiagnostics for immutable update');
+  });
+
+  it('removes files with zero diagnostics from Maps', () => {
+    assert.ok(src.includes('updated.delete(relativePath)'), 'Should delete from summary map');
+    assert.ok(src.includes('updatedRaw.delete(relativePath)'), 'Should delete from raw map');
+  });
 });
