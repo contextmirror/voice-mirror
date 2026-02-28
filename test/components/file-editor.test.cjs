@@ -706,3 +706,20 @@ describe('FileEditor.svelte: markdown link safety', () => {
     );
   });
 });
+
+describe('FileEditor.svelte: pendingCursorPosition', () => {
+  it('imports tabsStore for pending cursor', () => {
+    assert.ok(
+      src.includes('tabsStore') && src.includes('pendingCursorPosition'),
+      'Should check tabsStore.pendingCursorPosition'
+    );
+  });
+
+  it('dispatches cursor position from pending', () => {
+    assert.ok(src.includes('clearPendingCursor'), 'Should clear pending cursor after applying');
+  });
+
+  it('uses scrollIntoView when applying pending cursor', () => {
+    assert.ok(src.includes('scrollIntoView'), 'Should scroll to the cursor position');
+  });
+});

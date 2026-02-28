@@ -583,6 +583,25 @@
     return () => { unlisten?.(); };
   });
 
+  // Apply pending cursor position (from Problems panel click-to-navigate)
+  $effect(() => {
+    const pending = tabsStore.pendingCursorPosition;
+    if (!pending || !view || pending.path !== currentPath) return;
+    // Defer to ensure editor content is loaded
+    requestAnimationFrame(() => {
+      try {
+        const lineNum = Math.min(Math.max(pending.line + 1, 1), view.state.doc.lines);
+        const line = view.state.doc.line(lineNum);
+        const charOffset = Math.min(pending.character || 0, line.length);
+        view.dispatch({ selection: { anchor: line.from + charOffset }, scrollIntoView: true });
+        view.focus();
+      } catch (e) {
+        // Ignore if line is out of range
+      }
+      tabsStore.clearPendingCursor();
+    });
+  });
+
   // Listen for outline symbol navigation (from OutlinePanel via LensWorkspace)
   // Scoped by groupId so each editor instance only handles its own events
   $effect(() => {
