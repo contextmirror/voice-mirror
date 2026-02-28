@@ -103,6 +103,10 @@ pub fn find_server_for_extension(
 
 /// Resolve the binary path for a server.
 /// Checks: 1) user PATH, 2) managed lsp-servers/node_modules/.bin/
+///
+/// On Windows, prefers `.cmd` wrappers over extensionless bash scripts
+/// in node_modules/.bin/ because `resolve_node_script` needs the `.cmd`
+/// extension to locate the actual Node.js entry script.
 pub fn find_binary_path(command: &str, lsp_servers_dir: &Path) -> Option<PathBuf> {
     // 1. Check user PATH
     if let Ok(path) = which::which(command) {
@@ -111,18 +115,21 @@ pub fn find_binary_path(command: &str, lsp_servers_dir: &Path) -> Option<PathBuf
 
     // 2. Check managed node_modules/.bin/
     let bin_dir = lsp_servers_dir.join("node_modules").join(".bin");
-    let bin_path = bin_dir.join(command);
-    if bin_path.exists() {
-        return Some(bin_path);
-    }
 
-    // On Windows, check .cmd wrapper
+    // On Windows, prefer .cmd wrapper — the extensionless file is a bash script
+    // that can't run natively. resolve_node_script() needs the .cmd extension
+    // to find the actual Node.js entry script for proper stdio piping.
     #[cfg(windows)]
     {
         let cmd_path = bin_dir.join(format!("{}.cmd", command));
         if cmd_path.exists() {
             return Some(cmd_path);
         }
+    }
+
+    let bin_path = bin_dir.join(command);
+    if bin_path.exists() {
+        return Some(bin_path);
     }
 
     None
