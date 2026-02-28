@@ -83,6 +83,65 @@
 
   const loadLanguage = loadLanguageExtension;
 
+  // Range highlight decoration (VS Code-style rangeHighlight for Problems panel navigation)
+  let rangeHighlightEffect = null;
+  let clearRangeHighlightEffect = null;
+  let rangeHighlightField = null;
+  let rangeHighlightTimer = null;
+
+  function initRangeHighlight(cm) {
+    rangeHighlightEffect = cm.StateEffect.define();
+    clearRangeHighlightEffect = cm.StateEffect.define();
+
+    const highlightMark = cm.Decoration.mark({ class: 'cm-range-highlight' });
+    const highlightLine = cm.Decoration.line({ class: 'cm-range-highlight-line' });
+
+    rangeHighlightField = cm.StateField.define({
+      create() { return cm.RangeSet.empty; },
+      update(decos, tr) {
+        for (const e of tr.effects) {
+          if (e.is(clearRangeHighlightEffect)) return cm.RangeSet.empty;
+          if (e.is(rangeHighlightEffect)) {
+            const { from, to, wholeLine } = e.value;
+            if (wholeLine) {
+              // Highlight full lines
+              const marks = [];
+              for (let pos = from; pos <= to;) {
+                const line = tr.state.doc.lineAt(pos);
+                marks.push(highlightLine.range(line.from));
+                pos = line.to + 1;
+              }
+              return cm.RangeSet.of(marks);
+            }
+            if (from < to) return cm.RangeSet.of([highlightMark.range(from, to)]);
+            // Single point — highlight the whole line
+            const line = tr.state.doc.lineAt(from);
+            return cm.RangeSet.of([highlightLine.range(line.from)]);
+          }
+        }
+        // Clear on user selection change (typing, clicking elsewhere)
+        if (tr.selectionSet && !tr.effects.some(e => e.is(rangeHighlightEffect))) {
+          return cm.RangeSet.empty;
+        }
+        return decos;
+      },
+      provide: f => cm.EditorView.decorations.from(f),
+    });
+  }
+
+  function applyRangeHighlight(view, from, to) {
+    if (!rangeHighlightEffect || !view) return;
+    clearTimeout(rangeHighlightTimer);
+    const wholeLine = from === to;
+    view.dispatch({ effects: rangeHighlightEffect.of({ from, to, wholeLine }) });
+    // Auto-clear after 3 seconds
+    rangeHighlightTimer = setTimeout(() => {
+      if (view && clearRangeHighlightEffect) {
+        try { view.dispatch({ effects: clearRangeHighlightEffect.of(null) }); } catch {}
+      }
+    }, 3000);
+  }
+
   function sendAiMessage(text) {
     chatStore.addMessage('user', text);
     if (aiStatusStore.isApiProvider) {
@@ -443,6 +502,10 @@
         extensions.splice(1, 0, ...langSupport);
       }
 
+      // Add range highlight decoration support (for Problems panel navigation)
+      initRangeHighlight(cm);
+      if (rangeHighlightField) extensions.push(rangeHighlightField);
+
       const state = cm.EditorState.create({
         doc: data.content,
         extensions,
@@ -594,19 +657,23 @@
         const line = view.state.doc.line(lineNum);
         const anchor = line.from + Math.min(pending.character || 0, line.length);
 
-        // If we have an end range, create a selection highlight (like VS Code)
-        let head = anchor;
+        // Compute end position for range highlight
+        let highlightEnd = anchor;
         if (pending.endLine != null) {
           const endLineNum = Math.min(Math.max(pending.endLine + 1, 1), view.state.doc.lines);
           const endLine = view.state.doc.line(endLineNum);
-          head = endLine.from + Math.min(pending.endCharacter || 0, endLine.length);
+          highlightEnd = endLine.from + Math.min(pending.endCharacter || 0, endLine.length);
         }
 
+        // Set cursor at start (not selection — the decoration handles the visual highlight)
         const scrollEffect = cmCache?.EditorView?.scrollIntoView(anchor, { y: 'center' });
         view.dispatch({
-          selection: { anchor, head },
+          selection: { anchor },
           ...(scrollEffect ? { effects: scrollEffect } : { scrollIntoView: true }),
         });
+
+        // Apply VS Code-style range highlight decoration
+        applyRangeHighlight(view, anchor, highlightEnd);
         view.focus();
       } catch (e) {
         // Ignore if line is out of range
@@ -993,6 +1060,16 @@
 
   .file-editor :global(.cm-lintPoint-warning) {
     border-bottom-color: var(--warn);
+  }
+
+  /* VS Code-style range highlight for Problems panel navigation */
+  .file-editor :global(.cm-range-highlight) {
+    background-color: color-mix(in srgb, var(--accent) 25%, transparent);
+    border-radius: 2px;
+  }
+
+  .file-editor :global(.cm-range-highlight-line) {
+    background-color: color-mix(in srgb, var(--accent) 15%, transparent);
   }
 
 </style>
