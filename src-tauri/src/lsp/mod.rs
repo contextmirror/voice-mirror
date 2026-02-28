@@ -41,6 +41,10 @@ pub struct LspServer {
     pub pending_requests: Arc<Mutex<HashMap<i64, oneshot::Sender<Value>>>>,
     pub crash_count: u32,
     pub last_crash: Option<Instant>,
+    pub state: types::ServerState,
+    pub project_root: String,
+    pub last_error: Option<String>,
+    pub stderr_lines: Arc<Mutex<Vec<String>>>,
 }
 
 /// Manages all LSP server processes.
@@ -439,6 +443,10 @@ impl LspManager {
                 pending_requests: pending,
                 crash_count: 0,
                 last_crash: None,
+                state: types::ServerState::Running,
+                project_root: project_root.to_string(),
+                last_error: None,
+                stderr_lines: Arc::new(Mutex::new(Vec::new())),
             },
         );
 
@@ -1148,8 +1156,13 @@ impl LspManager {
             .map(|s| LspServerStatus {
                 language_id: s.language_id.clone(),
                 binary: s.binary.clone(),
-                running: true,
+                state: s.state.clone(),
                 open_docs_count: s.open_docs.len(),
+                crash_count: s.crash_count,
+                project_root: s.project_root.clone(),
+                last_error: s.last_error.clone(),
+                pid: s.process.id(),
+                running: s.state == types::ServerState::Running,
             })
             .collect()
     }

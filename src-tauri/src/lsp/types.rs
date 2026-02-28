@@ -4,7 +4,7 @@
 //! for communicating LSP data to the frontend via Tauri events.
 
 use lsp_types::DiagnosticSeverity;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use url::Url;
 
 /// Convert a relative file path and project root into a `file://` URI.
@@ -83,14 +83,32 @@ pub struct DiagnosticPosition {
     pub character: u32,
 }
 
+/// Server lifecycle state.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub enum ServerState {
+    Stopped,
+    Starting,
+    Running,
+    Restarting,
+    Stopping,
+    Failed,
+}
+
 /// Status information for a single LSP server.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LspServerStatus {
     pub language_id: String,
     pub binary: String,
-    pub running: bool,
+    pub state: ServerState,
     pub open_docs_count: usize,
+    pub crash_count: u32,
+    pub project_root: String,
+    pub last_error: Option<String>,
+    pub pid: Option<u32>,
+    /// Keep for backward compat with frontend
+    pub running: bool,
 }
 
 /// Emitted when LSP server status changes.
