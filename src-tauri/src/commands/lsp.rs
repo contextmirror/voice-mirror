@@ -746,6 +746,60 @@ pub fn lsp_set_server_enabled(
     IpcResponse::ok(json!({ "ok": true, "server": server_id, "enabled": enabled }))
 }
 
+/// Restart a specific LSP server (shut down + re-launch).
+#[tauri::command]
+pub async fn lsp_restart_server(
+    lang_id: String,
+    project_root: String,
+    state: State<'_, LspManagerState>,
+) -> Result<IpcResponse, ()> {
+    let mut manager = state.0.lock().await;
+    manager.shutdown_server(&lang_id, &project_root).await.ok();
+    match manager.ensure_server(&lang_id, &project_root).await {
+        Ok(()) => Ok(IpcResponse::ok(json!({"restarted": true}))),
+        Err(e) => Ok(IpcResponse::err(e)),
+    }
+}
+
+/// Get detailed information about a specific running LSP server.
+///
+/// Returns full stderr buffer, open document URIs, crash count, etc.
+#[tauri::command]
+pub async fn lsp_get_server_detail(
+    lang_id: String,
+    project_root: String,
+    state: State<'_, LspManagerState>,
+) -> Result<IpcResponse, ()> {
+    let manager = state.0.lock().await;
+    let key = crate::lsp::server_key(&lang_id, &project_root);
+    match manager.servers.get(&key) {
+        Some(server) => {
+            let stderr = server
+                .stderr_lines
+                .try_lock()
+                .map(|buf| buf.clone())
+                .unwrap_or_default();
+            Ok(IpcResponse::ok(json!({
+                "languageId": server.language_id,
+                "binary": server.binary,
+                "state": server.state,
+                "projectRoot": server.project_root,
+                "version": server.version,
+                "serverName": server.server_name,
+                "crashCount": server.crash_count,
+                "lastError": server.last_error,
+                "openDocs": server.open_docs.iter().collect::<Vec<_>>(),
+                "stderrLines": stderr,
+                "pid": server.process.id(),
+            })))
+        }
+        None => Ok(IpcResponse::err(format!(
+            "No server found for {} in {}",
+            lang_id, project_root
+        ))),
+    }
+}
+
 /// Get the status of all running LSP servers.
 #[tauri::command]
 pub async fn lsp_get_status(

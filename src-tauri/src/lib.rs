@@ -418,6 +418,8 @@ pub fn run() {
             lsp_cmds::lsp_get_server_list,
             lsp_cmds::lsp_install_server,
             lsp_cmds::lsp_set_server_enabled,
+            lsp_cmds::lsp_restart_server,
+            lsp_cmds::lsp_get_server_detail,
             lsp_cmds::lsp_get_status,
             lsp_cmds::lsp_shutdown,
             // Dev server detection + management

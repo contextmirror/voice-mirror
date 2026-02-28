@@ -755,6 +755,14 @@ export async function lspSetServerEnabled(serverId, enabled) {
   return invoke('lsp_set_server_enabled', { serverId, enabled });
 }
 
+export async function lspRestartServer(langId, projectRoot) {
+  return invoke('lsp_restart_server', { langId, projectRoot });
+}
+
+export async function lspGetServerDetail(langId, projectRoot) {
+  return invoke('lsp_get_server_detail', { langId, projectRoot });
+}
+
 export async function lspShutdown() {
   return invoke('lsp_shutdown');
 }
