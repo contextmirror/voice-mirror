@@ -81,3 +81,27 @@ describe('device preview — Rust commands', () => {
         });
     });
 });
+
+const apiSrc = fs.readFileSync(path.join(__dirname, '../../src/lib/api.js'), 'utf-8');
+
+describe('api.js: device preview wrappers', () => {
+  it('exports lensCreateDeviceWebview', () => {
+    assert.ok(apiSrc.includes('export async function lensCreateDeviceWebview'), 'Should export lensCreateDeviceWebview');
+  });
+
+  it('exports lensCloseDeviceWebview', () => {
+    assert.ok(apiSrc.includes('export async function lensCloseDeviceWebview'), 'Should export lensCloseDeviceWebview');
+  });
+
+  it('exports lensCloseAllDeviceWebviews', () => {
+    assert.ok(apiSrc.includes('export async function lensCloseAllDeviceWebviews'), 'Should export lensCloseAllDeviceWebviews');
+  });
+
+  it('exports lensResizeDeviceWebview', () => {
+    assert.ok(apiSrc.includes('export async function lensResizeDeviceWebview'), 'Should export lensResizeDeviceWebview');
+  });
+
+  it('lensCreateDeviceWebview invokes correct command', () => {
+    assert.ok(apiSrc.includes("'lens_create_device_webview'"), 'Should invoke lens_create_device_webview');
+  });
+});

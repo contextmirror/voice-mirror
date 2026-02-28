@@ -400,6 +400,24 @@ export async function lensCloseAllTabs() {
   return invoke('lens_close_all_tabs');
 }
 
+// ============ Device Preview ============
+
+export async function lensCreateDeviceWebview({ presetId, url, width, height, x, y }) {
+  return invoke('lens_create_device_webview', { presetId, url, width, height, x, y });
+}
+
+export async function lensCloseDeviceWebview(label) {
+  return invoke('lens_close_device_webview', { label });
+}
+
+export async function lensCloseAllDeviceWebviews() {
+  return invoke('lens_close_all_device_webviews');
+}
+
+export async function lensResizeDeviceWebview(label, x, y, width, height) {
+  return invoke('lens_resize_device_webview', { label, x, y, width, height });
+}
+
 // ============ Dev Server ============
 
 /**

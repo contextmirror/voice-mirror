@@ -244,6 +244,11 @@ describe('api.js -- exported async functions', () => {
     'lensCloseTab',
     'lensSwitchTab',
     'lensCloseAllTabs',
+    // Device Preview
+    'lensCreateDeviceWebview',
+    'lensCloseDeviceWebview',
+    'lensCloseAllDeviceWebviews',
+    'lensResizeDeviceWebview',
     // GPU / Model Management
     'detectGpu',
     'listSttModels',
