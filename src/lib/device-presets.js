@@ -33,13 +33,18 @@ export const DEVICE_PRESETS = [
     { id: 'ipad-pro-11', name: 'iPad Pro 11"', category: 'iPad', width: 834, height: 1194, dpr: 2, userAgent: IPAD_UA },
     { id: 'ipad-pro-13', name: 'iPad Pro 13"', category: 'iPad', width: 1032, height: 1376, dpr: 2, userAgent: IPAD_UA },
 
-    // Android Phone (6 devices)
+    // Android Phone (11 devices)
     { id: 'pixel-8', name: 'Pixel 8', category: 'Android Phone', width: 412, height: 915, dpr: 2.625, userAgent: ANDROID_PHONE_UA },
     { id: 'pixel-8-pro', name: 'Pixel 8 Pro', category: 'Android Phone', width: 412, height: 915, dpr: 2.625, userAgent: ANDROID_PHONE_UA },
     { id: 'galaxy-s24', name: 'Galaxy S24', category: 'Android Phone', width: 360, height: 780, dpr: 3, userAgent: ANDROID_PHONE_UA },
     { id: 'galaxy-s24-ultra', name: 'Galaxy S24 Ultra', category: 'Android Phone', width: 412, height: 915, dpr: 3.5, userAgent: ANDROID_PHONE_UA },
     { id: 'galaxy-z-fold-folded', name: 'Galaxy Z Fold (Folded)', category: 'Android Phone', width: 280, height: 653, dpr: 2.55, userAgent: ANDROID_PHONE_UA },
     { id: 'galaxy-z-fold-open', name: 'Galaxy Z Fold (Open)', category: 'Android Phone', width: 600, height: 653, dpr: 2.55, userAgent: ANDROID_PHONE_UA },
+    { id: 'moto-g56', name: 'Moto G56', category: 'Android Phone', width: 360, height: 800, dpr: 3, userAgent: ANDROID_PHONE_UA },
+    { id: 'moto-g54', name: 'Moto G54', category: 'Android Phone', width: 360, height: 800, dpr: 3, userAgent: ANDROID_PHONE_UA },
+    { id: 'moto-g-power-2024', name: 'Moto G Power (2024)', category: 'Android Phone', width: 412, height: 915, dpr: 2.625, userAgent: ANDROID_PHONE_UA },
+    { id: 'moto-g-stylus-2024', name: 'Moto G Stylus (2024)', category: 'Android Phone', width: 412, height: 915, dpr: 2.625, userAgent: ANDROID_PHONE_UA },
+    { id: 'moto-g-play-2024', name: 'Moto G Play (2024)', category: 'Android Phone', width: 360, height: 800, dpr: 2, userAgent: ANDROID_PHONE_UA },
 
     // Android Tablet (2 devices)
     { id: 'galaxy-tab-s9', name: 'Galaxy Tab S9', category: 'Android Tablet', width: 800, height: 1280, dpr: 2, userAgent: ANDROID_TABLET_UA },
