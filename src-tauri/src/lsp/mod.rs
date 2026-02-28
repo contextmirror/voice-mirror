@@ -559,6 +559,22 @@ impl LspManager {
         // Emit status update
         self.emit_status();
 
+        // Trigger background project scan (non-blocking).
+        // Spawns a task that waits for the server to finish initialization
+        // before scanning project files for diagnostics.
+        let scan_lang = lang_id.to_string();
+        let scan_root = project_root.to_string();
+        let scan_app = self.app_handle.clone();
+        tokio::spawn(async move {
+            // Small delay to let server finish initialization
+            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+            let lsp_state: tauri::State<'_, LspManagerState> = scan_app.state();
+            let mut manager = lsp_state.0.lock().await;
+            if let Err(e) = manager.scan_project_files(&scan_lang, &scan_root).await {
+                warn!("Background scan failed for '{}': {}", scan_lang, e);
+            }
+        });
+
         Ok(())
     }
 
