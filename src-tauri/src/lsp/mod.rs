@@ -20,7 +20,7 @@ use serde_json::Value;
 use tauri::{AppHandle, Emitter};
 use tokio::process::{Child, ChildStdin};
 use tokio::sync::{oneshot, Mutex};
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 use types::{LspServerStatus, LspServerStatusEvent};
 
@@ -179,31 +179,56 @@ impl LspManager {
                             if trimmed.is_empty() {
                                 continue;
                             }
-                            if trimmed == last_msg {
+
+                            // Strip leading timestamp for dedup comparison
+                            // rust-analyzer format: "2026-02-28T16:49:56.717Z  WARN ..."
+                            let msg_body = if trimmed.len() > 30 && trimmed.as_bytes()[4] == b'-' {
+                                // Skip past "YYYY-MM-DDTHH:MM:SS.fffffffZ  "
+                                trimmed.find("  ").map_or(trimmed, |i| &trimmed[i..]).trim()
+                            } else {
+                                trimmed
+                            };
+
+                            if msg_body == last_msg {
                                 repeat_count += 1;
                                 continue;
                             }
+
                             // Flush previous repeated message
                             if repeat_count > 0 {
-                                warn!(
+                                debug!(
                                     "[{}/{}] stderr: (repeated {} more times)",
                                     lang_id_clone, binary_clone, repeat_count
                                 );
                                 repeat_count = 0;
                             }
-                            warn!(
-                                "[{}/{}] stderr: {}",
-                                lang_id_clone, binary_clone, trimmed
-                            );
+
+                            // Downgrade known-noisy LSP messages to debug level
+                            let is_noise = msg_body.contains("notify error: Input watch path")
+                                || msg_body.contains("inference diagnostic in desugared")
+                                || msg_body.contains("overly long loop turn");
+
+                            if is_noise {
+                                debug!(
+                                    "[{}/{}] stderr: {}",
+                                    lang_id_clone, binary_clone, msg_body
+                                );
+                            } else {
+                                warn!(
+                                    "[{}/{}] stderr: {}",
+                                    lang_id_clone, binary_clone, trimmed
+                                );
+                            }
+
                             last_msg.clear();
-                            last_msg.push_str(trimmed);
+                            last_msg.push_str(msg_body);
                         }
                         Err(_) => break,
                     }
                 }
                 // Flush any remaining repeats
                 if repeat_count > 0 {
-                    warn!(
+                    debug!(
                         "[{}/{}] stderr: (repeated {} more times)",
                         lang_id_clone, binary_clone, repeat_count
                     );
