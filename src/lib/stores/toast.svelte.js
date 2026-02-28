@@ -7,6 +7,7 @@
 
 import { uid } from '../utils.js';
 import { configStore } from './config.svelte.js';
+import { statusBarStore } from './status-bar.svelte.js';
 
 /**
  * @typedef {Object} Toast
@@ -95,6 +96,14 @@ function createToastStore() {
 
     toasts = [...toasts, toast];
     scheduleDismiss(id, effectiveDuration);
+
+    // Persist to notification center (status bar bell)
+    statusBarStore.addNotification({
+      message,
+      severity,
+      source: 'toast',
+    });
+
     return id;
   }
 

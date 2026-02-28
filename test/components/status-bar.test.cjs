@@ -374,3 +374,109 @@ describe('StatusBar.svelte: theme integration', () => {
     );
   });
 });
+
+// ──────────────────────────────────────────────────
+// Task 5: R1 click → Go to Line
+// ──────────────────────────────────────────────────
+
+describe('StatusBar.svelte: R1 click action', () => {
+  it('dispatches status-bar-go-to-line event', () => {
+    assert.ok(src.includes('status-bar-go-to-line'), 'Should dispatch go-to-line event');
+  });
+
+  it('R1 has clickable class', () => {
+    assert.ok(src.includes('sb-clickable'), 'Should have clickable class');
+  });
+
+  it('R1 uses CustomEvent', () => {
+    assert.ok(src.includes('CustomEvent'), 'Should use CustomEvent');
+  });
+});
+
+const APP_SRC = fs.readFileSync(path.join(__dirname, '../../src/App.svelte'), 'utf-8');
+
+describe('App.svelte: status-bar-go-to-line listener', () => {
+  it('listens for status-bar-go-to-line event', () => {
+    assert.ok(APP_SRC.includes('status-bar-go-to-line'), 'Should listen for go-to-line event');
+  });
+
+  it('sets commandPaletteMode to goto-line', () => {
+    assert.ok(APP_SRC.includes("'goto-line'"), 'Should set goto-line mode');
+  });
+
+  it('has cleanup for event listener', () => {
+    assert.ok(APP_SRC.includes('removeEventListener'), 'Should clean up listener');
+  });
+});
+
+// ──────────────────────────────────────────────────
+// Task 6: Toast → notification routing
+// ──────────────────────────────────────────────────
+
+const TOAST_SRC = fs.readFileSync(path.join(__dirname, '../../src/lib/stores/toast.svelte.js'), 'utf-8');
+
+describe('toast.svelte.js: notification routing', () => {
+  it('imports statusBarStore', () => {
+    assert.ok(TOAST_SRC.includes('statusBarStore'), 'Should import statusBarStore');
+  });
+
+  it('imports from status-bar.svelte.js', () => {
+    assert.ok(TOAST_SRC.includes('status-bar.svelte.js'), 'Should import from correct file');
+  });
+
+  it('calls addNotification when adding toast', () => {
+    assert.ok(TOAST_SRC.includes('addNotification'), 'Should route to notification store');
+  });
+});
+
+// ──────────────────────────────────────────────────
+// Task 4: FileEditor → statusBarStore wiring
+// ──────────────────────────────────────────────────
+
+const FE_SRC = fs.readFileSync(path.join(__dirname, '../../src/components/lens/FileEditor.svelte'), 'utf-8');
+
+describe('FileEditor.svelte: status bar wiring', () => {
+  it('imports statusBarStore', () => {
+    assert.ok(FE_SRC.includes('statusBarStore'), 'Should import statusBarStore');
+  });
+
+  it('imports getLanguageName', () => {
+    assert.ok(FE_SRC.includes('getLanguageName'), 'Should import getLanguageName');
+  });
+
+  it('calls setCursor', () => {
+    assert.ok(FE_SRC.includes('statusBarStore.setCursor'), 'Should call setCursor');
+  });
+
+  it('calls setLanguage', () => {
+    assert.ok(FE_SRC.includes('statusBarStore.setLanguage'), 'Should call setLanguage');
+  });
+
+  it('calls setEditorFocused', () => {
+    assert.ok(FE_SRC.includes('statusBarStore.setEditorFocused'), 'Should call setEditorFocused');
+  });
+
+  it('calls setEol', () => {
+    assert.ok(FE_SRC.includes('statusBarStore.setEol'), 'Should call setEol');
+  });
+
+  it('calls setEncoding', () => {
+    assert.ok(FE_SRC.includes('statusBarStore.setEncoding'), 'Should call setEncoding');
+  });
+
+  it('calls clearEditorState on destroy', () => {
+    assert.ok(FE_SRC.includes('statusBarStore.clearEditorState'), 'Should clear on destroy');
+  });
+});
+
+const EXT_SRC = fs.readFileSync(path.join(__dirname, '../../src/lib/editor-extensions.js'), 'utf-8');
+
+describe('editor-extensions.js: cursor activity callback', () => {
+  it('accepts onCursorActivity option', () => {
+    assert.ok(EXT_SRC.includes('onCursorActivity'), 'Should accept onCursorActivity');
+  });
+
+  it('calls onCursorActivity on updates', () => {
+    assert.ok(EXT_SRC.includes('onCursorActivity('), 'Should call onCursorActivity');
+  });
+});

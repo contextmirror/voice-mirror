@@ -2,7 +2,7 @@
 
 > Internal doc. Tracks what Voice Mirror's Lens workspace has vs what VS Code / Zed / Cursor offer.
 >
-> Last updated: 2026-02-27
+> Last updated: 2026-02-28
 
 ---
 
@@ -42,6 +42,8 @@ What's missing is everything that makes a "real IDE" feel seamless — the gaps 
 | Command palette (commands) | Full | Full | 48 commands, 4 modes, MRU | **Feature Compete** |
 | Terminal | Full | Partial | Rich (tabs, splits, search, links, persistence) | Minor gaps — see §14 |
 | Minimap | Full | Full | Full (@replit/codemirror-minimap + diff minimap) | **Feature Compete** |
+| Status bar | Full | Full | Full (git, diagnostics, cursor, language, encoding, EOL, LSP, dev server) | **Feature Compete** |
+| Notifications | Full | Full | Full (toast system + notification center + bell) | **Feature Compete** |
 | Breadcrumbs | Full | Full | None | Low |
 | Find & replace (in file) | Full | Full | Full | **Feature Compete** |
 
@@ -551,6 +553,8 @@ See `docs/archive/TERMINAL-GAP-ANALYSIS.md` for the complete 33-item gap list. T
 | Find in terminal (Ctrl+F) | Terminal | Search with regex, case toggle, match navigation |
 | Clickable URLs/file paths | Terminal | URL detection + file path detection (Unix/Windows, :line:col) |
 | Terminal persistence | Terminal | Layout/names/colors/icons saved to config, fresh PTYs on restore |
+| Status bar | Editor | Git branch, diagnostics, cursor pos, language, encoding, EOL, indentation, LSP health, dev server |
+| Notification system | Editor | Toast notifications + notification center + bell icon with unread count |
 
 ### Open Gaps — Ranked by Impact
 

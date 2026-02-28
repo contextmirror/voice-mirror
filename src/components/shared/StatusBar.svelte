@@ -148,8 +148,9 @@
   <!-- ════════ RIGHT SIDE ════════ -->
   <div class="status-bar-right">
     {#if showEditorInfo}
-      <!-- R1: Cursor position -->
-      <button class="sb-item" title="Go to Line">
+      <!-- R1: Cursor position (click → Go to Line dialog) -->
+      <button class="sb-item sb-clickable" title="Go to Line"
+        onclick={() => window.dispatchEvent(new CustomEvent('status-bar-go-to-line'))}>
         <span>Ln {statusBarStore.cursor.line}, Col {statusBarStore.cursor.col}</span>
       </button>
 
@@ -294,6 +295,10 @@
   .sb-item:hover {
     color: var(--text);
     background: var(--bg-hover);
+  }
+
+  .sb-clickable {
+    cursor: pointer;
   }
 
   /* ========== Icons ========== */

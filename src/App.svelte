@@ -221,6 +221,16 @@
     return () => { unlistenFn?.(); };
   });
 
+  // Listen for status bar "Go to Line" click (R1 cursor position item)
+  $effect(() => {
+    const handleGoToLine = () => {
+      commandPaletteMode = 'goto-line';
+      commandPaletteVisible = true;
+    };
+    window.addEventListener('status-bar-go-to-line', handleGoToLine);
+    return () => window.removeEventListener('status-bar-go-to-line', handleGoToLine);
+  });
+
   // Clean up on window close (bounds are saved by Rust's CloseRequested handler)
   $effect(() => {
     const handleBeforeUnload = () => {
