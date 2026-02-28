@@ -18,8 +18,8 @@
 |------|-------------|--------|-------|--------|
 | 1 | Status bar store (state + setters) | Done | agent | 7b7d4cca |
 | 2 | StatusBar component + CSS | Done | agent | eaca80f7 |
-| 3 | Mount in App.svelte | Pending | — | — |
-| 4 | FileEditor → store wiring | Pending | — | — |
+| 3 | Mount in App.svelte | Done | agent | b9fae202 |
+| 4 | FileEditor → store wiring | Done | agent | — |
 | 5 | R1 click → Go to Line | Pending | — | — |
 | 6 | Toast → notification routing | Pending | — | — |
 | 7 | Update IDE-GAPS.md | Pending | — | — |

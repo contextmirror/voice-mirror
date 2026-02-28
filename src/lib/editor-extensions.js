@@ -27,6 +27,7 @@ import { createGitGutter } from './editor-git-gutter.js';
  * @param {function} [options.getOriginalContent] - Async callback returning original git content for diff gutter
  * @param {function} [options.onClick] - Callback for Ctrl+Click go-to-definition (event, view)
  * @param {function} [options.onFontZoom] - Callback for font zoom (delta: +1, -1, or 0 to reset)
+ * @param {function} [options.onCursorActivity] - Callback for cursor position changes (update)
  * @returns {Array} CodeMirror extensions array
  */
 export function buildEditorExtensions(cm, lsp, options) {
@@ -43,6 +44,7 @@ export function buildEditorExtensions(cm, lsp, options) {
     onClick,
     getOriginalContent,
     onFontZoom,
+    onCursorActivity,
   } = options;
 
   const extensions = [
@@ -71,6 +73,12 @@ export function buildEditorExtensions(cm, lsp, options) {
       // Dismiss signature help when cursor moves without doc change
       if (onSignatureHelp && !update.docChanged && update.selectionSet) {
         onSignatureHelp.onSelectionChanged(update);
+      }
+      // Status bar cursor tracking
+      if (update.selectionSet || update.docChanged) {
+        if (onCursorActivity) {
+          onCursorActivity(update);
+        }
       }
     }),
     cm.keymap.of([

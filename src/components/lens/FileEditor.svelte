@@ -20,6 +20,7 @@
   import { buildEditorExtensions } from '../../lib/editor-extensions.js';
   import { gitGutterPlugin } from '../../lib/editor-git-gutter.js';
   import { loadLanguageExtension } from '../../lib/codemirror-languages.js';
+  import { statusBarStore, getLanguageName } from '../../lib/stores/status-bar.svelte.js';
 
   let { tab, groupId = 1 } = $props();
 
@@ -380,6 +381,11 @@
           return true;
         } : null,
         onFontZoom: (delta) => handleFontZoom(delta),
+        onCursorActivity: (update) => {
+          const pos = update.state.selection.main.head;
+          const lineInfo = update.state.doc.lineAt(pos);
+          statusBarStore.setCursor(lineInfo.number, pos - lineInfo.from + 1);
+        },
         getOriginalContent: isExternal ? null : async (filePath) => {
           const root = projectStore.activeProject?.path || null;
           try {
@@ -419,6 +425,20 @@
           const gp = view.plugin(gitGutterPlugin);
           if (gp) gp.setPath(filePath);
         }
+
+        // Status bar: set language and initial editor state
+        statusBarStore.setLanguage(getLanguageName(filePath));
+        statusBarStore.setEditorFocused(true);
+        statusBarStore.setEncoding('UTF-8');
+
+        // Detect EOL from content
+        const hasCarriageReturn = data.content?.includes('\r\n');
+        statusBarStore.setEol(hasCarriageReturn ? 'CRLF' : 'LF');
+
+        // Set initial cursor position
+        const initialPos = view.state.selection.main.head;
+        const initialLine = view.state.doc.lineAt(initialPos);
+        statusBarStore.setCursor(initialLine.number, initialPos - initialLine.from + 1);
       }
 
       // Open file in LSP (fire and forget)
@@ -563,6 +583,7 @@
     clearTimeout(sigHelpDebounce);
     lsp.destroy();
     view?.destroy();
+    statusBarStore.clearEditorState();
   });
 </script>
 

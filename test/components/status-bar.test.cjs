@@ -306,6 +306,58 @@ describe('StatusBar.svelte: click-outside for notification panel', () => {
   });
 });
 
+// ---- FileEditor wiring tests ----
+const FE_SRC_PATH = path.join(__dirname, '../../src/components/lens/FileEditor.svelte');
+const feSrc = fs.readFileSync(FE_SRC_PATH, 'utf-8');
+
+describe('FileEditor.svelte: status bar wiring', () => {
+  it('imports statusBarStore', () => {
+    assert.ok(feSrc.includes('statusBarStore'), 'Should import statusBarStore');
+  });
+
+  it('imports getLanguageName', () => {
+    assert.ok(feSrc.includes('getLanguageName'), 'Should import getLanguageName');
+  });
+
+  it('calls setCursor', () => {
+    assert.ok(feSrc.includes('statusBarStore.setCursor'), 'Should call setCursor');
+  });
+
+  it('calls setLanguage', () => {
+    assert.ok(feSrc.includes('statusBarStore.setLanguage'), 'Should call setLanguage');
+  });
+
+  it('calls setEditorFocused', () => {
+    assert.ok(feSrc.includes('statusBarStore.setEditorFocused'), 'Should call setEditorFocused');
+  });
+
+  it('calls setEol', () => {
+    assert.ok(feSrc.includes('statusBarStore.setEol'), 'Should call setEol');
+  });
+
+  it('calls setEncoding', () => {
+    assert.ok(feSrc.includes('statusBarStore.setEncoding'), 'Should call setEncoding');
+  });
+
+  it('calls clearEditorState on destroy', () => {
+    assert.ok(feSrc.includes('statusBarStore.clearEditorState'), 'Should clear on destroy');
+  });
+});
+
+// ---- editor-extensions.js wiring tests ----
+const EXT_SRC_PATH = path.join(__dirname, '../../src/lib/editor-extensions.js');
+const extSrc = fs.readFileSync(EXT_SRC_PATH, 'utf-8');
+
+describe('editor-extensions.js: cursor activity callback', () => {
+  it('accepts onCursorActivity option', () => {
+    assert.ok(extSrc.includes('onCursorActivity'), 'Should accept onCursorActivity');
+  });
+
+  it('calls onCursorActivity on selection change', () => {
+    assert.ok(extSrc.includes('onCursorActivity(update)') || extSrc.includes('onCursorActivity('), 'Should call onCursorActivity');
+  });
+});
+
 describe('StatusBar.svelte: theme integration', () => {
   it('uses var(--accent) for notification badge', () => {
     assert.ok(src.includes('var(--accent)'), 'Should use --accent for badge');
