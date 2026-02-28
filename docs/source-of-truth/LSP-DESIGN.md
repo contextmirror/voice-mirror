@@ -34,15 +34,16 @@ Content-Length: 52\r\n
 
 ## Implementation Status
 
-### Implemented (Phases 1–5 complete)
+### Implemented (Phases 1–3 complete)
 
 | Feature | Status | Where |
 |---------|--------|-------|
-| Rust LSP infrastructure | Done | `src-tauri/src/lsp/` (4 files, ~1,525 lines) |
-| Server auto-detection (7 languages) | Done | `lsp/detection.rs` |
+| **Phase 1 — Core LSP** | | |
+| Rust LSP infrastructure | Done | `src-tauri/src/lsp/` (7 files, ~3,500 lines) |
+| Server auto-detection (7 servers, 10+ languages) | Done | `lsp/detection.rs` |
 | JSON-RPC framing (Content-Length) | Done | `lsp/client.rs` |
-| 9 Tauri commands | Done | `commands/lsp.rs` |
-| 9 API wrappers | Done | `src/lib/api.js` |
+| 24 Tauri commands | Done | `commands/lsp.rs` |
+| 24 API wrappers | Done | `src/lib/api.js` |
 | Diagnostics (squiggly underlines) | Done | `FileEditor.svelte` → `@codemirror/lint` |
 | Rich completions | Done | `FileEditor.svelte` → `@codemirror/autocomplete` |
 | Hover tooltips | Done | `FileEditor.svelte` → `@codemirror/view` hoverTooltip |
@@ -50,17 +51,32 @@ Content-Length: 52\r\n
 | External file navigation (read-only) | Done | `FileEditor.svelte` — opens files outside project |
 | Diagnostic caching per file | Done | `FileEditor.svelte` — `cachedDiagnostics` Map |
 | `didSave` on Ctrl+S | Done | `FileEditor.svelte` |
-| LSP status panel | Done | `LspTab.svelte` (130 lines) |
 | Windows handling | Done | `.cmd` resolution, `CREATE_NO_WINDOW`, drive letter normalization |
 | Live file sync (AI edits → editor) | Done | `fs-file-changed` event → CodeMirror update → LSP re-analysis |
-| **LSP helper module** | Done | `editor-lsp.svelte.js` — extracted from FileEditor (factory pattern) |
-| **FileTree diagnostic decorations** | Done | `lsp-diagnostics.svelte.js` store + `FileTree.svelte` red/yellow badges |
-| **Document symbols / outline** | Done | `OutlinePanel.svelte` — third tab in FileTree, recursive symbol tree |
-| **Find all references** | Done | `ReferencesPanel.svelte` + Shift+F12 + context menu |
-| **Code actions / quick fixes** | Done | `CodeActionsMenu.svelte` + Ctrl+. + context menu, grouped by kind |
-| **Rename symbol** | Done | `RenameInput.svelte` + F2 + context menu, multi-file via workspace edit |
-| Tests | Done | 100+ tests across 12 test files, all passing |
-| Documentation | Done | This file |
+| LSP helper module | Done | `editor-lsp.svelte.js` — extracted from FileEditor (factory pattern) |
+| FileTree diagnostic decorations | Done | `lsp-diagnostics.svelte.js` store + `FileTree.svelte` red/yellow badges |
+| Document symbols / outline | Done | `OutlinePanel.svelte` — third tab in FileTree, recursive symbol tree |
+| Find all references | Done | `ReferencesPanel.svelte` + Shift+F12 + context menu |
+| Code actions / quick fixes | Done | `CodeActionsMenu.svelte` + Ctrl+. + context menu, grouped by kind |
+| Rename symbol | Done | `RenameInput.svelte` + F2 + context menu, multi-file via workspace edit |
+| **Phase 2 — Server Lifecycle** | | |
+| Project-scoped server keys | Done | `mod.rs` — `"{lang_id}::{project_root}"` composite keys |
+| Shutdown-all on project switch | Done | `LensWorkspace.svelte` → `lspShutdown()` |
+| workspaceFolders in initialize | Done | `client.rs` — sends project root as workspace folder |
+| Crash recovery (exponential backoff) | Done | `client.rs` — backoff 1-30s, max 5 crashes, open doc replay |
+| Health monitoring (stale requests) | Done | `mod.rs` — 10s poll, 30s stale threshold, Unresponsive state |
+| Idle shutdown (60s timer) | Done | `mod.rs` — watch-channel cancellation, auto-restart on reopen |
+| Server stderr capture | Done | `mod.rs` — last 50 lines buffered, last 5 in LspTab detail |
+| Server version detection | Done | `mod.rs` — serverInfo.name + version from initialize response |
+| LSP management panel | Done | `LspTab.svelte` — status dots, restart/stop/install, expandable detail |
+| **Phase 3 — Project-Wide & Multi-Server** | | |
+| Background project scanning | Done | `mod.rs` — auto-scan on server start, MAX_SCAN_FILES=500 |
+| Staggered batch didOpen | Done | `mod.rs` — SCAN_BATCH_SIZE=10, SCAN_BATCH_DELAY_MS=100 |
+| Multi-server per file | Done | Primary + supplementary routing, ESLint as supplementary |
+| Native binary download (rust-analyzer) | Done | `installer.rs` — GitHub Releases, gzip, platform detection |
+| Manifest expansion (7 servers) | Done | svelte, typescript, css, html, json, eslint, rust-analyzer |
+| Tests | Done | 200+ tests across 20+ test files, all passing |
+| Documentation | Done | This file + `IDE-GAPS.md` |
 
 ### Not Implemented
 
@@ -68,20 +84,23 @@ These are standard LSP capabilities that we **do not** currently support. Listed
 
 | Feature | LSP Method | Value | Notes |
 |---------|-----------|-------|-------|
-| **Signature help** | `textDocument/signatureHelp` | Medium | Shows function parameter info as you type `(`. Overlaps with completions. |
 | **Inlay hints** | `textDocument/inlayHint` | Medium | Inline type annotations (e.g., showing inferred types). Can be noisy. |
-| **Linked editing** | `textDocument/linkedEditingRange` | Low | Edit matching pairs simultaneously (e.g., HTML open/close tags). |
-| **On-type formatting** | `textDocument/onTypeFormatting` | Low | Auto-format as you type (e.g., indent after `{`). |
+| **Workspace symbols** | `workspace/symbol` | Medium | Search for symbols across the entire project. Feeds into Command Palette. |
+| **Document highlight** | `textDocument/documentHighlight` | Medium | Highlights all occurrences of symbol under cursor. |
 | **Semantic highlighting** | `textDocument/semanticTokens` | Low | Token-based highlighting (more accurate than syntax regex). Marginal visual improvement. |
 | **Code lens** | `textDocument/codeLens` | Low | Inline annotations above functions (e.g., "3 references", "Run test"). |
-| **Workspace symbols** | `workspace/symbol` | Low | Search for symbols across the entire project. Overlaps with Command Palette file search. |
-| **Document colors** | `textDocument/documentColor` | Low | Color picker for CSS/style values. |
-| **Call hierarchy** | `callHierarchy/incomingCalls` | Low | "Who calls this function?" tree view. Niche use case. |
-| **Folding ranges** | `textDocument/foldingRange` | Low | LSP-aware code folding. CodeMirror already has syntax-based folding. |
 | **Type definition** | `textDocument/typeDefinition` | Low | Jump to the type of a symbol (vs the symbol's definition). |
-| **Declaration / Implementation** | `textDocument/declaration` | Low | Jump to declaration or implementation of interfaces/abstract methods. |
-| **Multi-server per file** | — | Low | Multiple LSP servers for one file (e.g., TS + CSS for CSS-in-JS). |
-| **Crash recovery** | — | Low | Restart server with exponential backoff on unexpected exit. Not yet needed — servers are stable in practice. |
+| **Go-to-declaration** | `textDocument/declaration` | Low | Jump to declaration of interfaces/abstract methods. |
+| **Go-to-implementation** | `textDocument/implementation` | Low | Jump to concrete implementation. |
+| **Linked editing** | `textDocument/linkedEditingRange` | Low | Edit matching pairs simultaneously (e.g., HTML open/close tags). |
+| **On-type formatting** | `textDocument/onTypeFormatting` | Low | Auto-format as you type (e.g., indent after `{`). |
+| **Range formatting** | `textDocument/rangeFormatting` | Low | Format selection only. Backend ready, needs UI. |
+| **Document colors** | `textDocument/documentColor` | Low | Color picker for CSS/style values. |
+| **Call hierarchy** | `callHierarchy/incomingCalls` | Very low | "Who calls this function?" tree view. Niche use case. |
+| **Type hierarchy** | `typeHierarchy/subtypes` | Very low | Class inheritance tree. |
+| **Folding ranges** | `textDocument/foldingRange` | Very low | LSP-aware code folding. CodeMirror already has syntax-based folding. |
+| **Selection range** | `textDocument/selectionRange` | Very low | Smart expand selection. CodeMirror has built-in. |
+| **Pull diagnostics** | `textDocument/diagnostic` | Low | Server-initiated diagnostic refresh. |
 
 ---
 
