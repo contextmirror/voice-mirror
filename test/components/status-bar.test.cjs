@@ -587,3 +587,48 @@ describe('StatusBar.svelte: install lifecycle toast notifications', () => {
   });
 });
 
+// ──────────────────────────────────────────────────
+// Task 12: Node.js not-found notification
+// ──────────────────────────────────────────────────
+
+describe('StatusBar.svelte: Node.js not-found listener', () => {
+  it('listens for lsp-node-not-found event', () => {
+    assert.ok(src.includes('lsp-node-not-found'), 'Should listen for lsp-node-not-found event');
+  });
+
+  it('shows error toast for Node.js not found', () => {
+    // The listener should show a toast with error severity about Node.js
+    assert.ok(
+      src.includes('Node.js') || src.includes('nodejs'),
+      'Should mention Node.js in the notification'
+    );
+  });
+});
+
+const MOD_RS_SRC = fs.readFileSync(
+  path.join(__dirname, '../../src-tauri/src/lsp/mod.rs'),
+  'utf-8'
+);
+
+describe('mod.rs: Node.js not-found event emission', () => {
+  it('uses AtomicBool for once-per-session guard', () => {
+    assert.ok(
+      MOD_RS_SRC.includes('AtomicBool'),
+      'Should use AtomicBool for once-per-session guard'
+    );
+  });
+
+  it('emits lsp-node-not-found event', () => {
+    assert.ok(
+      MOD_RS_SRC.includes('lsp-node-not-found'),
+      'Should emit lsp-node-not-found Tauri event'
+    );
+  });
+
+  it('only emits once per session using compare_exchange or similar', () => {
+    assert.ok(
+      MOD_RS_SRC.includes('compare_exchange') || MOD_RS_SRC.includes('swap'),
+      'Should use atomic operation to emit only once per session'
+    );
+  });
+});

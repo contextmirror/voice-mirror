@@ -14,9 +14,12 @@ pub mod manifest;
 pub mod types;
 
 use std::collections::{HashMap, HashSet};
-use std::sync::atomic::AtomicI64;
+use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
+
+/// Once-per-session flag: emit `lsp-node-not-found` only once.
+static NODE_NOT_FOUND_EMITTED: AtomicBool = AtomicBool::new(false);
 
 use serde_json::Value;
 use tauri::{AppHandle, Emitter};
@@ -97,6 +100,13 @@ impl LspManager {
             // Check if Node.js is available
             let node_status = installer::detect_node();
             if !node_status.available {
+                // Emit lsp-node-not-found event once per session
+                if NODE_NOT_FOUND_EMITTED
+                    .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+                    .is_ok()
+                {
+                    let _ = self.app_handle.emit("lsp-node-not-found", ());
+                }
                 return Err(format!(
                     "LSP server '{}' requires Node.js for installation. Install Node.js from nodejs.org",
                     server_info.binary

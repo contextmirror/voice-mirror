@@ -129,6 +129,22 @@
     };
   });
 
+  // -- Node.js not-found listener --
+  $effect(() => {
+    let unlisten;
+    listen('lsp-node-not-found', () => {
+      toastStore.addToast({
+        message: 'Language server features require Node.js. Install from nodejs.org.',
+        severity: 'error',
+        duration: 0,
+        key: 'lsp-node-not-found',
+      });
+    }).then(fn => { unlisten = fn; });
+
+    return () => {
+      if (unlisten) unlisten();
+    };
+  });
 </script>
 
 <svelte:document onclick={handleDocumentClick} />
