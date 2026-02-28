@@ -229,6 +229,11 @@
   listen('lens-url-changed', (event) => {
     const url = event.payload?.url;
     if (!url) return;
+    // Ignore events from device webviews to prevent infinite loop:
+    // device navigates → on_page_load emits lens-url-changed → we navigate
+    // device again → on_page_load fires again → ...
+    const tabId = event.payload?.tabId || '';
+    if (tabId.startsWith('device-')) return;
     devicePreviewStore.setPreviewUrl(url);
     // Clear emulation tracking so CDP re-applies after navigation
     // (new page load clears device metrics override)
