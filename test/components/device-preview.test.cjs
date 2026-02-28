@@ -105,3 +105,62 @@ describe('api.js: device preview wrappers', () => {
     assert.ok(apiSrc.includes("'lens_create_device_webview'"), 'Should invoke lens_create_device_webview');
   });
 });
+
+const componentSrc = fs.readFileSync(path.join(__dirname, '../../src/components/lens/DevicePreview.svelte'), 'utf-8');
+
+describe('DevicePreview.svelte: imports', () => {
+  it('imports devicePreviewStore', () => {
+    assert.ok(componentSrc.includes('devicePreviewStore'));
+  });
+  it('imports DevicePreviewStrip', () => {
+    assert.ok(componentSrc.includes('DevicePreviewStrip'));
+  });
+  it('imports getPresetById', () => {
+    assert.ok(componentSrc.includes('getPresetById'));
+  });
+  it('imports lensResizeDeviceWebview', () => {
+    assert.ok(componentSrc.includes('lensResizeDeviceWebview'));
+  });
+});
+
+describe('DevicePreview.svelte: structure', () => {
+  it('has device-preview class', () => {
+    assert.ok(componentSrc.includes('device-preview'));
+  });
+  it('has device-grid class', () => {
+    assert.ok(componentSrc.includes('device-grid'));
+  });
+  it('has device-frame class', () => {
+    assert.ok(componentSrc.includes('device-frame'));
+  });
+  it('has device-label class', () => {
+    assert.ok(componentSrc.includes('device-label'));
+  });
+  it('has empty state', () => {
+    assert.ok(componentSrc.includes('No devices selected') || componentSrc.includes('device-empty'));
+  });
+  it('includes DevicePreviewStrip', () => {
+    assert.ok(componentSrc.includes('DevicePreviewStrip'));
+  });
+});
+
+describe('DevicePreview.svelte: WebView2 positioning', () => {
+  it('uses ResizeObserver', () => {
+    assert.ok(componentSrc.includes('ResizeObserver'));
+  });
+  it('references lensResizeDeviceWebview for positioning', () => {
+    assert.ok(componentSrc.includes('lensResizeDeviceWebview'));
+  });
+  it('uses getBoundingClientRect for bounds', () => {
+    assert.ok(componentSrc.includes('getBoundingClientRect'));
+  });
+});
+
+describe('DevicePreview.svelte: styles', () => {
+  it('has scoped styles', () => {
+    assert.ok(componentSrc.includes('<style>'));
+  });
+  it('grid is scrollable', () => {
+    assert.ok(componentSrc.includes('overflow'));
+  });
+});
