@@ -1,5 +1,64 @@
 import { mount } from 'svelte';
 import App from './App.svelte';
+import { logFrontendError } from './lib/api.js';
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Layer 1: Global Runtime Error Capture
+// ══════════════════════════════════════════════════════════════════════════════
+// Captures all unhandled errors, unhandled promise rejections, and
+// console.error/console.warn calls. Forwards them to the Rust backend's
+// Frontend output channel, which writes to JSONL files that Claude Code
+// can read to diagnose bugs without requiring the user to describe them.
+
+/** Safe logger — must never throw (would cause infinite loops) */
+function _safeLogFrontendError(level, message, context) {
+  try {
+    logFrontendError({ level, message, context });
+  } catch {
+    // Swallow — logging infrastructure must never crash the app
+  }
+}
+
+// ── Uncaught errors ──
+window.onerror = (message, source, lineno, colno, error) => {
+  const context = [
+    `Source: ${source || 'unknown'}:${lineno || '?'}:${colno || '?'}`,
+    error?.stack ? `Stack:\n${error.stack}` : '',
+  ].filter(Boolean).join('\n');
+
+  _safeLogFrontendError('ERROR', `Uncaught: ${message}`, context);
+  return false; // Don't suppress — let browser console show it too
+};
+
+// ── Unhandled promise rejections ──
+window.addEventListener('unhandledrejection', (event) => {
+  const reason = event.reason;
+  const message = reason instanceof Error
+    ? reason.message
+    : String(reason ?? 'Unknown rejection');
+  const stack = reason instanceof Error ? reason.stack : '';
+  const context = stack ? `Stack:\n${stack}` : '';
+
+  _safeLogFrontendError('ERROR', `Unhandled rejection: ${message}`, context);
+});
+
+// ── Console intercepts ──
+// Capture console.error/warn so they appear in the Frontend output channel.
+// This catches the many console.warn('[Terminal] ...') calls throughout the app.
+const _originalConsoleError = console.error.bind(console);
+const _originalConsoleWarn = console.warn.bind(console);
+
+console.error = (...args) => {
+  _originalConsoleError(...args);
+  const message = args.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' ');
+  _safeLogFrontendError('ERROR', message, '');
+};
+
+console.warn = (...args) => {
+  _originalConsoleWarn(...args);
+  const message = args.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' ');
+  _safeLogFrontendError('WARN', message, '');
+};
 
 const app = mount(App, {
   target: document.getElementById('app'),
