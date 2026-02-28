@@ -393,6 +393,67 @@ describe('tabs.svelte.js: closed tab history', () => {
   });
 });
 
+// ── Bulk close → closed tab history ──────────────────────────────────────────
+
+describe('tabs.svelte.js: bulk close records closed tab history', () => {
+  it('has pushToClosedHistory helper function', () => {
+    assert.ok(src.includes('pushToClosedHistory'), 'Should have helper to DRY closed tab recording');
+  });
+
+  it('closeOthers pushes to closed tab history', () => {
+    assert.ok(
+      /closeOthers[\s\S]*pushToClosedHistory/.test(src) ||
+      (src.includes('closeOthers') && src.includes('pushToClosedHistory')),
+      'closeOthers should record tabs before removing'
+    );
+  });
+
+  it('closeToRight pushes to closed tab history', () => {
+    assert.ok(
+      /closeToRight[\s\S]*pushToClosedHistory/.test(src) ||
+      (src.includes('closeToRight') && src.includes('pushToClosedHistory')),
+      'closeToRight should record tabs before removing'
+    );
+  });
+
+  it('closeAll pushes to closed tab history', () => {
+    assert.ok(
+      /closeAll[\s\S]*pushToClosedHistory/.test(src) ||
+      (src.includes('closeAll') && src.includes('pushToClosedHistory')),
+      'closeAll should record tabs before removing'
+    );
+  });
+
+  it('preserves diff status in closed tab entry', () => {
+    assert.ok(src.includes('status') && src.includes('closedTabs'), 'Should store status for diff tabs');
+  });
+
+  it('reopenClosedTab uses entry.status for diff tabs', () => {
+    assert.ok(
+      src.includes('entry.status') && src.includes('reopenClosedTab'),
+      'reopenClosedTab should use stored status instead of hardcoded modified'
+    );
+  });
+
+  it('closeTab uses pushToClosedHistory helper', () => {
+    // closeTab should delegate to the helper instead of inline push
+    const closeTabStart = src.indexOf('closeTab(id)');
+    const closeTabEnd = src.indexOf('requestClose');
+    const chunk = src.slice(closeTabStart, closeTabEnd);
+    assert.ok(
+      chunk.includes('pushToClosedHistory(closedTab)'),
+      'closeTab should call pushToClosedHistory'
+    );
+  });
+
+  it('JSDoc type includes status field', () => {
+    assert.ok(
+      src.includes('status?: string|null'),
+      'closedTabs JSDoc type should include optional status field'
+    );
+  });
+});
+
 describe('tabs.svelte.js: diff tab support', () => {
   it('has openDiff method', () => {
     assert.ok(src.includes('openDiff('), 'Should have openDiff method');

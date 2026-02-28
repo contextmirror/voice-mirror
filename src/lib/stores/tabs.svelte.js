@@ -40,9 +40,28 @@ function createTabsStore() {
   let untitledCounter = 0;
   let previewEnabled = $state(true);
 
-  /** @type {Array<{path: string, type: string, groupId: number, title: string}>} */
+  /** @type {Array<{path: string, type: string, groupId: number, title: string, status?: string|null}>} */
   let closedTabs = $state([]);
   const MAX_CLOSED_TABS = 20;
+
+  /**
+   * Push a tab onto the closed-tab history (skips untitled files).
+   * @param {{path: string, type: string, groupId: number, title: string, status?: string}} tab
+   */
+  function pushToClosedHistory(tab) {
+    if (!tab.path.startsWith('untitled:')) {
+      closedTabs.push({
+        path: tab.path,
+        type: tab.type,
+        groupId: tab.groupId,
+        title: tab.title,
+        status: tab.status || null,
+      });
+      if (closedTabs.length > MAX_CLOSED_TABS) {
+        closedTabs.shift();
+      }
+    }
+  }
 
   return {
     get tabs() { return tabs; },
@@ -245,17 +264,7 @@ function createTabsStore() {
       }
 
       // Push to closed tab history (skip untitled files)
-      if (!closedTab.path.startsWith('untitled:')) {
-        closedTabs.push({
-          path: closedTab.path,
-          type: closedTab.type,
-          groupId: closedTab.groupId,
-          title: closedTab.title,
-        });
-        if (closedTabs.length > MAX_CLOSED_TABS) {
-          closedTabs.splice(0, closedTabs.length - MAX_CLOSED_TABS);
-        }
-      }
+      pushToClosedHistory(closedTab);
 
       tabs.splice(idx, 1);
 
@@ -448,6 +457,10 @@ function createTabsStore() {
      * Close all tabs and reset editor groups.
      */
     closeAll() {
+      // Record all tabs in closed history before clearing
+      for (const tab of tabs) {
+        pushToClosedHistory(tab);
+      }
       tabs.length = 0;
       activeTabId = null;
       editorGroupsStore.reset();
@@ -461,9 +474,10 @@ function createTabsStore() {
       if (!tab) return;
       const groupId = tab.groupId;
 
-      // Remove other tabs in the same group
+      // Record tabs being removed, then splice them out
       for (let i = tabs.length - 1; i >= 0; i--) {
         if (tabs[i].groupId === groupId && tabs[i].id !== id) {
+          pushToClosedHistory(tabs[i]);
           tabs.splice(i, 1);
         }
       }
@@ -488,8 +502,10 @@ function createTabsStore() {
       // Get IDs of tabs to the right in this group
       const toRemove = new Set(groupTabs.slice(groupIdx + 1).map(t => t.id));
 
+      // Record tabs being removed, then splice them out
       for (let i = tabs.length - 1; i >= 0; i--) {
         if (toRemove.has(tabs[i].id)) {
+          pushToClosedHistory(tabs[i]);
           tabs.splice(i, 1);
         }
       }
@@ -533,7 +549,7 @@ function createTabsStore() {
         : editorGroupsStore.focusedGroupId;
       const name = entry.path.split(/[/\\]/).pop() || entry.path;
       if (entry.type === 'diff') {
-        this.openDiff({ path: entry.path, status: 'modified' }, targetGroup);
+        this.openDiff({ path: entry.path, status: entry.status || 'modified' }, targetGroup);
       } else {
         this.openFile({ name, path: entry.path }, targetGroup);
       }
