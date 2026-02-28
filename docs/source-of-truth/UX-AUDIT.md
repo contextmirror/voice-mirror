@@ -221,8 +221,36 @@ Close Tab (single item)
 | Output tab (outer strip) | Clear Output, Copy All, Word Wrap, Scroll Lock | Good — no gaps |
 | Terminal tab (outer strip) | None | Low — could add "New Terminal" |
 | Chat/Session entries | Rename, Delete | Could add Duplicate, Export |
-| Project strip avatars | Remove Project | Could add Open in Terminal, Copy Path |
+| Project strip avatars | Remove Project | **Edit Project dialog** (name, icon upload, color, startup script) + Open in Terminal, Copy Path — see §1.11 |
 | Empty terminal sidebar | New Terminal | Could add "New with Profile..." |
+
+---
+
+### 1.11 Project Strip Context Menu + Edit Project Dialog
+
+**File:** `src/components/sidebar/ProjectStrip.svelte`
+
+**Reference:** OpenCode Desktop (`packages/app/src/components/dialog-edit-project.tsx`)
+
+#### What We Have
+Right-click on a project avatar shows a single "Remove Project" item. Project avatars display a colored letter derived from the folder name.
+
+#### What OpenCode Desktop Has
+Right-click context menu: **Edit**, Enable/Disable Workspaces, Clear Notifications, Close.
+
+The **Edit** item opens a modal dialog with:
+- **Project name** — text input (defaults to folder name)
+- **Project icon** — click-to-upload image with drag-and-drop, stored as base64 data URL. When no custom image, falls back to colored avatar.
+- **Color palette** — 6 color dots (pink, mint, orange, purple, cyan, lime) for avatar background. Uses CSS variables per theme. Hidden when custom image is uploaded.
+- **Workspace startup script** — multiline monospace textarea for shell commands to run when opening the project (e.g. `npm run dev`, starting services)
+
+#### Recommendation
+
+| Item | Priority | Notes |
+|------|----------|-------|
+| **Edit Project dialog** (name, icon, color, startup script) | Medium | High-polish feature. Name + color are quick wins; icon upload + startup script are medium effort. |
+| **Context menu expansion** (Edit, Clear Notifications, Close) | Medium | Currently only "Remove Project" — should match OpenCode's menu |
+| **Startup script execution** | Medium-Large | Requires Tauri command to run shell commands on project open. Useful for auto-starting dev servers. |
 
 ---
 
@@ -642,24 +670,26 @@ Alt+Down/Up (next/prev chunk)
 | 31 | Ctrl+O (open file) wired to handler | Keyboards | Small |
 | 32 | Ctrl+Shift+E (focus file tree) | Keyboards | Small |
 | 33 | Wire Ctrl+K W / Ctrl+K U chords | Keyboards | Small |
+| 34 | Edit Project dialog (name, icon, color, startup script) | Project | Medium |
+| 35 | Project strip context menu (Edit, Clear Notifications, Close) | Context Menus | Small |
 
 ### P3 — Low Priority / Nice-to-Have
 
 | # | Item | Category | Effort |
 |---|------|----------|--------|
-| 34 | Inlay hints (LSP) | Editor | Medium |
-| 35 | Peek definition (Alt+F12) | Editor | Large |
-| 36 | Tab overflow dropdown | Tabs | Medium |
-| 37 | Git/diagnostic tab decorations | Tabs | Medium |
-| 38 | Close to the Left (tab context menu) | Context Menus | Small |
-| 39 | Encoding/EOL in status bar | Status Bar | Small |
-| 40 | Notification center/history | Status Bar | Medium |
-| 41 | File drag to terminal (insert path) | Drag | Medium |
-| 42 | Cursor blink/animation config | Editor | Low |
-| 43 | Render whitespace | Editor | Low |
-| 44 | Bracket pair colorization | Editor | Low |
-| 45 | Minimap show/hide toggle | Editor | Small |
-| 46 | Browser tab: Duplicate, Close Others | Context Menus | Small |
+| 36 | Inlay hints (LSP) | Editor | Medium |
+| 37 | Peek definition (Alt+F12) | Editor | Large |
+| 38 | Tab overflow dropdown | Tabs | Medium |
+| 39 | Git/diagnostic tab decorations | Tabs | Medium |
+| 40 | Close to the Left (tab context menu) | Context Menus | Small |
+| 41 | Encoding/EOL in status bar | Status Bar | Small |
+| 42 | Notification center/history | Status Bar | Medium |
+| 43 | File drag to terminal (insert path) | Drag | Medium |
+| 44 | Cursor blink/animation config | Editor | Low |
+| 45 | Render whitespace | Editor | Low |
+| 46 | Bracket pair colorization | Editor | Low |
+| 47 | Minimap show/hide toggle | Editor | Small |
+| 48 | Browser tab: Duplicate, Close Others | Context Menus | Small |
 
 ---
 
