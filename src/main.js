@@ -84,6 +84,8 @@ document.addEventListener('dragstart', (e) => {
   const el = /** @type {HTMLElement} */ (e.target);
   // Allow elements with explicit draggable="true" (our custom drag handlers)
   if (el?.getAttribute?.('draggable') === 'true') return;
+  // Allow CodeMirror text drag-and-drop (select text → drag to move)
+  if (el?.closest?.('.cm-editor')) return;
   e.preventDefault();
 }, true);
 

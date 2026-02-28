@@ -49,7 +49,7 @@ All 6 items from the second wave are done:
 | 1 | **Quick fix lightbulb in gutter** | Editor | Medium |
 | 2 | **Ctrl+Tab MRU tab cycling** | Tabs | Medium |
 | ~~3~~ | ~~**Unsplit terminal preserves terminals**~~ (was killing them) | Terminal | ✅ Done |
-| 4 | **Text drag in editor** (unblock in main.js) | Drag | Small |
+| ~~4~~ | ~~**Text drag in editor**~~ (unblocked `.cm-editor` in main.js dragstart handler) | Drag | ✅ Done |
 
 ---
 
@@ -617,7 +617,7 @@ Alt+Down/Up (next/prev chunk)
 
 | Gap | Description | Effort |
 |-----|-------------|--------|
-| **Text drag in editor** | Global `dragstart` handler in `main.js` blocks CodeMirror text drag. Need to allow drags originating from `.cm-editor`. | Small |
+| ~~Text drag in editor~~ | ~~Global `dragstart` handler in `main.js` blocks CodeMirror text drag.~~ Added `.cm-editor` exception. | ✅ Done |
 | **External file drop from OS** | `dragDropEnabled: false` in tauri.conf.json. Enabling + adding handler would allow opening files dragged from Windows Explorer. | Medium |
 | **File drag to terminal** | Cannot drop a file onto the terminal to insert its path. VS Code supports this. | Medium |
 
@@ -668,7 +668,7 @@ All P0 items completed (status bar done in prior work).
 | 22 | Word wrap toggle in editor | Editor | Small |
 | 23 | Tab size configuration | Editor | Small |
 | 24 | Auto-indent on paste | Editor | Medium |
-| 25 | Text drag in editor (unblock in main.js) | Drag | Small |
+| ~~25~~ | ~~Text drag in editor (unblock in main.js)~~ | ~~Drag~~ | ✅ Done |
 | 26 | External file drop from OS | Drag | Medium |
 | 27 | Ctrl+O (open file) wired to handler | Keyboards | Small |
 | 28 | Ctrl+Shift+E (focus file tree) | Keyboards | Small |
