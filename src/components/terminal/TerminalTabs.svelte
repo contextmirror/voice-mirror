@@ -363,7 +363,7 @@
       </svg>
       <span class="tab-label">Problems</span>
       {#if problemsBadgeCount > 0}
-        <span class="problems-badge">{problemsBadgeCount}</span>
+        <span class="problems-badge" class:warnings-only={problemsTotals.errors === 0}>{problemsBadgeCount}</span>
       {/if}
     </div>
 
@@ -1154,6 +1154,10 @@
     font-weight: 600;
     line-height: 1;
     margin-left: 2px;
+  }
+
+  .problems-badge.warnings-only {
+    background: var(--warn);
   }
 
   .severity-toggle {

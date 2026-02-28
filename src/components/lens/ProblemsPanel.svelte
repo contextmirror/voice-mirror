@@ -180,8 +180,9 @@
               <span class="diag-message">{diag.message}</span>
 
               <!-- Source + code -->
-              {#if formatSource(diag)}
-                <span class="diag-source">{formatSource(diag)}</span>
+              {@const source = formatSource(diag)}
+              {#if source}
+                <span class="diag-source">{source}</span>
               {/if}
 
               <!-- Line:col -->
