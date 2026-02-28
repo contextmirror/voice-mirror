@@ -6,6 +6,7 @@
  */
 import { getPresetById } from '../device-presets.js';
 import { lensCreateDeviceWebview, lensCloseDeviceWebview, lensCloseAllDeviceWebviews } from '../api.js';
+import { lensStore } from './lens.svelte.js';
 
 const MAX_DEVICES = 5;
 
@@ -57,7 +58,7 @@ function createDevicePreviewStore() {
      * @param {{ x: number, y: number, width: number, height: number }|null} bounds - WebView2 position
      * @returns {Promise<boolean>} Whether the device was added successfully
      */
-    async addDevice(presetId, bounds = null) {
+    async addDevice(presetId) {
       if (activeDevices.length >= MAX_DEVICES) return false;
 
       // Reject duplicates
@@ -66,14 +67,24 @@ function createDevicePreviewStore() {
       const preset = getPresetById(presetId);
       if (!preset) return false;
 
+      // Resolve URL: store URL > browser URL > fallback
+      const url = previewUrl || lensStore.url || 'about:blank';
+
       const device = { presetId, webviewLabel: null };
       activeDevices.push(device);
 
       try {
-        const result = await lensCreateDeviceWebview(presetId, preset, bounds);
+        const result = await lensCreateDeviceWebview({
+          presetId,
+          url,
+          width: orientation === 'landscape' ? preset.height : preset.width,
+          height: orientation === 'landscape' ? preset.width : preset.height,
+          x: 0,
+          y: 0,
+        });
         const d = activeDevices.find(d => d.presetId === presetId);
         if (d && result) {
-          d.webviewLabel = result?.data?.label || result?.label || presetId;
+          d.webviewLabel = result?.data?.label || result?.label || `device-${presetId}`;
         }
         return true;
       } catch (err) {
