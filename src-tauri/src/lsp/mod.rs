@@ -302,10 +302,25 @@ impl LspManager {
         // Build the root URI for the project
         let root_uri = types::file_uri("", project_root);
 
+        // Load initializationOptions from the manifest entry (if available).
+        // This is critical for servers like Svelte LS that need configuration
+        // (e.g., diagnostics enable, TypeScript SDK path) at init time.
+        let init_options = manifest::load_manifest()
+            .ok()
+            .and_then(|m| {
+                server_info
+                    .server_id
+                    .as_deref()
+                    .and_then(|id| m.servers.get(id).cloned())
+            })
+            .map(|entry| entry.initialization_options)
+            .unwrap_or(serde_json::Value::Null);
+
         // Send initialize request
         let init_params = serde_json::json!({
             "processId": std::process::id(),
             "rootUri": root_uri,
+            "initializationOptions": init_options,
             "capabilities": {
                 "textDocument": {
                     "synchronization": {
