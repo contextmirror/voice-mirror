@@ -19,7 +19,7 @@
 ### Phase 1: Registry + Auto-Download + Routing
 - [x] Task 1: Create server registry manifest (`lsp-servers.json`)
 - [x] Task 2: Create manifest parser (`manifest.rs`)
-- [ ] Task 3: Create Node.js detection utility
+- [x] Task 3: Create Node.js detection utility
 - [ ] Task 4: Create npm installer module (`installer.rs`)
 - [ ] Task 5: Rewrite detection module to use manifest
 - [ ] Task 6: Wire installer into `ensure_server()` flow

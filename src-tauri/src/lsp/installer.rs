@@ -5,12 +5,17 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
 
 use tauri::Emitter;
+use tokio::sync::Mutex;
 use tracing::{error, info, warn};
 
+/// In-process mutex to prevent concurrent install_server calls (TOCTOU guard for file lock).
+static INSTALL_MUTEX: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+
 /// Result of Node.js detection.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct NodeStatus {
     pub available: bool,
     pub node_version: Option<String>,
@@ -138,7 +143,8 @@ pub async fn install_server(
         server_id, packages
     );
 
-    // Acquire lock
+    // Acquire in-process mutex first, then file lock (dual-layer concurrency control)
+    let _mutex_guard = INSTALL_MUTEX.lock().await;
     let _lock = acquire_install_lock(lsp_dir)
         .ok_or_else(|| "Another LSP server install is in progress".to_string())?;
 
@@ -161,7 +167,9 @@ pub async fn install_server(
         lsp_dir.to_string_lossy().to_string(),
     ];
 
-    // Add packages with version constraint
+    // Add packages with version constraint.
+    // Version pin applies only to the primary package (packages[0]).
+    // Peer dependencies (e.g., typescript SDK) install at their latest compatible version.
     for pkg in packages {
         if !version.is_empty() && pkg == &packages[0] {
             args.push(format!("{}@{}", pkg, version));
