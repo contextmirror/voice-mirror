@@ -7,7 +7,8 @@
       "excludeExtensions": [],
       "install": {
         "type": "npm",
-        "packages": ["svelte-language-server", "typescript"]
+        "packages": ["svelte-language-server", "typescript"],
+        "version": "^0.17"
       },
       "command": "svelteserver",
       "args": ["--stdio"],
@@ -26,7 +27,7 @@
             }
           },
           "typescript": {
-            "tsdk": ""
+            "tsdk": "./node_modules/typescript/lib"
           }
         }
       },
@@ -39,7 +40,8 @@
       "excludeExtensions": [".svelte"],
       "install": {
         "type": "npm",
-        "packages": ["typescript-language-server", "typescript"]
+        "packages": ["typescript-language-server", "typescript"],
+        "version": "^4.0"
       },
       "command": "typescript-language-server",
       "args": ["--stdio"],
@@ -56,7 +58,8 @@
       "excludeExtensions": [".svelte"],
       "install": {
         "type": "npm",
-        "packages": ["vscode-langservers-extracted"]
+        "packages": ["vscode-langservers-extracted"],
+        "version": "^4.0"
       },
       "command": "vscode-css-language-server",
       "args": ["--stdio"],
@@ -73,7 +76,8 @@
       "excludeExtensions": [".svelte"],
       "install": {
         "type": "npm",
-        "packages": ["vscode-langservers-extracted"]
+        "packages": ["vscode-langservers-extracted"],
+        "version": "^4.0"
       },
       "command": "vscode-html-language-server",
       "args": ["--stdio"],
@@ -90,7 +94,8 @@
       "excludeExtensions": [],
       "install": {
         "type": "npm",
-        "packages": ["vscode-langservers-extracted"]
+        "packages": ["vscode-langservers-extracted"],
+        "version": "^4.0"
       },
       "command": "vscode-json-language-server",
       "args": ["--stdio"],
