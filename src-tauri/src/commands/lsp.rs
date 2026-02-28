@@ -21,10 +21,11 @@ fn extension_from_path(path: &str) -> Option<String> {
         .map(|ext| ext.to_string_lossy().to_string())
 }
 
-/// Open a file in the LSP server for the appropriate language.
+/// Open a file in ALL matching LSP servers for the appropriate language.
 ///
-/// Detects the language from the file extension, ensures the server is running,
-/// and sends a `textDocument/didOpen` notification.
+/// Detects ALL servers from the file extension (primary + supplementary),
+/// ensures each server is running, and sends a `textDocument/didOpen`
+/// notification to each. The primary server's language ID is returned.
 #[tauri::command]
 pub async fn lsp_open_file(
     path: String,
@@ -38,29 +39,35 @@ pub async fn lsp_open_file(
         None => return Ok(IpcResponse::err("Could not determine file extension")),
     };
 
-    let lang_id = match detection::language_id_for_extension(&ext) {
-        Some(id) => id.to_string(),
-        None => return Ok(IpcResponse::err(format!("No LSP support for .{} files", ext))),
-    };
-
     let uri = types::file_uri(&path, &project_root);
 
     let mut manager = state.0.lock().await;
 
-    if let Err(e) = manager.ensure_server(&lang_id, &project_root).await {
-        return Ok(IpcResponse::err(e));
+    // Start ALL matching servers (primary + supplementary)
+    let started = match manager.ensure_servers_for_extension(&ext, &project_root).await {
+        Ok(s) if s.is_empty() => {
+            return Ok(IpcResponse::err(format!("No LSP servers available for .{} files", ext)));
+        }
+        Ok(s) => s,
+        Err(e) => return Ok(IpcResponse::err(e)),
+    };
+
+    // Send didOpen to ALL started servers
+    let primary_lang_id = started[0].clone(); // First is always primary (sorted)
+    for server_id in &started {
+        if let Err(e) = manager.open_document(&uri, server_id, &content, &project_root).await {
+            tracing::warn!("Failed to open document in '{}' server: {}", server_id, e);
+        }
     }
 
-    match manager.open_document(&uri, &lang_id, &content, &project_root).await {
-        Ok(()) => Ok(IpcResponse::ok(json!({ "languageId": lang_id, "uri": uri }))),
-        Err(e) => Ok(IpcResponse::err(e)),
-    }
+    Ok(IpcResponse::ok(json!({ "languageId": primary_lang_id, "uri": uri })))
 }
 
-/// Close a file in the LSP server.
+/// Close a file in ALL LSP servers that have it open.
 ///
-/// Sends a `textDocument/didClose` notification. If no more documents are open
-/// for the language, the server is shut down.
+/// Sends a `textDocument/didClose` notification to every running server
+/// that tracks this URI. If no more documents are open for a server,
+/// its idle shutdown timer starts.
 #[tauri::command]
 pub async fn lsp_close_file(
     path: String,
@@ -72,21 +79,33 @@ pub async fn lsp_close_file(
         None => return Ok(IpcResponse::err("Could not determine file extension")),
     };
 
-    let lang_id = match detection::language_id_for_extension(&ext) {
-        Some(id) => id.to_string(),
-        None => return Ok(IpcResponse::ok_empty()),
-    };
-
     let uri = types::file_uri(&path, &project_root);
 
-    let mut manager = state.0.lock().await;
-    match manager.close_document(&uri, &lang_id, &project_root).await {
-        Ok(()) => Ok(IpcResponse::ok_empty()),
-        Err(e) => Ok(IpcResponse::err(e)),
+    // Find all server IDs that match this extension
+    let lang_ids = detection::language_ids_for_extension(&ext);
+    if lang_ids.is_empty() {
+        return Ok(IpcResponse::ok_empty());
     }
+
+    let mut manager = state.0.lock().await;
+
+    // Close in all matching servers that are currently running
+    for lang_id in &lang_ids {
+        let key = crate::lsp::server_key(lang_id, &project_root);
+        // Only close if server exists and has this document open
+        let has_doc = manager.servers.get(&key)
+            .map_or(false, |s| s.open_docs.contains(&uri) || s.background_docs.contains(&uri));
+        if has_doc {
+            if let Err(e) = manager.close_document(&uri, lang_id, &project_root).await {
+                tracing::warn!("Failed to close document in '{}' server: {}", lang_id, e);
+            }
+        }
+    }
+
+    Ok(IpcResponse::ok_empty())
 }
 
-/// Notify the LSP server of file content changes.
+/// Notify ALL matching LSP servers of file content changes.
 #[tauri::command]
 pub async fn lsp_change_file(
     path: String,
@@ -100,24 +119,34 @@ pub async fn lsp_change_file(
         None => return Ok(IpcResponse::err("Could not determine file extension")),
     };
 
-    let lang_id = match detection::language_id_for_extension(&ext) {
-        Some(id) => id.to_string(),
-        None => return Ok(IpcResponse::ok_empty()),
-    };
-
     let uri = types::file_uri(&path, &project_root);
 
-    let mut manager = state.0.lock().await;
-    match manager
-        .change_document(&uri, &lang_id, &content, version, &project_root)
-        .await
-    {
-        Ok(()) => Ok(IpcResponse::ok_empty()),
-        Err(e) => Ok(IpcResponse::err(e)),
+    let lang_ids = detection::language_ids_for_extension(&ext);
+    if lang_ids.is_empty() {
+        return Ok(IpcResponse::ok_empty());
     }
+
+    let mut manager = state.0.lock().await;
+
+    // Send didChange to all running servers that have this document open
+    for lang_id in &lang_ids {
+        let key = crate::lsp::server_key(lang_id, &project_root);
+        let has_doc = manager.servers.get(&key)
+            .map_or(false, |s| s.open_docs.contains(&uri));
+        if has_doc {
+            if let Err(e) = manager
+                .change_document(&uri, lang_id, &content, version, &project_root)
+                .await
+            {
+                tracing::warn!("Failed to send didChange to '{}' server: {}", lang_id, e);
+            }
+        }
+    }
+
+    Ok(IpcResponse::ok_empty())
 }
 
-/// Notify the LSP server that a file was saved.
+/// Notify ALL matching LSP servers that a file was saved.
 #[tauri::command]
 pub async fn lsp_save_file(
     path: String,
@@ -130,18 +159,28 @@ pub async fn lsp_save_file(
         None => return Ok(IpcResponse::err("Could not determine file extension")),
     };
 
-    let lang_id = match detection::language_id_for_extension(&ext) {
-        Some(id) => id.to_string(),
-        None => return Ok(IpcResponse::ok_empty()),
-    };
-
     let uri = types::file_uri(&path, &project_root);
 
-    let mut manager = state.0.lock().await;
-    match manager.save_document(&uri, &lang_id, &content, &project_root).await {
-        Ok(()) => Ok(IpcResponse::ok_empty()),
-        Err(e) => Ok(IpcResponse::err(e)),
+    let lang_ids = detection::language_ids_for_extension(&ext);
+    if lang_ids.is_empty() {
+        return Ok(IpcResponse::ok_empty());
     }
+
+    let mut manager = state.0.lock().await;
+
+    // Send didSave to all running servers that have this document open
+    for lang_id in &lang_ids {
+        let key = crate::lsp::server_key(lang_id, &project_root);
+        let has_doc = manager.servers.get(&key)
+            .map_or(false, |s| s.open_docs.contains(&uri));
+        if has_doc {
+            if let Err(e) = manager.save_document(&uri, lang_id, &content, &project_root).await {
+                tracing::warn!("Failed to send didSave to '{}' server: {}", lang_id, e);
+            }
+        }
+    }
+
+    Ok(IpcResponse::ok_empty())
 }
 
 /// Request completion items at a position in a file.

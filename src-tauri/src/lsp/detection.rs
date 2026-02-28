@@ -164,6 +164,68 @@ pub fn language_id_for_extension(ext: &str) -> Option<String> {
     Some(id)
 }
 
+/// Detect ALL language servers for a given file extension (primary + supplementary).
+///
+/// Uses the embedded manifest to find all matching servers, then checks
+/// if each binary exists on PATH or in the managed lsp-servers/ directory.
+/// Returns an empty vec if no server is configured for the extension.
+pub fn detect_all_for_extension(ext: &str) -> Vec<ServerInfo> {
+    let manifest = match super::manifest::load_manifest() {
+        Ok(m) => m,
+        Err(_) => return Vec::new(),
+    };
+    let lsp_dir = super::installer::get_lsp_servers_dir().ok();
+
+    let entries = super::manifest::find_servers_for_extension(&manifest, ext);
+
+    let mut results = Vec::new();
+    for (id, mut entry) in entries {
+        // Apply user config overrides (e.g. enabled: false)
+        if let Ok(guard) = crate::commands::config::CONFIG.lock() {
+            if let Some(overrides) = guard.lsp_servers.get(&id) {
+                super::manifest::apply_overrides(&mut entry, overrides);
+            }
+        }
+        if !entry.enabled {
+            continue;
+        }
+
+        let resolved = if let Some(ref dir) = lsp_dir {
+            super::manifest::find_binary_path(&entry.command, dir)
+        } else {
+            which::which(&entry.command).ok()
+        };
+
+        let installed = resolved.is_some();
+        let language_id = id.clone();
+
+        results.push(ServerInfo {
+            language_id,
+            binary: entry.command.clone(),
+            args: entry.args.clone(),
+            installed,
+            resolved_path: resolved,
+            server_id: Some(id),
+        });
+    }
+    results
+}
+
+/// Look up ALL server IDs (lang_ids) for a file extension, without checking PATH.
+///
+/// Returns all matching server IDs from the manifest sorted by priority
+/// (primary first, then supplementary). Used for multi-server file operations.
+pub fn language_ids_for_extension(ext: &str) -> Vec<String> {
+    let manifest = match super::manifest::load_manifest() {
+        Ok(m) => m,
+        Err(_) => return Vec::new(),
+    };
+    super::manifest::find_servers_for_extension(&manifest, ext)
+        .into_iter()
+        .map(|(id, _)| id)
+        .collect()
+}
+
 /// Check all known language servers and report which are installed.
 ///
 /// Iterates all enabled servers from the manifest and checks binary availability.

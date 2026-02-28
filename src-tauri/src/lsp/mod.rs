@@ -600,6 +600,35 @@ impl LspManager {
         Ok(())
     }
 
+    /// Ensure ALL servers matching a file extension are running (primary + supplementary).
+    ///
+    /// Loads the manifest, finds all matching servers for the extension, and starts
+    /// each one. Returns the list of server IDs (lang_ids) that were successfully
+    /// started or were already running. Logs warnings for servers that fail to start
+    /// but does not fail the entire operation — partial success is acceptable.
+    pub async fn ensure_servers_for_extension(
+        &mut self,
+        ext: &str,
+        project_root: &str,
+    ) -> Result<Vec<String>, String> {
+        let server_infos = detection::detect_all_for_extension(ext);
+
+        if server_infos.is_empty() {
+            return Err(format!("No LSP servers configured for .{} files", ext));
+        }
+
+        let mut started = Vec::new();
+        for info in &server_infos {
+            let server_id = info.language_id.clone();
+            if let Err(e) = self.ensure_server(&server_id, project_root).await {
+                warn!("Failed to start '{}' server for .{}: {}", server_id, ext, e);
+            } else {
+                started.push(server_id);
+            }
+        }
+        Ok(started)
+    }
+
     /// Open a document in the LSP server.
     pub async fn open_document(
         &mut self,

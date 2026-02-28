@@ -118,6 +118,49 @@ pub fn find_server_for_extension(
     best
 }
 
+/// Find ALL servers matching a file extension.
+/// Returns all matching servers sorted: primary first, then supplementary.
+/// Unlike `find_server_for_extension` (which returns only the best match),
+/// this returns every enabled server whose extensions list includes the given ext.
+pub fn find_servers_for_extension(
+    manifest: &ServerManifest,
+    ext: &str,
+) -> Vec<(String, ServerEntry)> {
+    let dot_ext = if ext.starts_with('.') {
+        ext.to_lowercase()
+    } else {
+        format!(".{}", ext.to_lowercase())
+    };
+
+    let mut results = Vec::new();
+    for (id, entry) in &manifest.servers {
+        if !entry.enabled {
+            continue;
+        }
+        if entry
+            .exclude_extensions
+            .iter()
+            .any(|e| e.to_lowercase() == dot_ext)
+        {
+            continue;
+        }
+        if entry
+            .extensions
+            .iter()
+            .any(|e| e.to_lowercase() == dot_ext)
+        {
+            results.push((id.clone(), entry.clone()));
+        }
+    }
+    // Sort: primary first, then supplementary (stable within each group)
+    results.sort_by(|(_, a), (_, b)| match (a.priority.as_str(), b.priority.as_str()) {
+        ("primary", "supplementary") => std::cmp::Ordering::Less,
+        ("supplementary", "primary") => std::cmp::Ordering::Greater,
+        _ => std::cmp::Ordering::Equal,
+    });
+    results
+}
+
 /// Resolve the binary path for a server.
 /// Checks: 1) user PATH, 2) managed lsp-servers/node_modules/.bin/
 ///
@@ -284,9 +327,50 @@ mod tests {
     fn test_github_release_install_config_fields() {
         let manifest = load_manifest().unwrap();
         let ra = &manifest.servers["rust-analyzer"];
-        // github-release should have repo and assetPattern, packages should default to empty
         assert!(ra.install.packages.is_empty(), "github-release should have empty packages");
         assert!(ra.install.asset_pattern.contains("{arch}"), "assetPattern should contain {{arch}} placeholder");
         assert!(ra.install.asset_pattern.contains("{os}"), "assetPattern should contain {{os}} placeholder");
+    }
+
+    #[test]
+    fn test_find_servers_for_extension_returns_all() {
+        let manifest = load_manifest().unwrap();
+        let results = find_servers_for_extension(&manifest, "js");
+        assert!(results.len() >= 2, "Should return at least 2 servers for .js");
+        let ids: Vec<&str> = results.iter().map(|(id, _)| id.as_str()).collect();
+        assert!(ids.contains(&"typescript"), "Should include typescript");
+        assert!(ids.contains(&"eslint"), "Should include eslint");
+    }
+
+    #[test]
+    fn test_find_servers_sorts_primary_first() {
+        let manifest = load_manifest().unwrap();
+        let results = find_servers_for_extension(&manifest, "js");
+        assert!(!results.is_empty());
+        assert_eq!(results[0].1.priority, "primary", "First result should be primary");
+        if results.len() > 1 {
+            let first_supp = results.iter().position(|(_, e)| e.priority == "supplementary");
+            let last_primary = results.iter().rposition(|(_, e)| e.priority == "primary");
+            if let (Some(supp_idx), Some(prim_idx)) = (first_supp, last_primary) {
+                assert!(prim_idx < supp_idx, "All primary servers should come before supplementary");
+            }
+        }
+    }
+
+    #[test]
+    fn test_find_servers_respects_exclude() {
+        let manifest = load_manifest().unwrap();
+        let results = find_servers_for_extension(&manifest, "svelte");
+        let ids: Vec<&str> = results.iter().map(|(id, _)| id.as_str()).collect();
+        assert!(!ids.contains(&"typescript"), "typescript should be excluded for .svelte");
+        assert!(!ids.contains(&"eslint"), "eslint should be excluded for .svelte");
+        assert!(ids.contains(&"svelte"), "svelte server should match .svelte");
+    }
+
+    #[test]
+    fn test_find_servers_empty_for_unknown() {
+        let manifest = load_manifest().unwrap();
+        let results = find_servers_for_extension(&manifest, "xyz");
+        assert!(results.is_empty(), "No servers should match .xyz");
     }
 }
