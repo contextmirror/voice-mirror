@@ -423,6 +423,11 @@ export async function lensEvalDeviceJs(label, js) {
   return invoke('lens_eval_device_js', { label, js });
 }
 
+/** Set CDP device emulation on a device-preview webview (viewport, DPR, user agent, touch). */
+export async function lensSetDeviceEmulation(label, { width, height, deviceScaleFactor, mobile, userAgent }) {
+  return invoke('lens_set_device_emulation', { label, width, height, deviceScaleFactor, mobile, userAgent });
+}
+
 // ============ Dev Server ============
 
 /**

@@ -288,3 +288,43 @@ describe('lens_eval_device_js command', () => {
     assert.ok(apiSrcV2.includes('lensEvalDeviceJs') || apiSrcV2.includes('lens_eval_device_js'), 'Should have API wrapper');
   });
 });
+
+// Re-read sources for CDP emulation tests
+const lensSrcCDP = fs.readFileSync(path.join(__dirname, '../../src-tauri/src/commands/lens.rs'), 'utf-8');
+const libSrcCDP = fs.readFileSync(path.join(__dirname, '../../src-tauri/src/lib.rs'), 'utf-8');
+const apiSrcCDP = fs.readFileSync(path.join(__dirname, '../../src/lib/api.js'), 'utf-8');
+const componentSrcCDP = fs.readFileSync(path.join(__dirname, '../../src/components/lens/DevicePreview.svelte'), 'utf-8');
+
+describe('CDP device emulation', () => {
+  it('lens.rs has lens_set_device_emulation command', () => {
+    assert.ok(lensSrcCDP.includes('lens_set_device_emulation'), 'Should have lens_set_device_emulation');
+  });
+
+  it('lens.rs calls Emulation.setDeviceMetricsOverride', () => {
+    assert.ok(lensSrcCDP.includes('setDeviceMetricsOverride'), 'Should call setDeviceMetricsOverride');
+  });
+
+  it('lens.rs calls Network.setUserAgentOverride', () => {
+    assert.ok(lensSrcCDP.includes('setUserAgentOverride'), 'Should call setUserAgentOverride');
+  });
+
+  it('lens.rs calls Emulation.setTouchEmulationEnabled', () => {
+    assert.ok(lensSrcCDP.includes('setTouchEmulationEnabled'), 'Should call setTouchEmulationEnabled');
+  });
+
+  it('is registered in lib.rs', () => {
+    assert.ok(libSrcCDP.includes('lens_cmds::lens_set_device_emulation'), 'Should be registered');
+  });
+
+  it('has API wrapper', () => {
+    assert.ok(apiSrcCDP.includes('lensSetDeviceEmulation'), 'Should have API wrapper');
+  });
+
+  it('DevicePreview calls lensSetDeviceEmulation', () => {
+    assert.ok(componentSrcCDP.includes('lensSetDeviceEmulation'), 'Should call CDP emulation');
+  });
+
+  it('tracks emulated devices to avoid re-calling', () => {
+    assert.ok(componentSrcCDP.includes('emulatedDevices'), 'Should track emulated devices');
+  });
+});

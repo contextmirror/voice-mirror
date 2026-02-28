@@ -9,7 +9,7 @@
   import { onDestroy } from 'svelte';
   import { devicePreviewStore } from '../../lib/stores/device-preview.svelte.js';
   import { getPresetById } from '../../lib/device-presets.js';
-  import { lensResizeDeviceWebview, lensEvalDeviceJs } from '../../lib/api.js';
+  import { lensResizeDeviceWebview, lensEvalDeviceJs, lensSetDeviceEmulation } from '../../lib/api.js';
   import { SYNC_SCRIPT, replayScrollScript, replayClickScript } from '../../lib/device-sync.js';
   import DevicePreviewStrip from './DevicePreviewStrip.svelte';
 
@@ -18,6 +18,7 @@
   let resizeObserver = null;
   let rafId = null;
   let syncInterval = null;
+  let emulatedDevices = new Set();
 
   /**
    * Get the effective device width respecting orientation.
@@ -112,8 +113,27 @@
         rect.height
       ).catch(() => {});
 
-      // Inject CSS zoom so the page thinks it has the real device viewport width
-      // e.g., a 200px-wide WebView2 with zoom 0.51 renders as if 393px wide
+      // Apply CDP device emulation (once per device) — sets the logical viewport,
+      // DPR, user agent, and touch emulation via Chrome DevTools Protocol
+      if (!emulatedDevices.has(device.presetId)) {
+        emulatedDevices.add(device.presetId);
+        const isM = isPhone(preset) || isTablet(preset);
+        lensSetDeviceEmulation(device.webviewLabel, {
+          width: getDeviceWidth(preset),
+          height: getDeviceHeight(preset),
+          deviceScaleFactor: preset.dpr || 1,
+          mobile: isM,
+          userAgent: preset.userAgent || '',
+        }).catch((err) => {
+          console.warn('[DevicePreview] CDP emulation failed:', err);
+          emulatedDevices.delete(device.presetId);
+        });
+      }
+
+      // Inject CSS zoom so the page renders at the real device viewport width
+      // within the smaller physical WebView2 window. CDP emulation sets the
+      // logical viewport (e.g. 393px) but the physical window may be 200px —
+      // without zoom the content would be cropped.
       const deviceW = getDeviceWidth(preset);
       const zoom = rect.width / deviceW;
       lensEvalDeviceJs(
@@ -204,6 +224,7 @@
       resizeObserver = null;
     }
     stopSyncPolling();
+    emulatedDevices.clear();
     devicePreviewStore.removeAllDevices();
   });
 </script>

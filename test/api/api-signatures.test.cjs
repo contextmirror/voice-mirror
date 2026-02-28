@@ -250,6 +250,7 @@ describe('api.js -- exported async functions', () => {
     'lensCloseAllDeviceWebviews',
     'lensResizeDeviceWebview',
     'lensEvalDeviceJs',
+    'lensSetDeviceEmulation',
     // GPU / Model Management
     'detectGpu',
     'listSttModels',

@@ -991,6 +991,124 @@ pub fn lens_resize_device_webview(
     }
 }
 
+/// Call a Chrome DevTools Protocol method on a lens/device webview.
+/// Windows-only — uses the WebView2 COM API.
+#[cfg(windows)]
+async fn call_cdp_method_lens(
+    webview: &tauri::Webview,
+    method: &str,
+    params: &str,
+) -> Result<serde_json::Value, String> {
+    let (tx, rx) = tokio::sync::oneshot::channel::<Result<String, String>>();
+    let method_owned = method.to_string();
+    let params_owned = params.to_string();
+
+    webview
+        .with_webview(move |platform_webview| {
+            use webview2_com::CallDevToolsProtocolMethodCompletedHandler;
+            use windows_core::HSTRING;
+
+            unsafe {
+                let controller = platform_webview.controller();
+                let core_webview = match controller.CoreWebView2() {
+                    Ok(wv) => wv,
+                    Err(e) => {
+                        let _ = tx.send(Err(format!("CoreWebView2 failed: {:?}", e)));
+                        return;
+                    }
+                };
+
+                let method_h = HSTRING::from(method_owned.as_str());
+                let params_h = HSTRING::from(params_owned.as_str());
+                let handler = CallDevToolsProtocolMethodCompletedHandler::create(
+                    Box::new(move |hresult, result| {
+                        if hresult.is_ok() {
+                            let _ = tx.send(Ok(result));
+                        } else {
+                            let _ = tx.send(Err(format!("CDP call failed: {:?}", hresult)));
+                        }
+                        Ok(())
+                    }),
+                );
+
+                if let Err(e) = core_webview.CallDevToolsProtocolMethod(
+                    &method_h,
+                    &params_h,
+                    &handler,
+                ) {
+                    tracing::error!("[lens] CDP dispatch failed: {:?}", e);
+                }
+            }
+        })
+        .map_err(|e| format!("with_webview failed: {}", e))?;
+
+    match tokio::time::timeout(std::time::Duration::from_secs(10), rx).await {
+        Ok(Ok(Ok(result_str))) => {
+            serde_json::from_str(&result_str)
+                .or_else(|_| Ok(serde_json::json!({ "raw": result_str })))
+        }
+        Ok(Ok(Err(e))) => Err(e),
+        Ok(Err(_)) => Err("CDP channel closed unexpectedly".into()),
+        Err(_) => Err("CDP call timed out".into()),
+    }
+}
+
+/// Stub for non-Windows platforms.
+#[cfg(not(windows))]
+async fn call_cdp_method_lens(
+    _webview: &tauri::Webview,
+    _method: &str,
+    _params: &str,
+) -> Result<serde_json::Value, String> {
+    Err("CDP calls are only supported on Windows (WebView2)".into())
+}
+
+/// Set CDP device emulation on a device-preview webview.
+/// Calls Emulation.setDeviceMetricsOverride, Network.setUserAgentOverride,
+/// and (for mobile) Emulation.setTouchEmulationEnabled.
+#[tauri::command]
+pub async fn lens_set_device_emulation(
+    app: AppHandle,
+    label: String,
+    width: u32,
+    height: u32,
+    device_scale_factor: f64,
+    mobile: bool,
+    user_agent: String,
+) -> Result<String, String> {
+    let webview = app.get_webview(&label)
+        .ok_or_else(|| format!("Webview '{}' not found", label))?;
+
+    // 1. Override device metrics (viewport size, DPR, mobile flag)
+    let metrics_params = serde_json::json!({
+        "width": width,
+        "height": height,
+        "deviceScaleFactor": device_scale_factor,
+        "mobile": mobile
+    });
+    call_cdp_method_lens(&webview, "Emulation.setDeviceMetricsOverride", &metrics_params.to_string()).await?;
+
+    // 2. Override user agent
+    if !user_agent.is_empty() {
+        let ua_params = serde_json::json!({
+            "userAgent": user_agent
+        });
+        call_cdp_method_lens(&webview, "Network.setUserAgentOverride", &ua_params.to_string()).await?;
+    }
+
+    // 3. Enable touch emulation for mobile devices
+    if mobile {
+        let touch_params = serde_json::json!({
+            "enabled": true,
+            "maxTouchPoints": 5
+        });
+        call_cdp_method_lens(&webview, "Emulation.setTouchEmulationEnabled", &touch_params.to_string()).await?;
+    }
+
+    info!("[lens] Device emulation set for {}: {}x{} dpr={} mobile={}", label, width, height, device_scale_factor, mobile);
+    Ok("ok".to_string())
+}
+
 /// Evaluate JavaScript in a specific device-preview webview (fire-and-forget).
 /// Used for injecting the interaction sync script and replaying events on sibling devices.
 #[tauri::command]
