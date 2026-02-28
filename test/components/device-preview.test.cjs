@@ -164,3 +164,40 @@ describe('DevicePreview.svelte: styles', () => {
     assert.ok(componentSrc.includes('overflow'));
   });
 });
+
+const groupTabBarSrc = fs.readFileSync(path.join(__dirname, '../../src/components/lens/GroupTabBar.svelte'), 'utf-8');
+const editorPaneSrc = fs.readFileSync(path.join(__dirname, '../../src/components/lens/EditorPane.svelte'), 'utf-8');
+const workspaceSrc = fs.readFileSync(path.join(__dirname, '../../src/components/lens/LensWorkspace.svelte'), 'utf-8');
+
+describe('GroupTabBar: device preview button', () => {
+  it('accepts onDevicePreviewClick prop', () => {
+    assert.ok(groupTabBarSrc.includes('onDevicePreviewClick'));
+  });
+  it('accepts showDevicePreview prop', () => {
+    assert.ok(groupTabBarSrc.includes('showDevicePreview'));
+  });
+  it('has device preview button with phone icon', () => {
+    assert.ok(groupTabBarSrc.includes('Device Preview'));
+  });
+});
+
+describe('EditorPane: device preview passthrough', () => {
+  it('accepts onDevicePreviewClick prop', () => {
+    assert.ok(editorPaneSrc.includes('onDevicePreviewClick'));
+  });
+  it('accepts showDevicePreview prop', () => {
+    assert.ok(editorPaneSrc.includes('showDevicePreview'));
+  });
+});
+
+describe('LensWorkspace: device preview wiring', () => {
+  it('imports devicePreviewStore', () => {
+    assert.ok(workspaceSrc.includes('devicePreviewStore'));
+  });
+  it('passes onDevicePreviewClick to EditorPane', () => {
+    assert.ok(workspaceSrc.includes('onDevicePreviewClick'));
+  });
+  it('passes showDevicePreview to EditorPane', () => {
+    assert.ok(workspaceSrc.includes('showDevicePreview'));
+  });
+});

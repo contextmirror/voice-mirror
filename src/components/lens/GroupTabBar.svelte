@@ -6,7 +6,7 @@
   import { renameEntry } from '../../lib/api.js';
   import TabContextMenu from './TabContextMenu.svelte';
 
-  let { groupId = 1, onBrowserClick = null, showBrowser = false } = $props();
+  let { groupId = 1, onBrowserClick = null, showBrowser = false, onDevicePreviewClick = null, showDevicePreview = false } = $props();
 
   let tabMenu = $state({ visible: false, x: 0, y: 0, tab: null });
   let splitMenu = $state({ visible: false, x: 0, y: 0 });
@@ -317,6 +317,14 @@
 
   <!-- Right-side action buttons (VS Code style) -->
   <div class="editor-actions">
+    {#if onDevicePreviewClick}
+      <button class="action-btn" class:active={showDevicePreview} onclick={onDevicePreviewClick} aria-label="Device Preview" title="Device Preview">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/>
+        </svg>
+      </button>
+    {/if}
+
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <button class="action-btn" class:active={hasSplit} onclick={handleSplitEditor} oncontextmenu={handleSplitContextMenu} aria-label="Split editor right" title="Split editor right (Ctrl+\) — right-click for more">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
