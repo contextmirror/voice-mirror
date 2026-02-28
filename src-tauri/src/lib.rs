@@ -254,6 +254,7 @@ pub fn run() {
             tabs: std::sync::Mutex::new(std::collections::HashMap::new()),
             active_tab_id: std::sync::Mutex::new(None),
             bounds: std::sync::Mutex::new(None),
+            device_webviews: std::sync::Mutex::new(Vec::new()),
         })
         .manage(services::file_watcher::FileWatcherState {
             handle: std::sync::Mutex::new(None),
@@ -352,6 +353,11 @@ pub fn run() {
             lens_cmds::lens_set_visible,
             lens_cmds::lens_hard_refresh,
             lens_cmds::lens_clear_cache,
+            // Device Preview
+            lens_cmds::lens_create_device_webview,
+            lens_cmds::lens_close_device_webview,
+            lens_cmds::lens_close_all_device_webviews,
+            lens_cmds::lens_resize_device_webview,
             // File tree
             files_cmds::list_directory,
             files_cmds::get_git_changes,
