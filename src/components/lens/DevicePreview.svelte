@@ -72,15 +72,34 @@
   }
 
   /**
+   * Check if a device category is a phone (needs phone-style frame).
+   */
+  function isPhone(preset) {
+    return preset.category === 'iPhone' || preset.category === 'Android Phone';
+  }
+
+  /**
+   * Check if a device category is a tablet.
+   */
+  function isTablet(preset) {
+    return preset.category === 'iPad' || preset.category === 'Android Tablet';
+  }
+
+  /**
    * Reposition all WebView2 native windows to match their DOM viewport placeholders.
    * Each viewport div's getBoundingClientRect() gives us absolute screen coordinates
    * that we pass to the Rust backend to position the native child window.
+   * Also injects CSS zoom so the page renders at the real device viewport width
+   * despite the WebView2 being displayed at a smaller scaled size.
    */
   function repositionAllWebviews() {
     for (const device of devicePreviewStore.activeDevices) {
       if (!device.webviewLabel) continue;
       const el = viewportRefs[device.presetId];
       if (!el) continue;
+
+      const preset = getPresetById(device.presetId);
+      if (!preset) continue;
 
       const rect = el.getBoundingClientRect();
       if (rect.width <= 0 || rect.height <= 0) continue;
@@ -91,6 +110,15 @@
         rect.top,
         rect.width,
         rect.height
+      ).catch(() => {});
+
+      // Inject CSS zoom so the page thinks it has the real device viewport width
+      // e.g., a 200px-wide WebView2 with zoom 0.51 renders as if 393px wide
+      const deviceW = getDeviceWidth(preset);
+      const zoom = rect.width / deviceW;
+      lensEvalDeviceJs(
+        device.webviewLabel,
+        `document.documentElement.style.zoom='${zoom.toFixed(4)}'`
       ).catch(() => {});
     }
   }
@@ -190,11 +218,21 @@
       {#each devicePreviewStore.activeDevices as device (device.presetId)}
         {@const preset = getPresetById(device.presetId)}
         {#if preset}
-          <div class="device-frame" data-preset={device.presetId}>
-            <div class="device-viewport"
-                 bind:this={viewportRefs[device.presetId]}
-                 style="width: {getScaledWidth(preset)}px; height: {getScaledHeight(preset)}px;">
-              <!-- WebView2 renders here as native overlay -->
+          <div class="device-frame" class:phone={isPhone(preset)} class:tablet={isTablet(preset)} data-preset={device.presetId}>
+            <div class="device-bezel" class:phone={isPhone(preset)} class:tablet={isTablet(preset)}>
+              {#if isPhone(preset)}
+                <div class="device-notch"></div>
+              {/if}
+              <div class="device-screen" class:phone={isPhone(preset)} class:tablet={isTablet(preset)}>
+                <div class="device-viewport"
+                     bind:this={viewportRefs[device.presetId]}
+                     style="width: {getScaledWidth(preset)}px; height: {getScaledHeight(preset)}px;">
+                  <!-- WebView2 renders here as native overlay -->
+                </div>
+              </div>
+              {#if isPhone(preset)}
+                <div class="device-home-bar"></div>
+              {/if}
             </div>
             <div class="device-label">{preset.name} — {getDeviceWidth(preset)}&times;{getDeviceHeight(preset)}</div>
           </div>
@@ -228,13 +266,64 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 4px;
+    gap: 6px;
+  }
+
+  /* Dark bezel wrapping the screen — looks like a real device */
+  .device-bezel {
+    background: #1a1a1a;
+    border: 2px solid #333;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    overflow: hidden;
+  }
+
+  .device-bezel.phone {
+    border-radius: 28px;
+    padding: 10px 6px 8px;
+  }
+
+  .device-bezel.tablet {
+    border-radius: 16px;
+    padding: 8px 6px;
+  }
+
+  /* Dynamic island / notch indicator */
+  .device-notch {
+    width: 60px;
+    height: 6px;
+    background: #333;
+    border-radius: 3px;
+    margin-bottom: 4px;
+    flex-shrink: 0;
+  }
+
+  /* Screen area containing the WebView2 viewport */
+  .device-screen {
+    overflow: hidden;
+  }
+
+  .device-screen.phone {
+    border-radius: 6px;
+  }
+
+  .device-screen.tablet {
+    border-radius: 4px;
+  }
+
+  /* Home indicator bar at bottom of phone */
+  .device-home-bar {
+    width: 40%;
+    height: 4px;
+    background: #555;
+    border-radius: 2px;
+    margin-top: 6px;
+    flex-shrink: 0;
   }
 
   .device-viewport {
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    background: var(--bg);
+    background: #000;
     position: relative;
   }
 
