@@ -8,7 +8,7 @@ import { getPresetById } from '../device-presets.js';
 import { lensCreateDeviceWebview, lensCloseDeviceWebview, lensCloseAllDeviceWebviews } from '../api.js';
 import { lensStore } from './lens.svelte.js';
 
-const MAX_DEVICES = 5;
+const MAX_DEVICES = 3;
 
 function createDevicePreviewStore() {
   let activeDevices = $state([]);

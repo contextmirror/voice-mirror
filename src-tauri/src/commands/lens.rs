@@ -9,7 +9,7 @@ use tracing::{info, warn};
 const MAX_TABS: usize = 8;
 
 /// Maximum number of device preview webviews allowed.
-const MAX_DEVICE_WEBVIEWS: usize = 5;
+const MAX_DEVICE_WEBVIEWS: usize = 3;
 
 /// A single browser tab backed by a native WebView2 instance.
 pub struct BrowserTab {

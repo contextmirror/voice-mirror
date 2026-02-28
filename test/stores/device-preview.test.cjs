@@ -54,8 +54,8 @@ describe('device-preview store: constants', () => {
     assert.ok(src.includes('MAX_DEVICES'), 'Should have MAX_DEVICES constant');
   });
 
-  it('MAX_DEVICES is 5', () => {
-    assert.ok(src.includes('MAX_DEVICES = 5'), 'MAX_DEVICES should be 5');
+  it('MAX_DEVICES is 3', () => {
+    assert.ok(src.includes('MAX_DEVICES = 3'), 'MAX_DEVICES should be 3');
   });
 });
 
