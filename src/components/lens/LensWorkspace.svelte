@@ -10,6 +10,7 @@
   import FileEditor from './FileEditor.svelte';
   import DiffViewer from './DiffViewer.svelte';
   import EditorPane from './EditorPane.svelte';
+  import DevicePreview from './DevicePreview.svelte';
   import SplitPanel from '../shared/SplitPanel.svelte';
   import ChatPanel from '../chat/ChatPanel.svelte';
   import TerminalTabs from '../terminal/TerminalTabs.svelte';
@@ -37,6 +38,7 @@
   // chatVerticalRatio removed — pixel agents placeholder removed, chat is full height
   let centerRatio = $state(0.75);           // editor/preview vs terminal
   let previewRatio = $state(0.78);          // center column vs file tree
+  let devicePreviewRatio = $state(0.5);    // editor vs device preview
 
   // Browser is a fixed UI element, not a tab — follows the first (leftmost) group
   let showBrowser = $state(false);
@@ -294,34 +296,43 @@
             <SplitPanel direction="vertical" bind:ratio={centerRatio} minA={200} minB={80} collapseB={!layoutStore.showTerminal}>
               {#snippet panelA()}
                 <div class="preview-area">
-                  <!-- Editor Grid: always visible so GroupTabBar stays accessible -->
-                  <div class="editor-grid">
-                    {#if editorGroupsStore.maximizedGroupId !== null}
-                      <EditorPane groupId={editorGroupsStore.maximizedGroupId} showBrowser={editorGroupsStore.maximizedGroupId === firstGroupId ? showBrowser : false} onBrowserClick={editorGroupsStore.maximizedGroupId === firstGroupId ? () => { showBrowser = !showBrowser; } : null} onDevicePreviewClick={editorGroupsStore.maximizedGroupId === firstGroupId ? () => { devicePreviewStore.toggle(); } : null} showDevicePreview={editorGroupsStore.maximizedGroupId === firstGroupId ? devicePreviewStore.isOpen : false} />
-                    {:else}
-                      {@render renderNode(editorGroupsStore.gridRoot)}
-                    {/if}
-                    <!-- Workspace-level drop zone overlay for full-width ancestor splits -->
-                    {#if ancestorDropZone}
-                      <div class="ancestor-drop-overlay">
-                        <div class="ancestor-zone" class:top={ancestorDropZone === 'top'} class:bottom={ancestorDropZone === 'bottom'} class:left={ancestorDropZone === 'left'} class:right={ancestorDropZone === 'right'}></div>
-                      </div>
-                    {/if}
-                  </div>
+                  <SplitPanel direction="horizontal" bind:ratio={devicePreviewRatio} minA={300} minB={200} collapseB={!devicePreviewStore.isOpen}>
+                    {#snippet panelA()}
+                      <div class="editor-with-browser">
+                        <!-- Editor Grid: always visible so GroupTabBar stays accessible -->
+                        <div class="editor-grid">
+                          {#if editorGroupsStore.maximizedGroupId !== null}
+                            <EditorPane groupId={editorGroupsStore.maximizedGroupId} showBrowser={editorGroupsStore.maximizedGroupId === firstGroupId ? showBrowser : false} onBrowserClick={editorGroupsStore.maximizedGroupId === firstGroupId ? () => { showBrowser = !showBrowser; } : null} onDevicePreviewClick={editorGroupsStore.maximizedGroupId === firstGroupId ? () => { devicePreviewStore.toggle(); } : null} showDevicePreview={editorGroupsStore.maximizedGroupId === firstGroupId ? devicePreviewStore.isOpen : false} />
+                          {:else}
+                            {@render renderNode(editorGroupsStore.gridRoot)}
+                          {/if}
+                          <!-- Workspace-level drop zone overlay for full-width ancestor splits -->
+                          {#if ancestorDropZone}
+                            <div class="ancestor-drop-overlay">
+                              <div class="ancestor-zone" class:top={ancestorDropZone === 'top'} class:bottom={ancestorDropZone === 'bottom'} class:left={ancestorDropZone === 'left'} class:right={ancestorDropZone === 'right'}></div>
+                            </div>
+                          {/if}
+                        </div>
 
-                  <!-- Browser layer: overlays editor content when visible (tab bar stays above) -->
-                  <div class="preview-layer" class:visible={showBrowser}>
-                    <BrowserTabBar onNewTab={() => lensPreviewRef?.createNewTab()} />
-                    <LensToolbar />
-                    {#if lensStore.designMode}
-                      <DesignToolbar
-                        onSend={handleDesignSend}
-                        onElementSend={handleElementSend}
-                        onClose={() => lensStore.setDesignMode(false)}
-                      />
-                    {/if}
-                    <LensPreview bind:this={lensPreviewRef} />
-                  </div>
+                        <!-- Browser layer: overlays editor content when visible (tab bar stays above) -->
+                        <div class="preview-layer" class:visible={showBrowser}>
+                          <BrowserTabBar onNewTab={() => lensPreviewRef?.createNewTab()} />
+                          <LensToolbar />
+                          {#if lensStore.designMode}
+                            <DesignToolbar
+                              onSend={handleDesignSend}
+                              onElementSend={handleElementSend}
+                              onClose={() => lensStore.setDesignMode(false)}
+                            />
+                          {/if}
+                          <LensPreview bind:this={lensPreviewRef} />
+                        </div>
+                      </div>
+                    {/snippet}
+                    {#snippet panelB()}
+                      <DevicePreview />
+                    {/snippet}
+                  </SplitPanel>
                 </div>
               {/snippet}
               {#snippet panelB()}
@@ -375,6 +386,14 @@
   }
 
   .preview-area {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .editor-with-browser {
     display: flex;
     flex-direction: column;
     height: 100%;

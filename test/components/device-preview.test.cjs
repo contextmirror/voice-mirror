@@ -201,3 +201,21 @@ describe('LensWorkspace: device preview wiring', () => {
     assert.ok(workspaceSrc.includes('showDevicePreview'));
   });
 });
+
+describe('LensWorkspace.svelte: device preview integration', () => {
+  it('imports DevicePreview component', () => {
+    assert.ok(workspaceSrc.includes("import DevicePreview from './DevicePreview.svelte'"), 'Should import DevicePreview');
+  });
+
+  it('renders DevicePreview in a split pane with editor', () => {
+    assert.ok(workspaceSrc.includes('<DevicePreview'), 'Should render DevicePreview component');
+  });
+
+  it('uses devicePreviewStore.isOpen for collapse', () => {
+    assert.ok(workspaceSrc.includes('devicePreviewStore.isOpen'), 'Should use store isOpen for visibility');
+  });
+
+  it('has devicePreviewRatio state for split', () => {
+    assert.ok(workspaceSrc.includes('devicePreviewRatio'), 'Should have devicePreviewRatio state');
+  });
+});
