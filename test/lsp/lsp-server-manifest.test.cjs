@@ -92,6 +92,50 @@ describe('lsp-servers.json: typescript dependency', () => {
   });
 });
 
+describe('lsp-servers.json: priority field', () => {
+  it('all Phase 1 servers have primary priority', () => {
+    const phase1 = ['svelte', 'typescript', 'css', 'html', 'json'];
+    for (const id of phase1) {
+      assert.equal(
+        manifest.servers[id].priority,
+        'primary',
+        `${id} should have priority "primary"`
+      );
+    }
+  });
+
+  it('every server has a valid priority value', () => {
+    for (const [id, server] of Object.entries(manifest.servers)) {
+      assert.ok(
+        ['primary', 'supplementary'].includes(server.priority),
+        `${id}: priority should be "primary" or "supplementary", got "${server.priority}"`
+      );
+    }
+  });
+
+  it('primary servers are not duplicating language coverage unnecessarily', () => {
+    const primaryServers = Object.entries(manifest.servers)
+      .filter(([, s]) => s.priority === 'primary');
+    // Collect all extensions from primary servers
+    const extCounts = {};
+    for (const [id, server] of primaryServers) {
+      for (const ext of server.extensions) {
+        if (!server.excludeExtensions.includes(ext)) {
+          if (!extCounts[ext]) extCounts[ext] = [];
+          extCounts[ext].push(id);
+        }
+      }
+    }
+    // Each extension should have at most one primary server
+    for (const [ext, servers] of Object.entries(extCounts)) {
+      assert.ok(
+        servers.length <= 1,
+        `Extension ${ext} has multiple primary servers: ${servers.join(', ')}`
+      );
+    }
+  });
+});
+
 describe('lsp-servers.json: shared packages', () => {
   it('css, html, json use vscode-langservers-extracted', () => {
     for (const id of ['css', 'html', 'json']) {
