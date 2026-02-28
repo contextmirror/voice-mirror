@@ -40,6 +40,9 @@ function createTabsStore() {
   let untitledCounter = 0;
   let previewEnabled = $state(true);
 
+  /** @type {{ path: string, line: number, character: number } | null} */
+  let pendingCursorPosition = $state(null);
+
   /** @type {Array<{path: string, type: string, groupId: number, title: string, status?: string|null}>} */
   let closedTabs = $state([]);
   const MAX_CLOSED_TABS = 20;
@@ -68,6 +71,19 @@ function createTabsStore() {
     get activeTabId() { return activeTabId; },
     get activeTab() { return tabs.find(t => t.id === activeTabId) || null; },
     get previewEnabled() { return previewEnabled; },
+
+    /** Pending cursor position for cross-file navigation */
+    get pendingCursorPosition() { return pendingCursorPosition; },
+
+    /** Set a cursor position to navigate to after a file opens */
+    setPendingCursor(path, line, character) {
+      pendingCursorPosition = { path, line, character };
+    },
+
+    /** Clear pending cursor (called by FileEditor after applying) */
+    clearPendingCursor() {
+      pendingCursorPosition = null;
+    },
 
     /**
      * Get all tabs belonging to a specific group.

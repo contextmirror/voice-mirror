@@ -454,6 +454,26 @@ describe('tabs.svelte.js: bulk close records closed tab history', () => {
   });
 });
 
+describe('tabs.svelte.js: pendingCursorPosition', () => {
+  it('has pendingCursorPosition getter', () => {
+    assert.ok(src.includes('pendingCursorPosition'), 'Should have pendingCursorPosition');
+  });
+
+  it('has setPendingCursor method', () => {
+    assert.ok(src.includes('setPendingCursor('), 'Should have setPendingCursor method');
+  });
+
+  it('has clearPendingCursor method', () => {
+    assert.ok(src.includes('clearPendingCursor('), 'Should have clearPendingCursor method');
+  });
+
+  it('setPendingCursor accepts path, line, character', () => {
+    const idx = src.indexOf('setPendingCursor(');
+    const body = src.slice(idx, idx + 200);
+    assert.ok(body.includes('path') && body.includes('line'), 'Should accept path and line');
+  });
+});
+
 describe('tabs.svelte.js: diff tab support', () => {
   it('has openDiff method', () => {
     assert.ok(src.includes('openDiff('), 'Should have openDiff method');
