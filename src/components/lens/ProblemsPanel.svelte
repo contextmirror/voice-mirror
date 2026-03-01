@@ -63,12 +63,10 @@
       groups.push({ filePath, diagnostics: sorted, errors, warnings });
     }
 
-    // Sort file groups: files with errors first, then warnings-only, then alpha
-    groups.sort((a, b) => {
-      if (a.errors > 0 && b.errors === 0) return -1;
-      if (a.errors === 0 && b.errors > 0) return 1;
-      return a.filePath.localeCompare(b.filePath);
-    });
+    // Sort file groups alphabetically — stable order prevents visual jumping
+    // when diagnostic counts fluctuate during LSP re-analysis.
+    // Error/warning badges on each file header already indicate severity.
+    groups.sort((a, b) => a.filePath.localeCompare(b.filePath));
 
     return groups;
   });
