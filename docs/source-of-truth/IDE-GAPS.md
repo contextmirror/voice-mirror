@@ -531,7 +531,7 @@ See `docs/archive/TERMINAL-GAP-ANALYSIS.md` for the complete 33-item gap list. T
 |---------|---------|-----|-------------|----------|
 | **Inline gutter change indicators** | ✅ Green/blue/red bars (add/modify/delete) | ✅ | ✅ Green/blue/red bars + peek + revert | Done ✓ |
 | **Word wrap toggle** | ✅ Toggle line wrapping | ✅ | ❌ (only in DiffViewer + OutputPanel) | Small |
-| **Indent guides** | ✅ Colored lines showing nesting depth | ✅ | ❌ | Medium |
+| **Indent guides** | ✅ Colored lines showing nesting depth | ✅ | ✅ `@replit/codemirror-indentation-markers` + status bar toggle | Done ✓ |
 | **Bracket pair colorization** | ✅ Rainbow brackets | ✅ | ❌ | Low |
 | **Sticky scroll** | ✅ Pin scope headers (function/class) at top | ✅ | ❌ | Low |
 | **Code folding UI** | ✅ Gutter fold markers, fold/unfold all | ✅ | ⚠️ CM has folding but no visible gutter markers | Low |
@@ -539,7 +539,7 @@ See `docs/archive/TERMINAL-GAP-ANALYSIS.md` for the complete 33-item gap list. T
 | **Snippet system** | ✅ User-defined snippets | ✅ | ❌ | Low |
 | **Image preview in editor** | ✅ | ✅ | ❌ | Very low |
 
-**Assessment:** Core editing is feature-complete. Inline gutter change indicators are now implemented (green/blue/red bars + peek widget + hunk revert). The file editor is missing a word wrap toggle (exists in DiffViewer and OutputPanel but not the main editor). The next biggest editor gaps are word wrap toggle, indent guides, and bracket pair colorization.
+**Assessment:** Core editing is feature-complete. Indent guides are now implemented via `@replit/codemirror-indentation-markers` with active block highlighting and a toggle in the status bar indentation dropdown. The file editor is missing a word wrap toggle (exists in DiffViewer + OutputPanel but not the main editor). The next biggest editor gaps are word wrap toggle, bracket pair colorization, and sticky scroll.
 
 ---
 
@@ -588,6 +588,7 @@ See `docs/archive/TERMINAL-GAP-ANALYSIS.md` for the complete 33-item gap list. T
 | LSP manifest expansion (Phase 3) | LSP | 7 servers: svelte, typescript, css, html, json, eslint, rust-analyzer |
 | Code actions lightbulb gutter | Editor | 💡 icon on current line when code actions available, 400ms debounce |
 | Font zoom (Ctrl+=/−/0) | Editor | Zoom in, zoom out, reset font size |
+| Indent guides | Editor | `@replit/codemirror-indentation-markers`, active block highlight, status bar toggle |
 
 ### Open Gaps — Ranked by Impact
 
@@ -602,7 +603,7 @@ See `docs/archive/TERMINAL-GAP-ANALYSIS.md` for the complete 33-item gap list. T
 | 7 | **Inline blame (git blame)** | Source Control | Medium | Medium | Per-line author/date annotations. §11 |
 | 8 | **Stash support** | Source Control | Medium | Small | Stash/pop/apply from UI. §11 |
 | 9 | **Drag-to-move files in tree** | File Tree | Medium | Medium | Drag files between folders. §13 |
-| 10 | **Indent guides** | Editor | Medium | Small | Colored lines showing nesting depth. §15 |
+| ~~10~~ | ~~**Indent guides**~~ | ~~Editor~~ | ~~Medium~~ | ~~Small~~ | ✅ Done — `@replit/codemirror-indentation-markers` + status bar toggle. §15 |
 | 11 | **Navigate to next/prev diff file** | Diff | Medium | Small | Alt+F5 cycle through changed files. §12 |
 | 12 | **Interactive diff minimap** | Diff | Low | Small | Click minimap to jump to chunk. §12 |
 | 13 | **Workspace symbols** | LSP | Medium | Medium | Cross-project symbol search in command palette |

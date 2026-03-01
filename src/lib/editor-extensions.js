@@ -7,6 +7,7 @@
 import { indentWithTab } from '@codemirror/commands';
 import { showMinimap } from '@replit/codemirror-minimap';
 import { vscodeKeymap } from '@replit/codemirror-vscode-keymap';
+import { indentationMarkers } from '@replit/codemirror-indentation-markers';
 import { createGitGutter } from './editor-git-gutter.js';
 
 /**
@@ -238,6 +239,7 @@ function createCodeActionsGutter(cm, lsp, filePath) {
  * @param {function} [options.onCursorActivity] - Callback for cursor position changes (update)
  * @param {function} [options.onNavigateBack] - Callback for Alt+Left navigation history back
  * @param {function} [options.onNavigateForward] - Callback for Alt+Right navigation history forward
+ * @param {boolean} [options.showIndentGuides] - Whether to show indentation guide lines
  * @returns {Array} CodeMirror extensions array
  */
 export function buildEditorExtensions(cm, lsp, options) {
@@ -257,6 +259,7 @@ export function buildEditorExtensions(cm, lsp, options) {
     onCursorActivity,
     onNavigateBack,
     onNavigateForward,
+    showIndentGuides,
   } = options;
 
   const extensions = [
@@ -325,6 +328,15 @@ export function buildEditorExtensions(cm, lsp, options) {
       };
     })
   );
+
+  // Indent guides — vertical lines showing nesting depth
+  if (showIndentGuides) {
+    extensions.push(...indentationMarkers({
+      highlightActiveBlock: true,
+      hideFirstIndent: false,
+      thickness: 1,
+    }));
+  }
 
   // Git change gutter — skip for read-only / external files
   if (getOriginalContent && !isReadOnly) {

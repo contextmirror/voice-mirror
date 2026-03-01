@@ -87,6 +87,7 @@ const DEFAULT_CONFIG = {
     markdownPreview: true,
     formatOnSave: false,
     fontSize: 14,
+    indentGuides: true,
   },
   devicePreview: {
     customDevices: [],

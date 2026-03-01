@@ -632,3 +632,57 @@ describe('mod.rs: Node.js not-found event emission', () => {
     );
   });
 });
+
+// ──────────────────────────────────────────────────
+// Indent guides dropdown
+// ──────────────────────────────────────────────────
+
+describe('StatusBar.svelte: indent guides dropdown', () => {
+  it('imports configStore from config store', () => {
+    assert.ok(src.includes('configStore'), 'Should import configStore');
+    assert.ok(src.includes('config.svelte.js'), 'Should import from config.svelte.js');
+  });
+
+  it('imports updateConfig from config store', () => {
+    assert.ok(src.includes('updateConfig'), 'Should import updateConfig');
+  });
+
+  it('has indent-anchor wrapper for dropdown positioning', () => {
+    assert.ok(src.includes('indent-anchor'), 'Should have indent-anchor class');
+  });
+
+  it('has indent-dropdown element', () => {
+    assert.ok(src.includes('indent-dropdown'), 'Should have indent-dropdown class');
+  });
+
+  it('has indent-item for dropdown rows', () => {
+    assert.ok(src.includes('indent-item'), 'Should have indent-item class');
+  });
+
+  it('derives indentGuides state from configStore', () => {
+    assert.ok(src.includes('indentGuides'), 'Should have indentGuides derived state');
+  });
+
+  it('has toggleIndentGuides handler', () => {
+    assert.ok(src.includes('toggleIndentGuides'), 'Should have toggleIndentGuides handler');
+  });
+
+  it('calls updateConfig to persist indent guide toggle', () => {
+    assert.ok(
+      src.includes("updateConfig({ editor:") || src.includes('updateConfig({editor:'),
+      'Should call updateConfig with editor patch'
+    );
+  });
+
+  it('has indentDropdownOpen state for show/hide', () => {
+    assert.ok(src.includes('indentDropdownOpen'), 'Should have indentDropdownOpen state');
+  });
+
+  it('shows Indent Guides label in dropdown', () => {
+    assert.ok(src.includes('Indent Guides'), 'Should show Indent Guides label');
+  });
+
+  it('has checkmark indicator for toggle state', () => {
+    assert.ok(src.includes('indent-check') || src.includes('✓'), 'Should have checkmark indicator');
+  });
+});

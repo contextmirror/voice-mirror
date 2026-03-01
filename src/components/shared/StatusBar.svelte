@@ -13,6 +13,7 @@
   import { lspDiagnosticsStore } from '../../lib/stores/lsp-diagnostics.svelte.js';
   import { devServerManager } from '../../lib/stores/dev-server-manager.svelte.js';
   import { toastStore } from '../../lib/stores/toast.svelte.js';
+  import { configStore, updateConfig } from '../../lib/stores/config.svelte.js';
 
   // -- Derived state --
   let hasProject = $derived(!!projectStore.activeProject?.path);
@@ -23,6 +24,25 @@
   /** @type {{ server: string, status: string, message: string } | null} */
   let lspInstall = $state(null);
   let installClearTimer = null;
+
+  // -- Indentation dropdown --
+  let indentDropdownOpen = $state(false);
+  let indentGuides = $derived(configStore.value?.editor?.indentGuides !== false);
+
+  function toggleIndentDropdown(e) {
+    e.stopPropagation();
+    indentDropdownOpen = !indentDropdownOpen;
+  }
+
+  function closeIndentDropdown() {
+    indentDropdownOpen = false;
+  }
+
+  function toggleIndentGuides() {
+    const next = !indentGuides;
+    updateConfig({ editor: { indentGuides: next } });
+    closeIndentDropdown();
+  }
 
   // -- Notification panel --
   let notifPanelOpen = $state(false);
@@ -40,9 +60,8 @@
   }
 
   function handleDocumentClick() {
-    if (notifPanelOpen) {
-      closeNotifPanel();
-    }
+    if (notifPanelOpen) closeNotifPanel();
+    if (indentDropdownOpen) closeIndentDropdown();
   }
 
   /**
@@ -248,16 +267,28 @@
         <span>Ln {statusBarStore.cursor.line}, Col {statusBarStore.cursor.col}</span>
       </button>
 
-      <!-- R2: Indentation -->
-      <button class="sb-item" title="Indentation">
-        <span>
-          {#if statusBarStore.indent.type === 'tabs'}
-            Tabs: {statusBarStore.indent.size}
-          {:else}
-            Spaces: {statusBarStore.indent.size}
-          {/if}
-        </span>
-      </button>
+      <!-- R2: Indentation (clickable dropdown) -->
+      <div class="indent-anchor">
+        <button class="sb-item sb-clickable" title="Indentation"
+          onclick={toggleIndentDropdown}>
+          <span>
+            {#if statusBarStore.indent.type === 'tabs'}
+              Tabs: {statusBarStore.indent.size}
+            {:else}
+              Spaces: {statusBarStore.indent.size}
+            {/if}
+          </span>
+        </button>
+
+        {#if indentDropdownOpen}
+          <div class="indent-dropdown" role="menu">
+            <button class="indent-item" role="menuitem" onclick={toggleIndentGuides}>
+              <span class="indent-check">{indentGuides ? '✓' : ''}</span>
+              <span>Indent Guides</span>
+            </button>
+          </div>
+        {/if}
+      </div>
 
       <!-- R3: Encoding -->
       <button class="sb-item" title="Encoding">
@@ -484,6 +515,51 @@
 
   .lsp-failed-icon {
     color: var(--danger);
+  }
+
+  /* ========== R2: Indentation dropdown ========== */
+  .indent-anchor {
+    position: relative;
+    height: 100%;
+  }
+
+  .indent-dropdown {
+    position: absolute;
+    bottom: 100%;
+    right: 0;
+    margin-bottom: 4px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border, rgba(255,255,255,0.08));
+    border-radius: 6px;
+    padding: 4px 0;
+    min-width: 160px;
+    box-shadow: 0 -4px 16px rgba(0,0,0,0.4);
+    z-index: 10000;
+  }
+
+  .indent-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    padding: 5px 10px;
+    background: none;
+    border: none;
+    color: var(--text);
+    font-size: 12px;
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .indent-item:hover {
+    background: rgba(255,255,255,0.06);
+  }
+
+  .indent-check {
+    width: 14px;
+    text-align: center;
+    font-size: 11px;
+    color: var(--accent);
   }
 
   /* ========== R6: Bell ========== */

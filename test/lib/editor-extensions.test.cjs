@@ -46,6 +46,21 @@ describe('editor-extensions.js: VS Code keymap', () => {
   });
 });
 
+describe('editor-extensions.js: indent guides', () => {
+  it('imports indentationMarkers from @replit/codemirror-indentation-markers', () => {
+    assert.ok(src.includes("from '@replit/codemirror-indentation-markers'"), 'Should import indentationMarkers');
+  });
+
+  it('conditionally adds indent guides based on showIndentGuides option', () => {
+    assert.ok(src.includes('showIndentGuides'), 'Should check showIndentGuides option');
+    assert.ok(src.includes('indentationMarkers'), 'Should use indentationMarkers extension');
+  });
+
+  it('enables highlightActiveBlock for indent guides', () => {
+    assert.ok(src.includes('highlightActiveBlock: true'), 'Should highlight active block');
+  });
+});
+
 describe('editor-extensions.js: cm object dependencies', () => {
   it('destructures ViewPlugin from cm parameter', () => {
     assert.ok(src.includes('ViewPlugin') && src.includes('cm'), 'Should use ViewPlugin from cm');

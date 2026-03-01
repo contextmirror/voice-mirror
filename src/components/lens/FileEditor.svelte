@@ -505,6 +505,7 @@
             return result?.data || result;
           } catch { return null; }
         },
+        showIndentGuides: configStore.value?.editor?.indentGuides !== false,
       });
 
       if (langSupport && !Array.isArray(langSupport)) {
