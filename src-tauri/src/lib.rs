@@ -438,6 +438,10 @@ pub fn run() {
             // Output / diagnostics
             output_cmds::get_output_logs,
             output_cmds::log_frontend_error,
+            output_cmds::register_project_channel,
+            output_cmds::unregister_project_channel,
+            output_cmds::push_project_log,
+            output_cmds::list_project_channels,
         ])
         .setup(|app| {
             // Migrate data from old Electron directory before anything reads it

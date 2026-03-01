@@ -286,6 +286,9 @@ pub struct OutputStore {
     buffers: RwLock<Vec<ChannelBuffer>>,
     project_channels: RwLock<HashMap<String, ProjectChannelEntry>>,
     app_handle: RwLock<Option<AppHandle>>,
+    /// Optional JSONL file writer for project channel persistence.
+    /// Set via `set_file_writer()` during app setup.
+    file_writer: RwLock<Option<LogFileWriter>>,
 }
 
 impl OutputStore {
@@ -296,6 +299,15 @@ impl OutputStore {
             buffers: RwLock::new(buffers),
             project_channels: RwLock::new(HashMap::new()),
             app_handle: RwLock::new(None),
+            file_writer: RwLock::new(None),
+        }
+    }
+
+    /// Set the JSONL file writer for project channel persistence.
+    /// Called once during app setup after the `OutputLayer` creates the writer.
+    pub fn set_file_writer(&self, writer: LogFileWriter) {
+        if let Ok(mut fw) = self.file_writer.write() {
+            *fw = Some(writer);
         }
     }
 
@@ -431,6 +443,7 @@ impl OutputStore {
     /// Push a log entry into a project channel's buffer.
     ///
     /// If the channel does not exist, this is a no-op (never panics).
+    /// Also persists to JSONL file if a file writer is configured.
     pub fn push_project(&self, label: &str, level: &str, message: &str) {
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -453,6 +466,14 @@ impl OutputStore {
         if let Some(pc) = pcs.get_mut(label) {
             pc.buffer.push(entry.clone());
             drop(pcs); // release write lock before emitting
+
+            // Persist to JSONL file for terminal Claude's file fallback path
+            if let Ok(fw) = self.file_writer.read() {
+                if let Some(ref writer) = *fw {
+                    writer.append_project(label, &entry);
+                }
+            }
+
             self.emit_project_entry(label, &entry);
         }
     }
@@ -550,6 +571,146 @@ pub struct LogFileWriter {
     dir: PathBuf,
 }
 
+// ---------------------------------------------------------------------------
+// Shared JSONL file helpers (used by both system + project channels)
+// ---------------------------------------------------------------------------
+
+/// Read and filter log entries from a JSONL file on disk.
+///
+/// Returns `(matching_entries, total_lines_in_file)`.
+fn read_entries_from_file(
+    path: &Path,
+    min_level: Option<&str>,
+    last: Option<usize>,
+    search: Option<&str>,
+) -> (Vec<LogEntry>, usize) {
+    let file = match File::open(path) {
+        Ok(f) => f,
+        Err(_) => return (Vec::new(), 0),
+    };
+
+    let min_pri = min_level.map(level_priority).unwrap_or(0);
+    let mut total: usize = 0;
+    let mut filtered: Vec<LogEntry> = Vec::new();
+
+    for line in StdBufReader::new(file).lines() {
+        let line = match line {
+            Ok(l) => l,
+            Err(_) => continue,
+        };
+        if line.trim().is_empty() {
+            continue;
+        }
+        total += 1;
+
+        let entry: LogEntry = match serde_json::from_str(&line) {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+
+        // Level filter
+        if level_priority(&entry.level) < min_pri {
+            continue;
+        }
+
+        // Text search filter (case-insensitive)
+        if let Some(s) = search {
+            if !entry
+                .message
+                .to_ascii_lowercase()
+                .contains(&s.to_ascii_lowercase())
+            {
+                continue;
+            }
+        }
+
+        filtered.push(entry);
+    }
+
+    // Apply `last` (tail) limit
+    let result = if let Some(n) = last {
+        if n >= filtered.len() {
+            filtered
+        } else {
+            filtered[filtered.len() - n..].to_vec()
+        }
+    } else {
+        filtered
+    };
+
+    (result, total)
+}
+
+/// If a JSONL file exceeds `MAX_FILE_ENTRIES` lines, truncate it to keep
+/// only the most recent `TRUNCATE_KEEP` lines. Atomic write via temp file.
+fn truncate_file_if_needed(path: &Path) {
+    // Read all lines
+    let file = match File::open(path) {
+        Ok(f) => f,
+        Err(_) => return,
+    };
+    let lines: Vec<String> = StdBufReader::new(file)
+        .lines()
+        .filter_map(|l| l.ok())
+        .collect();
+
+    if lines.len() <= MAX_FILE_ENTRIES {
+        return;
+    }
+
+    // Keep the most recent TRUNCATE_KEEP lines
+    let keep = &lines[lines.len() - TRUNCATE_KEEP..];
+
+    // Write to a temp file, then rename (atomic on most OSes)
+    let tmp_path = path.with_extension("jsonl.tmp");
+    let write_result = (|| -> io::Result<()> {
+        let mut tmp = File::create(&tmp_path)?;
+        for line in keep {
+            writeln!(tmp, "{}", line)?;
+        }
+        tmp.flush()?;
+        Ok(())
+    })();
+
+    if write_result.is_ok() {
+        let _ = fs::rename(&tmp_path, &path);
+    } else {
+        let _ = fs::remove_file(&tmp_path);
+    }
+}
+
+/// Append a single JSON line to a file. Errors are silently ignored
+/// because logging infrastructure must never crash the app.
+fn append_entry_to_file(path: &Path, entry: &LogEntry) {
+    let line = match serde_json::to_string(entry) {
+        Ok(s) => s,
+        Err(_) => return,
+    };
+
+    let mut file = match OpenOptions::new().create(true).append(true).open(path) {
+        Ok(f) => f,
+        Err(_) => return,
+    };
+
+    let _ = writeln!(file, "{}", line);
+    let _ = file.flush();
+}
+
+/// Sanitize a label for use as a filename component.
+/// Replaces `/\:*?"<>| ` with `-` and lowercases.
+fn sanitize_label(label: &str) -> String {
+    label
+        .chars()
+        .map(|c| {
+            if "/\\:*?\"<>| ".contains(c) {
+                '-'
+            } else {
+                c.to_ascii_lowercase()
+            }
+        })
+        .collect()
+}
+
 impl LogFileWriter {
     /// Create a new writer, ensuring the target directory exists.
     pub fn new(dir: PathBuf) -> io::Result<Self> {
@@ -557,71 +718,43 @@ impl LogFileWriter {
         Ok(Self { dir })
     }
 
-    /// Path to the JSONL file for a given channel.
+    /// The directory this writer uses.
+    pub fn dir(&self) -> &Path {
+        &self.dir
+    }
+
+    /// Path to the JSONL file for a given system channel.
     fn channel_path(&self, channel: Channel) -> PathBuf {
         self.dir.join(format!("{}.jsonl", channel.as_str()))
+    }
+
+    /// Path to the JSONL file for a project channel.
+    fn project_channel_path(&self, label: &str) -> PathBuf {
+        self.dir.join(format!("project-{}.jsonl", sanitize_label(label)))
     }
 
     /// Append a log entry as a single JSON line. Errors are silently ignored
     /// because logging infrastructure must never crash the app.
     pub fn append(&self, entry: &LogEntry) {
-        let line = match serde_json::to_string(entry) {
-            Ok(s) => s,
-            Err(_) => return,
-        };
-
-        let path = self.channel_path(entry.channel);
-        let mut file = match OpenOptions::new().create(true).append(true).open(&path) {
-            Ok(f) => f,
-            Err(_) => return,
-        };
-
-        // Write line + newline, then flush
-        let _ = writeln!(file, "{}", line);
-        let _ = file.flush();
+        append_entry_to_file(&self.channel_path(entry.channel), entry);
     }
 
-    /// If the channel file exceeds `MAX_FILE_ENTRIES` lines, truncate it to
-    /// keep only the most recent `TRUNCATE_KEEP` lines.
+    /// Append a log entry to a project channel's JSONL file.
+    pub fn append_project(&self, label: &str, entry: &LogEntry) {
+        append_entry_to_file(&self.project_channel_path(label), entry);
+    }
+
+    /// If the system channel file exceeds `MAX_FILE_ENTRIES` lines, truncate it.
     pub fn maybe_truncate(&self, channel: Channel) {
-        let path = self.channel_path(channel);
-
-        // Read all lines
-        let file = match File::open(&path) {
-            Ok(f) => f,
-            Err(_) => return,
-        };
-        let lines: Vec<String> = StdBufReader::new(file)
-            .lines()
-            .filter_map(|l| l.ok())
-            .collect();
-
-        if lines.len() <= MAX_FILE_ENTRIES {
-            return;
-        }
-
-        // Keep the most recent TRUNCATE_KEEP lines
-        let keep = &lines[lines.len() - TRUNCATE_KEEP..];
-
-        // Write to a temp file, then rename (atomic on most OSes)
-        let tmp_path = path.with_extension("jsonl.tmp");
-        let write_result = (|| -> io::Result<()> {
-            let mut tmp = File::create(&tmp_path)?;
-            for line in keep {
-                writeln!(tmp, "{}", line)?;
-            }
-            tmp.flush()?;
-            Ok(())
-        })();
-
-        if write_result.is_ok() {
-            let _ = fs::rename(&tmp_path, &path);
-        } else {
-            let _ = fs::remove_file(&tmp_path);
-        }
+        truncate_file_if_needed(&self.channel_path(channel));
     }
 
-    /// Read and filter entries from a channel's JSONL file.
+    /// If the project channel file exceeds `MAX_FILE_ENTRIES` lines, truncate it.
+    pub fn maybe_truncate_project(&self, label: &str) {
+        truncate_file_if_needed(&self.project_channel_path(label));
+    }
+
+    /// Read and filter entries from a system channel's JSONL file.
     ///
     /// This is a **static** method — it does not require an instance. The MCP
     /// handler calls this directly with the log directory path.
@@ -635,64 +768,55 @@ impl LogFileWriter {
         search: Option<&str>,
     ) -> (Vec<LogEntry>, usize) {
         let path = dir.join(format!("{}.jsonl", channel.as_str()));
-        let file = match File::open(&path) {
-            Ok(f) => f,
-            Err(_) => return (Vec::new(), 0),
-        };
-
-        let min_pri = min_level.map(level_priority).unwrap_or(0);
-        let mut total: usize = 0;
-        let mut filtered: Vec<LogEntry> = Vec::new();
-
-        for line in StdBufReader::new(file).lines() {
-            let line = match line {
-                Ok(l) => l,
-                Err(_) => continue,
-            };
-            if line.trim().is_empty() {
-                continue;
-            }
-            total += 1;
-
-            let entry: LogEntry = match serde_json::from_str(&line) {
-                Ok(e) => e,
-                Err(_) => continue,
-            };
-
-            // Level filter
-            if level_priority(&entry.level) < min_pri {
-                continue;
-            }
-
-            // Text search filter (case-insensitive)
-            if let Some(s) = search {
-                if !entry
-                    .message
-                    .to_ascii_lowercase()
-                    .contains(&s.to_ascii_lowercase())
-                {
-                    continue;
-                }
-            }
-
-            filtered.push(entry);
-        }
-
-        // Apply `last` (tail) limit
-        let result = if let Some(n) = last {
-            if n >= filtered.len() {
-                filtered
-            } else {
-                filtered[filtered.len() - n..].to_vec()
-            }
-        } else {
-            filtered
-        };
-
-        (result, total)
+        read_entries_from_file(&path, min_level, last, search)
     }
 
-    /// Read summary information for all channels from their JSONL files.
+    /// Read and filter entries from a project channel's JSONL file.
+    ///
+    /// This is a **static** method — it does not require an instance.
+    ///
+    /// Returns `(matching_entries, total_lines_in_file)`.
+    pub fn read_project_channel(
+        dir: &Path,
+        label: &str,
+        min_level: Option<&str>,
+        last: Option<usize>,
+        search: Option<&str>,
+    ) -> (Vec<LogEntry>, usize) {
+        let path = dir.join(format!("project-{}.jsonl", sanitize_label(label)));
+        read_entries_from_file(&path, min_level, last, search)
+    }
+
+    /// List all project channels that have JSONL files on disk.
+    ///
+    /// Scans the directory for `project-*.jsonl` files and returns the label
+    /// parts (the part after `project-` and before `.jsonl`).
+    ///
+    /// This is a **static** method.
+    pub fn list_project_channels(dir: &Path) -> Vec<String> {
+        let entries = match fs::read_dir(dir) {
+            Ok(e) => e,
+            Err(_) => return Vec::new(),
+        };
+
+        entries
+            .filter_map(|e| e.ok())
+            .filter_map(|e| {
+                let name = e.file_name().to_string_lossy().to_string();
+                if name.starts_with("project-") && name.ends_with(".jsonl") {
+                    let label = name
+                        .strip_prefix("project-")?
+                        .strip_suffix(".jsonl")?
+                        .to_string();
+                    Some(label)
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    /// Read summary information for all system channels from their JSONL files.
     ///
     /// This is a **static** method — it does not require an instance.
     pub fn read_summary(dir: &Path) -> Vec<ChannelSummary> {
@@ -1495,5 +1619,152 @@ mod tests {
         assert_eq!(channels[1].project_path, "/projects/b");
         assert!(channels[1].framework.is_none());
         assert_eq!(channels[1].port, Some(8080));
+    }
+
+    // -----------------------------------------------------------------------
+    // sanitize_label tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_sanitize_label() {
+        assert_eq!(sanitize_label("my-app"), "my-app");
+        assert_eq!(sanitize_label("My App"), "my-app");
+        assert_eq!(sanitize_label("C:\\Users\\proj"), "c--users-proj");
+        assert_eq!(sanitize_label("feat/branch"), "feat-branch");
+        assert_eq!(sanitize_label("file:name*?.jsonl"), "file-name--.jsonl");
+        assert_eq!(sanitize_label("a<b>c\"d|e"), "a-b-c-d-e");
+    }
+
+    // -----------------------------------------------------------------------
+    // Project channel JSONL file persistence tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_project_file_writer_append_and_read() {
+        let dir = std::env::temp_dir().join(format!("vm_test_pfw_ar_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+
+        let writer = LogFileWriter::new(dir.clone()).unwrap();
+
+        let e1 = make_entry(1, "INFO", Channel::App, "server started");
+        let e2 = make_entry(2, "ERROR", Channel::App, "crash detected");
+
+        writer.append_project("my-app", &e1);
+        writer.append_project("my-app", &e2);
+
+        // Read back
+        let (entries, total) =
+            LogFileWriter::read_project_channel(&dir, "my-app", None, None, None);
+        assert_eq!(total, 2);
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].message, "server started");
+        assert_eq!(entries[1].message, "crash detected");
+
+        // Level filter: ERROR only
+        let (entries, _) =
+            LogFileWriter::read_project_channel(&dir, "my-app", Some("error"), None, None);
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].level, "ERROR");
+
+        // Search filter
+        let (entries, _) =
+            LogFileWriter::read_project_channel(&dir, "my-app", None, None, Some("started"));
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].message, "server started");
+
+        // Last (tail) filter
+        let (entries, _) =
+            LogFileWriter::read_project_channel(&dir, "my-app", None, Some(1), None);
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].message, "crash detected");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_project_file_list_channels() {
+        let dir = std::env::temp_dir().join(format!("vm_test_pfw_list_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+
+        let writer = LogFileWriter::new(dir.clone()).unwrap();
+
+        let e1 = make_entry(1, "INFO", Channel::App, "hello from alpha");
+        let e2 = make_entry(2, "INFO", Channel::App, "hello from beta");
+
+        writer.append_project("alpha", &e1);
+        writer.append_project("beta", &e2);
+
+        // Also write a system channel to verify it's not included
+        writer.append(&make_entry(3, "INFO", Channel::App, "system entry"));
+
+        let mut channels = LogFileWriter::list_project_channels(&dir);
+        channels.sort();
+        assert_eq!(channels.len(), 2);
+        assert_eq!(channels[0], "alpha");
+        assert_eq!(channels[1], "beta");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_project_file_writer_truncation() {
+        let dir = std::env::temp_dir().join(format!("vm_test_pfw_trunc_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+
+        let writer = LogFileWriter::new(dir.clone()).unwrap();
+
+        // Write more than MAX_FILE_ENTRIES lines
+        for i in 0..(MAX_FILE_ENTRIES + 100) {
+            writer.append_project(
+                "big-proj",
+                &make_entry(i as u64, "INFO", Channel::App, &format!("line {}", i)),
+            );
+        }
+
+        // Before truncation
+        let (_, total_before) =
+            LogFileWriter::read_project_channel(&dir, "big-proj", None, None, None);
+        assert_eq!(total_before, MAX_FILE_ENTRIES + 100);
+
+        // Trigger truncation
+        writer.maybe_truncate_project("big-proj");
+
+        // After truncation
+        let (entries, total_after) =
+            LogFileWriter::read_project_channel(&dir, "big-proj", None, None, None);
+        assert_eq!(total_after, TRUNCATE_KEEP);
+        assert_eq!(entries.len(), TRUNCATE_KEEP);
+
+        // The kept entries should be the most recent ones
+        let first_kept_id = (MAX_FILE_ENTRIES + 100) - TRUNCATE_KEEP;
+        assert_eq!(entries[0].message, format!("line {}", first_kept_id));
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_project_file_read_nonexistent() {
+        let dir = std::env::temp_dir().join(format!("vm_test_pfw_miss_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let _ = fs::create_dir_all(&dir);
+
+        let (entries, total) =
+            LogFileWriter::read_project_channel(&dir, "nope", None, None, None);
+        assert_eq!(total, 0);
+        assert!(entries.is_empty());
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_project_file_list_empty_dir() {
+        let dir = std::env::temp_dir().join(format!("vm_test_pfw_empty_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let _ = fs::create_dir_all(&dir);
+
+        let channels = LogFileWriter::list_project_channels(&dir);
+        assert!(channels.is_empty());
+
+        let _ = fs::remove_dir_all(&dir);
     }
 }

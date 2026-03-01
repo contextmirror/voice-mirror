@@ -57,6 +57,15 @@ pub fn init() -> Arc<OutputStore> {
     let output_store = Arc::new(OutputStore::new());
     let output_layer = OutputLayer::new(Arc::clone(&output_store));
 
+    // Give the OutputStore its own LogFileWriter for project channel JSONL persistence.
+    // This is separate from the OutputLayer's writer (which handles system channels via tracing).
+    {
+        let logs_current = platform::get_log_dir().join("current");
+        if let Ok(writer) = super::output::LogFileWriter::new(logs_current) {
+            output_store.set_file_writer(writer);
+        }
+    }
+
     tracing_subscriber::registry()
         .with(filter)
         .with(file_layer)
