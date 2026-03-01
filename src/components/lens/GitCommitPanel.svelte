@@ -605,7 +605,7 @@
         {#each stashes as stash (stash.index)}
           <div class="stash-item">
             <div class="stash-item-info">
-              <span class="stash-item-index">stash@{{{stash.index}}}</span>
+              <span class="stash-item-index">stash@{'{'}{stash.index}{'}'}</span>
               <span class="stash-item-message" title={stash.message || 'WIP'}>{stash.message || 'WIP'}</span>
             </div>
             <div class="stash-item-actions">
