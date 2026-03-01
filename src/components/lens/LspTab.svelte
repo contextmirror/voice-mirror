@@ -39,7 +39,13 @@
    * @returns {string}
    */
   function displayName(server) {
-    return server.serverName || server.binary || server.languageId;
+    let name = server.serverName || server.binary || server.languageId;
+    // Strip version suffix if present (e.g. "rust-analyzer 1.93.1 (01f6ddf7 ...)" → "rust-analyzer")
+    // since version is shown in a separate column
+    if (server.version && name.includes(server.version)) {
+      name = name.substring(0, name.indexOf(server.version)).trim();
+    }
+    return name || server.binary || server.languageId;
   }
 
   /**
@@ -218,9 +224,7 @@
             <span class="lsp-server-lang">{server.languageId}</span>
           </div>
           {#if server.version}
-            <span class="lsp-server-version">{server.version}</span>
-          {:else}
-            <span class="lsp-server-version">&mdash;</span>
+            <span class="lsp-server-version" title={server.version}>{server.version.length > 12 ? server.version.substring(0, 12) + '...' : server.version}</span>
           {/if}
           <span class="lsp-server-files">
             {server.openDocsCount} file{server.openDocsCount !== 1 ? 's' : ''}
@@ -417,10 +421,12 @@
   }
 
   .lsp-server-version {
-    font-size: 11px;
+    font-size: 10px;
     color: var(--muted);
     white-space: nowrap;
-    flex-shrink: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 80px;
   }
 
   .lsp-server-files {
