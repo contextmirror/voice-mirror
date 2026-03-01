@@ -1,5 +1,6 @@
 <script>
   import { gitCommit, gitPush, gitFetch, gitPull, gitForcePush, gitAheadBehind, gitListBranches, gitCheckoutBranch, gitStashSave, gitStashList, gitStashPop, gitStashApply, gitStashDrop } from '../../lib/api.js';
+  import { toastStore } from '../../lib/stores/toast.svelte.js';
 
   let { branch = '', stagedCount = 0, onCommit = () => {}, root = null } = $props();
 
@@ -142,23 +143,61 @@
 
   async function handleSwitchBranch(branchName) {
     if (switching) return;
-    // Warn user — switching branches while dev server runs causes hot-reload crash
-    const confirmed = window.confirm(
-      `Switch to "${branchName}"?\n\nThis will change files on disk. If a dev server is running, it may crash and need to be restarted.`
-    );
-    if (!confirmed) return;
     closeBranchDropdown();
     switching = true;
     clearError();
     try {
       const resp = await gitCheckoutBranch(branchName, root);
       if (resp?.success) {
-        onCommit?.(); // Triggers a git status refresh
+        toastStore.addToast({ message: `Switched to ${branchName}`, severity: 'success', duration: 3000 });
+        onCommit?.();
       } else if (resp?.error) {
-        error = resp.error;
+        handleCheckoutError(resp.error, branchName);
       }
     } catch (err) {
-      error = typeof err === 'string' ? err : (err.message || 'Branch switch failed');
+      const msg = typeof err === 'string' ? err : (err.message || 'Branch switch failed');
+      handleCheckoutError(msg, branchName);
+    } finally {
+      switching = false;
+    }
+  }
+
+  function handleCheckoutError(errorMsg, branchName) {
+    const isDirty = errorMsg.includes('local changes')
+      || errorMsg.includes('overwritten by checkout')
+      || errorMsg.includes('Please commit your changes or stash them');
+
+    if (isDirty) {
+      toastStore.addToast({
+        message: 'Cannot switch — uncommitted changes would be overwritten',
+        severity: 'warning',
+        actions: [
+          { label: 'Stash & Switch', callback: () => stashAndSwitch(branchName) },
+        ],
+      });
+    } else {
+      toastStore.addToast({ message: `Branch switch failed: ${errorMsg}`, severity: 'error' });
+    }
+  }
+
+  async function stashAndSwitch(branchName) {
+    switching = true;
+    try {
+      const stashResp = await gitStashSave(`Auto-stash before switching to ${branchName}`, root);
+      if (!stashResp?.success) {
+        toastStore.addToast({ message: 'Stash failed: ' + (stashResp?.error || 'unknown error'), severity: 'error' });
+        return;
+      }
+      const resp = await gitCheckoutBranch(branchName, root);
+      if (resp?.success) {
+        toastStore.addToast({ message: `Switched to ${branchName} (changes stashed)`, severity: 'success', duration: 5000 });
+        onCommit?.();
+      } else {
+        await gitStashPop(null, root);
+        toastStore.addToast({ message: 'Branch switch failed: ' + (resp?.error || 'unknown'), severity: 'error' });
+      }
+    } catch (err) {
+      toastStore.addToast({ message: 'Branch switch failed: ' + (err.message || err), severity: 'error' });
     } finally {
       switching = false;
     }
