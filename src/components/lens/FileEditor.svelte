@@ -545,12 +545,6 @@
         const initialLine = view.state.doc.lineAt(initialPos);
         statusBarStore.setCursor(initialLine.number, initialPos - initialLine.from + 1);
 
-        // Apply pending cursor after CM6 finishes its internal init measure cycles.
-        // setTimeout fires in a new macrotask, after any rAF-based init is complete.
-        // applyPendingCursor uses view.state.doc (correct offsets, handles \r\n).
-        if (tabsStore.pendingCursorPosition?.path === filePath) {
-          setTimeout(() => applyPendingCursor(), 50);
-        }
       }
 
       // Open file in LSP (fire and forget)
@@ -590,6 +584,13 @@
             view.dispatch(cm.setDiagnostics(view.state, cmDiags));
           } catch {}
         }
+      }
+
+      // Apply pending cursor AFTER diagnostics — diagnostic dispatches trigger CM6
+      // measure cycles (via lintGutter) that can reset scroll position.
+      // setTimeout(150) fires after those rAF-based measure cycles complete.
+      if (tabsStore.pendingCursorPosition?.path === filePath && view) {
+        setTimeout(() => applyPendingCursor(), 150);
       }
     } catch (err) {
       if (filePath !== currentPath) return;
