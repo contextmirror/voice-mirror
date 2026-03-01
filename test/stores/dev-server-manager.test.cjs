@@ -221,7 +221,7 @@ describe('dev-server-manager.svelte.js -- methods', () => {
 describe('dev-server-manager.svelte.js -- startServer behavior', () => {
   it('calls terminalSpawn with project cwd', () => {
     const block = src.split('async function startServer')[1] || '';
-    assert.ok(block.includes('terminalSpawn({ cwd: projectPath }'), 'Should spawn terminal with projectPath cwd');
+    assert.ok(block.includes('terminalSpawn({ cwd: projectPath'), 'Should spawn terminal with projectPath cwd');
   });
 
   it('calls terminalInput with start command', () => {

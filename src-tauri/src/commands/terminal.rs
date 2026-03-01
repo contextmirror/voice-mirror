@@ -27,19 +27,28 @@ macro_rules! lock_terminal {
 ///
 /// Returns `{ "id": "terminal-1" }` on success.
 /// If `profile_id` is provided, spawns using the matching shell profile.
+/// If `output_channel` is provided, PTY stdout is also mirrored to that project output channel.
 #[tauri::command]
 pub fn terminal_spawn(
     state: State<'_, TerminalManagerState>,
+    output_state: State<'_, std::sync::Arc<crate::services::output::OutputStore>>,
     cols: Option<u16>,
     rows: Option<u16>,
     cwd: Option<String>,
     profile_id: Option<String>,
+    output_channel: Option<String>,
 ) -> IpcResponse {
     let mut manager = lock_terminal!(state);
     let cols = cols.unwrap_or(80);
     let rows = rows.unwrap_or(24);
 
-    match manager.spawn(cols, rows, cwd, profile_id) {
+    let store = if output_channel.is_some() {
+        Some(output_state.inner().clone())
+    } else {
+        None
+    };
+
+    match manager.spawn(cols, rows, cwd, profile_id, output_channel, store) {
         Ok((id, profile_name)) => IpcResponse::ok(json!({ "id": id, "profileName": profile_name })),
         Err(e) => IpcResponse::err(e),
     }

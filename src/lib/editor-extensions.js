@@ -5,8 +5,87 @@
  * are passed in via parameters so FileEditor.svelte retains control of state.
  */
 import { indentWithTab } from '@codemirror/commands';
+import { Compartment } from '@codemirror/state';
+import { indentUnit } from '@codemirror/language';
 import { showMinimap } from '@replit/codemirror-minimap';
+import { vscodeKeymap } from '@replit/codemirror-vscode-keymap';
+import { indentationMarkers } from '@replit/codemirror-indentation-markers';
 import { createGitGutter } from './editor-git-gutter.js';
+
+/**
+ * Compartments for dynamic indentation reconfiguration.
+ * Stored per-editor via createIndentCompartments().
+ */
+export function createIndentCompartments() {
+  return {
+    indentUnit: new Compartment(),
+    tabSize: new Compartment(),
+  };
+}
+
+/**
+ * Detect indentation style from document content.
+ * @param {string} text - Document text
+ * @returns {{ type: 'spaces' | 'tabs', size: number }}
+ */
+export function detectIndentation(text) {
+  let spaceCounts = { 2: 0, 4: 0, 8: 0 };
+  let tabLines = 0;
+  let spaceLines = 0;
+  const lines = text.split('\n');
+  const limit = Math.min(lines.length, 500);
+
+  for (let i = 0; i < limit; i++) {
+    const line = lines[i];
+    if (!line || !line.match(/^\s+\S/)) continue;
+    if (line[0] === '\t') {
+      tabLines++;
+    } else if (line[0] === ' ') {
+      spaceLines++;
+      // Count leading spaces
+      const match = line.match(/^( +)/);
+      if (match) {
+        const len = match[1].length;
+        if (len % 2 === 0 && len <= 8) spaceCounts[len <= 2 ? 2 : len <= 4 ? 4 : 8]++;
+      }
+    }
+  }
+
+  if (tabLines > spaceLines) return { type: 'tabs', size: 4 };
+
+  // Determine most common space indent
+  let bestSize = 2;
+  let bestCount = 0;
+  for (const [size, count] of Object.entries(spaceCounts)) {
+    if (count > bestCount) { bestCount = count; bestSize = Number(size); }
+  }
+  return { type: 'spaces', size: bestSize };
+}
+
+/**
+ * Convert all indentation in a document between tabs and spaces.
+ * @param {string} text - Document text
+ * @param {'spaces' | 'tabs'} to - Target indentation type
+ * @param {number} size - Indent size (spaces per tab)
+ * @returns {string} Converted text
+ */
+export function convertIndentation(text, to, size) {
+  return text.split('\n').map(line => {
+    const match = line.match(/^(\s+)/);
+    if (!match) return line;
+    const indent = match[1];
+    const rest = line.slice(indent.length);
+    if (to === 'spaces') {
+      // Convert tabs to spaces
+      const expanded = indent.replace(/\t/g, ' '.repeat(size));
+      return expanded + rest;
+    } else {
+      // Convert spaces to tabs
+      const collapsed = indent.replace(new RegExp(' '.repeat(size), 'g'), '\t');
+      return collapsed + rest;
+    }
+  }).join('\n');
+}
 
 /**
  * Creates a CodeMirror ViewPlugin that underlines the word under the cursor
@@ -237,6 +316,10 @@ function createCodeActionsGutter(cm, lsp, filePath) {
  * @param {function} [options.onCursorActivity] - Callback for cursor position changes (update)
  * @param {function} [options.onNavigateBack] - Callback for Alt+Left navigation history back
  * @param {function} [options.onNavigateForward] - Callback for Alt+Right navigation history forward
+ * @param {boolean} [options.showIndentGuides] - Whether to show indentation guide lines
+ * @param {object} [options.indentCompartments] - Compartments from createIndentCompartments()
+ * @param {string} [options.indentType] - 'spaces' or 'tabs'
+ * @param {number} [options.indentSize] - Indent size (2, 4, 8)
  * @returns {Array} CodeMirror extensions array
  */
 export function buildEditorExtensions(cm, lsp, options) {
@@ -256,12 +339,22 @@ export function buildEditorExtensions(cm, lsp, options) {
     onCursorActivity,
     onNavigateBack,
     onNavigateForward,
+    showIndentGuides,
+    indentCompartments,
+    indentType,
+    indentSize,
   } = options;
 
   const extensions = [
     cm.basicSetup,
+    cm.keymap.of(vscodeKeymap),
     ...voiceMirrorEditorTheme,
     ...(isReadOnly ? [cm.EditorState.readOnly.of(true)] : []),
+    // Dynamic indentation compartments
+    ...(indentCompartments ? [
+      indentCompartments.indentUnit.of(indentUnit.of(indentType === 'tabs' ? '\t' : ' '.repeat(indentSize || 2))),
+      indentCompartments.tabSize.of(cm.EditorState.tabSize.of(indentSize || 2)),
+    ] : []),
     cm.lintGutter(),
     cm.autocompletion(lsp.hasLsp ? {
       override: [lsp.completionSource(filePath)],
@@ -296,29 +389,7 @@ export function buildEditorExtensions(cm, lsp, options) {
       indentWithTab,
       { key: 'Mod-s', run: () => { onSave(); return true; } },
       ...(onFormat ? [{ key: 'Shift-Alt-f', run: () => { onFormat(); return true; } }] : []),
-      // Multi-cursor: add cursor on line above/below (VS Code / Zed standard)
-      { key: 'Ctrl-Alt-ArrowUp', run: (v) => {
-        const ranges = v.state.selection.ranges;
-        const first = ranges[0];
-        const line = v.state.doc.lineAt(first.head);
-        if (line.number <= 1) return false;
-        const prevLine = v.state.doc.line(line.number - 1);
-        const col = first.head - line.from;
-        const newHead = prevLine.from + Math.min(col, prevLine.length);
-        v.dispatch({ selection: cm.EditorSelection.create([...ranges, cm.EditorSelection.cursor(newHead)]) });
-        return true;
-      }},
-      { key: 'Ctrl-Alt-ArrowDown', run: (v) => {
-        const ranges = v.state.selection.ranges;
-        const last = ranges[ranges.length - 1];
-        const line = v.state.doc.lineAt(last.head);
-        if (line.number >= v.state.doc.lines) return false;
-        const nextLine = v.state.doc.line(line.number + 1);
-        const col = last.head - line.from;
-        const newHead = nextLine.from + Math.min(col, nextLine.length);
-        v.dispatch({ selection: cm.EditorSelection.create([...ranges, cm.EditorSelection.cursor(newHead)]) });
-        return true;
-      }},
+      // Multi-cursor (Ctrl+Alt+Arrow) handled by vscodeKeymap
       // Font zoom: Ctrl+= (increase), Ctrl+- (decrease), Ctrl+0 (reset)
       ...(onFontZoom ? [
         { key: 'Ctrl-=', run: () => { onFontZoom(1); return true; } },
@@ -346,6 +417,15 @@ export function buildEditorExtensions(cm, lsp, options) {
     })
   );
 
+  // Indent guides — vertical lines showing nesting depth
+  if (showIndentGuides) {
+    extensions.push(...indentationMarkers({
+      highlightActiveBlock: true,
+      hideFirstIndent: false,
+      thickness: 1,
+    }));
+  }
+
   // Git change gutter — skip for read-only / external files
   if (getOriginalContent && !isReadOnly) {
     extensions.push(...createGitGutter(getOriginalContent));
@@ -368,10 +448,12 @@ export function buildEditorExtensions(cm, lsp, options) {
     extensions.push(createDefinitionHintPlugin(cm));
   }
 
-  // Lightbulb gutter — shows 💡 when code actions are available on the current line
-  if (lsp.hasLsp) {
-    extensions.push(...createCodeActionsGutter(cm, lsp, filePath));
-  }
+  // Lightbulb gutter disabled — TS LSP returns refactoring actions for nearly every
+  // line, making the gutter extremely noisy. Ctrl+. (Mod-.) already triggers code
+  // actions inline which is the better UX. Re-enable once we filter to quickfix-only.
+  // if (lsp.hasLsp) {
+  //   extensions.push(...createCodeActionsGutter(cm, lsp, filePath));
+  // }
 
   // Context menu + optional Ctrl+Click go-to-definition
   const domHandlers = {

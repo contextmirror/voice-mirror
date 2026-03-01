@@ -73,9 +73,8 @@ describe('FileEditor.svelte: editor extensions extraction', () => {
     assert.ok(extSrc.includes('cm.basicSetup'), 'Should include basicSetup');
   });
 
-  it('editor-extensions.js builds multi-cursor keybindings', () => {
-    assert.ok(extSrc.includes('Ctrl-Alt-ArrowUp'), 'Should have multi-cursor up');
-    assert.ok(extSrc.includes('Ctrl-Alt-ArrowDown'), 'Should have multi-cursor down');
+  it('editor-extensions.js delegates multi-cursor to vscodeKeymap', () => {
+    assert.ok(extSrc.includes('vscodeKeymap'), 'Should include vscodeKeymap (provides Ctrl+Alt+Arrow multi-cursor)');
   });
 
   it('editor-extensions.js adds LSP keybindings when LSP active', () => {
@@ -545,7 +544,7 @@ describe('FileEditor.svelte: markdown preview config', () => {
 
   it('resets showPreview to config default on file load', () => {
     const loadStart = src.indexOf('async function loadFile');
-    const chunk = src.slice(loadStart, loadStart + 500);
+    const chunk = src.slice(loadStart, loadStart + 1000);
     assert.ok(
       chunk.includes('showPreview = markdownPreviewDefault'),
       'Should reset showPreview to config default when loading a new file'

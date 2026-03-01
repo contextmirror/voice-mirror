@@ -1,6 +1,55 @@
 use std::path::PathBuf;
 use tracing::{info, warn};
 
+/// Strip ANSI escape sequences from a string.
+///
+/// Handles CSI sequences (ESC [ ... final_byte), OSC sequences (ESC ] ... ST),
+/// and simple two-byte escapes (ESC char).
+pub fn strip_ansi_codes(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    let mut chars = input.chars().peekable();
+
+    while let Some(c) = chars.next() {
+        if c == '\x1b' {
+            match chars.peek() {
+                Some('[') => {
+                    chars.next(); // consume '['
+                    // CSI: consume until final byte (0x40..=0x7E)
+                    while let Some(&ch) = chars.peek() {
+                        chars.next();
+                        if ('@'..='~').contains(&ch) {
+                            break;
+                        }
+                    }
+                }
+                Some(']') => {
+                    chars.next(); // consume ']'
+                    // OSC: consume until ST (ESC \ or BEL)
+                    while let Some(ch) = chars.next() {
+                        if ch == '\x07' {
+                            break;
+                        }
+                        if ch == '\x1b' {
+                            if chars.peek() == Some(&'\\') {
+                                chars.next();
+                            }
+                            break;
+                        }
+                    }
+                }
+                Some(_) => {
+                    chars.next(); // consume single char after ESC
+                }
+                None => {}
+            }
+        } else {
+            out.push(c);
+        }
+    }
+
+    out
+}
+
 /// Escape a string for safe embedding inside a JS single-quoted string literal.
 pub fn escape_js_string(s: &str) -> String {
     s.replace('\\', "\\\\")

@@ -214,6 +214,54 @@ const CACHE_SCRIPT: &str = r#"
 })();
 "#;
 
+/// Console hook initialization script for child WebView2 instances.
+///
+/// Intercepts `console.log/warn/error/info/debug` and sends each call to the
+/// `lens-console` custom URI scheme via `new Image().src` (fire-and-forget GET).
+/// Rust handles these in `lib.rs` and emits a `lens-console-message` Tauri event
+/// that the frontend can route to the appropriate project output channel.
+///
+/// The original console method is always called so DevTools still work normally.
+/// Arguments are serialized: objects → JSON, errors → stack trace, primitives → String.
+///
+/// URL format (Windows): `https://lens-console.localhost/{level}?m={encoded_message}`
+/// URL format (others):  `lens-console://localhost/{level}?m={encoded_message}`
+const CONSOLE_HOOK_SCRIPT: &str = r#"
+(function() {
+    if (window.__voiceMirrorConsoleHook) return;
+    window.__voiceMirrorConsoleHook = true;
+    var base = (navigator.platform && navigator.platform.indexOf('Win') !== -1)
+        ? 'https://lens-console.localhost/'
+        : 'lens-console://localhost/';
+    var methods = ['log','warn','error','info','debug'];
+    methods.forEach(function(method) {
+        var orig = console[method];
+        console[method] = function() {
+            try {
+                var args = Array.prototype.slice.call(arguments);
+                var parts = [];
+                for (var i = 0; i < args.length; i++) {
+                    var a = args[i];
+                    if (a === null) { parts.push('null'); continue; }
+                    if (a === undefined) { parts.push('undefined'); continue; }
+                    if (a instanceof Error) { parts.push(a.stack || a.toString()); continue; }
+                    if (typeof a === 'object') {
+                        try { parts.push(JSON.stringify(a, null, 2)); }
+                        catch(e) { parts.push(String(a)); }
+                        continue;
+                    }
+                    parts.push(String(a));
+                }
+                var msg = parts.join(' ');
+                if (msg.length > 4000) msg = msg.substring(0, 4000) + '...(truncated)';
+                new Image().src = base + method + '?m=' + encodeURIComponent(msg) + '&t=' + Date.now();
+            } catch(e) {}
+            orig.apply(console, arguments);
+        };
+    });
+})();
+"#;
+
 /// Internal helper: create a WebView2 child webview for a browser tab.
 /// Returns the webview label on success.
 async fn create_tab_webview(
@@ -253,6 +301,7 @@ async fn create_tab_webview(
             WebviewBuilder::new(&label_clone, tauri::WebviewUrl::External(parsed_url))
                 .initialization_script(&shortcut_script)
                 .initialization_script(CACHE_SCRIPT)
+                .initialization_script(CONSOLE_HOOK_SCRIPT)
                 .on_page_load(move |webview, payload| {
                     if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
                         let url_str = payload.url().to_string();

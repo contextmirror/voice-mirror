@@ -57,6 +57,9 @@ struct TerminalSession {
     master: Option<Box<dyn portable_pty::MasterPty + Send>>,
     /// Reader thread handle (kept alive; joined on kill).
     _reader_handle: Option<std::thread::JoinHandle<()>>,
+    /// If set, PTY output is also mirrored to this project output channel.
+    #[allow(dead_code)]
+    output_channel: Option<String>,
 }
 
 /// Manages multiple independent terminal sessions.
@@ -109,6 +112,18 @@ fn find_git_bash() -> Option<String> {
     }
 
     None
+}
+
+/// Classify a terminal output line into a log level based on content heuristics.
+fn classify_terminal_line(line: &str) -> &'static str {
+    let lower = line.to_ascii_lowercase();
+    if lower.contains("error") || lower.contains("failed") || lower.starts_with("✘") {
+        "ERROR"
+    } else if lower.contains("warn") || lower.contains("deprecat") {
+        "WARN"
+    } else {
+        "INFO"
+    }
 }
 
 impl TerminalManager {
@@ -259,7 +274,16 @@ impl TerminalManager {
     ///
     /// Returns `(session_id, profile_name)` on success.
     /// If `profile_id` is given, uses the matching profile's shell and args.
-    pub fn spawn(&mut self, cols: u16, rows: u16, cwd: Option<String>, profile_id: Option<String>) -> Result<(String, Option<String>), String> {
+    /// If `output_channel` is given, PTY stdout is also mirrored to that project output channel.
+    pub fn spawn(
+        &mut self,
+        cols: u16,
+        rows: u16,
+        cwd: Option<String>,
+        profile_id: Option<String>,
+        output_channel: Option<String>,
+        output_store: Option<Arc<crate::services::output::OutputStore>>,
+    ) -> Result<(String, Option<String>), String> {
         let id = format!("terminal-{}", self.next_id);
         self.next_id += 1;
 
@@ -380,6 +404,8 @@ impl TerminalManager {
         let event_tx = self.event_tx.clone();
         let session_id = id.clone();
         let thread_running = running.clone();
+        let output_channel_clone = output_channel.clone();
+        let output_store_clone = output_store;
 
         let reader_handle = std::thread::spawn(move || {
             let mut buf = [0u8; 4096];
@@ -392,6 +418,23 @@ impl TerminalManager {
                     }
                     Ok(n) => {
                         let text = String::from_utf8_lossy(&buf[..n]).to_string();
+
+                        // Mirror to project output channel if configured
+                        if let (Some(ref channel), Some(ref store)) = (&output_channel_clone, &output_store_clone) {
+                            for line in text.lines() {
+                                let trimmed = line.trim();
+                                if !trimmed.is_empty() {
+                                    // Strip ANSI escape codes so Output panel shows clean text
+                                    let clean = crate::util::strip_ansi_codes(trimmed);
+                                    let clean = clean.trim();
+                                    if !clean.is_empty() {
+                                        let level = classify_terminal_line(clean);
+                                        store.push_project(channel, level, clean);
+                                    }
+                                }
+                            }
+                        }
+
                         let _ = event_tx.send(TerminalEvent {
                             id: session_id.clone(),
                             event_type: "stdout".to_string(),
@@ -426,6 +469,7 @@ impl TerminalManager {
             running,
             master: Some(pty_pair.master),
             _reader_handle: Some(reader_handle),
+            output_channel,
         };
 
         info!("Spawned terminal session '{}' (shell={}, profile={:?}, cols={}, rows={})", id, shell, profile_name, cols, rows);

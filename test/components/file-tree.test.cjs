@@ -139,9 +139,9 @@ describe('FileTree.svelte', () => {
     assert.ok(src.includes('.add(path)'), 'Should add to set to expand');
   });
 
-  it('lazy-loads directory children on first expand', () => {
-    assert.ok(src.includes('dirChildren.has(path)'), 'Should check if children are cached');
+  it('always fetches fresh data on expand', () => {
     assert.ok(src.includes('listDirectory(path, root)'), 'Should load children via API with project root');
+    assert.ok(src.includes('Always fetch fresh data on expand'), 'Should always fetch, not use stale cache');
   });
 
   it('handles file click by calling onFileClick', () => {
@@ -407,10 +407,10 @@ describe('FileTree.svelte -- file watcher integration', () => {
     );
   });
 
-  it('only refreshes expanded directories on tree change', () => {
+  it('refreshes all expanded directories on any tree change', () => {
     assert.ok(
-      src.includes('expandedDirs.has(dir)'),
-      'Should check expandedDirs.has before refreshing a directory'
+      src.includes('for (const dir of expandedDirs)'),
+      'Should iterate all expandedDirs to refresh on filesystem change'
     );
   });
 

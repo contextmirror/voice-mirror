@@ -1,5 +1,5 @@
 <script>
-  import { gitCommit, gitPush, gitFetch, gitPull, gitForcePush, gitAheadBehind, gitListBranches, gitCheckoutBranch } from '../../lib/api.js';
+  import { gitCommit, gitPush, gitFetch, gitPull, gitForcePush, gitAheadBehind, gitListBranches, gitCheckoutBranch, gitStashSave, gitStashList, gitStashPop, gitStashApply, gitStashDrop } from '../../lib/api.js';
 
   let { branch = '', stagedCount = 0, onCommit = () => {}, root = null } = $props();
 
@@ -23,6 +23,15 @@
   let fetchBtnEl = $state(null);
   let fetchDropdownPos = $state({ x: 0, y: 0 });
   let remoteOp = $state(''); // 'fetch' | 'pull' | 'pull-rebase' | 'push' | 'force-push'
+
+  // Stash dropdown state
+  let stashDropdown = $state(false);
+  let stashBtnEl = $state(null);
+  let stashDropdownPos = $state({ x: 0, y: 0 });
+  let stashOp = $state(''); // 'save' | 'pop' | 'apply' | 'drop' | 'list'
+  let stashes = $state([]);
+  let loadingStashes = $state(false);
+  let stashMessage = $state('');
 
   // Ahead/behind tracking for dynamic label
   let ahead = $state(0);
@@ -245,6 +254,134 @@
       remoteOp = '';
     }
   }
+
+  // ── Stash dropdown ──
+  const STASH_DROPDOWN_WIDTH = 280;
+
+  async function toggleStashDropdown() {
+    if (stashDropdown) {
+      closeStashDropdown();
+      return;
+    }
+    if (stashBtnEl) {
+      const rect = stashBtnEl.getBoundingClientRect();
+      const rightEdge = rect.right;
+      const left = Math.max(4, rightEdge - STASH_DROPDOWN_WIDTH);
+      stashDropdownPos = { x: left, y: rect.bottom + 4 };
+    }
+    stashDropdown = true;
+    await refreshStashList();
+  }
+
+  function closeStashDropdown() {
+    stashDropdown = false;
+    stashMessage = '';
+  }
+
+  async function refreshStashList() {
+    loadingStashes = true;
+    try {
+      const resp = await gitStashList(root);
+      if (resp?.success && resp.data?.stashes) {
+        stashes = resp.data.stashes;
+      } else {
+        stashes = [];
+      }
+    } catch {
+      stashes = [];
+    } finally {
+      loadingStashes = false;
+    }
+  }
+
+  async function handleStashSave() {
+    if (stashOp) return;
+    clearError();
+    clearSuccess();
+    stashOp = 'save';
+    try {
+      const msg = stashMessage.trim() || undefined;
+      const resp = await gitStashSave(msg, root);
+      if (resp?.success) {
+        success = 'Stashed changes';
+        stashMessage = '';
+        onCommit?.(); // refresh git status
+        await refreshStashList();
+        setTimeout(clearSuccess, 3000);
+      } else if (resp?.error) {
+        error = resp.error;
+      }
+    } catch (err) {
+      error = typeof err === 'string' ? err : (err.message || 'Stash failed');
+    } finally {
+      stashOp = '';
+    }
+  }
+
+  async function handleStashPop(index) {
+    if (stashOp) return;
+    clearError();
+    clearSuccess();
+    stashOp = 'pop';
+    try {
+      const resp = await gitStashPop(index, root);
+      if (resp?.success) {
+        success = `Popped stash@{${index}}`;
+        onCommit?.();
+        await refreshStashList();
+        setTimeout(clearSuccess, 3000);
+      } else if (resp?.error) {
+        error = resp.error;
+      }
+    } catch (err) {
+      error = typeof err === 'string' ? err : (err.message || 'Stash pop failed');
+    } finally {
+      stashOp = '';
+    }
+  }
+
+  async function handleStashApply(index) {
+    if (stashOp) return;
+    clearError();
+    clearSuccess();
+    stashOp = 'apply';
+    try {
+      const resp = await gitStashApply(index, root);
+      if (resp?.success) {
+        success = `Applied stash@{${index}}`;
+        onCommit?.();
+        setTimeout(clearSuccess, 3000);
+      } else if (resp?.error) {
+        error = resp.error;
+      }
+    } catch (err) {
+      error = typeof err === 'string' ? err : (err.message || 'Stash apply failed');
+    } finally {
+      stashOp = '';
+    }
+  }
+
+  async function handleStashDrop(index) {
+    if (stashOp) return;
+    if (!window.confirm(`Drop stash@{${index}}? This cannot be undone.`)) return;
+    clearError();
+    clearSuccess();
+    stashOp = 'drop';
+    try {
+      const resp = await gitStashDrop(index, root);
+      if (resp?.success) {
+        success = `Dropped stash@{${index}}`;
+        await refreshStashList();
+        setTimeout(clearSuccess, 3000);
+      } else if (resp?.error) {
+        error = resp.error;
+      }
+    } catch (err) {
+      error = typeof err === 'string' ? err : (err.message || 'Stash drop failed');
+    } finally {
+      stashOp = '';
+    }
+  }
 </script>
 
 <div class="commit-panel">
@@ -326,6 +463,20 @@
         <span class="spinner"></span>
       {/if}
       Commit & Push
+    </button>
+    <button
+      class="commit-btn secondary stash-btn"
+      title="Stash"
+      bind:this={stashBtnEl}
+      onclick={toggleStashDropdown}
+      disabled={!!stashOp}
+    >
+      {#if stashOp}
+        <span class="spinner small"></span>
+      {:else}
+        <!-- Stash icon (inbox/archive) -->
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+      {/if}
     </button>
   </div>
 
@@ -411,6 +562,72 @@
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg>
       <span>Force Push</span>
     </button>
+  </div>
+{/if}
+
+{#if stashDropdown}
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="branch-backdrop" onclick={closeStashDropdown}></div>
+  <div class="stash-dropdown" style="left: {stashDropdownPos.x}px; top: {stashDropdownPos.y}px;">
+    <div class="stash-input-row">
+      <input
+        class="stash-message-input"
+        type="text"
+        placeholder="Stash message (optional)..."
+        bind:value={stashMessage}
+        onkeydown={(e) => {
+          if (e.key === 'Escape') closeStashDropdown();
+          if (e.key === 'Enter') handleStashSave();
+        }}
+        autofocus
+      />
+      <button class="stash-save-btn" onclick={handleStashSave} disabled={!!stashOp} title="Stash changes">
+        {#if stashOp === 'save'}
+          <span class="spinner small"></span>
+        {:else}
+          Stash
+        {/if}
+      </button>
+    </div>
+    <div class="fetch-menu-separator"></div>
+    <button class="fetch-menu-item" onclick={() => handleStashPop(0)} disabled={stashes.length === 0 || !!stashOp}>
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 11 12 6 7 11"/><line x1="12" y1="6" x2="12" y2="18"/></svg>
+      <span>Pop Latest Stash</span>
+    </button>
+    <button class="fetch-menu-item" onclick={() => handleStashApply(0)} disabled={stashes.length === 0 || !!stashOp}>
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><polyline points="17 11 19 13 23 9"/></svg>
+      <span>Apply Latest Stash</span>
+    </button>
+    {#if stashes.length > 0}
+      <div class="fetch-menu-separator"></div>
+      <div class="stash-list-header">Stashes ({stashes.length})</div>
+      <div class="stash-list">
+        {#each stashes as stash (stash.index)}
+          <div class="stash-item">
+            <div class="stash-item-info">
+              <span class="stash-item-index">stash@{'{'}{stash.index}{'}'}</span>
+              <span class="stash-item-message" title={stash.message || 'WIP'}>{stash.message || 'WIP'}</span>
+            </div>
+            <div class="stash-item-actions">
+              <button class="stash-action-btn" title="Pop" onclick={() => handleStashPop(stash.index)} disabled={!!stashOp}>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 11 12 6 7 11"/><line x1="12" y1="6" x2="12" y2="18"/></svg>
+              </button>
+              <button class="stash-action-btn" title="Apply" onclick={() => handleStashApply(stash.index)} disabled={!!stashOp}>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              </button>
+              <button class="stash-action-btn danger" title="Drop" onclick={() => handleStashDrop(stash.index)} disabled={!!stashOp}>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+          </div>
+        {/each}
+      </div>
+    {:else if !loadingStashes}
+      <div class="stash-empty">No stashes</div>
+    {/if}
+    {#if loadingStashes}
+      <div class="stash-empty">Loading stashes...</div>
+    {/if}
   </div>
 {/if}
 
@@ -754,5 +971,161 @@
     height: 1px;
     background: var(--border);
     margin: 4px 8px;
+  }
+
+  /* ── Stash button & dropdown ── */
+  .stash-btn {
+    flex: 0;
+    min-width: 32px;
+    max-width: 32px;
+    padding: 4px;
+  }
+
+  .stash-dropdown {
+    position: fixed;
+    z-index: 10002;
+    width: 280px;
+    max-height: 400px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+    -webkit-app-region: no-drag;
+    font-family: var(--font-family);
+    display: flex;
+    flex-direction: column;
+  }
+
+  .stash-input-row {
+    display: flex;
+    gap: 4px;
+    padding: 6px;
+  }
+
+  .stash-message-input {
+    flex: 1;
+    padding: 5px 8px;
+    font-size: 12px;
+    font-family: var(--font-mono);
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    outline: none;
+    min-width: 0;
+  }
+  .stash-message-input:focus {
+    border-color: var(--accent);
+  }
+  .stash-message-input::placeholder {
+    color: var(--muted);
+  }
+
+  .stash-save-btn {
+    padding: 4px 10px;
+    font-size: 11px;
+    font-family: var(--font-mono);
+    background: var(--accent);
+    color: var(--bg);
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    -webkit-app-region: no-drag;
+  }
+  .stash-save-btn:hover:not(:disabled) {
+    opacity: 0.85;
+  }
+  .stash-save-btn:disabled {
+    opacity: 0.5;
+    cursor: wait;
+  }
+
+  .stash-list-header {
+    padding: 4px 12px;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .stash-list {
+    overflow-y: auto;
+    max-height: 200px;
+    padding: 2px 0;
+  }
+
+  .stash-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 12px;
+    gap: 6px;
+  }
+  .stash-item:hover {
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+  }
+
+  .stash-item-info {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1;
+  }
+
+  .stash-item-index {
+    font-size: 10px;
+    font-family: var(--font-mono);
+    color: var(--muted);
+  }
+
+  .stash-item-message {
+    font-size: 11px;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .stash-item-actions {
+    display: flex;
+    gap: 2px;
+    flex-shrink: 0;
+  }
+
+  .stash-action-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    border-radius: 3px;
+    -webkit-app-region: no-drag;
+  }
+  .stash-action-btn:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--accent) 20%, transparent);
+    color: var(--text);
+  }
+  .stash-action-btn.danger:hover:not(:disabled) {
+    color: var(--danger);
+  }
+  .stash-action-btn:disabled {
+    opacity: 0.4;
+    cursor: wait;
+  }
+
+  .stash-empty {
+    padding: 10px 12px;
+    font-size: 11px;
+    color: var(--muted);
+    text-align: center;
   }
 </style>

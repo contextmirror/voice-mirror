@@ -237,9 +237,10 @@ describe('lsp-diagnostics.svelte.js: project-wide state', () => {
     assert.ok(src.includes('new Map(rawDiagnostics)'), 'Should create new Map from rawDiagnostics for immutable update');
   });
 
-  it('removes files with zero diagnostics from Maps', () => {
+  it('removes files with zero diagnostics from summary Map but preserves raw', () => {
     assert.ok(src.includes('updated.delete(relativePath)'), 'Should delete from summary map');
-    assert.ok(src.includes('updatedRaw.delete(relativePath)'), 'Should delete from raw map');
+    // rawDiagnostics keeps empty arrays to prevent ProblemsPanel visual jumping
+    assert.ok(src.includes('updatedRaw.set(relativePath, [])'), 'Should set empty array in raw map (not delete)');
   });
 });
 

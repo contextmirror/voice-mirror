@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::fmt;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufRead, BufReader as StdBufReader, Write as IoWrite};
@@ -230,6 +230,42 @@ impl ChannelBuffer {
 }
 
 // ---------------------------------------------------------------------------
+// Project Channels (dynamic)
+// ---------------------------------------------------------------------------
+
+/// Metadata for a registered project channel.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectChannelInfo {
+    pub label: String,
+    pub project_path: String,
+    pub framework: Option<String>,
+    pub port: Option<u16>,
+}
+
+/// Summary for a project channel.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectChannelSummary {
+    pub label: String,
+    pub project_path: String,
+    pub framework: Option<String>,
+    pub port: Option<u16>,
+    pub total: usize,
+    pub error: usize,
+    pub warn: usize,
+    pub info: usize,
+    pub debug: usize,
+    pub trace: usize,
+}
+
+/// A dynamic project channel with metadata + ring buffer.
+struct ProjectChannelEntry {
+    info: ProjectChannelInfo,
+    buffer: ChannelBuffer,
+}
+
+// ---------------------------------------------------------------------------
 // OutputStore
 // ---------------------------------------------------------------------------
 
@@ -248,7 +284,11 @@ pub struct ChannelSummary {
 /// Central store holding ring buffers for all channels.
 pub struct OutputStore {
     buffers: RwLock<Vec<ChannelBuffer>>,
+    project_channels: RwLock<HashMap<String, ProjectChannelEntry>>,
     app_handle: RwLock<Option<AppHandle>>,
+    /// Optional JSONL file writer for project channel persistence.
+    /// Set via `set_file_writer()` during app setup.
+    file_writer: RwLock<Option<LogFileWriter>>,
 }
 
 impl OutputStore {
@@ -257,7 +297,17 @@ impl OutputStore {
         let buffers: Vec<ChannelBuffer> = Channel::ALL.iter().map(|_| ChannelBuffer::new()).collect();
         Self {
             buffers: RwLock::new(buffers),
+            project_channels: RwLock::new(HashMap::new()),
             app_handle: RwLock::new(None),
+            file_writer: RwLock::new(None),
+        }
+    }
+
+    /// Set the JSONL file writer for project channel persistence.
+    /// Called once during app setup after the `OutputLayer` creates the writer.
+    pub fn set_file_writer(&self, writer: LogFileWriter) {
+        if let Ok(mut fw) = self.file_writer.write() {
+            *fw = Some(writer);
         }
     }
 
@@ -347,6 +397,160 @@ impl OutputStore {
             })
             .collect()
     }
+
+    // -----------------------------------------------------------------------
+    // Project channels (dynamic)
+    // -----------------------------------------------------------------------
+
+    /// Register a new project channel. If a channel with the same label already
+    /// exists, its metadata is updated but the buffer is preserved.
+    pub fn register_project_channel(
+        &self,
+        label: String,
+        project_path: String,
+        framework: Option<String>,
+        port: Option<u16>,
+    ) {
+        let mut pcs = self
+            .project_channels
+            .write()
+            .unwrap_or_else(|e| e.into_inner());
+
+        let info = ProjectChannelInfo {
+            label: label.clone(),
+            project_path,
+            framework,
+            port,
+        };
+
+        pcs.entry(label)
+            .and_modify(|entry| entry.info = info.clone())
+            .or_insert_with(|| ProjectChannelEntry {
+                info,
+                buffer: ChannelBuffer::new(),
+            });
+    }
+
+    /// Remove a project channel and discard its buffer.
+    pub fn unregister_project_channel(&self, label: &str) {
+        let mut pcs = self
+            .project_channels
+            .write()
+            .unwrap_or_else(|e| e.into_inner());
+        pcs.remove(label);
+    }
+
+    /// Push a log entry into a project channel's buffer.
+    ///
+    /// If the channel does not exist, this is a no-op (never panics).
+    /// Also persists to JSONL file if a file writer is configured.
+    pub fn push_project(&self, label: &str, level: &str, message: &str) {
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+
+        let entry = LogEntry {
+            id: NEXT_ENTRY_ID.fetch_add(1, Ordering::Relaxed),
+            timestamp,
+            level: level.to_ascii_uppercase(),
+            channel: Channel::App, // placeholder — project entries identified by label
+            message: message.to_string(),
+        };
+
+        let mut pcs = self
+            .project_channels
+            .write()
+            .unwrap_or_else(|e| e.into_inner());
+
+        if let Some(pc) = pcs.get_mut(label) {
+            pc.buffer.push(entry.clone());
+            drop(pcs); // release write lock before emitting
+
+            // Persist to JSONL file for terminal Claude's file fallback path
+            if let Ok(fw) = self.file_writer.read() {
+                if let Some(ref writer) = *fw {
+                    writer.append_project(label, &entry);
+                    // Truncate every 100 writes to prevent unbounded disk growth
+                    if entry.id % 100 == 0 {
+                        writer.maybe_truncate_project(label);
+                    }
+                }
+            }
+
+            self.emit_project_entry(label, &entry);
+        }
+    }
+
+    /// Query a project channel's buffer.
+    ///
+    /// Returns `(matching_entries, total_count)`. If the channel does not exist,
+    /// returns `([], 0)`.
+    pub fn query_project(
+        &self,
+        label: &str,
+        min_level: Option<&str>,
+        last: Option<usize>,
+        search: Option<&str>,
+    ) -> (Vec<LogEntry>, usize) {
+        let pcs = self
+            .project_channels
+            .read()
+            .unwrap_or_else(|e| e.into_inner());
+
+        match pcs.get(label) {
+            Some(pc) => pc.buffer.query(min_level, last, search),
+            None => (Vec::new(), 0),
+        }
+    }
+
+    /// Return a summary for every registered project channel.
+    pub fn project_summary(&self) -> Vec<ProjectChannelSummary> {
+        let pcs = self
+            .project_channels
+            .read()
+            .unwrap_or_else(|e| e.into_inner());
+
+        pcs.values()
+            .map(|pc| {
+                let (error, warn, info, debug, trace) = pc.buffer.count_by_level();
+                ProjectChannelSummary {
+                    label: pc.info.label.clone(),
+                    project_path: pc.info.project_path.clone(),
+                    framework: pc.info.framework.clone(),
+                    port: pc.info.port,
+                    total: pc.buffer.entries.len(),
+                    error,
+                    warn,
+                    info,
+                    debug,
+                    trace,
+                }
+            })
+            .collect()
+    }
+
+    /// Return metadata for every registered project channel.
+    pub fn list_project_channels(&self) -> Vec<ProjectChannelInfo> {
+        let pcs = self
+            .project_channels
+            .read()
+            .unwrap_or_else(|e| e.into_inner());
+
+        pcs.values().map(|pc| pc.info.clone()).collect()
+    }
+
+    /// Emit a Tauri event for a project channel log entry (best-effort).
+    fn emit_project_entry(&self, label: &str, entry: &LogEntry) {
+        if let Ok(ah) = self.app_handle.read() {
+            if let Some(handle) = ah.as_ref() {
+                let _ = handle.emit(
+                    "project-output-log",
+                    serde_json::json!({ "channel": label, "entry": entry }),
+                );
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -371,6 +575,146 @@ pub struct LogFileWriter {
     dir: PathBuf,
 }
 
+// ---------------------------------------------------------------------------
+// Shared JSONL file helpers (used by both system + project channels)
+// ---------------------------------------------------------------------------
+
+/// Read and filter log entries from a JSONL file on disk.
+///
+/// Returns `(matching_entries, total_lines_in_file)`.
+fn read_entries_from_file(
+    path: &Path,
+    min_level: Option<&str>,
+    last: Option<usize>,
+    search: Option<&str>,
+) -> (Vec<LogEntry>, usize) {
+    let file = match File::open(path) {
+        Ok(f) => f,
+        Err(_) => return (Vec::new(), 0),
+    };
+
+    let min_pri = min_level.map(level_priority).unwrap_or(0);
+    let mut total: usize = 0;
+    let mut filtered: Vec<LogEntry> = Vec::new();
+
+    for line in StdBufReader::new(file).lines() {
+        let line = match line {
+            Ok(l) => l,
+            Err(_) => continue,
+        };
+        if line.trim().is_empty() {
+            continue;
+        }
+        total += 1;
+
+        let entry: LogEntry = match serde_json::from_str(&line) {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+
+        // Level filter
+        if level_priority(&entry.level) < min_pri {
+            continue;
+        }
+
+        // Text search filter (case-insensitive)
+        if let Some(s) = search {
+            if !entry
+                .message
+                .to_ascii_lowercase()
+                .contains(&s.to_ascii_lowercase())
+            {
+                continue;
+            }
+        }
+
+        filtered.push(entry);
+    }
+
+    // Apply `last` (tail) limit
+    let result = if let Some(n) = last {
+        if n >= filtered.len() {
+            filtered
+        } else {
+            filtered[filtered.len() - n..].to_vec()
+        }
+    } else {
+        filtered
+    };
+
+    (result, total)
+}
+
+/// If a JSONL file exceeds `MAX_FILE_ENTRIES` lines, truncate it to keep
+/// only the most recent `TRUNCATE_KEEP` lines. Atomic write via temp file.
+fn truncate_file_if_needed(path: &Path) {
+    // Read all lines
+    let file = match File::open(path) {
+        Ok(f) => f,
+        Err(_) => return,
+    };
+    let lines: Vec<String> = StdBufReader::new(file)
+        .lines()
+        .filter_map(|l| l.ok())
+        .collect();
+
+    if lines.len() <= MAX_FILE_ENTRIES {
+        return;
+    }
+
+    // Keep the most recent TRUNCATE_KEEP lines
+    let keep = &lines[lines.len() - TRUNCATE_KEEP..];
+
+    // Write to a temp file, then rename (atomic on most OSes)
+    let tmp_path = path.with_extension("jsonl.tmp");
+    let write_result = (|| -> io::Result<()> {
+        let mut tmp = File::create(&tmp_path)?;
+        for line in keep {
+            writeln!(tmp, "{}", line)?;
+        }
+        tmp.flush()?;
+        Ok(())
+    })();
+
+    if write_result.is_ok() {
+        let _ = fs::rename(&tmp_path, &path);
+    } else {
+        let _ = fs::remove_file(&tmp_path);
+    }
+}
+
+/// Append a single JSON line to a file. Errors are silently ignored
+/// because logging infrastructure must never crash the app.
+fn append_entry_to_file(path: &Path, entry: &LogEntry) {
+    let line = match serde_json::to_string(entry) {
+        Ok(s) => s,
+        Err(_) => return,
+    };
+
+    let mut file = match OpenOptions::new().create(true).append(true).open(path) {
+        Ok(f) => f,
+        Err(_) => return,
+    };
+
+    let _ = writeln!(file, "{}", line);
+    let _ = file.flush();
+}
+
+/// Sanitize a label for use as a filename component.
+/// Replaces `/\:*?"<>| ` with `-` and lowercases.
+fn sanitize_label(label: &str) -> String {
+    label
+        .chars()
+        .map(|c| {
+            if "/\\:*?\"<>| ".contains(c) {
+                '-'
+            } else {
+                c.to_ascii_lowercase()
+            }
+        })
+        .collect()
+}
+
 impl LogFileWriter {
     /// Create a new writer, ensuring the target directory exists.
     pub fn new(dir: PathBuf) -> io::Result<Self> {
@@ -378,71 +722,43 @@ impl LogFileWriter {
         Ok(Self { dir })
     }
 
-    /// Path to the JSONL file for a given channel.
+    /// The directory this writer uses.
+    pub fn dir(&self) -> &Path {
+        &self.dir
+    }
+
+    /// Path to the JSONL file for a given system channel.
     fn channel_path(&self, channel: Channel) -> PathBuf {
         self.dir.join(format!("{}.jsonl", channel.as_str()))
+    }
+
+    /// Path to the JSONL file for a project channel.
+    fn project_channel_path(&self, label: &str) -> PathBuf {
+        self.dir.join(format!("project-{}.jsonl", sanitize_label(label)))
     }
 
     /// Append a log entry as a single JSON line. Errors are silently ignored
     /// because logging infrastructure must never crash the app.
     pub fn append(&self, entry: &LogEntry) {
-        let line = match serde_json::to_string(entry) {
-            Ok(s) => s,
-            Err(_) => return,
-        };
-
-        let path = self.channel_path(entry.channel);
-        let mut file = match OpenOptions::new().create(true).append(true).open(&path) {
-            Ok(f) => f,
-            Err(_) => return,
-        };
-
-        // Write line + newline, then flush
-        let _ = writeln!(file, "{}", line);
-        let _ = file.flush();
+        append_entry_to_file(&self.channel_path(entry.channel), entry);
     }
 
-    /// If the channel file exceeds `MAX_FILE_ENTRIES` lines, truncate it to
-    /// keep only the most recent `TRUNCATE_KEEP` lines.
+    /// Append a log entry to a project channel's JSONL file.
+    pub fn append_project(&self, label: &str, entry: &LogEntry) {
+        append_entry_to_file(&self.project_channel_path(label), entry);
+    }
+
+    /// If the system channel file exceeds `MAX_FILE_ENTRIES` lines, truncate it.
     pub fn maybe_truncate(&self, channel: Channel) {
-        let path = self.channel_path(channel);
-
-        // Read all lines
-        let file = match File::open(&path) {
-            Ok(f) => f,
-            Err(_) => return,
-        };
-        let lines: Vec<String> = StdBufReader::new(file)
-            .lines()
-            .filter_map(|l| l.ok())
-            .collect();
-
-        if lines.len() <= MAX_FILE_ENTRIES {
-            return;
-        }
-
-        // Keep the most recent TRUNCATE_KEEP lines
-        let keep = &lines[lines.len() - TRUNCATE_KEEP..];
-
-        // Write to a temp file, then rename (atomic on most OSes)
-        let tmp_path = path.with_extension("jsonl.tmp");
-        let write_result = (|| -> io::Result<()> {
-            let mut tmp = File::create(&tmp_path)?;
-            for line in keep {
-                writeln!(tmp, "{}", line)?;
-            }
-            tmp.flush()?;
-            Ok(())
-        })();
-
-        if write_result.is_ok() {
-            let _ = fs::rename(&tmp_path, &path);
-        } else {
-            let _ = fs::remove_file(&tmp_path);
-        }
+        truncate_file_if_needed(&self.channel_path(channel));
     }
 
-    /// Read and filter entries from a channel's JSONL file.
+    /// If the project channel file exceeds `MAX_FILE_ENTRIES` lines, truncate it.
+    pub fn maybe_truncate_project(&self, label: &str) {
+        truncate_file_if_needed(&self.project_channel_path(label));
+    }
+
+    /// Read and filter entries from a system channel's JSONL file.
     ///
     /// This is a **static** method — it does not require an instance. The MCP
     /// handler calls this directly with the log directory path.
@@ -456,64 +772,55 @@ impl LogFileWriter {
         search: Option<&str>,
     ) -> (Vec<LogEntry>, usize) {
         let path = dir.join(format!("{}.jsonl", channel.as_str()));
-        let file = match File::open(&path) {
-            Ok(f) => f,
-            Err(_) => return (Vec::new(), 0),
-        };
-
-        let min_pri = min_level.map(level_priority).unwrap_or(0);
-        let mut total: usize = 0;
-        let mut filtered: Vec<LogEntry> = Vec::new();
-
-        for line in StdBufReader::new(file).lines() {
-            let line = match line {
-                Ok(l) => l,
-                Err(_) => continue,
-            };
-            if line.trim().is_empty() {
-                continue;
-            }
-            total += 1;
-
-            let entry: LogEntry = match serde_json::from_str(&line) {
-                Ok(e) => e,
-                Err(_) => continue,
-            };
-
-            // Level filter
-            if level_priority(&entry.level) < min_pri {
-                continue;
-            }
-
-            // Text search filter (case-insensitive)
-            if let Some(s) = search {
-                if !entry
-                    .message
-                    .to_ascii_lowercase()
-                    .contains(&s.to_ascii_lowercase())
-                {
-                    continue;
-                }
-            }
-
-            filtered.push(entry);
-        }
-
-        // Apply `last` (tail) limit
-        let result = if let Some(n) = last {
-            if n >= filtered.len() {
-                filtered
-            } else {
-                filtered[filtered.len() - n..].to_vec()
-            }
-        } else {
-            filtered
-        };
-
-        (result, total)
+        read_entries_from_file(&path, min_level, last, search)
     }
 
-    /// Read summary information for all channels from their JSONL files.
+    /// Read and filter entries from a project channel's JSONL file.
+    ///
+    /// This is a **static** method — it does not require an instance.
+    ///
+    /// Returns `(matching_entries, total_lines_in_file)`.
+    pub fn read_project_channel(
+        dir: &Path,
+        label: &str,
+        min_level: Option<&str>,
+        last: Option<usize>,
+        search: Option<&str>,
+    ) -> (Vec<LogEntry>, usize) {
+        let path = dir.join(format!("project-{}.jsonl", sanitize_label(label)));
+        read_entries_from_file(&path, min_level, last, search)
+    }
+
+    /// List all project channels that have JSONL files on disk.
+    ///
+    /// Scans the directory for `project-*.jsonl` files and returns the label
+    /// parts (the part after `project-` and before `.jsonl`).
+    ///
+    /// This is a **static** method.
+    pub fn list_project_channels(dir: &Path) -> Vec<String> {
+        let entries = match fs::read_dir(dir) {
+            Ok(e) => e,
+            Err(_) => return Vec::new(),
+        };
+
+        entries
+            .filter_map(|e| e.ok())
+            .filter_map(|e| {
+                let name = e.file_name().to_string_lossy().to_string();
+                if name.starts_with("project-") && name.ends_with(".jsonl") {
+                    let label = name
+                        .strip_prefix("project-")?
+                        .strip_suffix(".jsonl")?
+                        .to_string();
+                    Some(label)
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    /// Read summary information for all system channels from their JSONL files.
     ///
     /// This is a **static** method — it does not require an instance.
     pub fn read_summary(dir: &Path) -> Vec<ChannelSummary> {
@@ -1093,6 +1400,374 @@ mod tests {
         // Should NOT truncate — still at the limit
         let (_, total) = LogFileWriter::read_channel(&dir, Channel::App, None, None, None);
         assert_eq!(total, MAX_FILE_ENTRIES);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    // -----------------------------------------------------------------------
+    // Project channel tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_project_channel_register_and_push() {
+        let store = OutputStore::new();
+
+        store.register_project_channel(
+            "my-app".to_string(),
+            "/projects/my-app".to_string(),
+            Some("vite".to_string()),
+            Some(3000),
+        );
+
+        store.push_project("my-app", "INFO", "Server started");
+        store.push_project("my-app", "WARN", "Deprecation warning");
+
+        let (entries, total) = store.query_project("my-app", None, None, None);
+        assert_eq!(total, 2);
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].message, "Server started");
+        assert_eq!(entries[0].level, "INFO");
+        assert_eq!(entries[1].message, "Deprecation warning");
+        assert_eq!(entries[1].level, "WARN");
+    }
+
+    #[test]
+    fn test_project_channel_unregister() {
+        let store = OutputStore::new();
+
+        store.register_project_channel(
+            "temp-proj".to_string(),
+            "/tmp/proj".to_string(),
+            None,
+            None,
+        );
+
+        store.push_project("temp-proj", "INFO", "hello");
+
+        // Verify it exists
+        let (entries, total) = store.query_project("temp-proj", None, None, None);
+        assert_eq!(total, 1);
+        assert_eq!(entries.len(), 1);
+
+        // Unregister
+        store.unregister_project_channel("temp-proj");
+
+        // Query should return empty now
+        let (entries, total) = store.query_project("temp-proj", None, None, None);
+        assert_eq!(total, 0);
+        assert!(entries.is_empty());
+
+        // list_project_channels should not include it
+        let channels = store.list_project_channels();
+        assert!(channels.iter().all(|c| c.label != "temp-proj"));
+    }
+
+    #[test]
+    fn test_project_channel_summary() {
+        let store = OutputStore::new();
+
+        store.register_project_channel(
+            "alpha".to_string(),
+            "/projects/alpha".to_string(),
+            Some("next".to_string()),
+            Some(3000),
+        );
+        store.register_project_channel(
+            "beta".to_string(),
+            "/projects/beta".to_string(),
+            Some("vite".to_string()),
+            Some(5173),
+        );
+
+        store.push_project("alpha", "ERROR", "crash");
+        store.push_project("alpha", "WARN", "slow");
+        store.push_project("alpha", "INFO", "ok");
+
+        store.push_project("beta", "DEBUG", "tick");
+        store.push_project("beta", "TRACE", "noise");
+
+        let summaries = store.project_summary();
+        assert_eq!(summaries.len(), 2);
+
+        // Sort by label for deterministic ordering (HashMap iteration is unordered)
+        let mut summaries = summaries;
+        summaries.sort_by(|a, b| a.label.cmp(&b.label));
+
+        let alpha = &summaries[0];
+        assert_eq!(alpha.label, "alpha");
+        assert_eq!(alpha.project_path, "/projects/alpha");
+        assert_eq!(alpha.framework.as_deref(), Some("next"));
+        assert_eq!(alpha.port, Some(3000));
+        assert_eq!(alpha.total, 3);
+        assert_eq!(alpha.error, 1);
+        assert_eq!(alpha.warn, 1);
+        assert_eq!(alpha.info, 1);
+        assert_eq!(alpha.debug, 0);
+        assert_eq!(alpha.trace, 0);
+
+        let beta = &summaries[1];
+        assert_eq!(beta.label, "beta");
+        assert_eq!(beta.total, 2);
+        assert_eq!(beta.debug, 1);
+        assert_eq!(beta.trace, 1);
+    }
+
+    #[test]
+    fn test_project_channel_ring_buffer_cap() {
+        let store = OutputStore::new();
+
+        store.register_project_channel(
+            "big".to_string(),
+            "/projects/big".to_string(),
+            None,
+            None,
+        );
+
+        for i in 0..2500 {
+            store.push_project("big", "INFO", &format!("entry {}", i));
+        }
+
+        let (entries, total) = store.query_project("big", None, None, None);
+        assert_eq!(total, MAX_ENTRIES_PER_CHANNEL); // 2000
+        assert_eq!(entries.len(), MAX_ENTRIES_PER_CHANNEL);
+
+        // Oldest retained should be entry 500 (0..499 evicted)
+        assert_eq!(entries[0].message, "entry 500");
+
+        // Newest should be entry 2499
+        assert_eq!(entries[1999].message, "entry 2499");
+    }
+
+    #[test]
+    fn test_project_channel_query_filters() {
+        let store = OutputStore::new();
+
+        store.register_project_channel(
+            "filtered".to_string(),
+            "/projects/filtered".to_string(),
+            None,
+            None,
+        );
+
+        store.push_project("filtered", "ERROR", "fatal crash in module A");
+        store.push_project("filtered", "WARN", "deprecation in module B");
+        store.push_project("filtered", "INFO", "server started");
+        store.push_project("filtered", "DEBUG", "request handled");
+        store.push_project("filtered", "TRACE", "byte-level trace");
+
+        // Level filter: WARN and above
+        let (entries, _) = store.query_project("filtered", Some("WARN"), None, None);
+        assert_eq!(entries.len(), 2); // ERROR + WARN
+        assert_eq!(entries[0].level, "ERROR");
+        assert_eq!(entries[1].level, "WARN");
+
+        // Search filter
+        let (entries, _) = store.query_project("filtered", None, None, Some("module"));
+        assert_eq!(entries.len(), 2);
+        assert!(entries[0].message.contains("module A"));
+        assert!(entries[1].message.contains("module B"));
+
+        // Last (tail) filter
+        let (entries, _) = store.query_project("filtered", None, Some(2), None);
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].level, "DEBUG");
+        assert_eq!(entries[1].level, "TRACE");
+
+        // Combined: level + search
+        let (entries, _) = store.query_project("filtered", Some("WARN"), None, Some("module"));
+        assert_eq!(entries.len(), 2); // ERROR has "module A", WARN has "module B"
+    }
+
+    #[test]
+    fn test_push_to_nonexistent_project_channel_is_noop() {
+        let store = OutputStore::new();
+
+        // Should not panic
+        store.push_project("does-not-exist", "ERROR", "boom");
+
+        // Query returns empty
+        let (entries, total) = store.query_project("does-not-exist", None, None, None);
+        assert_eq!(total, 0);
+        assert!(entries.is_empty());
+    }
+
+    #[test]
+    fn test_list_project_channels() {
+        let store = OutputStore::new();
+
+        store.register_project_channel(
+            "proj-a".to_string(),
+            "/projects/a".to_string(),
+            Some("vite".to_string()),
+            Some(5173),
+        );
+        store.register_project_channel(
+            "proj-b".to_string(),
+            "/projects/b".to_string(),
+            None,
+            Some(8080),
+        );
+
+        let mut channels = store.list_project_channels();
+        assert_eq!(channels.len(), 2);
+
+        // Sort for deterministic assertion (HashMap iteration order is not guaranteed)
+        channels.sort_by(|a, b| a.label.cmp(&b.label));
+
+        assert_eq!(channels[0].label, "proj-a");
+        assert_eq!(channels[0].project_path, "/projects/a");
+        assert_eq!(channels[0].framework.as_deref(), Some("vite"));
+        assert_eq!(channels[0].port, Some(5173));
+
+        assert_eq!(channels[1].label, "proj-b");
+        assert_eq!(channels[1].project_path, "/projects/b");
+        assert!(channels[1].framework.is_none());
+        assert_eq!(channels[1].port, Some(8080));
+    }
+
+    // -----------------------------------------------------------------------
+    // sanitize_label tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_sanitize_label() {
+        assert_eq!(sanitize_label("my-app"), "my-app");
+        assert_eq!(sanitize_label("My App"), "my-app");
+        assert_eq!(sanitize_label("C:\\Users\\proj"), "c--users-proj");
+        assert_eq!(sanitize_label("feat/branch"), "feat-branch");
+        assert_eq!(sanitize_label("file:name*?.jsonl"), "file-name--.jsonl");
+        assert_eq!(sanitize_label("a<b>c\"d|e"), "a-b-c-d-e");
+    }
+
+    // -----------------------------------------------------------------------
+    // Project channel JSONL file persistence tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_project_file_writer_append_and_read() {
+        let dir = std::env::temp_dir().join(format!("vm_test_pfw_ar_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+
+        let writer = LogFileWriter::new(dir.clone()).unwrap();
+
+        let e1 = make_entry(1, "INFO", Channel::App, "server started");
+        let e2 = make_entry(2, "ERROR", Channel::App, "crash detected");
+
+        writer.append_project("my-app", &e1);
+        writer.append_project("my-app", &e2);
+
+        // Read back
+        let (entries, total) =
+            LogFileWriter::read_project_channel(&dir, "my-app", None, None, None);
+        assert_eq!(total, 2);
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].message, "server started");
+        assert_eq!(entries[1].message, "crash detected");
+
+        // Level filter: ERROR only
+        let (entries, _) =
+            LogFileWriter::read_project_channel(&dir, "my-app", Some("error"), None, None);
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].level, "ERROR");
+
+        // Search filter
+        let (entries, _) =
+            LogFileWriter::read_project_channel(&dir, "my-app", None, None, Some("started"));
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].message, "server started");
+
+        // Last (tail) filter
+        let (entries, _) =
+            LogFileWriter::read_project_channel(&dir, "my-app", None, Some(1), None);
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].message, "crash detected");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_project_file_list_channels() {
+        let dir = std::env::temp_dir().join(format!("vm_test_pfw_list_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+
+        let writer = LogFileWriter::new(dir.clone()).unwrap();
+
+        let e1 = make_entry(1, "INFO", Channel::App, "hello from alpha");
+        let e2 = make_entry(2, "INFO", Channel::App, "hello from beta");
+
+        writer.append_project("alpha", &e1);
+        writer.append_project("beta", &e2);
+
+        // Also write a system channel to verify it's not included
+        writer.append(&make_entry(3, "INFO", Channel::App, "system entry"));
+
+        let mut channels = LogFileWriter::list_project_channels(&dir);
+        channels.sort();
+        assert_eq!(channels.len(), 2);
+        assert_eq!(channels[0], "alpha");
+        assert_eq!(channels[1], "beta");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_project_file_writer_truncation() {
+        let dir = std::env::temp_dir().join(format!("vm_test_pfw_trunc_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+
+        let writer = LogFileWriter::new(dir.clone()).unwrap();
+
+        // Write more than MAX_FILE_ENTRIES lines
+        for i in 0..(MAX_FILE_ENTRIES + 100) {
+            writer.append_project(
+                "big-proj",
+                &make_entry(i as u64, "INFO", Channel::App, &format!("line {}", i)),
+            );
+        }
+
+        // Before truncation
+        let (_, total_before) =
+            LogFileWriter::read_project_channel(&dir, "big-proj", None, None, None);
+        assert_eq!(total_before, MAX_FILE_ENTRIES + 100);
+
+        // Trigger truncation
+        writer.maybe_truncate_project("big-proj");
+
+        // After truncation
+        let (entries, total_after) =
+            LogFileWriter::read_project_channel(&dir, "big-proj", None, None, None);
+        assert_eq!(total_after, TRUNCATE_KEEP);
+        assert_eq!(entries.len(), TRUNCATE_KEEP);
+
+        // The kept entries should be the most recent ones
+        let first_kept_id = (MAX_FILE_ENTRIES + 100) - TRUNCATE_KEEP;
+        assert_eq!(entries[0].message, format!("line {}", first_kept_id));
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_project_file_read_nonexistent() {
+        let dir = std::env::temp_dir().join(format!("vm_test_pfw_miss_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let _ = fs::create_dir_all(&dir);
+
+        let (entries, total) =
+            LogFileWriter::read_project_channel(&dir, "nope", None, None, None);
+        assert_eq!(total, 0);
+        assert!(entries.is_empty());
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_project_file_list_empty_dir() {
+        let dir = std::env::temp_dir().join(format!("vm_test_pfw_empty_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let _ = fs::create_dir_all(&dir);
+
+        let channels = LogFileWriter::list_project_channels(&dir);
+        assert!(channels.is_empty());
 
         let _ = fs::remove_dir_all(&dir);
     }

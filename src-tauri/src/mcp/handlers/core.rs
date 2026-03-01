@@ -990,6 +990,7 @@ fn handle_get_logs_via_files(args: &Value) -> McpToolResult {
 
     match channel {
         Some(ch_str) => {
+            // Try system channel first
             if let Some(ch) = Channel::from_str(ch_str) {
                 let (entries, total) = LogFileWriter::read_channel(
                     &logs_dir,
@@ -1007,22 +1008,66 @@ fn handle_get_logs_via_files(args: &Value) -> McpToolResult {
                 ));
                 McpToolResult::text(result)
             } else {
-                McpToolResult::error(format!(
-                    "Unknown channel: {}. Available: app, cli, voice, mcp, browser",
-                    ch_str
-                ))
+                // Try project channel JSONL
+                let (entries, total) = LogFileWriter::read_project_channel(
+                    &logs_dir,
+                    ch_str,
+                    level,
+                    last.or(Some(100)),
+                    search,
+                );
+                if total > 0 {
+                    let lines: Vec<String> =
+                        entries.iter().map(|e| e.format_line()).collect();
+                    let count = lines.len();
+                    let mut result = lines.join("\n");
+                    result.push_str(&format!(
+                        "\n\n--- {} entries (filtered from {} total, project channel via file fallback) ---",
+                        count, total
+                    ));
+                    McpToolResult::text(result)
+                } else {
+                    // List available channels to help
+                    let project_channels =
+                        LogFileWriter::list_project_channels(&logs_dir);
+                    let available = if project_channels.is_empty() {
+                        "No project channels found.".to_string()
+                    } else {
+                        format!(
+                            "Available project channels: {}",
+                            project_channels.join(", ")
+                        )
+                    };
+                    McpToolResult::error(format!(
+                        "Unknown channel: {}. System: app, cli, voice, mcp, browser, frontend. {}",
+                        ch_str, available
+                    ))
+                }
             }
         }
         None => {
             let summaries = LogFileWriter::read_summary(&logs_dir);
-            let mut text = String::from("Output Channels (via file fallback):\n");
+            let project_channels = LogFileWriter::list_project_channels(&logs_dir);
+
+            let mut text = String::from("System Output Channels (via file fallback):\n");
             for s in &summaries {
                 text.push_str(&format!(
-                    "  {:<8} {:>4} entries ({} error, {} warn, {} info)\n",
+                    "  {:<10} {:>4} entries ({} error, {} warn, {} info)\n",
                     format!("{}:", s.channel),
                     s.total, s.error, s.warn, s.info
                 ));
             }
+
+            if !project_channels.is_empty() {
+                text.push_str("\nProject Channels:\n");
+                for ch_name in &project_channels {
+                    let (_, total) = LogFileWriter::read_project_channel(
+                        &logs_dir, ch_name, None, None, None,
+                    );
+                    text.push_str(&format!("  {} ({} entries)\n", ch_name, total));
+                }
+            }
+
             McpToolResult::text(text)
         }
     }

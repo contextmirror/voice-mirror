@@ -518,6 +518,11 @@ export async function gitPull(rebase, root) { return invoke('git_pull', { rebase
 export async function gitForcePush(root) { return invoke('git_force_push', { root: root || null }); }
 export async function gitListBranches(root) { return invoke('git_list_branches', { root: root || null }); }
 export async function gitCheckoutBranch(branch, root) { return invoke('git_checkout_branch', { branch, root: root || null }); }
+export async function gitStashSave(message, root) { return invoke('git_stash_save', { message: message || null, root: root || null }); }
+export async function gitStashList(root) { return invoke('git_stash_list', { root: root || null }); }
+export async function gitStashPop(index, root) { return invoke('git_stash_pop', { index: index ?? null, root: root || null }); }
+export async function gitStashApply(index, root) { return invoke('git_stash_apply', { index: index ?? null, root: root || null }); }
+export async function gitStashDrop(index, root) { return invoke('git_stash_drop', { index, root: root || null }); }
 /**
  * Create a new file with optional content.
  * Errors if the file already exists. Creates parent directories as needed.
@@ -628,6 +633,7 @@ export async function terminalSpawn(options = {}) {
     rows: options.rows || null,
     cwd: options.cwd || null,
     profileId: options.profileId || null,
+    outputChannel: options.outputChannel || null,
   });
 }
 
@@ -769,6 +775,24 @@ export async function lspGetServerDetail(langId, projectRoot) {
 
 export async function lspShutdown() {
   return invoke('lsp_shutdown');
+}
+
+// ============ Project Output Channels ============
+
+export async function registerProjectChannel(label, projectPath, framework, port) {
+  return invoke('register_project_channel', { label, projectPath, framework: framework || null, port: port || null });
+}
+
+export async function unregisterProjectChannel(label) {
+  return invoke('unregister_project_channel', { label });
+}
+
+export async function pushProjectLog(label, level, message) {
+  return invoke('push_project_log', { label, level, message });
+}
+
+export async function listProjectChannels() {
+  return invoke('list_project_channels');
 }
 
 // ============ Output / Diagnostics ============

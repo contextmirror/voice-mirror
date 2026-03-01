@@ -101,7 +101,7 @@
   });
 
   async function handleTreeChanged(event) {
-    const { directories, root: rootChanged } = event.payload;
+    const { root: rootChanged } = event.payload;
     const currentRoot = projectStore.activeProject?.path || null;
     if (!currentRoot) return; // No project open, ignore stale watcher events
 
@@ -109,19 +109,26 @@
       await loadRoot();
     }
 
-    if (directories && directories.length > 0) {
+    // Refresh ALL expanded directories on any filesystem change.
+    // The watcher reports which directories changed, but changes can cascade
+    // (e.g. moving files between dirs affects both source and destination).
+    // Refreshing all expanded dirs is cheap (only visible folders) and ensures
+    // the tree never shows stale data.
+    if (expandedDirs.size > 0) {
       const updated = new Map(dirChildren);
       let changed = false;
-      for (const dir of directories) {
-        if (expandedDirs.has(dir)) {
-          try {
-            const resp = await listDirectory(dir, currentRoot);
-            if (resp && resp.data) {
-              updated.set(dir, resp.data);
-              changed = true;
-            }
-          } catch (err) {
-            console.error('FileTree: watcher refresh failed for', dir, err);
+      for (const dir of expandedDirs) {
+        try {
+          const resp = await listDirectory(dir, currentRoot);
+          if (resp && resp.data) {
+            updated.set(dir, resp.data);
+            changed = true;
+          }
+        } catch (err) {
+          // Directory may have been deleted — remove from cache
+          if (updated.has(dir)) {
+            updated.delete(dir);
+            changed = true;
           }
         }
       }
@@ -129,6 +136,10 @@
         dirChildren = updated;
       }
     }
+
+    // Always refresh root entries too — file/folder additions/deletions at
+    // the project root level need to show up immediately.
+    await loadRoot();
   }
 
   function handleGitChanged() {
@@ -185,26 +196,27 @@
       next.add(path);
       expandedDirs = next;
 
-      if (!dirChildren.has(path)) {
-        const loading = new Set(loadingDirs);
-        loading.add(path);
-        loadingDirs = loading;
+      // Always fetch fresh data on expand — never use stale cache.
+      // Filesystem changes while collapsed won't update dirChildren,
+      // so re-expanding must read from disk to show current state.
+      const loading = new Set(loadingDirs);
+      loading.add(path);
+      loadingDirs = loading;
 
-        try {
-          const root = projectStore.activeProject?.path || null;
-          const resp = await listDirectory(path, root);
-          if (resp && resp.data) {
-            const updated = new Map(dirChildren);
-            updated.set(path, resp.data);
-            dirChildren = updated;
-          }
-        } catch (err) {
-          console.error('FileTree: failed to load directory', path, err);
-        } finally {
-          const done = new Set(loadingDirs);
-          done.delete(path);
-          loadingDirs = done;
+      try {
+        const root = projectStore.activeProject?.path || null;
+        const resp = await listDirectory(path, root);
+        if (resp && resp.data) {
+          const updated = new Map(dirChildren);
+          updated.set(path, resp.data);
+          dirChildren = updated;
         }
+      } catch (err) {
+        console.error('FileTree: failed to load directory', path, err);
+      } finally {
+        const done = new Set(loadingDirs);
+        done.delete(path);
+        loadingDirs = done;
       }
     }
   }

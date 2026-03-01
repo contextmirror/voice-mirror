@@ -30,6 +30,85 @@ describe('editor-extensions.js: Ctrl+hover definition underline', () => {
   });
 });
 
+describe('editor-extensions.js: VS Code keymap', () => {
+  it('imports vscodeKeymap from @replit/codemirror-vscode-keymap', () => {
+    assert.ok(src.includes("from '@replit/codemirror-vscode-keymap'"), 'Should import vscodeKeymap');
+  });
+
+  it('adds vscodeKeymap to extensions via keymap.of()', () => {
+    assert.ok(src.includes('keymap.of(vscodeKeymap)'), 'Should add vscodeKeymap as keymap extension');
+  });
+
+  it('adds vscodeKeymap after basicSetup so it overrides defaults', () => {
+    const basicSetupIndex = src.indexOf('basicSetup');
+    const vscodeKeymapIndex = src.indexOf('keymap.of(vscodeKeymap)');
+    assert.ok(vscodeKeymapIndex > basicSetupIndex, 'vscodeKeymap should come after basicSetup');
+  });
+});
+
+describe('editor-extensions.js: indent guides', () => {
+  it('imports indentationMarkers from @replit/codemirror-indentation-markers', () => {
+    assert.ok(src.includes("from '@replit/codemirror-indentation-markers'"), 'Should import indentationMarkers');
+  });
+
+  it('conditionally adds indent guides based on showIndentGuides option', () => {
+    assert.ok(src.includes('showIndentGuides'), 'Should check showIndentGuides option');
+    assert.ok(src.includes('indentationMarkers'), 'Should use indentationMarkers extension');
+  });
+
+  it('enables highlightActiveBlock for indent guides', () => {
+    assert.ok(src.includes('highlightActiveBlock: true'), 'Should highlight active block');
+  });
+});
+
+describe('editor-extensions.js: dynamic indentation', () => {
+  it('imports Compartment from @codemirror/state', () => {
+    assert.ok(src.includes("Compartment"), 'Should use Compartment');
+    assert.ok(src.includes("from '@codemirror/state'"), 'Should import from @codemirror/state');
+  });
+
+  it('imports indentUnit from @codemirror/language', () => {
+    assert.ok(src.includes("indentUnit"), 'Should use indentUnit');
+    assert.ok(src.includes("from '@codemirror/language'"), 'Should import from @codemirror/language');
+  });
+
+  it('exports createIndentCompartments function', () => {
+    assert.ok(src.includes('export function createIndentCompartments'), 'Should export createIndentCompartments');
+  });
+
+  it('exports detectIndentation function', () => {
+    assert.ok(src.includes('export function detectIndentation'), 'Should export detectIndentation');
+  });
+
+  it('exports convertIndentation function', () => {
+    assert.ok(src.includes('export function convertIndentation'), 'Should export convertIndentation');
+  });
+
+  it('detectIndentation handles tabs vs spaces', () => {
+    assert.ok(src.includes('tabLines') && src.includes('spaceLines'), 'Should count tab vs space lines');
+  });
+
+  it('detectIndentation detects 2/4/8 space sizes', () => {
+    assert.ok(src.includes('spaceCounts'), 'Should track space indent sizes');
+  });
+
+  it('convertIndentation replaces tabs with spaces and vice versa', () => {
+    assert.ok(src.includes("to === 'spaces'"), 'Should handle spaces conversion');
+    assert.ok(src.includes("'\\t'"), 'Should handle tabs');
+  });
+
+  it('accepts indentCompartments option in buildEditorExtensions', () => {
+    assert.ok(src.includes('indentCompartments'), 'Should accept indentCompartments option');
+    assert.ok(src.includes('indentType'), 'Should accept indentType option');
+    assert.ok(src.includes('indentSize'), 'Should accept indentSize option');
+  });
+
+  it('configures compartments with indentUnit and tabSize', () => {
+    assert.ok(src.includes('indentCompartments.indentUnit.of'), 'Should configure indentUnit compartment');
+    assert.ok(src.includes('indentCompartments.tabSize.of'), 'Should configure tabSize compartment');
+  });
+});
+
 describe('editor-extensions.js: cm object dependencies', () => {
   it('destructures ViewPlugin from cm parameter', () => {
     assert.ok(src.includes('ViewPlugin') && src.includes('cm'), 'Should use ViewPlugin from cm');

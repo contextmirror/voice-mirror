@@ -493,6 +493,20 @@ commandRegistry.registerMany([
     category: 'Git',
     execute: () => window.dispatchEvent(new CustomEvent('command:git-show-changes')),
   },
+  {
+    id: 'git.nextChangedFile',
+    label: 'Go to Next Changed File',
+    category: 'Git',
+    keybinding: 'Alt+F5',
+    execute: () => window.dispatchEvent(new CustomEvent('command:next-diff-file')),
+  },
+  {
+    id: 'git.prevChangedFile',
+    label: 'Go to Previous Changed File',
+    category: 'Git',
+    keybinding: 'Shift+Alt+F5',
+    execute: () => window.dispatchEvent(new CustomEvent('command:prev-diff-file')),
+  },
 ]);
 
 // Terminal (4)

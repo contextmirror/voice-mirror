@@ -12,6 +12,10 @@
   import { terminalTabsStore } from '../../lib/stores/terminal-tabs.svelte.js';
   import { devServerManager } from '../../lib/stores/dev-server-manager.svelte.js';
   import { searchBuffer, nextMatch, prevMatch } from '../../lib/terminal-search.js';
+  import { createLinkOverlay } from '../../lib/terminal-link-overlay.js';
+  import { tabsStore } from '../../lib/stores/tabs.svelte.js';
+  import { projectStore } from '../../lib/stores/project.svelte.js';
+  import { open } from '@tauri-apps/plugin-shell';
   import TerminalSearch from './TerminalSearch.svelte';
 
   let { shellId, visible = true, onRegisterActions } = $props();
@@ -26,6 +30,7 @@
   let lastPtyRows = $state(0);
   let initialized = $state(false);
   let pendingEvents = [];
+  let linkOverlay = null;
 
   // ---- Search state ----
   let searchVisible = $state(false);
@@ -429,6 +434,23 @@
             handleShellOutput(evt.payload);
           }
           pendingEvents = [];
+
+          // Initialize clickable link overlay (Ctrl+click to open URLs/files)
+          linkOverlay = createLinkOverlay({
+            container: containerEl,
+            getTerm: () => term,
+            getCwd: () => projectStore.activeProject?.path || '',
+            onOpenUrl: (url) => {
+              open(url).catch(err => console.warn('[Terminal] Failed to open URL:', err));
+            },
+            onOpenFile: (match) => {
+              const fileName = match.path.split(/[/\\]/).pop() || match.path;
+              if (match.line != null) {
+                tabsStore.setPendingCursor(match.path, match.line - 1, (match.col || 1) - 1);
+              }
+              tabsStore.openFile({ name: fileName, path: match.path });
+            },
+          });
         });
       });
     }
@@ -449,6 +471,10 @@
       if (unlistenShellOutput) {
         unlistenShellOutput();
         unlistenShellOutput = null;
+      }
+      if (linkOverlay) {
+        linkOverlay.destroy();
+        linkOverlay = null;
       }
       if (term) {
         term.dispose();

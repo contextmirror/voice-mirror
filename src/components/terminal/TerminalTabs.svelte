@@ -329,6 +329,9 @@
         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
       </svg>
       <span class="tab-label">Output</span>
+      {#if outputStore.hasProjectErrors}
+        <span class="error-badge"></span>
+      {/if}
     </div>
 
     <!-- Terminal tab (pinned) -->
@@ -398,13 +401,30 @@
             onclick={(e) => { e.stopPropagation(); toggleChannelDropdown(); }}
             title="Select output channel"
           >
-            <span>{outputStore.channelLabels[outputStore.activeChannel]}</span>
+            <span>{outputStore.channelLabels[outputStore.activeChannel] || outputStore.activeChannel}</span>
             <svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.5">
               <polyline points="3 4.5 6 7.5 9 4.5"/>
             </svg>
           </button>
           {#if channelDropdownOpen}
             <div class="channel-dropdown-menu">
+              {#if outputStore.projectChannels.length > 0}
+                {#each outputStore.projectChannels as pc}
+                  <button
+                    class="channel-dropdown-item"
+                    class:active={outputStore.activeChannel === pc.label}
+                    onclick={(e) => { e.stopPropagation(); selectChannel(pc.label); }}
+                  >
+                    {pc.label}
+                    {#if outputStore.activeChannel === pc.label}
+                      <svg class="channel-check" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <polyline points="20 6 9 17 4 12"/>
+                      </svg>
+                    {/if}
+                  </button>
+                {/each}
+                <div class="channel-divider"></div>
+              {/if}
               {#each outputStore.channels as ch}
                 <button
                   class="channel-dropdown-item"
@@ -1097,6 +1117,23 @@
   .channel-check {
     color: var(--accent);
     flex-shrink: 0;
+  }
+
+  .channel-divider {
+    height: 1px;
+    background: var(--muted);
+    margin: 4px 8px;
+    opacity: 0.3;
+  }
+
+  .error-badge {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--danger, #f44);
+    margin-left: 4px;
+    vertical-align: middle;
   }
 
   /* -- Output panel container -- */

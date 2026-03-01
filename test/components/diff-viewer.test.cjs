@@ -551,6 +551,63 @@ describe('DiffViewer.svelte: component integration', () => {
   });
 });
 
+describe('DiffViewer.svelte: diff file navigation', () => {
+  it('imports getGitChanges from api.js', () => {
+    assert.ok(src.includes('getGitChanges'), 'Should import getGitChanges');
+  });
+
+  it('has changedFiles state', () => {
+    assert.ok(src.includes('changedFiles'), 'Should have changedFiles state');
+  });
+
+  it('has loadChangedFiles function', () => {
+    assert.ok(src.includes('async function loadChangedFiles'), 'Should have loadChangedFiles function');
+  });
+
+  it('computes currentFileIndex from changedFiles', () => {
+    assert.ok(src.includes('currentFileIndex'), 'Should have currentFileIndex derived');
+    assert.ok(src.includes('changedFiles.findIndex'), 'Should find current file in changedFiles');
+  });
+
+  it('computes hasPrevFile and hasNextFile', () => {
+    assert.ok(src.includes('hasPrevFile'), 'Should have hasPrevFile derived');
+    assert.ok(src.includes('hasNextFile'), 'Should have hasNextFile derived');
+  });
+
+  it('has navigateToPrevFile function', () => {
+    assert.ok(src.includes('function navigateToPrevFile'), 'Should have navigateToPrevFile');
+  });
+
+  it('has navigateToNextFile function', () => {
+    assert.ok(src.includes('function navigateToNextFile'), 'Should have navigateToNextFile');
+  });
+
+  it('navigateToPrevFile opens diff via tabsStore', () => {
+    assert.ok(src.includes('tabsStore.openDiff(prev)'), 'Should open prev diff via tabsStore');
+  });
+
+  it('navigateToNextFile opens diff via tabsStore', () => {
+    assert.ok(src.includes('tabsStore.openDiff(next)'), 'Should open next diff via tabsStore');
+  });
+
+  it('passes file navigation props to DiffToolbar', () => {
+    assert.ok(src.includes('onPrevFile={navigateToPrevFile}'), 'Should pass navigateToPrevFile to toolbar');
+    assert.ok(src.includes('onNextFile={navigateToNextFile}'), 'Should pass navigateToNextFile to toolbar');
+    assert.ok(src.includes('{hasPrevFile}'), 'Should pass hasPrevFile to toolbar');
+    assert.ok(src.includes('{hasNextFile}'), 'Should pass hasNextFile to toolbar');
+  });
+
+  it('listens for command:next-diff-file and command:prev-diff-file events', () => {
+    assert.ok(src.includes("'command:next-diff-file'"), 'Should listen for next-diff-file event');
+    assert.ok(src.includes("'command:prev-diff-file'"), 'Should listen for prev-diff-file event');
+  });
+
+  it('loads changed files when tab loads', () => {
+    // loadChangedFiles is called in the effect that loads diff content
+    assert.ok(src.includes('loadChangedFiles()'), 'Should call loadChangedFiles when tab loads');
+  });
+});
+
 describe('DiffViewer.svelte: exported state and callbacks', () => {
   it('has viewMode state', () => {
     assert.ok(src.includes('let viewMode'), 'Should have viewMode');

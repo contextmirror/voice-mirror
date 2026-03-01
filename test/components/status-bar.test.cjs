@@ -632,3 +632,159 @@ describe('mod.rs: Node.js not-found event emission', () => {
     );
   });
 });
+
+// ──────────────────────────────────────────────────
+// Indent guides dropdown
+// ──────────────────────────────────────────────────
+
+describe('StatusBar.svelte: indent guides dropdown', () => {
+  it('imports configStore from config store', () => {
+    assert.ok(src.includes('configStore'), 'Should import configStore');
+    assert.ok(src.includes('config.svelte.js'), 'Should import from config.svelte.js');
+  });
+
+  it('imports updateConfig from config store', () => {
+    assert.ok(src.includes('updateConfig'), 'Should import updateConfig');
+  });
+
+  it('has indent-anchor wrapper for dropdown positioning', () => {
+    assert.ok(src.includes('indent-anchor'), 'Should have indent-anchor class');
+  });
+
+  it('has indent-dropdown element', () => {
+    assert.ok(src.includes('indent-dropdown'), 'Should have indent-dropdown class');
+  });
+
+  it('has indent-item for dropdown rows', () => {
+    assert.ok(src.includes('indent-item'), 'Should have indent-item class');
+  });
+
+  it('derives indentGuides state from configStore', () => {
+    assert.ok(src.includes('indentGuides'), 'Should have indentGuides derived state');
+  });
+
+  it('has toggleIndentGuides handler', () => {
+    assert.ok(src.includes('toggleIndentGuides'), 'Should have toggleIndentGuides handler');
+  });
+
+  it('calls updateConfig to persist indent guide toggle', () => {
+    assert.ok(
+      src.includes("updateConfig({ editor:") || src.includes('updateConfig({editor:'),
+      'Should call updateConfig with editor patch'
+    );
+  });
+
+  it('has indentDropdownOpen state for show/hide', () => {
+    assert.ok(src.includes('indentDropdownOpen'), 'Should have indentDropdownOpen state');
+  });
+
+  it('shows Indent Guides label in dropdown', () => {
+    assert.ok(src.includes('Indent Guides'), 'Should show Indent Guides label');
+  });
+
+  it('has checkmark indicator for toggle state', () => {
+    assert.ok(src.includes('indent-check') || src.includes('✓'), 'Should have checkmark indicator');
+  });
+});
+
+describe('StatusBar.svelte: VS Code-style indent dropdown', () => {
+  it('has "Indent Using Spaces" section label', () => {
+    assert.ok(src.includes('Indent Using Spaces'), 'Should show Indent Using Spaces label');
+  });
+
+  it('has "Indent Using Tabs" section label', () => {
+    assert.ok(src.includes('Indent Using Tabs'), 'Should show Indent Using Tabs label');
+  });
+
+  it('has size buttons (2, 4, 8)', () => {
+    assert.ok(src.includes('indent-size-btn'), 'Should have size buttons');
+    assert.ok(src.includes('indent-size-row'), 'Should have size row container');
+  });
+
+  it('highlights active size with .active class', () => {
+    assert.ok(src.includes('.indent-size-btn.active'), 'Should have active class styling');
+  });
+
+  it('dispatches status-bar-indent-change event for spaces', () => {
+    assert.ok(src.includes('setIndentSpaces'), 'Should have setIndentSpaces handler');
+    assert.ok(src.includes('status-bar-indent-change'), 'Should dispatch indent-change event');
+  });
+
+  it('dispatches status-bar-indent-change event for tabs', () => {
+    assert.ok(src.includes('setIndentTabs'), 'Should have setIndentTabs handler');
+  });
+
+  it('has "Convert Indentation to Spaces" option', () => {
+    assert.ok(src.includes('Convert Indentation to Spaces'), 'Should have convert to spaces option');
+  });
+
+  it('has "Convert Indentation to Tabs" option', () => {
+    assert.ok(src.includes('Convert Indentation to Tabs'), 'Should have convert to tabs option');
+  });
+
+  it('dispatches status-bar-indent-convert event', () => {
+    assert.ok(src.includes('status-bar-indent-convert'), 'Should dispatch convert event');
+    assert.ok(src.includes('convertTo'), 'Should have convertTo handler');
+  });
+
+  it('has "Detect Indentation from Content" option', () => {
+    assert.ok(src.includes('Detect Indentation from Content'), 'Should have detect indentation option');
+  });
+
+  it('dispatches status-bar-indent-detect event', () => {
+    assert.ok(src.includes('status-bar-indent-detect'), 'Should dispatch detect event');
+    assert.ok(src.includes('detectIndent'), 'Should have detectIndent handler');
+  });
+
+  it('has dividers between sections', () => {
+    assert.ok(src.includes('indent-divider'), 'Should have divider elements');
+  });
+});
+
+describe('FileEditor.svelte: indent event handling', () => {
+  it('imports createIndentCompartments from editor-extensions', () => {
+    assert.ok(feSrc.includes('createIndentCompartments'), 'Should import createIndentCompartments');
+  });
+
+  it('imports detectIndentation from editor-extensions', () => {
+    assert.ok(feSrc.includes('detectIndentation'), 'Should import detectIndentation');
+  });
+
+  it('imports convertIndentation from editor-extensions', () => {
+    assert.ok(feSrc.includes('convertIndentation'), 'Should import convertIndentation');
+  });
+
+  it('creates indent compartments', () => {
+    assert.ok(feSrc.includes('createIndentCompartments()'), 'Should create indent compartments');
+  });
+
+  it('tracks currentIndent state', () => {
+    assert.ok(feSrc.includes('currentIndent'), 'Should have currentIndent state');
+  });
+
+  it('calls statusBarStore.setIndent on init', () => {
+    assert.ok(feSrc.includes('statusBarStore.setIndent'), 'Should call setIndent');
+  });
+
+  it('listens for status-bar-indent-change event', () => {
+    assert.ok(feSrc.includes('status-bar-indent-change'), 'Should listen for indent-change');
+  });
+
+  it('listens for status-bar-indent-convert event', () => {
+    assert.ok(feSrc.includes('status-bar-indent-convert'), 'Should listen for indent-convert');
+  });
+
+  it('listens for status-bar-indent-detect event', () => {
+    assert.ok(feSrc.includes('status-bar-indent-detect'), 'Should listen for indent-detect');
+  });
+
+  it('has reconfigureIndent function', () => {
+    assert.ok(feSrc.includes('reconfigureIndent'), 'Should have reconfigureIndent function');
+  });
+
+  it('passes indentCompartments to buildEditorExtensions', () => {
+    assert.ok(feSrc.includes('indentCompartments,'), 'Should pass compartments to extensions');
+    assert.ok(feSrc.includes('indentType:'), 'Should pass indentType');
+    assert.ok(feSrc.includes('indentSize:'), 'Should pass indentSize');
+  });
+});

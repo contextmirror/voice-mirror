@@ -13,6 +13,7 @@
   import { lspDiagnosticsStore } from '../../lib/stores/lsp-diagnostics.svelte.js';
   import { devServerManager } from '../../lib/stores/dev-server-manager.svelte.js';
   import { toastStore } from '../../lib/stores/toast.svelte.js';
+  import { configStore, updateConfig } from '../../lib/stores/config.svelte.js';
 
   // -- Derived state --
   let hasProject = $derived(!!projectStore.activeProject?.path);
@@ -23,6 +24,42 @@
   /** @type {{ server: string, status: string, message: string } | null} */
   let lspInstall = $state(null);
   let installClearTimer = null;
+
+  // -- Indentation dropdown --
+  let indentDropdownOpen = $state(false);
+  let indentGuides = $derived(configStore.value?.editor?.indentGuides !== false);
+
+  function toggleIndentDropdown(e) {
+    e.stopPropagation();
+    indentDropdownOpen = !indentDropdownOpen;
+  }
+
+  function closeIndentDropdown() {
+    indentDropdownOpen = false;
+  }
+
+  function toggleIndentGuides() {
+    const next = !indentGuides;
+    updateConfig({ editor: { indentGuides: next } });
+  }
+
+  function setIndentSpaces(size) {
+    window.dispatchEvent(new CustomEvent('status-bar-indent-change', { detail: { type: 'spaces', size } }));
+  }
+
+  function setIndentTabs(size) {
+    window.dispatchEvent(new CustomEvent('status-bar-indent-change', { detail: { type: 'tabs', size } }));
+  }
+
+  function convertTo(type) {
+    window.dispatchEvent(new CustomEvent('status-bar-indent-convert', { detail: { to: type } }));
+    closeIndentDropdown();
+  }
+
+  function detectIndent() {
+    window.dispatchEvent(new CustomEvent('status-bar-indent-detect'));
+    closeIndentDropdown();
+  }
 
   // -- Notification panel --
   let notifPanelOpen = $state(false);
@@ -40,9 +77,8 @@
   }
 
   function handleDocumentClick() {
-    if (notifPanelOpen) {
-      closeNotifPanel();
-    }
+    if (notifPanelOpen) closeNotifPanel();
+    if (indentDropdownOpen) closeIndentDropdown();
   }
 
   /**
@@ -248,16 +284,60 @@
         <span>Ln {statusBarStore.cursor.line}, Col {statusBarStore.cursor.col}</span>
       </button>
 
-      <!-- R2: Indentation -->
-      <button class="sb-item" title="Indentation">
-        <span>
-          {#if statusBarStore.indent.type === 'tabs'}
-            Tabs: {statusBarStore.indent.size}
-          {:else}
-            Spaces: {statusBarStore.indent.size}
-          {/if}
-        </span>
-      </button>
+      <!-- R2: Indentation (clickable dropdown) -->
+      <div class="indent-anchor">
+        <button class="sb-item sb-clickable" title="Indentation"
+          onclick={toggleIndentDropdown}>
+          <span>
+            {#if statusBarStore.indent.type === 'tabs'}
+              Tabs: {statusBarStore.indent.size}
+            {:else}
+              Spaces: {statusBarStore.indent.size}
+            {/if}
+          </span>
+        </button>
+
+        {#if indentDropdownOpen}
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <div class="indent-dropdown" role="menu" onclick={(e) => e.stopPropagation()}>
+            <div class="indent-section-label">Indent Using Spaces</div>
+            <div class="indent-size-row">
+              {#each [2, 4, 8] as size}
+                <button class="indent-size-btn" role="menuitem"
+                  class:active={statusBarStore.indent.type === 'spaces' && statusBarStore.indent.size === size}
+                  onclick={() => setIndentSpaces(size)}>
+                  {size}
+                </button>
+              {/each}
+            </div>
+            <div class="indent-section-label">Indent Using Tabs</div>
+            <div class="indent-size-row">
+              {#each [2, 4, 8] as size}
+                <button class="indent-size-btn" role="menuitem"
+                  class:active={statusBarStore.indent.type === 'tabs' && statusBarStore.indent.size === size}
+                  onclick={() => setIndentTabs(size)}>
+                  {size}
+                </button>
+              {/each}
+            </div>
+            <div class="indent-divider"></div>
+            <button class="indent-item" role="menuitem" onclick={() => convertTo('spaces')}>
+              Convert Indentation to Spaces
+            </button>
+            <button class="indent-item" role="menuitem" onclick={() => convertTo('tabs')}>
+              Convert Indentation to Tabs
+            </button>
+            <button class="indent-item" role="menuitem" onclick={detectIndent}>
+              Detect Indentation from Content
+            </button>
+            <div class="indent-divider"></div>
+            <button class="indent-item" role="menuitem" onclick={toggleIndentGuides}>
+              <span class="indent-check">{indentGuides ? '✓' : ''}</span>
+              <span>Indent Guides</span>
+            </button>
+          </div>
+        {/if}
+      </div>
 
       <!-- R3: Encoding -->
       <button class="sb-item" title="Encoding">
@@ -484,6 +564,95 @@
 
   .lsp-failed-icon {
     color: var(--danger);
+  }
+
+  /* ========== R2: Indentation dropdown ========== */
+  .indent-anchor {
+    position: relative;
+    height: 100%;
+  }
+
+  .indent-dropdown {
+    position: absolute;
+    bottom: 100%;
+    right: 0;
+    margin-bottom: 4px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border, rgba(255,255,255,0.08));
+    border-radius: 6px;
+    padding: 4px 0;
+    min-width: 240px;
+    box-shadow: 0 -4px 16px rgba(0,0,0,0.4);
+    z-index: 10000;
+    animation: notif-in 0.12s ease-out;
+  }
+
+  .indent-section-label {
+    padding: 4px 10px 2px;
+    font-size: 11px;
+    color: var(--muted);
+    font-weight: 500;
+  }
+
+  .indent-size-row {
+    display: flex;
+    gap: 4px;
+    padding: 2px 10px 4px;
+  }
+
+  .indent-size-btn {
+    min-width: 32px;
+    padding: 3px 8px;
+    border: 1px solid var(--border, rgba(255,255,255,0.1));
+    border-radius: 4px;
+    background: none;
+    color: var(--text);
+    font-size: 12px;
+    font-family: var(--font-family);
+    cursor: pointer;
+    transition: background 100ms, border-color 100ms;
+  }
+
+  .indent-size-btn:hover {
+    background: rgba(255,255,255,0.06);
+  }
+
+  .indent-size-btn.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+  }
+
+  .indent-divider {
+    height: 1px;
+    margin: 4px 0;
+    background: var(--border, rgba(255,255,255,0.08));
+  }
+
+  .indent-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    padding: 5px 10px;
+    background: none;
+    border: none;
+    color: var(--text);
+    font-size: 12px;
+    font-family: var(--font-family);
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .indent-item:hover {
+    background: rgba(255,255,255,0.06);
+  }
+
+  .indent-check {
+    width: 14px;
+    text-align: center;
+    font-size: 11px;
+    color: var(--accent);
   }
 
   /* ========== R6: Bell ========== */

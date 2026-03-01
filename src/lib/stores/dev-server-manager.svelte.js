@@ -10,6 +10,7 @@ import { terminalSpawn, terminalInput, terminalKill, probePort, lensNavigate, ki
 import { terminalTabsStore } from './terminal-tabs.svelte.js';
 import { lensStore } from './lens.svelte.js';
 import { toastStore } from './toast.svelte.js';
+import { outputStore } from './output.svelte.js';
 
 // -- Constants --
 const POLL_INTERVAL = 500;
@@ -30,6 +31,7 @@ const CRASH_LOOP_WINDOW = 300000; // 5 minutes
  * @property {number|null} lastCrashTime
  * @property {number} lastActiveTime
  * @property {boolean} crashLoopDetected
+ * @property {string|null} outputChannel
  */
 
 function createDevServerManager() {
@@ -59,6 +61,7 @@ function createDevServerManager() {
         lastCrashTime: null,
         lastActiveTime: Date.now(),
         crashLoopDetected: false,
+        outputChannel: null,
       });
       // Trigger reactivity by reassigning
       servers = new Map(servers);
@@ -210,9 +213,23 @@ function createDevServerManager() {
     // Evict LRU if at capacity (after marking as starting so guard check works)
     await evictIfNeeded();
 
+    // Build output channel label
+    const folderName = projectPath.split(/[/\\]/).filter(Boolean).pop() || 'project';
+    const channelLabel = server.framework
+      ? `${folderName} (${server.framework} :${server.port})`
+      : `${folderName} (:${server.port})`;
+
+    // Register project output channel (before spawn so channel exists when output starts)
+    try {
+      await outputStore.registerProjectChannel(channelLabel, projectPath, server.framework, server.port);
+    } catch (err) {
+      console.warn('[dev-server-manager] Failed to register output channel:', err);
+    }
+    updateState(projectPath, { outputChannel: channelLabel });
+
     // Spawn PTY
     try {
-      const result = await terminalSpawn({ cwd: projectPath });
+      const result = await terminalSpawn({ cwd: projectPath, outputChannel: channelLabel });
       if (!result?.success || !result?.data?.id) {
         updateState(projectPath, { status: 'stopped' });
         toastStore.addToast({
@@ -311,6 +328,16 @@ function createDevServerManager() {
     }
 
     terminalTabsStore.markExited(shellId);
+
+    // Unregister project output channel
+    if (state.outputChannel) {
+      try {
+        await outputStore.unregisterProjectChannel(state.outputChannel);
+      } catch (err) {
+        console.warn('[dev-server-manager] Failed to unregister output channel:', err);
+      }
+    }
+    updateState(projectPath, { outputChannel: null });
 
     toastStore.addToast({
       message: `Stopped ${framework || 'dev server'}${port ? ` on :${port}` : ''}`,

@@ -13,12 +13,13 @@ describe('output.svelte.js store', () => {
     assert.ok(src.includes('export const outputStore'));
   });
 
-  it('defines all 5 channels', () => {
+  it('defines all 6 system channels', () => {
     assert.ok(src.includes("'app'"));
     assert.ok(src.includes("'cli'"));
     assert.ok(src.includes("'voice'"));
     assert.ok(src.includes("'mcp'"));
     assert.ok(src.includes("'browser'"));
+    assert.ok(src.includes("'frontend'"));
   });
 
   it('listens to output-log Tauri event', () => {

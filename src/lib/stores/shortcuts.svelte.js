@@ -215,6 +215,16 @@ export const IN_APP_SHORTCUTS = {
     label: 'Toggle bottom panel',
     category: 'in-app',
   },
+  'next-diff-file': {
+    keys: 'Alt+F5',
+    label: 'Go to next changed file',
+    category: 'in-app',
+  },
+  'prev-diff-file': {
+    keys: 'Shift+Alt+F5',
+    label: 'Go to previous changed file',
+    category: 'in-app',
+  },
 };
 
 // ============ Action Handlers ============
@@ -293,6 +303,12 @@ const actionHandlers = {
   },
   'toggle-bottom-panel': () => {
     layoutStore.toggleTerminal();
+  },
+  'next-diff-file': () => {
+    window.dispatchEvent(new CustomEvent('command:next-diff-file'));
+  },
+  'prev-diff-file': () => {
+    window.dispatchEvent(new CustomEvent('command:prev-diff-file'));
   },
 };
 
@@ -676,6 +692,20 @@ export function setupInAppShortcuts() {
     if (ctrl && event.shiftKey && event.key === 'T') {
       event.preventDefault();
       actionHandlers['reopen-closed-tab']?.();
+      return;
+    }
+
+    // Alt+F5 -> Next changed file (diff navigation)
+    if (event.altKey && !ctrl && !event.shiftKey && event.key === 'F5') {
+      event.preventDefault();
+      actionHandlers['next-diff-file']?.();
+      return;
+    }
+
+    // Shift+Alt+F5 -> Previous changed file (diff navigation)
+    if (event.altKey && !ctrl && event.shiftKey && event.key === 'F5') {
+      event.preventDefault();
+      actionHandlers['prev-diff-file']?.();
       return;
     }
 

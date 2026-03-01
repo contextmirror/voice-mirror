@@ -17,7 +17,7 @@
   import { renderMarkdown } from '../../lib/markdown.js';
   import { createEditorLsp, LSP_EXTENSIONS, uriToRelativePath, lspPositionToOffset, mapCompletionKind } from '../../lib/editor-lsp.svelte.js';
   import { lspDiagnosticsStore } from '../../lib/stores/lsp-diagnostics.svelte.js';
-  import { buildEditorExtensions } from '../../lib/editor-extensions.js';
+  import { buildEditorExtensions, createIndentCompartments, detectIndentation, convertIndentation } from '../../lib/editor-extensions.js';
   import { navigationHistoryStore } from '../../lib/stores/navigation-history.svelte.js';
   import { gitGutterPlugin } from '../../lib/editor-git-gutter.js';
   import { loadLanguageExtension } from '../../lib/codemirror-languages.js';
@@ -55,6 +55,10 @@
   // Signature help positioning
   let sigHelpCoords = $state({ x: 0, y: 0 });
   let sigHelpDebounce = null;
+
+  // Indentation state (compartments for dynamic reconfiguration)
+  const indentCompartments = createIndentCompartments();
+  let currentIndent = $state({ type: 'spaces', size: 2 });
 
   // LSP helper (extracted to editor-lsp.svelte.js)
   const lsp = createEditorLsp();
@@ -261,6 +265,17 @@
     }
     lsp.reset();
     clearTimeout(sigHelpDebounce);
+
+    // CRITICAL: Destroy old view BEFORE setting currentPath.
+    // Setting currentPath triggers the pending cursor $effect, which checks
+    // `pending.path === currentPath`. If the old view still exists at that
+    // point, the $effect fires applyPendingCursor on the WRONG editor,
+    // consumes the pending cursor, and the real new editor never gets it.
+    // By nulling view first, the $effect's `if (!view) return` guard works.
+    if (view) {
+      view.destroy();
+      view = null;
+    }
 
     currentPath = filePath;
     loading = true;
@@ -494,6 +509,10 @@
             return result?.data || result;
           } catch { return null; }
         },
+        showIndentGuides: configStore.value?.editor?.indentGuides !== false,
+        indentCompartments,
+        indentType: currentIndent.type,
+        indentSize: currentIndent.size,
       });
 
       if (langSupport && !Array.isArray(langSupport)) {
@@ -510,12 +529,6 @@
         doc: data.content,
         extensions,
       });
-
-      // Destroy old editor if it exists
-      if (view) {
-        view.destroy();
-        view = null;
-      }
 
       loading = false;
       await tick();
@@ -540,11 +553,18 @@
         const hasCarriageReturn = data.content?.includes('\r\n');
         statusBarStore.setEol(hasCarriageReturn ? 'CRLF' : 'LF');
 
+        // Detect and set indentation
+        const detected = detectIndentation(data.content || '');
+        currentIndent = detected;
+        statusBarStore.setIndent(detected.type, detected.size);
+
         // Set initial cursor position
         const initialPos = view.state.selection.main.head;
         const initialLine = view.state.doc.lineAt(initialPos);
         statusBarStore.setCursor(initialLine.number, initialPos - initialLine.from + 1);
 
+        // Apply pending cursor if Problems panel or similar set one before file loaded
+        applyPendingCursor();
       }
 
       // Open file in LSP (fire and forget)
@@ -584,51 +604,6 @@
             view.dispatch(cm.setDiagnostics(view.state, cmDiags));
           } catch {}
         }
-      }
-
-      // Apply pending cursor after file loads. We need to survive CM6 measure
-      // cycles triggered by diagnostic dispatch and git gutter async fetch.
-      // Strategy: apply cursor at multiple intervals so even if an intermediate
-      // layout reflow resets scroll, the last application wins.
-      if (tabsStore.pendingCursorPosition?.path === filePath && view) {
-        const savedPending = { ...tabsStore.pendingCursorPosition };
-        tabsStore.clearPendingCursor();
-        const applyScroll = () => {
-          if (!view) return;
-          try {
-            const lineNum = Math.min(Math.max(savedPending.line + 1, 1), view.state.doc.lines);
-            const line = view.state.doc.line(lineNum);
-            const anchor = line.from + Math.min(savedPending.character || 0, line.length);
-            const scrollEffect = cmCache?.EditorView?.scrollIntoView(anchor, { y: 'center' });
-            view.dispatch({
-              selection: { anchor },
-              ...(scrollEffect ? { effects: scrollEffect } : { scrollIntoView: true }),
-            });
-            // Highlight + focus only on the final application
-            return anchor;
-          } catch { return null; }
-        };
-        // Apply at escalating intervals to survive layout reflows from:
-        // - CM6 init measure cycles (~50ms)
-        // - Diagnostic lint gutter appearance (~100ms)
-        // - Git gutter async fetch completion (~200-400ms)
-        setTimeout(() => applyScroll(), 50);
-        setTimeout(() => applyScroll(), 200);
-        setTimeout(() => {
-          const anchor = applyScroll();
-          if (anchor != null) {
-            let highlightEnd = anchor;
-            if (savedPending.endLine != null) {
-              try {
-                const endLineNum = Math.min(Math.max(savedPending.endLine + 1, 1), view.state.doc.lines);
-                const endLine = view.state.doc.line(endLineNum);
-                highlightEnd = endLine.from + Math.min(savedPending.endCharacter || 0, endLine.length);
-              } catch {}
-            }
-            applyRangeHighlight(view, anchor, highlightEnd);
-            view.focus();
-          }
-        }, 500);
       }
     } catch (err) {
       if (filePath !== currentPath) return;
@@ -694,25 +669,43 @@
 
   /**
    * Apply a pending cursor position to the current editor view.
-   * Used by both the $effect (for already-open files) and loadFile (for newly opened files).
+   * Awaits document.fonts.ready so the scroll dispatch and CM6's height map
+   * rebuild (triggered by fonts.ready) happen in the same measure cycle.
+   * Without this, CM6 consumes scrollTarget in the first measure, then
+   * fonts.ready triggers a full height map rebuild that resets scroll.
    */
-  function applyPendingCursor() {
+  async function applyPendingCursor() {
     const pending = tabsStore.pendingCursorPosition;
     if (!pending || !view || pending.path !== currentPath) return;
+
+    // Save and clear immediately so no other code path re-triggers
+    const savedPending = { ...pending };
+    tabsStore.clearPendingCursor();
+
+    // Wait for fonts to load — CM6's constructor registers a document.fonts.ready
+    // callback that sets mustMeasureContent="refresh" and rebuilds the height map.
+    // If we scroll before this, the rebuild destroys our scroll position.
+    if (document.fonts?.ready) {
+      await document.fonts.ready;
+    }
+
+    // Re-check state is still valid after await
+    if (!view || savedPending.path !== currentPath) return;
+
     try {
-      const lineNum = Math.min(Math.max(pending.line + 1, 1), view.state.doc.lines);
+      const lineNum = Math.min(Math.max(savedPending.line + 1, 1), view.state.doc.lines);
       const line = view.state.doc.line(lineNum);
-      const anchor = line.from + Math.min(pending.character || 0, line.length);
+      const anchor = line.from + Math.min(savedPending.character || 0, line.length);
 
       // Compute end position for range highlight
       let highlightEnd = anchor;
-      if (pending.endLine != null) {
-        const endLineNum = Math.min(Math.max(pending.endLine + 1, 1), view.state.doc.lines);
+      if (savedPending.endLine != null) {
+        const endLineNum = Math.min(Math.max(savedPending.endLine + 1, 1), view.state.doc.lines);
         const endLine = view.state.doc.line(endLineNum);
-        highlightEnd = endLine.from + Math.min(pending.endCharacter || 0, endLine.length);
+        highlightEnd = endLine.from + Math.min(savedPending.endCharacter || 0, endLine.length);
       }
 
-      // Set cursor at start (not selection — the decoration handles the visual highlight)
+      // Set cursor and scroll
       const scrollEffect = cmCache?.EditorView?.scrollIntoView(anchor, { y: 'center' });
       view.dispatch({
         selection: { anchor },
@@ -725,18 +718,16 @@
     } catch (e) {
       // Ignore if line is out of range
     }
-    tabsStore.clearPendingCursor();
   }
 
   // Apply pending cursor position (from Problems panel click-to-navigate).
-  // This effect handles the case where the file is ALREADY OPEN and view already exists.
-  // For new files, loadFile() schedules applyPendingCursor via setTimeout after view creation.
+  // For already-open files: view exists, fonts already loaded, works immediately.
+  // For new files: called from loadFile() after view creation, awaits fonts.ready.
   $effect(() => {
     const pending = tabsStore.pendingCursorPosition;
     if (!pending || pending.path !== currentPath) return;
     if (!view) return;
-    // setTimeout(0) defers to next macrotask — enough for already-open files
-    setTimeout(() => applyPendingCursor(), 0);
+    applyPendingCursor();
   });
 
   // Listen for outline symbol navigation (from OutlinePanel via LensWorkspace)
@@ -772,6 +763,57 @@
       window.removeEventListener('lens-goto-position', handleGotoPosition);
       window.removeEventListener('command:save', handleCommandSave);
       window.removeEventListener('command:format', handleCommandFormat);
+    };
+  });
+
+  // Indent change events from StatusBar dropdown
+  async function reconfigureIndent(type, size) {
+    currentIndent = { type, size };
+    statusBarStore.setIndent(type, size);
+    if (!view) return;
+    const cm = await loadCM();
+    const { indentUnit: iu } = await import('@codemirror/language');
+    view.dispatch({
+      effects: [
+        indentCompartments.indentUnit.reconfigure(iu.of(type === 'tabs' ? '\t' : ' '.repeat(size))),
+        indentCompartments.tabSize.reconfigure(cm.EditorState.tabSize.of(size)),
+      ],
+    });
+  }
+
+  $effect(() => {
+    function handleIndentChange(e) {
+      const { type, size } = e.detail;
+      reconfigureIndent(type, size);
+    }
+
+    function handleIndentConvert(e) {
+      if (!view) return;
+      const { to } = e.detail;
+      const size = currentIndent.size || 2;
+      const doc = view.state.doc.toString();
+      const converted = convertIndentation(doc, to, size);
+      // Apply document changes (even if content looks similar, tabs ≠ spaces)
+      view.dispatch({
+        changes: { from: 0, to: doc.length, insert: converted },
+      });
+      // Switch indent type (and reconfigure editor so Tab key uses new mode)
+      reconfigureIndent(to, size);
+    }
+
+    function handleIndentDetect() {
+      if (!view) return;
+      const detected = detectIndentation(view.state.doc.toString());
+      reconfigureIndent(detected.type, detected.size);
+    }
+
+    window.addEventListener('status-bar-indent-change', handleIndentChange);
+    window.addEventListener('status-bar-indent-convert', handleIndentConvert);
+    window.addEventListener('status-bar-indent-detect', handleIndentDetect);
+    return () => {
+      window.removeEventListener('status-bar-indent-change', handleIndentChange);
+      window.removeEventListener('status-bar-indent-convert', handleIndentConvert);
+      window.removeEventListener('status-bar-indent-detect', handleIndentDetect);
     };
   });
 
