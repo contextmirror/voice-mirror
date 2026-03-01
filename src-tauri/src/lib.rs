@@ -241,6 +241,71 @@ pub fn run() {
                 ])
                 .unwrap()
         })
+        // Custom URI scheme for capturing browser console output from the lens
+        // child webview.  The injected `CONSOLE_HOOK_SCRIPT` patches
+        // console.log/warn/error/info/debug and fires `new Image().src` to this
+        // scheme with the level and URL-encoded message.  Rust parses the URL and
+        // emits a `lens-console-message` Tauri event for the frontend to route to
+        // the appropriate project output channel.
+        .register_uri_scheme_protocol("lens-console", |ctx, request| {
+            let uri = request.uri().to_string();
+            // URL format — Windows: https://lens-console.localhost/{level}?m={msg}&t=...
+            //               macOS/Linux: lens-console://localhost/{level}?m={msg}&t=...
+            let path = uri
+                .split("localhost")
+                .nth(1)
+                .unwrap_or("")
+                .trim_start_matches('/')
+                .trim_start_matches(':');
+
+            let level_part = path
+                .split('?')
+                .next()
+                .unwrap_or("")
+                .trim_matches('/');
+
+            let query = path.split('?').nth(1).unwrap_or("");
+            let encoded_msg = query
+                .split('&')
+                .find_map(|pair| pair.strip_prefix("m="))
+                .unwrap_or("");
+            let message = percent_encoding::percent_decode_str(encoded_msg)
+                .decode_utf8_lossy()
+                .to_string();
+
+            if !message.is_empty() {
+                let log_level = match level_part {
+                    "error" => "ERROR",
+                    "warn" => "WARN",
+                    "debug" => "DEBUG",
+                    "info" => "INFO",
+                    _ => "INFO", // "log" maps to INFO
+                };
+
+                let _ = ctx.app_handle().emit(
+                    "lens-console-message",
+                    serde_json::json!({
+                        "level": log_level,
+                        "message": message,
+                    }),
+                );
+            }
+
+            // Return 1×1 transparent GIF so the Image() load succeeds silently
+            tauri::http::Response::builder()
+                .status(200)
+                .header("content-type", "image/gif")
+                .header("access-control-allow-origin", "*")
+                .body(vec![
+                    0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x01, 0x00,
+                    0x01, 0x00, 0x80, 0x00, 0x00, 0xff, 0xff, 0xff,
+                    0x00, 0x00, 0x00, 0x21, 0xf9, 0x04, 0x00, 0x00,
+                    0x00, 0x00, 0x00, 0x2c, 0x00, 0x00, 0x00, 0x00,
+                    0x01, 0x00, 0x01, 0x00, 0x00, 0x02, 0x02, 0x44,
+                    0x01, 0x00, 0x3b,
+                ])
+                .unwrap()
+        })
         .manage(ai_cmds::AiManagerState(std::sync::Mutex::new(
             AiManager::new(),
         )))
