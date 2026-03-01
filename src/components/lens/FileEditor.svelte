@@ -17,7 +17,7 @@
   import { renderMarkdown } from '../../lib/markdown.js';
   import { createEditorLsp, LSP_EXTENSIONS, uriToRelativePath, lspPositionToOffset, mapCompletionKind } from '../../lib/editor-lsp.svelte.js';
   import { lspDiagnosticsStore } from '../../lib/stores/lsp-diagnostics.svelte.js';
-  import { buildEditorExtensions } from '../../lib/editor-extensions.js';
+  import { buildEditorExtensions, createIndentCompartments, detectIndentation, convertIndentation } from '../../lib/editor-extensions.js';
   import { navigationHistoryStore } from '../../lib/stores/navigation-history.svelte.js';
   import { gitGutterPlugin } from '../../lib/editor-git-gutter.js';
   import { loadLanguageExtension } from '../../lib/codemirror-languages.js';
@@ -55,6 +55,10 @@
   // Signature help positioning
   let sigHelpCoords = $state({ x: 0, y: 0 });
   let sigHelpDebounce = null;
+
+  // Indentation state (compartments for dynamic reconfiguration)
+  const indentCompartments = createIndentCompartments();
+  let currentIndent = $state({ type: 'spaces', size: 2 });
 
   // LSP helper (extracted to editor-lsp.svelte.js)
   const lsp = createEditorLsp();
@@ -506,6 +510,9 @@
           } catch { return null; }
         },
         showIndentGuides: configStore.value?.editor?.indentGuides !== false,
+        indentCompartments,
+        indentType: currentIndent.type,
+        indentSize: currentIndent.size,
       });
 
       if (langSupport && !Array.isArray(langSupport)) {
@@ -545,6 +552,11 @@
         // Detect EOL from content
         const hasCarriageReturn = data.content?.includes('\r\n');
         statusBarStore.setEol(hasCarriageReturn ? 'CRLF' : 'LF');
+
+        // Detect and set indentation
+        const detected = detectIndentation(data.content || '');
+        currentIndent = detected;
+        statusBarStore.setIndent(detected.type, detected.size);
 
         // Set initial cursor position
         const initialPos = view.state.selection.main.head;
@@ -751,6 +763,57 @@
       window.removeEventListener('lens-goto-position', handleGotoPosition);
       window.removeEventListener('command:save', handleCommandSave);
       window.removeEventListener('command:format', handleCommandFormat);
+    };
+  });
+
+  // Indent change events from StatusBar dropdown
+  async function reconfigureIndent(type, size) {
+    currentIndent = { type, size };
+    statusBarStore.setIndent(type, size);
+    if (!view) return;
+    const cm = await loadCM();
+    const { indentUnit: iu } = await import('@codemirror/language');
+    view.dispatch({
+      effects: [
+        indentCompartments.indentUnit.reconfigure(iu.of(type === 'tabs' ? '\t' : ' '.repeat(size))),
+        indentCompartments.tabSize.reconfigure(cm.EditorState.tabSize.of(size)),
+      ],
+    });
+  }
+
+  $effect(() => {
+    function handleIndentChange(e) {
+      const { type, size } = e.detail;
+      reconfigureIndent(type, size);
+    }
+
+    function handleIndentConvert(e) {
+      if (!view) return;
+      const { to } = e.detail;
+      const doc = view.state.doc.toString();
+      const converted = convertIndentation(doc, to, currentIndent.size);
+      if (converted !== doc) {
+        view.dispatch({
+          changes: { from: 0, to: doc.length, insert: converted },
+        });
+      }
+      // Also switch the indent type
+      reconfigureIndent(to, currentIndent.size);
+    }
+
+    function handleIndentDetect() {
+      if (!view) return;
+      const detected = detectIndentation(view.state.doc.toString());
+      reconfigureIndent(detected.type, detected.size);
+    }
+
+    window.addEventListener('status-bar-indent-change', handleIndentChange);
+    window.addEventListener('status-bar-indent-convert', handleIndentConvert);
+    window.addEventListener('status-bar-indent-detect', handleIndentDetect);
+    return () => {
+      window.removeEventListener('status-bar-indent-change', handleIndentChange);
+      window.removeEventListener('status-bar-indent-convert', handleIndentConvert);
+      window.removeEventListener('status-bar-indent-detect', handleIndentDetect);
     };
   });
 

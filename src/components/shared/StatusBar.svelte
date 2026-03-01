@@ -41,6 +41,25 @@
   function toggleIndentGuides() {
     const next = !indentGuides;
     updateConfig({ editor: { indentGuides: next } });
+  }
+
+  function setIndentSpaces(size) {
+    window.dispatchEvent(new CustomEvent('status-bar-indent-change', { detail: { type: 'spaces', size } }));
+    closeIndentDropdown();
+  }
+
+  function setIndentTabs(size) {
+    window.dispatchEvent(new CustomEvent('status-bar-indent-change', { detail: { type: 'tabs', size } }));
+    closeIndentDropdown();
+  }
+
+  function convertTo(type) {
+    window.dispatchEvent(new CustomEvent('status-bar-indent-convert', { detail: { to: type } }));
+    closeIndentDropdown();
+  }
+
+  function detectIndent() {
+    window.dispatchEvent(new CustomEvent('status-bar-indent-detect'));
     closeIndentDropdown();
   }
 
@@ -281,7 +300,39 @@
         </button>
 
         {#if indentDropdownOpen}
-          <div class="indent-dropdown" role="menu">
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <div class="indent-dropdown" role="menu" onclick={(e) => e.stopPropagation()}>
+            <div class="indent-section-label">Indent Using Spaces</div>
+            <div class="indent-size-row">
+              {#each [2, 4, 8] as size}
+                <button class="indent-size-btn" role="menuitem"
+                  class:active={statusBarStore.indent.type === 'spaces' && statusBarStore.indent.size === size}
+                  onclick={() => setIndentSpaces(size)}>
+                  {size}
+                </button>
+              {/each}
+            </div>
+            <div class="indent-section-label">Indent Using Tabs</div>
+            <div class="indent-size-row">
+              {#each [2, 4, 8] as size}
+                <button class="indent-size-btn" role="menuitem"
+                  class:active={statusBarStore.indent.type === 'tabs' && statusBarStore.indent.size === size}
+                  onclick={() => setIndentTabs(size)}>
+                  {size}
+                </button>
+              {/each}
+            </div>
+            <div class="indent-divider"></div>
+            <button class="indent-item" role="menuitem" onclick={() => convertTo('spaces')}>
+              Convert Indentation to Spaces
+            </button>
+            <button class="indent-item" role="menuitem" onclick={() => convertTo('tabs')}>
+              Convert Indentation to Tabs
+            </button>
+            <button class="indent-item" role="menuitem" onclick={detectIndent}>
+              Detect Indentation from Content
+            </button>
+            <div class="indent-divider"></div>
             <button class="indent-item" role="menuitem" onclick={toggleIndentGuides}>
               <span class="indent-check">{indentGuides ? '✓' : ''}</span>
               <span>Indent Guides</span>
@@ -532,9 +583,52 @@
     border: 1px solid var(--border, rgba(255,255,255,0.08));
     border-radius: 6px;
     padding: 4px 0;
-    min-width: 160px;
+    min-width: 240px;
     box-shadow: 0 -4px 16px rgba(0,0,0,0.4);
     z-index: 10000;
+    animation: notif-in 0.12s ease-out;
+  }
+
+  .indent-section-label {
+    padding: 4px 10px 2px;
+    font-size: 11px;
+    color: var(--muted);
+    font-weight: 500;
+  }
+
+  .indent-size-row {
+    display: flex;
+    gap: 4px;
+    padding: 2px 10px 4px;
+  }
+
+  .indent-size-btn {
+    min-width: 32px;
+    padding: 3px 8px;
+    border: 1px solid var(--border, rgba(255,255,255,0.1));
+    border-radius: 4px;
+    background: none;
+    color: var(--text);
+    font-size: 12px;
+    font-family: var(--font-family);
+    cursor: pointer;
+    transition: background 100ms, border-color 100ms;
+  }
+
+  .indent-size-btn:hover {
+    background: rgba(255,255,255,0.06);
+  }
+
+  .indent-size-btn.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+  }
+
+  .indent-divider {
+    height: 1px;
+    margin: 4px 0;
+    background: var(--border, rgba(255,255,255,0.08));
   }
 
   .indent-item {
@@ -547,6 +641,7 @@
     border: none;
     color: var(--text);
     font-size: 12px;
+    font-family: var(--font-family);
     cursor: pointer;
     text-align: left;
   }

@@ -5,10 +5,87 @@
  * are passed in via parameters so FileEditor.svelte retains control of state.
  */
 import { indentWithTab } from '@codemirror/commands';
+import { Compartment } from '@codemirror/state';
+import { indentUnit } from '@codemirror/language';
 import { showMinimap } from '@replit/codemirror-minimap';
 import { vscodeKeymap } from '@replit/codemirror-vscode-keymap';
 import { indentationMarkers } from '@replit/codemirror-indentation-markers';
 import { createGitGutter } from './editor-git-gutter.js';
+
+/**
+ * Compartments for dynamic indentation reconfiguration.
+ * Stored per-editor via createIndentCompartments().
+ */
+export function createIndentCompartments() {
+  return {
+    indentUnit: new Compartment(),
+    tabSize: new Compartment(),
+  };
+}
+
+/**
+ * Detect indentation style from document content.
+ * @param {string} text - Document text
+ * @returns {{ type: 'spaces' | 'tabs', size: number }}
+ */
+export function detectIndentation(text) {
+  let spaceCounts = { 2: 0, 4: 0, 8: 0 };
+  let tabLines = 0;
+  let spaceLines = 0;
+  const lines = text.split('\n');
+  const limit = Math.min(lines.length, 500);
+
+  for (let i = 0; i < limit; i++) {
+    const line = lines[i];
+    if (!line || !line.match(/^\s+\S/)) continue;
+    if (line[0] === '\t') {
+      tabLines++;
+    } else if (line[0] === ' ') {
+      spaceLines++;
+      // Count leading spaces
+      const match = line.match(/^( +)/);
+      if (match) {
+        const len = match[1].length;
+        if (len % 2 === 0 && len <= 8) spaceCounts[len <= 2 ? 2 : len <= 4 ? 4 : 8]++;
+      }
+    }
+  }
+
+  if (tabLines > spaceLines) return { type: 'tabs', size: 4 };
+
+  // Determine most common space indent
+  let bestSize = 2;
+  let bestCount = 0;
+  for (const [size, count] of Object.entries(spaceCounts)) {
+    if (count > bestCount) { bestCount = count; bestSize = Number(size); }
+  }
+  return { type: 'spaces', size: bestSize };
+}
+
+/**
+ * Convert all indentation in a document between tabs and spaces.
+ * @param {string} text - Document text
+ * @param {'spaces' | 'tabs'} to - Target indentation type
+ * @param {number} size - Indent size (spaces per tab)
+ * @returns {string} Converted text
+ */
+export function convertIndentation(text, to, size) {
+  return text.split('\n').map(line => {
+    const match = line.match(/^(\s+)/);
+    if (!match) return line;
+    const indent = match[1];
+    const rest = line.slice(indent.length);
+    if (to === 'spaces') {
+      // Convert tabs to spaces
+      const expanded = indent.replace(/\t/g, ' '.repeat(size));
+      return expanded + rest;
+    } else {
+      // Convert spaces to tabs
+      const collapsed = indent.replace(new RegExp(' '.repeat(size), 'g'), '\t');
+      return collapsed + rest;
+    }
+  }).join('\n');
+}
 
 /**
  * Creates a CodeMirror ViewPlugin that underlines the word under the cursor
@@ -240,6 +317,9 @@ function createCodeActionsGutter(cm, lsp, filePath) {
  * @param {function} [options.onNavigateBack] - Callback for Alt+Left navigation history back
  * @param {function} [options.onNavigateForward] - Callback for Alt+Right navigation history forward
  * @param {boolean} [options.showIndentGuides] - Whether to show indentation guide lines
+ * @param {object} [options.indentCompartments] - Compartments from createIndentCompartments()
+ * @param {string} [options.indentType] - 'spaces' or 'tabs'
+ * @param {number} [options.indentSize] - Indent size (2, 4, 8)
  * @returns {Array} CodeMirror extensions array
  */
 export function buildEditorExtensions(cm, lsp, options) {
@@ -260,6 +340,9 @@ export function buildEditorExtensions(cm, lsp, options) {
     onNavigateBack,
     onNavigateForward,
     showIndentGuides,
+    indentCompartments,
+    indentType,
+    indentSize,
   } = options;
 
   const extensions = [
@@ -267,6 +350,11 @@ export function buildEditorExtensions(cm, lsp, options) {
     cm.keymap.of(vscodeKeymap),
     ...voiceMirrorEditorTheme,
     ...(isReadOnly ? [cm.EditorState.readOnly.of(true)] : []),
+    // Dynamic indentation compartments
+    ...(indentCompartments ? [
+      indentCompartments.indentUnit.of(indentUnit.of(indentType === 'tabs' ? '\t' : ' '.repeat(indentSize || 2))),
+      indentCompartments.tabSize.of(cm.EditorState.tabSize.of(indentSize || 2)),
+    ] : []),
     cm.lintGutter(),
     cm.autocompletion(lsp.hasLsp ? {
       override: [lsp.completionSource(filePath)],

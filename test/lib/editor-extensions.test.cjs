@@ -61,6 +61,54 @@ describe('editor-extensions.js: indent guides', () => {
   });
 });
 
+describe('editor-extensions.js: dynamic indentation', () => {
+  it('imports Compartment from @codemirror/state', () => {
+    assert.ok(src.includes("Compartment"), 'Should use Compartment');
+    assert.ok(src.includes("from '@codemirror/state'"), 'Should import from @codemirror/state');
+  });
+
+  it('imports indentUnit from @codemirror/language', () => {
+    assert.ok(src.includes("indentUnit"), 'Should use indentUnit');
+    assert.ok(src.includes("from '@codemirror/language'"), 'Should import from @codemirror/language');
+  });
+
+  it('exports createIndentCompartments function', () => {
+    assert.ok(src.includes('export function createIndentCompartments'), 'Should export createIndentCompartments');
+  });
+
+  it('exports detectIndentation function', () => {
+    assert.ok(src.includes('export function detectIndentation'), 'Should export detectIndentation');
+  });
+
+  it('exports convertIndentation function', () => {
+    assert.ok(src.includes('export function convertIndentation'), 'Should export convertIndentation');
+  });
+
+  it('detectIndentation handles tabs vs spaces', () => {
+    assert.ok(src.includes('tabLines') && src.includes('spaceLines'), 'Should count tab vs space lines');
+  });
+
+  it('detectIndentation detects 2/4/8 space sizes', () => {
+    assert.ok(src.includes('spaceCounts'), 'Should track space indent sizes');
+  });
+
+  it('convertIndentation replaces tabs with spaces and vice versa', () => {
+    assert.ok(src.includes("to === 'spaces'"), 'Should handle spaces conversion');
+    assert.ok(src.includes("'\\t'"), 'Should handle tabs');
+  });
+
+  it('accepts indentCompartments option in buildEditorExtensions', () => {
+    assert.ok(src.includes('indentCompartments'), 'Should accept indentCompartments option');
+    assert.ok(src.includes('indentType'), 'Should accept indentType option');
+    assert.ok(src.includes('indentSize'), 'Should accept indentSize option');
+  });
+
+  it('configures compartments with indentUnit and tabSize', () => {
+    assert.ok(src.includes('indentCompartments.indentUnit.of'), 'Should configure indentUnit compartment');
+    assert.ok(src.includes('indentCompartments.tabSize.of'), 'Should configure tabSize compartment');
+  });
+});
+
 describe('editor-extensions.js: cm object dependencies', () => {
   it('destructures ViewPlugin from cm parameter', () => {
     assert.ok(src.includes('ViewPlugin') && src.includes('cm'), 'Should use ViewPlugin from cm');
