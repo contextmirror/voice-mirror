@@ -651,25 +651,44 @@
 
   /**
    * Apply a pending cursor position to the current editor view.
-   * Used by both the $effect (for already-open files) and loadFile (for newly opened files).
+   * Awaits document.fonts.ready so the scroll dispatch and CM6's height map
+   * rebuild (triggered by fonts.ready) happen in the same measure cycle.
+   * Without this, CM6 consumes scrollTarget in the first measure, then
+   * fonts.ready triggers a full height map rebuild that resets scroll.
    */
-  function applyPendingCursor() {
+  async function applyPendingCursor() {
     const pending = tabsStore.pendingCursorPosition;
     if (!pending || !view || pending.path !== currentPath) return;
+
+    // Save and clear immediately so no other code path re-triggers
+    const savedPending = { ...pending };
+    tabsStore.clearPendingCursor();
+
+    // Wait for fonts to load — CM6's constructor registers a document.fonts.ready
+    // callback that sets mustMeasureContent="refresh" and rebuilds the height map.
+    // If we scroll before this, the rebuild destroys our scroll position.
+    if (document.fonts?.ready) {
+      await document.fonts.ready;
+    }
+
+    // Re-check state is still valid after await
+    if (!view || savedPending.path !== currentPath) return;
+
     try {
-      const lineNum = Math.min(Math.max(pending.line + 1, 1), view.state.doc.lines);
+      const lineNum = Math.min(Math.max(savedPending.line + 1, 1), view.state.doc.lines);
       const line = view.state.doc.line(lineNum);
-      const anchor = line.from + Math.min(pending.character || 0, line.length);
+      const anchor = line.from + Math.min(savedPending.character || 0, line.length);
 
       // Compute end position for range highlight
       let highlightEnd = anchor;
-      if (pending.endLine != null) {
-        const endLineNum = Math.min(Math.max(pending.endLine + 1, 1), view.state.doc.lines);
+      if (savedPending.endLine != null) {
+        const endLineNum = Math.min(Math.max(savedPending.endLine + 1, 1), view.state.doc.lines);
         const endLine = view.state.doc.line(endLineNum);
-        highlightEnd = endLine.from + Math.min(pending.endCharacter || 0, endLine.length);
+        highlightEnd = endLine.from + Math.min(savedPending.endCharacter || 0, endLine.length);
       }
 
-      // Set cursor at start (not selection — the decoration handles the visual highlight)
+      // Set cursor and scroll — this dispatch will be processed in the same
+      // measure cycle as any pending height map rebuild from fonts.ready
       const scrollEffect = cmCache?.EditorView?.scrollIntoView(anchor, { y: 'center' });
       view.dispatch({
         selection: { anchor },
@@ -682,18 +701,16 @@
     } catch (e) {
       // Ignore if line is out of range
     }
-    tabsStore.clearPendingCursor();
   }
 
   // Apply pending cursor position (from Problems panel click-to-navigate).
-  // Note: `view` is not $state so the effect won't re-run when view is created.
-  // For new files, applyPendingCursor() is called directly after view creation in loadFile().
-  // This effect handles the case where the file is already open and view already exists.
+  // For already-open files: view exists, fonts already loaded, works immediately.
+  // For new files: called from loadFile() after view creation, awaits fonts.ready.
   $effect(() => {
     const pending = tabsStore.pendingCursorPosition;
     if (!pending || pending.path !== currentPath) return;
-    // Defer one frame to let any tab-switch rendering settle
-    requestAnimationFrame(() => applyPendingCursor());
+    if (!view) return;
+    applyPendingCursor();
   });
 
   // Listen for outline symbol navigation (from OutlinePanel via LensWorkspace)
