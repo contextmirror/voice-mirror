@@ -506,48 +506,9 @@
       initRangeHighlight(cm);
       if (rangeHighlightField) extensions.push(rangeHighlightField);
 
-      // Check for pending cursor BEFORE creating state — bake it into the initial
-      // EditorState + EditorView so CM6's own initialization scrolls to the right spot.
-      // This avoids the race where external scroll dispatches get overwritten by CM's
-      // internal measure cycles during initialization.
-      const pending = tabsStore.pendingCursorPosition;
-      const hasPending = pending && pending.path === filePath;
-      let initialSelection;
-      let scrollTo;
-      let pendingHighlight = null;
-
-      if (hasPending) {
-        try {
-          // Compute offset from raw string — no CM APIs needed before state creation
-          const lines = data.content.split('\n');
-          const lineIdx = Math.min(Math.max(pending.line, 0), lines.length - 1);
-          let anchor = 0;
-          for (let i = 0; i < lineIdx; i++) anchor += lines[i].length + 1;
-          anchor += Math.min(pending.character || 0, lines[lineIdx].length);
-
-          initialSelection = cm.EditorSelection.cursor(anchor);
-          scrollTo = cm.EditorView.scrollIntoView(anchor, { y: 'center' });
-
-          // Compute highlight end position
-          let highlightEnd = anchor;
-          if (pending.endLine != null) {
-            const endIdx = Math.min(Math.max(pending.endLine, 0), lines.length - 1);
-            let endPos = 0;
-            for (let i = 0; i < endIdx; i++) endPos += lines[i].length + 1;
-            endPos += Math.min(pending.endCharacter || 0, lines[endIdx].length);
-            highlightEnd = endPos;
-          }
-          pendingHighlight = { from: anchor, to: highlightEnd };
-        } catch {
-          // Fall back to default position
-        }
-        tabsStore.clearPendingCursor();
-      }
-
       const state = cm.EditorState.create({
         doc: data.content,
         extensions,
-        ...(initialSelection ? { selection: initialSelection } : {}),
       });
 
       // Destroy old editor if it exists
@@ -560,11 +521,7 @@
       await tick();
 
       if (editorEl) {
-        view = new cm.EditorView({
-          state,
-          parent: editorEl,
-          ...(scrollTo ? { scrollTo } : {}),
-        });
+        view = new cm.EditorView({ state, parent: editorEl });
         // Attach current path for LSP handler access
         view._lspPath = filePath;
 
@@ -588,10 +545,11 @@
         const initialLine = view.state.doc.lineAt(initialPos);
         statusBarStore.setCursor(initialLine.number, initialPos - initialLine.from + 1);
 
-        // Apply range highlight decoration if we had a pending cursor
-        if (pendingHighlight) {
-          applyRangeHighlight(view, pendingHighlight.from, pendingHighlight.to);
-          view.focus();
+        // Apply pending cursor after CM6 finishes its internal init measure cycles.
+        // setTimeout fires in a new macrotask, after any rAF-based init is complete.
+        // applyPendingCursor uses view.state.doc (correct offsets, handles \r\n).
+        if (tabsStore.pendingCursorPosition?.path === filePath) {
+          setTimeout(() => applyPendingCursor(), 50);
         }
       }
 
@@ -733,14 +691,13 @@
 
   // Apply pending cursor position (from Problems panel click-to-navigate).
   // This effect handles the case where the file is ALREADY OPEN and view already exists.
-  // For new files, applyPendingCursor() is called from loadFile() after view creation.
+  // For new files, loadFile() schedules applyPendingCursor via setTimeout after view creation.
   $effect(() => {
     const pending = tabsStore.pendingCursorPosition;
     if (!pending || pending.path !== currentPath) return;
-    // Only apply if view exists (file already open). If view is null, loadFile will handle it.
     if (!view) return;
-    // Double-rAF ensures layout has completed so scrollIntoView works
-    requestAnimationFrame(() => requestAnimationFrame(() => applyPendingCursor()));
+    // setTimeout(0) defers to next macrotask — enough for already-open files
+    setTimeout(() => applyPendingCursor(), 0);
   });
 
   // Listen for outline symbol navigation (from OutlinePanel via LensWorkspace)
