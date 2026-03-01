@@ -448,10 +448,12 @@ export function buildEditorExtensions(cm, lsp, options) {
     extensions.push(createDefinitionHintPlugin(cm));
   }
 
-  // Lightbulb gutter — shows 💡 when code actions are available on the current line
-  if (lsp.hasLsp) {
-    extensions.push(...createCodeActionsGutter(cm, lsp, filePath));
-  }
+  // Lightbulb gutter disabled — TS LSP returns refactoring actions for nearly every
+  // line, making the gutter extremely noisy. Ctrl+. (Mod-.) already triggers code
+  // actions inline which is the better UX. Re-enable once we filter to quickfix-only.
+  // if (lsp.hasLsp) {
+  //   extensions.push(...createCodeActionsGutter(cm, lsp, filePath));
+  // }
 
   // Context menu + optional Ctrl+Click go-to-definition
   const domHandlers = {
