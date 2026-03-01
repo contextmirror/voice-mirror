@@ -8,6 +8,7 @@
   import { MANUFACTURERS, getPresetsByManufacturer, getPopularPresets } from '../../lib/device-presets.js';
   import { devicePreviewStore } from '../../lib/stores/device-preview.svelte.js';
 
+  /** @type {{ onClose?: (e: MouseEvent) => void, anchorRect?: DOMRect|null }} */
   let { onClose = () => {}, anchorRect = null } = $props();
 
   let search = $state('');

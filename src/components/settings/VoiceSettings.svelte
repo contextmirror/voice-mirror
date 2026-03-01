@@ -476,7 +476,7 @@
             </div>
             <Button
               variant="danger"
-              size="small"
+              small
               onClick={() => handleDeleteModel(model.modelSize)}
               disabled={deleting === model.modelSize}
             >

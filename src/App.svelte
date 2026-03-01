@@ -483,7 +483,7 @@
           </div>
         {:else if activeView === 'terminal'}
           <div class="view-panel">
-            <Terminal />
+            <Terminal shellId="" onRegisterActions={() => {}} />
           </div>
         {:else if activeView === 'lens'}
           <div class="view-panel">

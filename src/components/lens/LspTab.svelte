@@ -39,7 +39,13 @@
    * @returns {string}
    */
   function displayName(server) {
-    return server.serverName || server.binary || server.languageId;
+    let name = server.serverName || server.binary || server.languageId;
+    // Strip version suffix if present (e.g. "rust-analyzer 1.93.1 (01f6ddf7 ...)" → "rust-analyzer")
+    // since version is shown in a separate column
+    if (server.version && name.includes(server.version)) {
+      name = name.substring(0, name.indexOf(server.version)).trim();
+    }
+    return name || server.binary || server.languageId;
   }
 
   /**
@@ -217,11 +223,6 @@
             <span class="lsp-server-name">{displayName(server)}</span>
             <span class="lsp-server-lang">{server.languageId}</span>
           </div>
-          {#if server.version}
-            <span class="lsp-server-version">{server.version}</span>
-          {:else}
-            <span class="lsp-server-version">&mdash;</span>
-          {/if}
           <span class="lsp-server-files">
             {server.openDocsCount} file{server.openDocsCount !== 1 ? 's' : ''}
           </span>
@@ -259,6 +260,12 @@
               <span class="detail-label">Binary</span>
               <span class="detail-value">{server.binary}</span>
             </div>
+            {#if server.version}
+              <div class="detail-row">
+                <span class="detail-label">Version</span>
+                <span class="detail-value">{server.version}</span>
+              </div>
+            {/if}
             <div class="detail-row">
               <span class="detail-label">State</span>
               <span class="detail-value">{server.state}</span>
@@ -414,13 +421,6 @@
   .lsp-server-lang {
     font-size: 10px;
     color: var(--muted);
-  }
-
-  .lsp-server-version {
-    font-size: 11px;
-    color: var(--muted);
-    white-space: nowrap;
-    flex-shrink: 0;
   }
 
   .lsp-server-files {

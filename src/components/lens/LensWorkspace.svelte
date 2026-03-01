@@ -184,7 +184,7 @@
     // Focus the chat input so the user can immediately type their instruction
     requestAnimationFrame(() => {
       const textarea = document.querySelector('.chat-input-bar textarea');
-      if (textarea) textarea.focus();
+      if (textarea) /** @type {HTMLElement} */(textarea).focus();
     });
   }
 

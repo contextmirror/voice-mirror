@@ -241,7 +241,7 @@ export async function listModels(providerType, baseUrl) {
  * @param {string} [threadId] - Thread ID (defaults to "voice-mirror")
  * @param {string} [imagePath] - Optional screenshot file path for multimodal messages
  */
-export async function writeUserMessage(message, from, threadId, imagePath, imageDataUrl) {
+export async function writeUserMessage(message, from = null, threadId = null, imagePath = null, imageDataUrl = null) {
   return invoke('write_user_message', { message, from, threadId, imagePath: imagePath || null, imageDataUrl: imageDataUrl || null });
 }
 

@@ -49,7 +49,7 @@ function createToastStore() {
 
   /**
    * Add a toast notification.
-   * @param {{ message: string, severity?: string, duration?: number, action?: { label: string, callback: () => void }|null, actions?: Array<{ label: string, callback: () => void }>|null, key?: string|null }} options
+   * @param {{ message: string, severity?: string, duration?: number, action?: { label: string, callback: () => void }|null, actions?: Array<{ label: string, callback: () => void }>|null, key?: string|null, progress?: number|null }} options
    * @returns {string} The toast ID
    */
   function addToast({

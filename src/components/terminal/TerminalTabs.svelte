@@ -189,8 +189,8 @@
 
   // Close context menu on outside click
   $effect(() => {
-    if (!contextMenu.visible && !outputContextMenu.visible) return;
-    function handleClick() { closeContextMenu(); closeOutputContextMenu(); }
+    if (!contextMenu.visible && !outputContextMenu.visible && !problemsContextMenu.visible) return;
+    function handleClick() { closeContextMenu(); closeOutputContextMenu(); closeProblemsContextMenu(); }
     // Delay so the right-click itself doesn't close it
     const timer = setTimeout(() => {
       window.addEventListener('click', handleClick);
@@ -242,6 +242,93 @@
   function outputContextToggleScrollLock() {
     outputStore.setAutoScroll(!outputStore.autoScroll);
     closeOutputContextMenu();
+  }
+
+  // ---- Problems tab context menu ----
+
+  let problemsContextMenu = $state({ visible: false, x: 0, y: 0 });
+
+  function showProblemsContextMenu(e) {
+    e.preventDefault();
+    const estimatedHeight = 100;
+    const maxY = window.innerHeight - estimatedHeight;
+    const y = Math.min(e.clientY, Math.max(0, maxY));
+    problemsContextMenu = { visible: true, x: e.clientX, y };
+  }
+
+  function closeProblemsContextMenu() {
+    problemsContextMenu = { ...problemsContextMenu, visible: false };
+  }
+
+  function formatSeverity(sev) {
+    if (sev === 1 || sev === 'error') return 'Error';
+    if (sev === 2 || sev === 'warning') return 'Warning';
+    if (sev === 3 || sev === 'information') return 'Info';
+    return 'Hint';
+  }
+
+  function problemsCopyAll() {
+    const lines = [];
+    for (const [filePath, diags] of lspDiagnosticsStore.rawDiagnostics) {
+      if (!diags || diags.length === 0) continue;
+      lines.push(filePath);
+      for (const d of diags) {
+        const sev = formatSeverity(d.severity);
+        const line = d.range?.start?.line != null ? d.range.start.line + 1 : '?';
+        const col = d.range?.start?.character != null ? d.range.start.character + 1 : '?';
+        const source = d.source ? ` [${d.source}]` : '';
+        const msg = (d.message || '').replace(/\r?\n/g, ' ');
+        lines.push(`  ${sev} (${line}:${col}): ${msg}${source}`);
+      }
+      lines.push('');
+    }
+    navigator.clipboard.writeText(lines.join('\n')).catch(() => {});
+    closeProblemsContextMenu();
+  }
+
+  async function problemsSaveToFile() {
+    const root = projectStore.activeProject?.path;
+    if (!root) {
+      toastStore.addToast({ message: 'No project open', severity: 'error' });
+      closeProblemsContextMenu();
+      return;
+    }
+    const lines = [];
+    const totals = lspDiagnosticsStore.getTotals();
+    lines.push(`# Problems Report`);
+    lines.push(`# Generated: ${new Date().toISOString()}`);
+    lines.push(`# Total: ${totals.errors} errors, ${totals.warnings} warnings, ${totals.infos} info`);
+    lines.push('');
+    for (const [filePath, diags] of lspDiagnosticsStore.rawDiagnostics) {
+      if (!diags || diags.length === 0) continue;
+      lines.push(`## ${filePath}`);
+      for (const d of diags) {
+        const sev = formatSeverity(d.severity);
+        const line = d.range?.start?.line != null ? d.range.start.line + 1 : '?';
+        const col = d.range?.start?.character != null ? d.range.start.character + 1 : '?';
+        const source = d.source ? ` [${d.source}]` : '';
+        const code = d.code ? ` (${d.code})` : '';
+        const msg = (d.message || '').replace(/\r?\n/g, ' ');
+        lines.push(`  ${sev} Ln ${line}, Col ${col}: ${msg}${source}${code}`);
+      }
+      lines.push('');
+    }
+    const { writeFile } = await import('../../lib/api.js');
+    try {
+      await writeFile('.problems.txt', lines.join('\n'), root);
+      toastStore.addToast({
+        message: 'Saved problems to .problems.txt',
+        severity: 'success',
+        duration: 3000,
+      });
+    } catch (err) {
+      console.error('[TerminalTabs] Failed to save problems file:', err);
+      toastStore.addToast({
+        message: `Failed to save: ${err?.message || err}`,
+        severity: 'error',
+      });
+    }
+    closeProblemsContextMenu();
   }
 
   // ---- Keyboard: Ctrl+Tab / Ctrl+Shift+Tab to cycle panels ----
@@ -357,6 +444,7 @@
       tabindex="0"
       aria-selected={bottomPanelMode === 'problems'}
       onclick={() => bottomPanelMode = 'problems'}
+      oncontextmenu={showProblemsContextMenu}
       onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') bottomPanelMode = 'problems'; }}
       title="Problems (Ctrl+Shift+M)"
     >
@@ -386,7 +474,7 @@
             type="text"
             placeholder="Filter (e.g. text, !exclude)"
             value={outputStore.filterText}
-            oninput={(e) => outputStore.setFilterText(e.target.value)}
+            oninput={(e) => outputStore.setFilterText(/** @type {HTMLInputElement} */(e.target).value)}
           />
           <!-- Funnel icon (decorative, inside input) -->
           <svg class="output-filter-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
@@ -542,7 +630,7 @@
             type="text"
             placeholder="Filter (e.g. text, !exclude)"
             value={problemsFilterText}
-            oninput={(e) => problemsFilterText = e.target.value}
+            oninput={(e) => problemsFilterText = /** @type {HTMLInputElement} */(e.target).value}
           />
           <svg class="output-filter-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
             <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
@@ -688,6 +776,27 @@
             <polyline points="20 6 9 17 4 12"/>
           </svg>
         {/if}
+      </button>
+    </div>
+  {/if}
+
+  <!-- Problems tab context menu -->
+  {#if problemsContextMenu.visible}
+    <div
+      class="context-menu"
+      style="left: {problemsContextMenu.x}px; top: {problemsContextMenu.y}px;"
+    >
+      <button class="context-menu-item" onclick={problemsCopyAll}>
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+        </svg>
+        Copy All
+      </button>
+      <button class="context-menu-item" onclick={problemsSaveToFile}>
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
+        </svg>
+        Save to .problems.txt
       </button>
     </div>
   {/if}

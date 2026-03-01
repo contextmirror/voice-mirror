@@ -163,7 +163,7 @@ import { SvelteMap } from 'svelte/reactivity';
 
 function createEditorGroupsStore() {
   let gridRoot = $state({ type: 'leaf', groupId: 1 });
-  let groups = new SvelteMap([[1, { activeTabId: null }]]);
+  let groups = new SvelteMap([[1, { activeTabId: null, locked: false }]]);
   let focusedGroupId = $state(1);
   let nextGroupId = $state(2);
   let maximizedGroupId = $state(null);
@@ -205,7 +205,7 @@ function createEditorGroupsStore() {
         gridRoot = newRoot;
       }
 
-      groups.set(newId, { activeTabId: null });
+      groups.set(newId, { activeTabId: null, locked: false });
 
       // Clear maximize so the new split is visible
       maximizedGroupId = null;
@@ -248,7 +248,7 @@ function createEditorGroupsStore() {
         children,
       };
 
-      groups.set(newId, { activeTabId: null });
+      groups.set(newId, { activeTabId: null, locked: false });
       maximizedGroupId = null;
 
       return newId;
@@ -339,7 +339,7 @@ function createEditorGroupsStore() {
      */
     reset() {
       gridRoot = { type: 'leaf', groupId: 1 };
-      groups = new SvelteMap([[1, { activeTabId: null }]]);
+      groups = new SvelteMap([[1, { activeTabId: null, locked: false }]]);
       focusedGroupId = 1;
       nextGroupId = 2;
       maximizedGroupId = null;

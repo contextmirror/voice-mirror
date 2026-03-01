@@ -544,7 +544,7 @@ describe('FileEditor.svelte: markdown preview config', () => {
 
   it('resets showPreview to config default on file load', () => {
     const loadStart = src.indexOf('async function loadFile');
-    const chunk = src.slice(loadStart, loadStart + 1000);
+    const chunk = src.slice(loadStart, loadStart + 1200);
     assert.ok(
       chunk.includes('showPreview = markdownPreviewDefault'),
       'Should reset showPreview to config default when loading a new file'
