@@ -506,9 +506,43 @@
       initRangeHighlight(cm);
       if (rangeHighlightField) extensions.push(rangeHighlightField);
 
+      // Check for pending cursor BEFORE creating state — bake it into the initial
+      // EditorState + EditorView so CM6's own initialization scrolls to the right spot.
+      // This avoids the race where external scroll dispatches get overwritten by CM's
+      // internal measure cycles during initialization.
+      const pending = tabsStore.pendingCursorPosition;
+      const hasPending = pending && pending.path === filePath;
+      let initialSelection;
+      let scrollTo;
+      let pendingHighlight = null;
+
+      if (hasPending) {
+        try {
+          const doc = cm.Text.of(data.content.split(/\r?\n/));
+          const lineNum = Math.min(Math.max(pending.line + 1, 1), doc.lines);
+          const line = doc.line(lineNum);
+          const anchor = line.from + Math.min(pending.character || 0, line.length);
+          initialSelection = cm.EditorSelection.cursor(anchor);
+          scrollTo = cm.EditorView.scrollIntoView(anchor, { y: 'center' });
+
+          // Compute highlight range for after view creation
+          let highlightEnd = anchor;
+          if (pending.endLine != null) {
+            const endLineNum = Math.min(Math.max(pending.endLine + 1, 1), doc.lines);
+            const endLine = doc.line(endLineNum);
+            highlightEnd = endLine.from + Math.min(pending.endCharacter || 0, endLine.length);
+          }
+          pendingHighlight = { from: anchor, to: highlightEnd };
+        } catch {
+          // Fall back to default position
+        }
+        tabsStore.clearPendingCursor();
+      }
+
       const state = cm.EditorState.create({
         doc: data.content,
         extensions,
+        ...(initialSelection ? { selection: initialSelection } : {}),
       });
 
       // Destroy old editor if it exists
@@ -521,7 +555,11 @@
       await tick();
 
       if (editorEl) {
-        view = new cm.EditorView({ state, parent: editorEl });
+        view = new cm.EditorView({
+          state,
+          parent: editorEl,
+          ...(scrollTo ? { scrollTo } : {}),
+        });
         // Attach current path for LSP handler access
         view._lspPath = filePath;
 
@@ -545,10 +583,11 @@
         const initialLine = view.state.doc.lineAt(initialPos);
         statusBarStore.setCursor(initialLine.number, initialPos - initialLine.from + 1);
 
-        // Apply pending cursor if Problems panel or similar set one before file loaded.
-        // Double-rAF ensures the browser has completed at least one layout pass
-        // so scrollIntoView has valid dimensions to work with.
-        requestAnimationFrame(() => requestAnimationFrame(() => applyPendingCursor()));
+        // Apply range highlight decoration if we had a pending cursor
+        if (pendingHighlight) {
+          applyRangeHighlight(view, pendingHighlight.from, pendingHighlight.to);
+          view.focus();
+        }
       }
 
       // Open file in LSP (fire and forget)
