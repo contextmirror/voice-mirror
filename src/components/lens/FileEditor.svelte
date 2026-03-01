@@ -545,8 +545,10 @@
         const initialLine = view.state.doc.lineAt(initialPos);
         statusBarStore.setCursor(initialLine.number, initialPos - initialLine.from + 1);
 
-        // Apply pending cursor if Problems panel or similar set one before file loaded
-        applyPendingCursor();
+        // Apply pending cursor if Problems panel or similar set one before file loaded.
+        // Double-rAF ensures the browser has completed at least one layout pass
+        // so scrollIntoView has valid dimensions to work with.
+        requestAnimationFrame(() => requestAnimationFrame(() => applyPendingCursor()));
       }
 
       // Open file in LSP (fire and forget)
@@ -686,14 +688,15 @@
   }
 
   // Apply pending cursor position (from Problems panel click-to-navigate).
-  // Note: `view` is not $state so the effect won't re-run when view is created.
-  // For new files, applyPendingCursor() is called directly after view creation in loadFile().
-  // This effect handles the case where the file is already open and view already exists.
+  // This effect handles the case where the file is ALREADY OPEN and view already exists.
+  // For new files, applyPendingCursor() is called from loadFile() after view creation.
   $effect(() => {
     const pending = tabsStore.pendingCursorPosition;
     if (!pending || pending.path !== currentPath) return;
-    // Defer one frame to let any tab-switch rendering settle
-    requestAnimationFrame(() => applyPendingCursor());
+    // Only apply if view exists (file already open). If view is null, loadFile will handle it.
+    if (!view) return;
+    // Double-rAF ensures layout has completed so scrollIntoView works
+    requestAnimationFrame(() => requestAnimationFrame(() => applyPendingCursor()));
   });
 
   // Listen for outline symbol navigation (from OutlinePanel via LensWorkspace)
