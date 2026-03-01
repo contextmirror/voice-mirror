@@ -96,6 +96,30 @@ describe('commands.svelte.js', () => {
       assert.ok(commandsSrc.includes(cat), `Should have category '${cat}'`);
     }
   });
+
+  it('has git.nextChangedFile command', () => {
+    assert.ok(commandsSrc.includes('git.nextChangedFile'), 'Should register git.nextChangedFile command');
+  });
+
+  it('has git.prevChangedFile command', () => {
+    assert.ok(commandsSrc.includes('git.prevChangedFile'), 'Should register git.prevChangedFile command');
+  });
+
+  it('git.nextChangedFile has Alt+F5 keybinding', () => {
+    assert.ok(commandsSrc.includes("'Alt+F5'"), 'git.nextChangedFile should have Alt+F5 keybinding');
+  });
+
+  it('git.prevChangedFile has Shift+Alt+F5 keybinding', () => {
+    assert.ok(commandsSrc.includes("'Shift+Alt+F5'"), 'git.prevChangedFile should have Shift+Alt+F5 keybinding');
+  });
+
+  it('git.nextChangedFile dispatches command:next-diff-file event', () => {
+    assert.ok(commandsSrc.includes("'command:next-diff-file'"), 'git.nextChangedFile should dispatch command:next-diff-file');
+  });
+
+  it('git.prevChangedFile dispatches command:prev-diff-file event', () => {
+    assert.ok(commandsSrc.includes("'command:prev-diff-file'"), 'git.prevChangedFile should dispatch command:prev-diff-file');
+  });
 });
 
 // ── CommandPalette.svelte ───────────────────────────────────────────────────

@@ -388,6 +388,11 @@ pub fn run() {
             files_cmds::git_force_push,
             files_cmds::git_list_branches,
             files_cmds::git_checkout_branch,
+            files_cmds::git_stash_save,
+            files_cmds::git_stash_list,
+            files_cmds::git_stash_pop,
+            files_cmds::git_stash_apply,
+            files_cmds::git_stash_drop,
             // Terminal sessions
             terminal_cmds::terminal_spawn,
             terminal_cmds::terminal_input,

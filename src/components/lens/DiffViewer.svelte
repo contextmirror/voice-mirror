@@ -1,6 +1,6 @@
 <script>
   import { onDestroy, tick } from 'svelte';
-  import { readFile, getFileGitContent, revealInExplorer } from '../../lib/api.js';
+  import { readFile, getFileGitContent, getGitChanges, revealInExplorer } from '../../lib/api.js';
   import { projectStore } from '../../lib/stores/project.svelte.js';
   import { tabsStore } from '../../lib/stores/tabs.svelte.js';
   import { voiceMirrorEditorTheme } from '../../lib/editor-theme.js';
@@ -38,6 +38,43 @@
   // Context menu state
   let contextMenu = $state({ visible: false, x: 0, y: 0 });
   let menuEl = $state(null);
+
+  // Changed files list for prev/next file navigation
+  let changedFiles = $state([]);
+
+  // Load changed files when tab is a diff tab
+  async function loadChangedFiles() {
+    const root = projectStore.activeProject?.path || null;
+    if (!root) { changedFiles = []; return; }
+    try {
+      const resp = await getGitChanges(root);
+      if (resp && resp.data) {
+        const changes = Array.isArray(resp.data.changes) ? resp.data.changes : [];
+        changedFiles = changes.map(c => ({ path: c.path, status: c.status || 'modified' }));
+      }
+    } catch {
+      changedFiles = [];
+    }
+  }
+
+  // Current file's index in the changed files list
+  let currentFileIndex = $derived(
+    tab?.path ? changedFiles.findIndex(c => c.path === tab.path) : -1
+  );
+  let hasPrevFile = $derived(currentFileIndex > 0);
+  let hasNextFile = $derived(currentFileIndex >= 0 && currentFileIndex < changedFiles.length - 1);
+
+  function navigateToPrevFile() {
+    if (!hasPrevFile) return;
+    const prev = changedFiles[currentFileIndex - 1];
+    tabsStore.openDiff(prev);
+  }
+
+  function navigateToNextFile() {
+    if (!hasNextFile) return;
+    const next = changedFiles[currentFileIndex + 1];
+    tabsStore.openDiff(next);
+  }
 
   let menuStyle = $derived.by(() => {
     const maxX = typeof window !== 'undefined' ? window.innerWidth - 220 : contextMenu.x;
@@ -408,6 +445,7 @@
     error = null;
     isBinary = false;
     destroyView();
+    loadChangedFiles();
 
     // Load diff content (async in effect — capture path to guard against race)
     (async () => {
@@ -474,6 +512,18 @@
     })();
   });
 
+  // Listen for global next/prev diff file events (from keyboard shortcuts / command palette)
+  $effect(() => {
+    function handleNextDiffFile() { navigateToNextFile(); }
+    function handlePrevDiffFile() { navigateToPrevFile(); }
+    window.addEventListener('command:next-diff-file', handleNextDiffFile);
+    window.addEventListener('command:prev-diff-file', handlePrevDiffFile);
+    return () => {
+      window.removeEventListener('command:next-diff-file', handleNextDiffFile);
+      window.removeEventListener('command:prev-diff-file', handlePrevDiffFile);
+    };
+  });
+
   onDestroy(() => {
     destroyView();
   });
@@ -507,6 +557,10 @@
       onNextChunk={() => navigateChunk('next')}
       onToggleWrap={toggleWrap}
       onToggleWhitespace={toggleWhitespace}
+      onPrevFile={navigateToPrevFile}
+      onNextFile={navigateToNextFile}
+      {hasPrevFile}
+      {hasNextFile}
     />
   {/if}
   <div class="diff-viewer-container">

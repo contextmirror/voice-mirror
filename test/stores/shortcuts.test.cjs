@@ -688,6 +688,70 @@ describe('shortcuts.svelte.js: tab cycling', () => {
   });
 });
 
+// ============ Diff file navigation shortcuts (Alt+F5 / Shift+Alt+F5) ============
+
+describe('shortcuts: diff file navigation (Alt+F5 / Shift+Alt+F5)', () => {
+  it('has next-diff-file in IN_APP_SHORTCUTS', () => {
+    assert.ok(
+      src.includes("'next-diff-file'"),
+      'IN_APP_SHORTCUTS should contain next-diff-file'
+    );
+  });
+
+  it('has prev-diff-file in IN_APP_SHORTCUTS', () => {
+    assert.ok(
+      src.includes("'prev-diff-file'"),
+      'IN_APP_SHORTCUTS should contain prev-diff-file'
+    );
+  });
+
+  it('next-diff-file uses Alt+F5 keybinding', () => {
+    assert.ok(
+      src.includes("'Alt+F5'"),
+      'next-diff-file should use Alt+F5'
+    );
+  });
+
+  it('prev-diff-file uses Shift+Alt+F5 keybinding', () => {
+    assert.ok(
+      src.includes("'Shift+Alt+F5'"),
+      'prev-diff-file should use Shift+Alt+F5'
+    );
+  });
+
+  it('handles Alt+F5 in keydown handler for next-diff-file', () => {
+    assert.ok(
+      src.includes("event.key === 'F5'"),
+      'Should handle F5 key for diff file navigation'
+    );
+    assert.ok(
+      src.includes("actionHandlers['next-diff-file']"),
+      'Should dispatch to next-diff-file action handler'
+    );
+  });
+
+  it('handles Shift+Alt+F5 in keydown handler for prev-diff-file', () => {
+    assert.ok(
+      src.includes("actionHandlers['prev-diff-file']"),
+      'Should dispatch to prev-diff-file action handler'
+    );
+  });
+
+  it('next-diff-file action dispatches command:next-diff-file event', () => {
+    assert.ok(
+      src.includes("'command:next-diff-file'"),
+      'next-diff-file handler should dispatch command:next-diff-file event'
+    );
+  });
+
+  it('prev-diff-file action dispatches command:prev-diff-file event', () => {
+    assert.ok(
+      src.includes("'command:prev-diff-file'"),
+      'prev-diff-file handler should dispatch command:prev-diff-file event'
+    );
+  });
+});
+
 // ============ Tauri event listeners ============
 
 describe('shortcuts: Tauri event listeners', () => {

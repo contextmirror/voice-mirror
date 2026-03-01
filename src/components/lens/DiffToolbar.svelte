@@ -17,6 +17,12 @@
     onToggleWrap = () => {},
     /** @type {(e?: MouseEvent) => void} */
     onToggleWhitespace = () => {},
+    /** @type {(e?: MouseEvent) => void} */
+    onPrevFile = () => {},
+    /** @type {(e?: MouseEvent) => void} */
+    onNextFile = () => {},
+    hasPrevFile = false,
+    hasNextFile = false,
   } = $props();
 
   let displayPath = $derived(filePath.split(/[/\\]/).slice(-3).join('/'));
@@ -126,6 +132,33 @@
     {#if stats.deletions > 0}
       <span class="diff-stat-del">-{stats.deletions}</span>
     {/if}
+  </div>
+
+  <span class="diff-toolbar-separator"></span>
+
+  <div class="diff-toolbar-group">
+    <button
+      class="diff-btn"
+      disabled={!hasPrevFile}
+      onclick={() => onPrevFile()}
+      aria-label="Previous changed file"
+      title="Previous changed file (Shift+Alt+F5)"
+    >
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="15 18 9 12 15 6"/>
+      </svg>
+    </button>
+    <button
+      class="diff-btn"
+      disabled={!hasNextFile}
+      onclick={() => onNextFile()}
+      aria-label="Next changed file"
+      title="Next changed file (Alt+F5)"
+    >
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="9 18 15 12 9 6"/>
+      </svg>
+    </button>
   </div>
 </div>
 

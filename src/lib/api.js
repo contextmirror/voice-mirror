@@ -518,6 +518,11 @@ export async function gitPull(rebase, root) { return invoke('git_pull', { rebase
 export async function gitForcePush(root) { return invoke('git_force_push', { root: root || null }); }
 export async function gitListBranches(root) { return invoke('git_list_branches', { root: root || null }); }
 export async function gitCheckoutBranch(branch, root) { return invoke('git_checkout_branch', { branch, root: root || null }); }
+export async function gitStashSave(message, root) { return invoke('git_stash_save', { message: message || null, root: root || null }); }
+export async function gitStashList(root) { return invoke('git_stash_list', { root: root || null }); }
+export async function gitStashPop(index, root) { return invoke('git_stash_pop', { index: index ?? null, root: root || null }); }
+export async function gitStashApply(index, root) { return invoke('git_stash_apply', { index: index ?? null, root: root || null }); }
+export async function gitStashDrop(index, root) { return invoke('git_stash_drop', { index, root: root || null }); }
 /**
  * Create a new file with optional content.
  * Errors if the file already exists. Creates parent directories as needed.

@@ -290,6 +290,12 @@ describe('api.js -- exported async functions', () => {
     'gitForcePush',
     'gitListBranches',
     'gitCheckoutBranch',
+    // Git Stash
+    'gitStashSave',
+    'gitStashList',
+    'gitStashPop',
+    'gitStashApply',
+    'gitStashDrop',
     // Terminals
     'terminalSpawn',
     'terminalInput',

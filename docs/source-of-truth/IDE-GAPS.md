@@ -589,6 +589,8 @@ See `docs/archive/TERMINAL-GAP-ANALYSIS.md` for the complete 33-item gap list. T
 | Code actions lightbulb gutter | Editor | 💡 icon on current line when code actions available, 400ms debounce |
 | Font zoom (Ctrl+=/−/0) | Editor | Zoom in, zoom out, reset font size |
 | Indent guides | Editor | `@replit/codemirror-indentation-markers`, active block highlight, status bar toggle |
+| Git stash support | Source Control | Save/list/pop/apply/drop with UI dropdown in commit panel |
+| Navigate to next/prev diff file | Diff | Alt+F5/Shift+Alt+F5, DiffToolbar buttons, command palette entries |
 
 ### Open Gaps — Ranked by Impact
 
@@ -601,10 +603,10 @@ See `docs/archive/TERMINAL-GAP-ANALYSIS.md` for the complete 33-item gap list. T
 | 5 | **Merge conflict resolution** | Source Control | Medium | Large | 3-way merge or inline markers. §11 |
 | 6 | **Commit history / log** | Source Control | Medium | Medium | View past commits. §11 |
 | 7 | **Inline blame (git blame)** | Source Control | Medium | Medium | Per-line author/date annotations. §11 |
-| 8 | **Stash support** | Source Control | Medium | Small | Stash/pop/apply from UI. §11 |
+| ~~8~~ | ~~**Stash support**~~ | ~~Source Control~~ | ~~Medium~~ | ~~Small~~ | ✅ Done — save/list/pop/apply/drop with UI dropdown. §11 |
 | 9 | **Drag-to-move files in tree** | File Tree | Medium | Medium | Drag files between folders. §13 |
 | ~~10~~ | ~~**Indent guides**~~ | ~~Editor~~ | ~~Medium~~ | ~~Small~~ | ✅ Done — `@replit/codemirror-indentation-markers` + status bar toggle. §15 |
-| 11 | **Navigate to next/prev diff file** | Diff | Medium | Small | Alt+F5 cycle through changed files. §12 |
+| ~~11~~ | ~~**Navigate to next/prev diff file**~~ | ~~Diff~~ | ~~Medium~~ | ~~Small~~ | ✅ Done — Alt+F5/Shift+Alt+F5, toolbar buttons, command palette. §12 |
 | 12 | **Interactive diff minimap** | Diff | Low | Small | Click minimap to jump to chunk. §12 |
 | 13 | **Workspace symbols** | LSP | Medium | Medium | Cross-project symbol search in command palette |
 | 14 | **Inlay hints** | LSP | Medium | Medium | Inline type annotations for TS/Rust |

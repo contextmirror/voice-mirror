@@ -674,6 +674,213 @@ pub fn git_checkout_branch(branch: String, root: Option<String>) -> IpcResponse 
     IpcResponse::ok(serde_json::json!({ "branch": branch.trim() }))
 }
 
+/// Stash working directory changes.
+///
+/// Runs `git stash push -m "{message}"`. If no message is provided,
+/// git generates an automatic description.
+#[tauri::command]
+pub fn git_stash_save(message: Option<String>, root: Option<String>) -> IpcResponse {
+    let root = match resolve_root(root) {
+        Ok(r) => r,
+        Err(e) => return e,
+    };
+
+    let mut args = vec!["stash", "push"];
+    let msg;
+    if let Some(ref m) = message {
+        if !m.trim().is_empty() {
+            msg = m.clone();
+            args.push("-m");
+            args.push(&msg);
+        }
+    }
+
+    let output = match std::process::Command::new("git")
+        .args(&args)
+        .current_dir(&root)
+        .output()
+    {
+        Ok(o) => o,
+        Err(e) => return IpcResponse::err(format!("Failed to run git stash push: {}", e)),
+    };
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return IpcResponse::err(format!("git stash push failed: {}", stderr.trim()));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    info!("git_stash_save: {}", stdout);
+    IpcResponse::ok(serde_json::json!({ "message": stdout }))
+}
+
+/// List all stashes.
+///
+/// Runs `git stash list` and parses output into structured data.
+/// Each stash entry has: `index` (number), `branch` (string), `message` (string).
+#[tauri::command]
+pub fn git_stash_list(root: Option<String>) -> IpcResponse {
+    let root = match resolve_root(root) {
+        Ok(r) => r,
+        Err(e) => return e,
+    };
+
+    let output = match std::process::Command::new("git")
+        .args(["stash", "list"])
+        .current_dir(&root)
+        .output()
+    {
+        Ok(o) => o,
+        Err(e) => return IpcResponse::err(format!("Failed to run git stash list: {}", e)),
+    };
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return IpcResponse::err(format!("git stash list failed: {}", stderr.trim()));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut stashes: Vec<serde_json::Value> = Vec::new();
+
+    for line in stdout.lines() {
+        // Format: "stash@{0}: On branch: message" or "stash@{0}: WIP on branch: hash message"
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+
+        // Parse index from "stash@{N}"
+        let index = line
+            .find('{')
+            .and_then(|start| {
+                line[start + 1..].find('}').map(|end| &line[start + 1..start + 1 + end])
+            })
+            .and_then(|s| s.parse::<u32>().ok())
+            .unwrap_or(0);
+
+        // Parse branch and message from the rest
+        // "stash@{0}: On branch_name: message text"
+        // "stash@{0}: WIP on branch_name: hash message text"
+        let after_colon = line.find(": ").map(|i| &line[i + 2..]).unwrap_or("");
+        let (branch, message) = if after_colon.starts_with("On ") {
+            let rest = &after_colon[3..];
+            if let Some(colon_pos) = rest.find(": ") {
+                (rest[..colon_pos].to_string(), rest[colon_pos + 2..].to_string())
+            } else {
+                (rest.to_string(), String::new())
+            }
+        } else if after_colon.starts_with("WIP on ") {
+            let rest = &after_colon[7..];
+            if let Some(colon_pos) = rest.find(": ") {
+                (rest[..colon_pos].to_string(), rest[colon_pos + 2..].to_string())
+            } else {
+                (rest.to_string(), String::new())
+            }
+        } else {
+            (String::new(), after_colon.to_string())
+        };
+
+        stashes.push(serde_json::json!({
+            "index": index,
+            "branch": branch,
+            "message": message,
+        }));
+    }
+
+    debug!("git_stash_list: {} stashes", stashes.len());
+    IpcResponse::ok(serde_json::json!({ "stashes": stashes }))
+}
+
+/// Pop a stash entry (apply + remove).
+///
+/// Runs `git stash pop stash@{index}`. Defaults to index 0 if not specified.
+#[tauri::command]
+pub fn git_stash_pop(index: Option<u32>, root: Option<String>) -> IpcResponse {
+    let root = match resolve_root(root) {
+        Ok(r) => r,
+        Err(e) => return e,
+    };
+
+    let stash_ref = format!("stash@{{{}}}", index.unwrap_or(0));
+    let output = match std::process::Command::new("git")
+        .args(["stash", "pop", &stash_ref])
+        .current_dir(&root)
+        .output()
+    {
+        Ok(o) => o,
+        Err(e) => return IpcResponse::err(format!("Failed to run git stash pop: {}", e)),
+    };
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return IpcResponse::err(format!("git stash pop failed: {}", stderr.trim()));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    info!("git_stash_pop: popped {}", stash_ref);
+    IpcResponse::ok(serde_json::json!({ "message": stdout }))
+}
+
+/// Apply a stash entry without removing it.
+///
+/// Runs `git stash apply stash@{index}`. Defaults to index 0 if not specified.
+#[tauri::command]
+pub fn git_stash_apply(index: Option<u32>, root: Option<String>) -> IpcResponse {
+    let root = match resolve_root(root) {
+        Ok(r) => r,
+        Err(e) => return e,
+    };
+
+    let stash_ref = format!("stash@{{{}}}", index.unwrap_or(0));
+    let output = match std::process::Command::new("git")
+        .args(["stash", "apply", &stash_ref])
+        .current_dir(&root)
+        .output()
+    {
+        Ok(o) => o,
+        Err(e) => return IpcResponse::err(format!("Failed to run git stash apply: {}", e)),
+    };
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return IpcResponse::err(format!("git stash apply failed: {}", stderr.trim()));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    info!("git_stash_apply: applied {}", stash_ref);
+    IpcResponse::ok(serde_json::json!({ "message": stdout }))
+}
+
+/// Drop (delete) a stash entry.
+///
+/// Runs `git stash drop stash@{index}`.
+#[tauri::command]
+pub fn git_stash_drop(index: u32, root: Option<String>) -> IpcResponse {
+    let root = match resolve_root(root) {
+        Ok(r) => r,
+        Err(e) => return e,
+    };
+
+    let stash_ref = format!("stash@{{{}}}", index);
+    let output = match std::process::Command::new("git")
+        .args(["stash", "drop", &stash_ref])
+        .current_dir(&root)
+        .output()
+    {
+        Ok(o) => o,
+        Err(e) => return IpcResponse::err(format!("Failed to run git stash drop: {}", e)),
+    };
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return IpcResponse::err(format!("git stash drop failed: {}", stderr.trim()));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    info!("git_stash_drop: dropped {}", stash_ref);
+    IpcResponse::ok(serde_json::json!({ "message": stdout }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

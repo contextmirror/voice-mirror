@@ -174,3 +174,33 @@ describe('DiffToolbar.svelte: toolbar separators', () => {
     assert.ok(src.includes('diff-toolbar-separator'), 'Should have separators');
   });
 });
+
+describe('DiffToolbar.svelte: file navigation buttons', () => {
+  it('accepts onPrevFile and onNextFile callback props', () => {
+    assert.ok(src.includes('onPrevFile'), 'Should have onPrevFile callback');
+    assert.ok(src.includes('onNextFile'), 'Should have onNextFile callback');
+  });
+
+  it('accepts hasPrevFile and hasNextFile props', () => {
+    assert.ok(src.includes('hasPrevFile'), 'Should have hasPrevFile prop');
+    assert.ok(src.includes('hasNextFile'), 'Should have hasNextFile prop');
+  });
+
+  it('has previous changed file button', () => {
+    assert.ok(src.includes('aria-label="Previous changed file"'), 'Should have prev file button');
+  });
+
+  it('has next changed file button', () => {
+    assert.ok(src.includes('aria-label="Next changed file"'), 'Should have next file button');
+  });
+
+  it('disables file navigation buttons when at boundaries', () => {
+    assert.ok(src.includes('disabled={!hasPrevFile}'), 'Should disable prev file at start');
+    assert.ok(src.includes('disabled={!hasNextFile}'), 'Should disable next file at end');
+  });
+
+  it('shows keyboard shortcut hints in tooltips', () => {
+    assert.ok(src.includes('Shift+Alt+F5'), 'Should show Shift+Alt+F5 in prev file tooltip');
+    assert.ok(src.includes('Alt+F5'), 'Should show Alt+F5 in next file tooltip');
+  });
+});
