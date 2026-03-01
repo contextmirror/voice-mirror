@@ -212,11 +212,12 @@ describe('lsp-diagnostics.svelte.js: getTotals method', () => {
       'Should return { errors, warnings, infos }');
   });
 
-  it('getTotals checks severity 3 for info', () => {
+  it('getTotals counts non-error non-warning as info (catch-all)', () => {
     const getTotalsIdx = src.indexOf('getTotals()');
     const getTotalsBody = src.slice(getTotalsIdx, getTotalsIdx + 500);
-    assert.ok(getTotalsBody.includes("'information'") || getTotalsBody.includes('sev === 3'),
-      'Should check info severity (string or numeric)');
+    // Should use else (catch-all) for infos, covering severity 3, 4, 'information', 'hint'
+    assert.ok(getTotalsBody.includes('else infos++'),
+      'Should count all non-error, non-warning severities as info');
   });
 });
 

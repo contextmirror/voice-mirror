@@ -45,16 +45,16 @@ function createLspDiagnosticsStore() {
     const updatedRaw = new Map(rawDiagnostics);
     if (errors === 0 && warnings === 0) {
       updated.delete(relativePath);
-      // Keep empty arrays in rawDiagnostics rather than deleting — prevents
-      // ProblemsPanel file groups from disappearing/reappearing when the LSP
-      // server briefly clears diagnostics during re-analysis (visual jump).
-      // fileGroups filters out files with 0 matching diagnostics anyway.
-      if (rawDiagnostics.has(relativePath)) {
-        updatedRaw.set(relativePath, []);
-      }
     } else {
       updated.set(relativePath, { errors, warnings });
+    }
+    // Always store raw diagnostics (even hint-only files) for ProblemsPanel.
+    // When LSP clears diagnostics (re-analysis), set empty array instead of
+    // deleting — prevents file groups from disappearing/reappearing (visual jump).
+    if (lspDiags.length > 0) {
       updatedRaw.set(relativePath, lspDiags);
+    } else if (rawDiagnostics.has(relativePath)) {
+      updatedRaw.set(relativePath, []);
     }
     diagnostics = updated;
     rawDiagnostics = updatedRaw;
@@ -102,7 +102,7 @@ function createLspDiagnosticsStore() {
           const sev = d.severity;
           if (sev === 'error' || sev === 1) errors++;
           else if (sev === 'warning' || sev === 2) warnings++;
-          else if (sev === 'information' || sev === 3) infos++;
+          else infos++;
         }
       }
       return { errors, warnings, infos };
