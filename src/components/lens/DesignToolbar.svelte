@@ -1,6 +1,7 @@
 <script>
   import { designCommand, designGetElement, lensCapturePreview } from '../../lib/api.js';
 
+  /** @type {{ onSend?: (e: MouseEvent) => void, onClose?: () => void, onElementSend?: () => void }} */
   let { onSend = () => {}, onClose = () => {}, onElementSend = () => {} } = $props();
 
   let activeTool = $state('pen');

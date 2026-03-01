@@ -474,7 +474,7 @@
             type="text"
             placeholder="Filter (e.g. text, !exclude)"
             value={outputStore.filterText}
-            oninput={(e) => outputStore.setFilterText(e.target.value)}
+            oninput={(e) => outputStore.setFilterText(/** @type {HTMLInputElement} */(e.target).value)}
           />
           <!-- Funnel icon (decorative, inside input) -->
           <svg class="output-filter-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
@@ -630,7 +630,7 @@
             type="text"
             placeholder="Filter (e.g. text, !exclude)"
             value={problemsFilterText}
-            oninput={(e) => problemsFilterText = e.target.value}
+            oninput={(e) => problemsFilterText = /** @type {HTMLInputElement} */(e.target).value}
           />
           <svg class="output-filter-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
             <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>

@@ -62,7 +62,7 @@
       type="text"
       placeholder="Search in files..."
       value={searchStore.query}
-      oninput={(e) => searchStore.setQuery(e.target.value)}
+      oninput={(e) => searchStore.setQuery(/** @type {HTMLInputElement} */(e.target).value)}
       onkeydown={handleKeydown}
       bind:this={inputEl}
     />
@@ -99,14 +99,14 @@
         type="text"
         placeholder="Include (e.g. *.rs,*.js)"
         value={searchStore.includePattern}
-        oninput={(e) => searchStore.setIncludePattern(e.target.value)}
+        oninput={(e) => searchStore.setIncludePattern(/** @type {HTMLInputElement} */(e.target).value)}
       />
       <input
         class="filter-input"
         type="text"
         placeholder="Exclude (e.g. node_modules)"
         value={searchStore.excludePattern}
-        oninput={(e) => searchStore.setExcludePattern(e.target.value)}
+        oninput={(e) => searchStore.setExcludePattern(/** @type {HTMLInputElement} */(e.target).value)}
       />
     {/if}
   </div>

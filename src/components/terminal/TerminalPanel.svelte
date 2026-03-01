@@ -21,13 +21,15 @@
   import TerminalContextMenu from './TerminalContextMenu.svelte';
 
   // Restore saved layout on mount, or spawn first terminal if nothing saved
-  onMount(async () => {
-    if (terminalTabsStore.groups.length === 0) {
-      const restored = await terminalTabsStore.restoreLayout();
-      if (!restored) {
-        terminalTabsStore.addGroup();
+  onMount(() => {
+    (async () => {
+      if (terminalTabsStore.groups.length === 0) {
+        const restored = await terminalTabsStore.restoreLayout();
+        if (!restored) {
+          terminalTabsStore.addGroup();
+        }
       }
-    }
+    })();
 
     // Register terminal shortcut handlers
     setActionHandler('new-terminal', () => terminalTabsStore.addGroup());
@@ -96,7 +98,7 @@
         {#if node.type === 'leaf'}
           {@const inst = terminalTabsStore.getInstance(node.instanceId)}
           {#if inst}
-            <Terminal shellId={inst.shellId} {visible} />
+            <Terminal shellId={inst.shellId} {visible} onRegisterActions={() => {}} />
           {/if}
         {:else if node.type === 'split'}
           <SplitPanel direction={node.direction} ratio={node.ratio} minA={80} minB={80}>

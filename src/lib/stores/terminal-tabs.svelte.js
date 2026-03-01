@@ -23,7 +23,7 @@ function createTerminalTabsStore() {
 
   // ---- Group/Instance Model ----
 
-  /** @type {Array<{ id: string, instanceIds: string[] }>} */
+  /** @type {Array<{ id: string, splitTree: object, readonly instanceIds: string[] }>} */
   let groups = $state([]);
 
   /** @type {Record<string, { id: string, groupId: string, title: string, profileId: string, icon: string|null, color: string|null, shellId: string, running: boolean, type?: string, projectPath?: string, framework?: string|null, port?: number|null }>} */
