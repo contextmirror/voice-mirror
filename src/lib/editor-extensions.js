@@ -6,6 +6,7 @@
  */
 import { indentWithTab } from '@codemirror/commands';
 import { showMinimap } from '@replit/codemirror-minimap';
+import { vscodeKeymap } from '@replit/codemirror-vscode-keymap';
 import { createGitGutter } from './editor-git-gutter.js';
 
 /**
@@ -260,6 +261,7 @@ export function buildEditorExtensions(cm, lsp, options) {
 
   const extensions = [
     cm.basicSetup,
+    cm.keymap.of(vscodeKeymap),
     ...voiceMirrorEditorTheme,
     ...(isReadOnly ? [cm.EditorState.readOnly.of(true)] : []),
     cm.lintGutter(),

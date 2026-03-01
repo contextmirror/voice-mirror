@@ -30,6 +30,22 @@ describe('editor-extensions.js: Ctrl+hover definition underline', () => {
   });
 });
 
+describe('editor-extensions.js: VS Code keymap', () => {
+  it('imports vscodeKeymap from @replit/codemirror-vscode-keymap', () => {
+    assert.ok(src.includes("from '@replit/codemirror-vscode-keymap'"), 'Should import vscodeKeymap');
+  });
+
+  it('adds vscodeKeymap to extensions via keymap.of()', () => {
+    assert.ok(src.includes('keymap.of(vscodeKeymap)'), 'Should add vscodeKeymap as keymap extension');
+  });
+
+  it('adds vscodeKeymap after basicSetup so it overrides defaults', () => {
+    const basicSetupIndex = src.indexOf('basicSetup');
+    const vscodeKeymapIndex = src.indexOf('keymap.of(vscodeKeymap)');
+    assert.ok(vscodeKeymapIndex > basicSetupIndex, 'vscodeKeymap should come after basicSetup');
+  });
+});
+
 describe('editor-extensions.js: cm object dependencies', () => {
   it('destructures ViewPlugin from cm parameter', () => {
     assert.ok(src.includes('ViewPlugin') && src.includes('cm'), 'Should use ViewPlugin from cm');
