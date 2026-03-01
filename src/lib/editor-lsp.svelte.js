@@ -246,11 +246,14 @@ export function createEditorLsp() {
     const root = projectStore.activeProject?.path || null;
 
     try {
+      const lspDiags = (diagnosticsAtCursor || [])
+        .map(d => d.lspDiagnostic)
+        .filter(Boolean);
       const result = await lspRequestCodeActions(
         currentPath,
         startLine.number - 1, sel.from - startLine.from,
         endLine.number - 1, sel.to - endLine.from,
-        diagnosticsAtCursor || [],
+        lspDiags,
         root
       );
       if (result?.data?.actions?.length) {
@@ -259,7 +262,9 @@ export function createEditorLsp() {
         codeActions = result.data.actions;
         showCodeActions = true;
       }
-    } catch {}
+    } catch (err) {
+      console.warn('[editor-lsp] Code actions request failed:', err);
+    }
   }
 
   async function requestSignatureHelp(view, currentPath, triggerChar) {
@@ -377,6 +382,7 @@ export function createEditorLsp() {
             severity: d.severity || 'error',
             message: d.message,
             source: d.source || undefined,
+            lspDiagnostic: d,
           };
         });
         cachedDiagnostics.set(currentPath, cmDiags);
