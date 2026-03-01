@@ -586,11 +586,49 @@
         }
       }
 
-      // Apply pending cursor AFTER diagnostics — diagnostic dispatches trigger CM6
-      // measure cycles (via lintGutter) that can reset scroll position.
-      // setTimeout(150) fires after those rAF-based measure cycles complete.
+      // Apply pending cursor after file loads. We need to survive CM6 measure
+      // cycles triggered by diagnostic dispatch and git gutter async fetch.
+      // Strategy: apply cursor at multiple intervals so even if an intermediate
+      // layout reflow resets scroll, the last application wins.
       if (tabsStore.pendingCursorPosition?.path === filePath && view) {
-        setTimeout(() => applyPendingCursor(), 150);
+        const savedPending = { ...tabsStore.pendingCursorPosition };
+        tabsStore.clearPendingCursor();
+        const applyScroll = () => {
+          if (!view) return;
+          try {
+            const lineNum = Math.min(Math.max(savedPending.line + 1, 1), view.state.doc.lines);
+            const line = view.state.doc.line(lineNum);
+            const anchor = line.from + Math.min(savedPending.character || 0, line.length);
+            const scrollEffect = cmCache?.EditorView?.scrollIntoView(anchor, { y: 'center' });
+            view.dispatch({
+              selection: { anchor },
+              ...(scrollEffect ? { effects: scrollEffect } : { scrollIntoView: true }),
+            });
+            // Highlight + focus only on the final application
+            return anchor;
+          } catch { return null; }
+        };
+        // Apply at escalating intervals to survive layout reflows from:
+        // - CM6 init measure cycles (~50ms)
+        // - Diagnostic lint gutter appearance (~100ms)
+        // - Git gutter async fetch completion (~200-400ms)
+        setTimeout(() => applyScroll(), 50);
+        setTimeout(() => applyScroll(), 200);
+        setTimeout(() => {
+          const anchor = applyScroll();
+          if (anchor != null) {
+            let highlightEnd = anchor;
+            if (savedPending.endLine != null) {
+              try {
+                const endLineNum = Math.min(Math.max(savedPending.endLine + 1, 1), view.state.doc.lines);
+                const endLine = view.state.doc.line(endLineNum);
+                highlightEnd = endLine.from + Math.min(savedPending.endCharacter || 0, endLine.length);
+              } catch {}
+            }
+            applyRangeHighlight(view, anchor, highlightEnd);
+            view.focus();
+          }
+        }, 500);
       }
     } catch (err) {
       if (filePath !== currentPath) return;
