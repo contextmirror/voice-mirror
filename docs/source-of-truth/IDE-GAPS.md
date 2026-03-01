@@ -440,9 +440,9 @@ Voice Mirror's extension story is: "Add an MCP server" — not "install a VS Cod
 
 | Feature | VS Code | Zed | Voice Mirror | Priority |
 |---------|---------|-----|-------------|----------|
-| **Drag to reorder / move files** | ✅ Drag files between folders | ✅ | ❌ Drag only opens in editor | Medium |
+| **Drag to reorder / move files** | ✅ Drag files between folders | ✅ | ✅ Drag files/folders between folders + root drops | Done ✓ |
 | **Multi-select files** | ✅ Shift/Ctrl+click for batch operations | ✅ | ❌ | Medium |
-| **Keyboard navigation (arrow keys)** | ✅ Full tree keyboard nav (up/down/left/right) | ✅ | ❌ Click only | Medium |
+| **Keyboard navigation (arrow keys)** | ✅ Full tree keyboard nav (up/down/left/right) | ✅ | ✅ Up/down/left/right, Enter, Home/End, tabindex + role="tree" | Done ✓ |
 | **Filter / focus mode** | ✅ Type to filter visible tree | ✅ Quick filter | ❌ | Low |
 | **Tree view vs flat list toggle** | ✅ Toggle in Changes panel | ❌ | ❌ | Low |
 | **Compact folders** | ✅ Collapse single-child folders (a/b/c → a/b/c) | ✅ | ❌ | Low |
@@ -451,7 +451,7 @@ Voice Mirror's extension story is: "Add an MCP server" — not "install a VS Cod
 | **Breadcrumbs above editor** | ✅ File path segments, click to navigate | ✅ | ❌ | Low |
 | **Sticky scroll (tree headers)** | ✅ Parent folders stick to top | ❌ | ❌ | Very low |
 
-**Assessment:** Our file tree is comprehensive — 4-tab layout (files/changes/outline/search), full CRUD, git + LSP decorations, drag-to-editor, live watchers. The main gaps are keyboard-only navigation and drag-to-move files between folders.
+**Assessment:** Our file tree is comprehensive — 4-tab layout (files/changes/outline/search), full CRUD, git + LSP decorations, drag-to-editor, drag-to-move between folders, keyboard navigation (arrow keys), live watchers. Remaining gaps are multi-select, filter mode, and compact folders.
 
 ---
 
@@ -593,6 +593,8 @@ See `docs/archive/TERMINAL-GAP-ANALYSIS.md` for the complete 33-item gap list. T
 | Git stash support | Source Control | Save/list/pop/apply/drop with UI dropdown in commit panel |
 | Navigate to next/prev diff file | Diff | Alt+F5/Shift+Alt+F5, DiffToolbar buttons, command palette entries |
 | Project output channels | Output | Dynamic per-project channels (build logs + browser console), MCP `get_logs` exposure, dropdown separator |
+| Keyboard tree navigation | File Tree | Arrow keys (up/down/left/right), Enter, Home/End, tabindex + role="tree", scroll-into-view |
+| Drag-to-move files in tree | File Tree | Drag files/folders between folders, drop-target highlight, circular move prevention, root drops |
 
 ### Open Gaps — Ranked by Impact
 
@@ -601,12 +603,12 @@ See `docs/archive/TERMINAL-GAP-ANALYSIS.md` for the complete 33-item gap list. T
 | ~~1~~ | ~~Inline gutter change indicators~~ | ~~Editor + Git~~ | ~~High~~ | ~~Medium~~ | ✅ Done — green/blue/red bars + peek widget + revert. §11, §15 |
 | 2 | **Hunk-level staging** | Source Control + Diff | High | Medium | Stage individual chunks, not whole files. Hunk-level *revert* done (via gutter peek). §11, §12 |
 | ~~3~~ | ~~**Terminal clickable links**~~ | ~~Terminal~~ | ~~High~~ | ~~Small~~ | ✅ Done — Ctrl+click overlay with URL + file path detection. §14 |
-| 4 | **Keyboard tree navigation** | File Tree | Medium | Medium | Arrow keys to navigate file tree. §13 |
+| ~~4~~ | ~~**Keyboard tree navigation**~~ | ~~File Tree~~ | ~~Medium~~ | ~~Medium~~ | ✅ Done — arrow keys (up/down/left/right), Enter, Home/End, tabindex + role="tree". §13 |
 | 5 | **Merge conflict resolution** | Source Control | Medium | Large | 3-way merge or inline markers. §11 |
 | 6 | **Commit history / log** | Source Control | Medium | Medium | View past commits. §11 |
 | 7 | **Inline blame (git blame)** | Source Control | Medium | Medium | Per-line author/date annotations. §11 |
 | ~~8~~ | ~~**Stash support**~~ | ~~Source Control~~ | ~~Medium~~ | ~~Small~~ | ✅ Done — save/list/pop/apply/drop with UI dropdown. §11 |
-| 9 | **Drag-to-move files in tree** | File Tree | Medium | Medium | Drag files between folders. §13 |
+| ~~9~~ | ~~**Drag-to-move files in tree**~~ | ~~File Tree~~ | ~~Medium~~ | ~~Medium~~ | ✅ Done — drag files/folders between folders, drop-target highlight, circular move prevention, root drops. §13 |
 | ~~10~~ | ~~**Indent guides**~~ | ~~Editor~~ | ~~Medium~~ | ~~Small~~ | ✅ Done — `@replit/codemirror-indentation-markers` + status bar toggle. §15 |
 | ~~11~~ | ~~**Navigate to next/prev diff file**~~ | ~~Diff~~ | ~~Medium~~ | ~~Small~~ | ✅ Done — Alt+F5/Shift+Alt+F5, toolbar buttons, command palette. §12 |
 | 12 | **Interactive diff minimap** | Diff | Low | Small | Click minimap to jump to chunk. §12 |
@@ -631,6 +633,6 @@ The gap list above looks daunting, but Voice Mirror doesn't need to close every 
 
 The strategy: close the top gaps so Lens is **comfortable enough** for real coding, then double down on the voice+AI features no one else has.
 
-**Done:** find/replace ✓, multi-cursor ✓, global search ✓, git stage+commit+push ✓, branch management ✓, dynamic sync ✓, document formatting ✓, signature help ✓, split editor ✓, command palette ✓, file tree git decorations ✓, LSP diagnostics in tree ✓, code minimap ✓, terminal tab close ✓, terminal grid splits (H+V) ✓, terminal find (Ctrl+F) ✓, terminal clickable links (Ctrl+click) ✓, terminal persistence ✓, inline gutter change indicators ✓, closed tab history + Ctrl+Shift+T ✓, mouse wheel scroll on tab bar ✓, back/forward navigation (Alt+Left/Right) ✓, Ctrl+hover definition underline ✓, Ctrl+PageUp/PageDown tab cycling ✓, tab drag to split zones ✓, Problems panel (Ctrl+Shift+M) ✓, code actions lightbulb gutter ✓, font zoom (Ctrl+=/−/0) ✓, LSP server management Phase 1 ✓, LSP crash recovery + health monitoring + idle shutdown (Phase 2) ✓, LSP project scanning + multi-server routing + native binary support (Phase 3) ✓, project output channels (build logs + browser console → MCP) ✓.
+**Done:** find/replace ✓, multi-cursor ✓, global search ✓, git stage+commit+push ✓, branch management ✓, dynamic sync ✓, document formatting ✓, signature help ✓, split editor ✓, command palette ✓, file tree git decorations ✓, LSP diagnostics in tree ✓, code minimap ✓, terminal tab close ✓, terminal grid splits (H+V) ✓, terminal find (Ctrl+F) ✓, terminal clickable links (Ctrl+click) ✓, terminal persistence ✓, inline gutter change indicators ✓, closed tab history + Ctrl+Shift+T ✓, mouse wheel scroll on tab bar ✓, back/forward navigation (Alt+Left/Right) ✓, Ctrl+hover definition underline ✓, Ctrl+PageUp/PageDown tab cycling ✓, tab drag to split zones ✓, Problems panel (Ctrl+Shift+M) ✓, code actions lightbulb gutter ✓, font zoom (Ctrl+=/−/0) ✓, LSP server management Phase 1 ✓, LSP crash recovery + health monitoring + idle shutdown (Phase 2) ✓, LSP project scanning + multi-server routing + native binary support (Phase 3) ✓, project output channels (build logs + browser console → MCP) ✓, keyboard tree navigation (arrow keys) ✓, drag-to-move files in tree ✓.
 
-**Next wave:** hunk-level staging (stage individual diff chunks from the gutter). This is the remaining high-impact gap that separates "usable" from "daily driver." The terminal is now feature-compete with VS Code for core workflows. LSP infrastructure is feature-compete — remaining LSP gaps are Tier 2 features (inlay hints, workspace symbols, semantic tokens).
+**Next wave:** hunk-level staging (stage individual diff chunks from the gutter). This is the remaining high-impact gap that separates "usable" from "daily driver." The file tree is now feature-compete for navigation (keyboard + drag-to-move). The terminal is feature-compete with VS Code for core workflows. LSP infrastructure is feature-compete — remaining LSP gaps are Tier 2 features (inlay hints, workspace symbols, semantic tokens).
