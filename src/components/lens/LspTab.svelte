@@ -223,9 +223,6 @@
             <span class="lsp-server-name">{displayName(server)}</span>
             <span class="lsp-server-lang">{server.languageId}</span>
           </div>
-          {#if server.version}
-            <span class="lsp-server-version" title={server.version}>{server.version.length > 12 ? server.version.substring(0, 12) + '...' : server.version}</span>
-          {/if}
           <span class="lsp-server-files">
             {server.openDocsCount} file{server.openDocsCount !== 1 ? 's' : ''}
           </span>
@@ -263,6 +260,12 @@
               <span class="detail-label">Binary</span>
               <span class="detail-value">{server.binary}</span>
             </div>
+            {#if server.version}
+              <div class="detail-row">
+                <span class="detail-label">Version</span>
+                <span class="detail-value">{server.version}</span>
+              </div>
+            {/if}
             <div class="detail-row">
               <span class="detail-label">State</span>
               <span class="detail-value">{server.state}</span>
@@ -418,15 +421,6 @@
   .lsp-server-lang {
     font-size: 10px;
     color: var(--muted);
-  }
-
-  .lsp-server-version {
-    font-size: 10px;
-    color: var(--muted);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 80px;
   }
 
   .lsp-server-files {
