@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::fmt;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufRead, BufReader as StdBufReader, Write as IoWrite};
@@ -230,6 +230,42 @@ impl ChannelBuffer {
 }
 
 // ---------------------------------------------------------------------------
+// Project Channels (dynamic)
+// ---------------------------------------------------------------------------
+
+/// Metadata for a registered project channel.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectChannelInfo {
+    pub label: String,
+    pub project_path: String,
+    pub framework: Option<String>,
+    pub port: Option<u16>,
+}
+
+/// Summary for a project channel.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectChannelSummary {
+    pub label: String,
+    pub project_path: String,
+    pub framework: Option<String>,
+    pub port: Option<u16>,
+    pub total: usize,
+    pub error: usize,
+    pub warn: usize,
+    pub info: usize,
+    pub debug: usize,
+    pub trace: usize,
+}
+
+/// A dynamic project channel with metadata + ring buffer.
+struct ProjectChannelEntry {
+    info: ProjectChannelInfo,
+    buffer: ChannelBuffer,
+}
+
+// ---------------------------------------------------------------------------
 // OutputStore
 // ---------------------------------------------------------------------------
 
@@ -248,6 +284,7 @@ pub struct ChannelSummary {
 /// Central store holding ring buffers for all channels.
 pub struct OutputStore {
     buffers: RwLock<Vec<ChannelBuffer>>,
+    project_channels: RwLock<HashMap<String, ProjectChannelEntry>>,
     app_handle: RwLock<Option<AppHandle>>,
 }
 
@@ -257,6 +294,7 @@ impl OutputStore {
         let buffers: Vec<ChannelBuffer> = Channel::ALL.iter().map(|_| ChannelBuffer::new()).collect();
         Self {
             buffers: RwLock::new(buffers),
+            project_channels: RwLock::new(HashMap::new()),
             app_handle: RwLock::new(None),
         }
     }
@@ -346,6 +384,147 @@ impl OutputStore {
                 }
             })
             .collect()
+    }
+
+    // -----------------------------------------------------------------------
+    // Project channels (dynamic)
+    // -----------------------------------------------------------------------
+
+    /// Register a new project channel. If a channel with the same label already
+    /// exists, its metadata is updated but the buffer is preserved.
+    pub fn register_project_channel(
+        &self,
+        label: String,
+        project_path: String,
+        framework: Option<String>,
+        port: Option<u16>,
+    ) {
+        let mut pcs = self
+            .project_channels
+            .write()
+            .unwrap_or_else(|e| e.into_inner());
+
+        let info = ProjectChannelInfo {
+            label: label.clone(),
+            project_path,
+            framework,
+            port,
+        };
+
+        pcs.entry(label)
+            .and_modify(|entry| entry.info = info.clone())
+            .or_insert_with(|| ProjectChannelEntry {
+                info,
+                buffer: ChannelBuffer::new(),
+            });
+    }
+
+    /// Remove a project channel and discard its buffer.
+    pub fn unregister_project_channel(&self, label: &str) {
+        let mut pcs = self
+            .project_channels
+            .write()
+            .unwrap_or_else(|e| e.into_inner());
+        pcs.remove(label);
+    }
+
+    /// Push a log entry into a project channel's buffer.
+    ///
+    /// If the channel does not exist, this is a no-op (never panics).
+    pub fn push_project(&self, label: &str, level: &str, message: &str) {
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+
+        let entry = LogEntry {
+            id: NEXT_ENTRY_ID.fetch_add(1, Ordering::Relaxed),
+            timestamp,
+            level: level.to_ascii_uppercase(),
+            channel: Channel::App, // placeholder — project entries identified by label
+            message: message.to_string(),
+        };
+
+        let mut pcs = self
+            .project_channels
+            .write()
+            .unwrap_or_else(|e| e.into_inner());
+
+        if let Some(pc) = pcs.get_mut(label) {
+            pc.buffer.push(entry.clone());
+            drop(pcs); // release write lock before emitting
+            self.emit_project_entry(label, &entry);
+        }
+    }
+
+    /// Query a project channel's buffer.
+    ///
+    /// Returns `(matching_entries, total_count)`. If the channel does not exist,
+    /// returns `([], 0)`.
+    pub fn query_project(
+        &self,
+        label: &str,
+        min_level: Option<&str>,
+        last: Option<usize>,
+        search: Option<&str>,
+    ) -> (Vec<LogEntry>, usize) {
+        let pcs = self
+            .project_channels
+            .read()
+            .unwrap_or_else(|e| e.into_inner());
+
+        match pcs.get(label) {
+            Some(pc) => pc.buffer.query(min_level, last, search),
+            None => (Vec::new(), 0),
+        }
+    }
+
+    /// Return a summary for every registered project channel.
+    pub fn project_summary(&self) -> Vec<ProjectChannelSummary> {
+        let pcs = self
+            .project_channels
+            .read()
+            .unwrap_or_else(|e| e.into_inner());
+
+        pcs.values()
+            .map(|pc| {
+                let (error, warn, info, debug, trace) = pc.buffer.count_by_level();
+                ProjectChannelSummary {
+                    label: pc.info.label.clone(),
+                    project_path: pc.info.project_path.clone(),
+                    framework: pc.info.framework.clone(),
+                    port: pc.info.port,
+                    total: pc.buffer.entries.len(),
+                    error,
+                    warn,
+                    info,
+                    debug,
+                    trace,
+                }
+            })
+            .collect()
+    }
+
+    /// Return metadata for every registered project channel.
+    pub fn list_project_channels(&self) -> Vec<ProjectChannelInfo> {
+        let pcs = self
+            .project_channels
+            .read()
+            .unwrap_or_else(|e| e.into_inner());
+
+        pcs.values().map(|pc| pc.info.clone()).collect()
+    }
+
+    /// Emit a Tauri event for a project channel log entry (best-effort).
+    fn emit_project_entry(&self, label: &str, entry: &LogEntry) {
+        if let Ok(ah) = self.app_handle.read() {
+            if let Some(handle) = ah.as_ref() {
+                let _ = handle.emit(
+                    "project-output-log",
+                    serde_json::json!({ "channel": label, "entry": entry }),
+                );
+            }
+        }
     }
 }
 
@@ -1095,5 +1274,226 @@ mod tests {
         assert_eq!(total, MAX_FILE_ENTRIES);
 
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    // -----------------------------------------------------------------------
+    // Project channel tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_project_channel_register_and_push() {
+        let store = OutputStore::new();
+
+        store.register_project_channel(
+            "my-app".to_string(),
+            "/projects/my-app".to_string(),
+            Some("vite".to_string()),
+            Some(3000),
+        );
+
+        store.push_project("my-app", "INFO", "Server started");
+        store.push_project("my-app", "WARN", "Deprecation warning");
+
+        let (entries, total) = store.query_project("my-app", None, None, None);
+        assert_eq!(total, 2);
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].message, "Server started");
+        assert_eq!(entries[0].level, "INFO");
+        assert_eq!(entries[1].message, "Deprecation warning");
+        assert_eq!(entries[1].level, "WARN");
+    }
+
+    #[test]
+    fn test_project_channel_unregister() {
+        let store = OutputStore::new();
+
+        store.register_project_channel(
+            "temp-proj".to_string(),
+            "/tmp/proj".to_string(),
+            None,
+            None,
+        );
+
+        store.push_project("temp-proj", "INFO", "hello");
+
+        // Verify it exists
+        let (entries, total) = store.query_project("temp-proj", None, None, None);
+        assert_eq!(total, 1);
+        assert_eq!(entries.len(), 1);
+
+        // Unregister
+        store.unregister_project_channel("temp-proj");
+
+        // Query should return empty now
+        let (entries, total) = store.query_project("temp-proj", None, None, None);
+        assert_eq!(total, 0);
+        assert!(entries.is_empty());
+
+        // list_project_channels should not include it
+        let channels = store.list_project_channels();
+        assert!(channels.iter().all(|c| c.label != "temp-proj"));
+    }
+
+    #[test]
+    fn test_project_channel_summary() {
+        let store = OutputStore::new();
+
+        store.register_project_channel(
+            "alpha".to_string(),
+            "/projects/alpha".to_string(),
+            Some("next".to_string()),
+            Some(3000),
+        );
+        store.register_project_channel(
+            "beta".to_string(),
+            "/projects/beta".to_string(),
+            Some("vite".to_string()),
+            Some(5173),
+        );
+
+        store.push_project("alpha", "ERROR", "crash");
+        store.push_project("alpha", "WARN", "slow");
+        store.push_project("alpha", "INFO", "ok");
+
+        store.push_project("beta", "DEBUG", "tick");
+        store.push_project("beta", "TRACE", "noise");
+
+        let summaries = store.project_summary();
+        assert_eq!(summaries.len(), 2);
+
+        // Sort by label for deterministic ordering (HashMap iteration is unordered)
+        let mut summaries = summaries;
+        summaries.sort_by(|a, b| a.label.cmp(&b.label));
+
+        let alpha = &summaries[0];
+        assert_eq!(alpha.label, "alpha");
+        assert_eq!(alpha.project_path, "/projects/alpha");
+        assert_eq!(alpha.framework.as_deref(), Some("next"));
+        assert_eq!(alpha.port, Some(3000));
+        assert_eq!(alpha.total, 3);
+        assert_eq!(alpha.error, 1);
+        assert_eq!(alpha.warn, 1);
+        assert_eq!(alpha.info, 1);
+        assert_eq!(alpha.debug, 0);
+        assert_eq!(alpha.trace, 0);
+
+        let beta = &summaries[1];
+        assert_eq!(beta.label, "beta");
+        assert_eq!(beta.total, 2);
+        assert_eq!(beta.debug, 1);
+        assert_eq!(beta.trace, 1);
+    }
+
+    #[test]
+    fn test_project_channel_ring_buffer_cap() {
+        let store = OutputStore::new();
+
+        store.register_project_channel(
+            "big".to_string(),
+            "/projects/big".to_string(),
+            None,
+            None,
+        );
+
+        for i in 0..2500 {
+            store.push_project("big", "INFO", &format!("entry {}", i));
+        }
+
+        let (entries, total) = store.query_project("big", None, None, None);
+        assert_eq!(total, MAX_ENTRIES_PER_CHANNEL); // 2000
+        assert_eq!(entries.len(), MAX_ENTRIES_PER_CHANNEL);
+
+        // Oldest retained should be entry 500 (0..499 evicted)
+        assert_eq!(entries[0].message, "entry 500");
+
+        // Newest should be entry 2499
+        assert_eq!(entries[1999].message, "entry 2499");
+    }
+
+    #[test]
+    fn test_project_channel_query_filters() {
+        let store = OutputStore::new();
+
+        store.register_project_channel(
+            "filtered".to_string(),
+            "/projects/filtered".to_string(),
+            None,
+            None,
+        );
+
+        store.push_project("filtered", "ERROR", "fatal crash in module A");
+        store.push_project("filtered", "WARN", "deprecation in module B");
+        store.push_project("filtered", "INFO", "server started");
+        store.push_project("filtered", "DEBUG", "request handled");
+        store.push_project("filtered", "TRACE", "byte-level trace");
+
+        // Level filter: WARN and above
+        let (entries, _) = store.query_project("filtered", Some("WARN"), None, None);
+        assert_eq!(entries.len(), 2); // ERROR + WARN
+        assert_eq!(entries[0].level, "ERROR");
+        assert_eq!(entries[1].level, "WARN");
+
+        // Search filter
+        let (entries, _) = store.query_project("filtered", None, None, Some("module"));
+        assert_eq!(entries.len(), 2);
+        assert!(entries[0].message.contains("module A"));
+        assert!(entries[1].message.contains("module B"));
+
+        // Last (tail) filter
+        let (entries, _) = store.query_project("filtered", None, Some(2), None);
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].level, "DEBUG");
+        assert_eq!(entries[1].level, "TRACE");
+
+        // Combined: level + search
+        let (entries, _) = store.query_project("filtered", Some("WARN"), None, Some("module"));
+        assert_eq!(entries.len(), 2); // ERROR has "module A", WARN has "module B"
+    }
+
+    #[test]
+    fn test_push_to_nonexistent_project_channel_is_noop() {
+        let store = OutputStore::new();
+
+        // Should not panic
+        store.push_project("does-not-exist", "ERROR", "boom");
+
+        // Query returns empty
+        let (entries, total) = store.query_project("does-not-exist", None, None, None);
+        assert_eq!(total, 0);
+        assert!(entries.is_empty());
+    }
+
+    #[test]
+    fn test_list_project_channels() {
+        let store = OutputStore::new();
+
+        store.register_project_channel(
+            "proj-a".to_string(),
+            "/projects/a".to_string(),
+            Some("vite".to_string()),
+            Some(5173),
+        );
+        store.register_project_channel(
+            "proj-b".to_string(),
+            "/projects/b".to_string(),
+            None,
+            Some(8080),
+        );
+
+        let mut channels = store.list_project_channels();
+        assert_eq!(channels.len(), 2);
+
+        // Sort for deterministic assertion (HashMap iteration order is not guaranteed)
+        channels.sort_by(|a, b| a.label.cmp(&b.label));
+
+        assert_eq!(channels[0].label, "proj-a");
+        assert_eq!(channels[0].project_path, "/projects/a");
+        assert_eq!(channels[0].framework.as_deref(), Some("vite"));
+        assert_eq!(channels[0].port, Some(5173));
+
+        assert_eq!(channels[1].label, "proj-b");
+        assert_eq!(channels[1].project_path, "/projects/b");
+        assert!(channels[1].framework.is_none());
+        assert_eq!(channels[1].port, Some(8080));
     }
 }
