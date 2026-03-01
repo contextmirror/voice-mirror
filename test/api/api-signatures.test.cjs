@@ -147,6 +147,11 @@ describe('api.js -- critical Tauri command names', () => {
     'git_force_push',
     // Terminal profiles
     'terminal_detect_profiles',
+    // Project Output Channels
+    'register_project_channel',
+    'unregister_project_channel',
+    'push_project_log',
+    'list_project_channels',
     // LSP
     'lsp_request_formatting',
     'lsp_request_range_formatting',
@@ -327,6 +332,11 @@ describe('api.js -- exported async functions', () => {
     'lspRestartServer',
     'lspGetServerDetail',
     'lspShutdown',
+    // Project Output Channels
+    'registerProjectChannel',
+    'unregisterProjectChannel',
+    'pushProjectLog',
+    'listProjectChannels',
     'getOutputLogs',
     'logFrontendError',
   ];
@@ -352,7 +362,7 @@ describe('api.js -- exported async functions', () => {
 });
 
 describe('api.js -- section organization', () => {
-  const sections = ['Config', 'Window', 'Voice', 'AI', 'Inbox', 'Chat', 'Screenshot', 'Tools', 'Shortcuts', 'Performance Stats', 'Config Migration', 'Design Overlay', 'Lens', 'Browser Tabs', 'Dev Server', 'GPU / Model Management', 'Files', 'Terminal', 'LSP', 'Output / Diagnostics'];
+  const sections = ['Config', 'Window', 'Voice', 'AI', 'Inbox', 'Chat', 'Screenshot', 'Tools', 'Shortcuts', 'Performance Stats', 'Config Migration', 'Design Overlay', 'Lens', 'Browser Tabs', 'Dev Server', 'GPU / Model Management', 'Files', 'Terminal', 'LSP', 'Project Output Channels', 'Output / Diagnostics'];
 
   for (const section of sections) {
     it(`has "${section}" section comment`, () => {
