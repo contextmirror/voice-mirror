@@ -2,7 +2,7 @@
 
 > Internal doc. Tracks what Voice Mirror's Lens workspace has vs what VS Code / Zed / Cursor offer.
 >
-> Last updated: 2026-02-28
+> Last updated: 2026-03-01
 
 ---
 
@@ -27,7 +27,7 @@ What's missing is everything that makes a "real IDE" feel seamless — the gaps 
 | Feature | VS Code | Zed | Voice Mirror | Status |
 |---------|---------|-----|-------------|--------|
 | Editor (syntax, save) | Full | Full | Full | **Feature Compete** |
-| LSP (diagnostics, hover, completion) | Full (29/29) | Full (26/29) | 16/29 features | See LSP table below |
+| LSP (diagnostics, hover, completion) | Full (29/29) | Full (26/29) | 18/29 features | See LSP table below |
 | Go-to-definition | Full | Full | Full | **Feature Compete** |
 | Find references | Full | Full | Full | **Feature Compete** |
 | Rename symbol | Full | Full | Full | **Feature Compete** |
@@ -107,7 +107,7 @@ What's missing is everything that makes a "real IDE" feel seamless — the gaps 
 
 | Category | VS Code | Zed | Cursor | Voice Mirror |
 |----------|---------|-----|--------|-------------|
-| **Features implemented** | 29/29 | 26/29 | 29/29 | 16/29 |
+| **Features implemented** | 29/29 | 26/29 | 29/29 | 18/29 |
 | **Core editing** | Complete | Complete | Complete | Complete |
 | **Navigation** | Complete | Near-complete | Complete | Tier 1 done |
 | **Inline assistance** | Complete | Complete | Complete | Signature help done |
@@ -229,7 +229,7 @@ What's missing is everything that makes a "real IDE" feel seamless — the gaps 
 
 **Status:** Full staging/commit/push/pull cycle implemented with branch management and remote sync.
 
-**Backend:** 14 Rust commands — `git_stage`, `git_unstage`, `git_stage_all`, `git_unstage_all`, `git_commit`, `git_discard`, `git_push`, `git_ahead_behind`, `git_fetch`, `git_pull`, `git_force_push`, `git_list_branches`, `git_checkout_branch`, `get_git_changes`.
+**Backend:** 15 Rust commands — `get_git_changes`, `get_file_git_content`, `git_stage`, `git_unstage`, `git_stage_all`, `git_unstage_all`, `git_commit`, `git_discard`, `git_push`, `git_ahead_behind`, `git_fetch`, `git_pull`, `git_force_push`, `git_list_branches`, `git_checkout_branch`.
 
 **Frontend:**
 - `GitCommitPanel.svelte` — commit textarea, Commit / Commit & Push buttons, Ctrl+Enter shortcut
@@ -467,8 +467,8 @@ Voice Mirror's extension story is: "Add an MCP server" — not "install a VS Cod
 | Grid splits (H + V, recursive tree, up to ~8 panes) | ✅ |
 | Tab close button (hover X, middle-click) | ✅ |
 | Find in terminal (Ctrl+F, regex, case toggle) | ✅ |
-| Clickable URL detection (balanced parens, trailing punct) | ✅ |
-| File path detection (Unix/Windows, :line:col) | ✅ |
+| Clickable URL detection (Ctrl+click, balanced parens) | ✅ |
+| File path detection (Ctrl+click, Unix/Windows, :line:col) | ✅ |
 | Terminal persistence (layout, names, colors, icons) | ✅ |
 | Sidebar tree with drag-to-reorder | ✅ |
 | Tab coloring (9 colors) + icons (15) | ✅ |
@@ -488,7 +488,7 @@ All 5 high-priority terminal gaps from the gap analysis have been implemented:
 | 2 | **Grid splits (H + V)** | Recursive split tree (`split-tree.js`), Split Right / Split Down, max depth 3 (~8 panes) | 23 unit + 33 source-inspection |
 | 3 | **Terminal persistence** | Layout saved to config (debounced 500ms), fresh PTYs on restore, profile fallback | 11 unit + source-inspection in split tests |
 | 4 | **Find in terminal** | `terminal-search.js` + `TerminalSearch.svelte`, Ctrl+F, regex, case toggle, match navigation | 19 unit + 64 source-inspection |
-| 5 | **Clickable links** | `terminal-links.js` — URL detection (balanced parens) + file path detection (Unix/Windows, :line:col) | 23 unit |
+| 5 | **Clickable links** | Ctrl+click overlay (`terminal-link-overlay.js`), opens URLs via shell + files in editor with line:col | 43 source-inspection |
 
 #### Remaining Terminal Gaps
 
@@ -518,6 +518,12 @@ See `docs/archive/TERMINAL-GAP-ANALYSIS.md` for the complete 33-item gap list. T
 | Custom theme (synced with app theme) | ✅ |
 | Format document (Shift+Alt+F) | ✅ |
 | Format on save | ✅ |
+| Code actions lightbulb gutter (💡 + Ctrl+.) | ✅ |
+| Font zoom (Ctrl+=/−/0) | ✅ |
+| Inline gutter change indicators (green/blue/red + peek + revert) | ✅ |
+| Back/forward navigation (Alt+Left/Right) | ✅ |
+| Ctrl+hover definition underline | ✅ |
+| Code minimap (@replit/codemirror-minimap) | ✅ |
 
 #### Gaps
 
@@ -558,7 +564,7 @@ See `docs/archive/TERMINAL-GAP-ANALYSIS.md` for the complete 33-item gap list. T
 | Tab close button | Terminal | Hover X, middle-click, last-group safety, dev-server confirm |
 | Grid splits (H + V) | Terminal | Recursive split tree, Split Right/Down, max ~8 panes |
 | Find in terminal (Ctrl+F) | Terminal | Search with regex, case toggle, match navigation |
-| Clickable URLs/file paths | Terminal | URL detection + file path detection (Unix/Windows, :line:col) |
+| Clickable URLs/file paths | Terminal | Ctrl+click overlay: URL detection + file path detection (Unix/Windows, :line:col) |
 | Terminal persistence | Terminal | Layout/names/colors/icons saved to config, fresh PTYs on restore |
 | Status bar | Editor | Git branch, diagnostics, cursor pos, language, encoding, EOL, indentation, LSP health, dev server |
 | Notification system | Editor | Toast notifications + notification center + bell icon with unread count |
@@ -580,6 +586,8 @@ See `docs/archive/TERMINAL-GAP-ANALYSIS.md` for the complete 33-item gap list. T
 | LSP native binary support (Phase 3) | LSP | GitHub Releases download, gzip decompression, rust-analyzer manifest entry |
 | LSP management panel rewrite (Phase 2) | LSP | Per-server status dots, restart/stop/install buttons, expandable detail, Restart All |
 | LSP manifest expansion (Phase 3) | LSP | 7 servers: svelte, typescript, css, html, json, eslint, rust-analyzer |
+| Code actions lightbulb gutter | Editor | 💡 icon on current line when code actions available, 400ms debounce |
+| Font zoom (Ctrl+=/−/0) | Editor | Zoom in, zoom out, reset font size |
 
 ### Open Gaps — Ranked by Impact
 
@@ -587,20 +595,21 @@ See `docs/archive/TERMINAL-GAP-ANALYSIS.md` for the complete 33-item gap list. T
 |------|---------|----------|--------|--------|-----------|
 | ~~1~~ | ~~Inline gutter change indicators~~ | ~~Editor + Git~~ | ~~High~~ | ~~Medium~~ | ✅ Done — green/blue/red bars + peek widget + revert. §11, §15 |
 | 2 | **Hunk-level staging** | Source Control + Diff | High | Medium | Stage individual chunks, not whole files. Hunk-level *revert* done (via gutter peek). §11, §12 |
-| 3 | **Keyboard tree navigation** | File Tree | Medium | Medium | Arrow keys to navigate file tree. §13 |
-| 4 | **Merge conflict resolution** | Source Control | Medium | Large | 3-way merge or inline markers. §11 |
-| 5 | **Commit history / log** | Source Control | Medium | Medium | View past commits. §11 |
-| 6 | **Inline blame (git blame)** | Source Control | Medium | Medium | Per-line author/date annotations. §11 |
-| 7 | **Stash support** | Source Control | Medium | Small | Stash/pop/apply from UI. §11 |
-| 8 | **Drag-to-move files in tree** | File Tree | Medium | Medium | Drag files between folders. §13 |
-| 9 | **Indent guides** | Editor | Medium | Small | Colored lines showing nesting depth. §15 |
-| 10 | **Navigate to next/prev diff file** | Diff | Medium | Small | Alt+F5 cycle through changed files. §12 |
-| 11 | **Interactive diff minimap** | Diff | Low | Small | Click minimap to jump to chunk. §12 |
-| 12 | **Workspace symbols** | LSP | Medium | Medium | Cross-project symbol search in command palette |
-| 13 | **Inlay hints** | LSP | Medium | Medium | Inline type annotations for TS/Rust |
-| 14 | **Breadcrumbs** | Editor | Low | Small | File path segments above editor |
-| ~~15~~ | ~~**Code minimap**~~ | ~~Editor~~ | ~~Low~~ | ~~Large~~ | ✅ Done — `@replit/codemirror-minimap` in file editor + `DiffMinimap.svelte` |
-| 16 | **Debug adapter (DAP)** | Editor | Low | Massive | AI terminal handles debugging better |
+| ~~3~~ | ~~**Terminal clickable links**~~ | ~~Terminal~~ | ~~High~~ | ~~Small~~ | ✅ Done — Ctrl+click overlay with URL + file path detection. §14 |
+| 4 | **Keyboard tree navigation** | File Tree | Medium | Medium | Arrow keys to navigate file tree. §13 |
+| 5 | **Merge conflict resolution** | Source Control | Medium | Large | 3-way merge or inline markers. §11 |
+| 6 | **Commit history / log** | Source Control | Medium | Medium | View past commits. §11 |
+| 7 | **Inline blame (git blame)** | Source Control | Medium | Medium | Per-line author/date annotations. §11 |
+| 8 | **Stash support** | Source Control | Medium | Small | Stash/pop/apply from UI. §11 |
+| 9 | **Drag-to-move files in tree** | File Tree | Medium | Medium | Drag files between folders. §13 |
+| 10 | **Indent guides** | Editor | Medium | Small | Colored lines showing nesting depth. §15 |
+| 11 | **Navigate to next/prev diff file** | Diff | Medium | Small | Alt+F5 cycle through changed files. §12 |
+| 12 | **Interactive diff minimap** | Diff | Low | Small | Click minimap to jump to chunk. §12 |
+| 13 | **Workspace symbols** | LSP | Medium | Medium | Cross-project symbol search in command palette |
+| 14 | **Inlay hints** | LSP | Medium | Medium | Inline type annotations for TS/Rust |
+| 15 | **Breadcrumbs** | Editor | Low | Small | File path segments above editor |
+| ~~16~~ | ~~**Code minimap**~~ | ~~Editor~~ | ~~Low~~ | ~~Large~~ | ✅ Done — `@replit/codemirror-minimap` in file editor + `DiffMinimap.svelte` |
+| 17 | **Debug adapter (DAP)** | Editor | Low | Massive | AI terminal handles debugging better |
 | -- | **Extensions / Plugins** | System | None | Massive | MCP servers are our extension model |
 
 ---
@@ -617,6 +626,6 @@ The gap list above looks daunting, but Voice Mirror doesn't need to close every 
 
 The strategy: close the top gaps so Lens is **comfortable enough** for real coding, then double down on the voice+AI features no one else has.
 
-**Done:** find/replace ✓, multi-cursor ✓, global search ✓, git stage+commit+push ✓, branch management ✓, dynamic sync ✓, document formatting ✓, signature help ✓, split editor ✓, command palette ✓, file tree git decorations ✓, LSP diagnostics in tree ✓, code minimap ✓, terminal tab close ✓, terminal grid splits (H+V) ✓, terminal find (Ctrl+F) ✓, clickable terminal links ✓, terminal persistence ✓, inline gutter change indicators ✓, closed tab history + Ctrl+Shift+T ✓, mouse wheel scroll on tab bar ✓, back/forward navigation (Alt+Left/Right) ✓, Ctrl+hover definition underline ✓, Ctrl+PageUp/PageDown tab cycling ✓, tab drag to split zones ✓, Problems panel (Ctrl+Shift+M) ✓, LSP server management Phase 1 ✓, LSP crash recovery + health monitoring + idle shutdown (Phase 2) ✓, LSP project scanning + multi-server routing + native binary support (Phase 3) ✓.
+**Done:** find/replace ✓, multi-cursor ✓, global search ✓, git stage+commit+push ✓, branch management ✓, dynamic sync ✓, document formatting ✓, signature help ✓, split editor ✓, command palette ✓, file tree git decorations ✓, LSP diagnostics in tree ✓, code minimap ✓, terminal tab close ✓, terminal grid splits (H+V) ✓, terminal find (Ctrl+F) ✓, terminal clickable links (Ctrl+click) ✓, terminal persistence ✓, inline gutter change indicators ✓, closed tab history + Ctrl+Shift+T ✓, mouse wheel scroll on tab bar ✓, back/forward navigation (Alt+Left/Right) ✓, Ctrl+hover definition underline ✓, Ctrl+PageUp/PageDown tab cycling ✓, tab drag to split zones ✓, Problems panel (Ctrl+Shift+M) ✓, code actions lightbulb gutter ✓, font zoom (Ctrl+=/−/0) ✓, LSP server management Phase 1 ✓, LSP crash recovery + health monitoring + idle shutdown (Phase 2) ✓, LSP project scanning + multi-server routing + native binary support (Phase 3) ✓.
 
-**Next wave:** hunk-level staging (stage individual diff chunks from the gutter). This is the remaining high-impact gap that separates "usable" from "daily driver." The terminal is now feature-compete with VS Code for core workflows. LSP infrastructure is now feature-compete — remaining LSP gaps are Tier 2 features (inlay hints, workspace symbols, semantic tokens).
+**Next wave:** hunk-level staging (stage individual diff chunks from the gutter). This is the remaining high-impact gap that separates "usable" from "daily driver." The terminal is now feature-compete with VS Code for core workflows. LSP infrastructure is feature-compete — remaining LSP gaps are Tier 2 features (inlay hints, workspace symbols, semantic tokens).
