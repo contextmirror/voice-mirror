@@ -780,15 +780,15 @@ export async function lspShutdown() {
 // ============ Project Output Channels ============
 
 export async function registerProjectChannel(label, projectPath, framework, port) {
-  return invoke('register_project_channel', { label, projectPath, framework: framework || null, port: port || null });
+  return invoke('register_project_channel', { params: { label, projectPath, framework: framework || null, port: port || null } });
 }
 
 export async function unregisterProjectChannel(label) {
-  return invoke('unregister_project_channel', { label });
+  return invoke('unregister_project_channel', { params: { label } });
 }
 
 export async function pushProjectLog(label, level, message) {
-  return invoke('push_project_log', { label, level, message });
+  return invoke('push_project_log', { params: { label, level, message } });
 }
 
 export async function listProjectChannels() {
