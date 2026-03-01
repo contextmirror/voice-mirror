@@ -527,14 +527,13 @@ fn build_all_groups() -> HashMap<String, ToolGroupDef> {
                 },
                 ToolDef {
                     name: "get_logs".into(),
-                    description: "Query Voice Mirror's structured output logs. Without a channel, returns a summary of all channels with entry counts. With a channel, returns the actual log lines. Use this to diagnose issues with the CLI provider, voice pipeline, MCP server, or browser bridge.".into(),
+                    description: "Query Voice Mirror's structured output logs. Without a channel, returns a summary of all channels (system + project) with entry counts. With a channel name, returns actual log lines. System channels: app, cli, voice, mcp, browser, frontend. Project channels are dynamic -- created when dev servers start -- and contain build logs + browser console output for the project being developed. Use this to diagnose issues or view project runtime logs.".into(),
                     input_schema: json!({
                         "type": "object",
                         "properties": {
                             "channel": {
                                 "type": "string",
-                                "enum": ["app", "cli", "voice", "mcp", "browser"],
-                                "description": "Which log channel to query: app (Voice Mirror core), cli (CLI Provider), voice (Voice Pipeline), mcp (MCP Server), browser (Browser Bridge). Omit for a summary of all channels."
+                                "description": "Which log channel to query. System channels: app (Voice Mirror core), cli (CLI Provider), voice (Voice Pipeline), mcp (MCP Server), browser (Browser Bridge), frontend (Frontend errors). Project channels are dynamic (use summary to discover names). Omit for a summary of all channels."
                             },
                             "level": {
                                 "type": "string",
