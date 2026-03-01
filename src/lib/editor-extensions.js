@@ -298,29 +298,7 @@ export function buildEditorExtensions(cm, lsp, options) {
       indentWithTab,
       { key: 'Mod-s', run: () => { onSave(); return true; } },
       ...(onFormat ? [{ key: 'Shift-Alt-f', run: () => { onFormat(); return true; } }] : []),
-      // Multi-cursor: add cursor on line above/below (VS Code / Zed standard)
-      { key: 'Ctrl-Alt-ArrowUp', run: (v) => {
-        const ranges = v.state.selection.ranges;
-        const first = ranges[0];
-        const line = v.state.doc.lineAt(first.head);
-        if (line.number <= 1) return false;
-        const prevLine = v.state.doc.line(line.number - 1);
-        const col = first.head - line.from;
-        const newHead = prevLine.from + Math.min(col, prevLine.length);
-        v.dispatch({ selection: cm.EditorSelection.create([...ranges, cm.EditorSelection.cursor(newHead)]) });
-        return true;
-      }},
-      { key: 'Ctrl-Alt-ArrowDown', run: (v) => {
-        const ranges = v.state.selection.ranges;
-        const last = ranges[ranges.length - 1];
-        const line = v.state.doc.lineAt(last.head);
-        if (line.number >= v.state.doc.lines) return false;
-        const nextLine = v.state.doc.line(line.number + 1);
-        const col = last.head - line.from;
-        const newHead = nextLine.from + Math.min(col, nextLine.length);
-        v.dispatch({ selection: cm.EditorSelection.create([...ranges, cm.EditorSelection.cursor(newHead)]) });
-        return true;
-      }},
+      // Multi-cursor (Ctrl+Alt+Arrow) handled by vscodeKeymap
       // Font zoom: Ctrl+= (increase), Ctrl+- (decrease), Ctrl+0 (reset)
       ...(onFontZoom ? [
         { key: 'Ctrl-=', run: () => { onFontZoom(1); return true; } },
