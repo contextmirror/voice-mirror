@@ -518,19 +518,24 @@
 
       if (hasPending) {
         try {
-          const doc = cm.Text.of(data.content.split(/\r?\n/));
-          const lineNum = Math.min(Math.max(pending.line + 1, 1), doc.lines);
-          const line = doc.line(lineNum);
-          const anchor = line.from + Math.min(pending.character || 0, line.length);
+          // Compute offset from raw string — no CM APIs needed before state creation
+          const lines = data.content.split('\n');
+          const lineIdx = Math.min(Math.max(pending.line, 0), lines.length - 1);
+          let anchor = 0;
+          for (let i = 0; i < lineIdx; i++) anchor += lines[i].length + 1;
+          anchor += Math.min(pending.character || 0, lines[lineIdx].length);
+
           initialSelection = cm.EditorSelection.cursor(anchor);
           scrollTo = cm.EditorView.scrollIntoView(anchor, { y: 'center' });
 
-          // Compute highlight range for after view creation
+          // Compute highlight end position
           let highlightEnd = anchor;
           if (pending.endLine != null) {
-            const endLineNum = Math.min(Math.max(pending.endLine + 1, 1), doc.lines);
-            const endLine = doc.line(endLineNum);
-            highlightEnd = endLine.from + Math.min(pending.endCharacter || 0, endLine.length);
+            const endIdx = Math.min(Math.max(pending.endLine, 0), lines.length - 1);
+            let endPos = 0;
+            for (let i = 0; i < endIdx; i++) endPos += lines[i].length + 1;
+            endPos += Math.min(pending.endCharacter || 0, lines[endIdx].length);
+            highlightEnd = endPos;
           }
           pendingHighlight = { from: anchor, to: highlightEnd };
         } catch {
