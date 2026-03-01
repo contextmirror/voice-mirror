@@ -545,6 +545,8 @@
         const initialLine = view.state.doc.lineAt(initialPos);
         statusBarStore.setCursor(initialLine.number, initialPos - initialLine.from + 1);
 
+        // Apply pending cursor if Problems panel or similar set one before file loaded
+        applyPendingCursor();
       }
 
       // Open file in LSP (fire and forget)
@@ -584,51 +586,6 @@
             view.dispatch(cm.setDiagnostics(view.state, cmDiags));
           } catch {}
         }
-      }
-
-      // Apply pending cursor after file loads. We need to survive CM6 measure
-      // cycles triggered by diagnostic dispatch and git gutter async fetch.
-      // Strategy: apply cursor at multiple intervals so even if an intermediate
-      // layout reflow resets scroll, the last application wins.
-      if (tabsStore.pendingCursorPosition?.path === filePath && view) {
-        const savedPending = { ...tabsStore.pendingCursorPosition };
-        tabsStore.clearPendingCursor();
-        const applyScroll = () => {
-          if (!view) return;
-          try {
-            const lineNum = Math.min(Math.max(savedPending.line + 1, 1), view.state.doc.lines);
-            const line = view.state.doc.line(lineNum);
-            const anchor = line.from + Math.min(savedPending.character || 0, line.length);
-            const scrollEffect = cmCache?.EditorView?.scrollIntoView(anchor, { y: 'center' });
-            view.dispatch({
-              selection: { anchor },
-              ...(scrollEffect ? { effects: scrollEffect } : { scrollIntoView: true }),
-            });
-            // Highlight + focus only on the final application
-            return anchor;
-          } catch { return null; }
-        };
-        // Apply at escalating intervals to survive layout reflows from:
-        // - CM6 init measure cycles (~50ms)
-        // - Diagnostic lint gutter appearance (~100ms)
-        // - Git gutter async fetch completion (~200-400ms)
-        setTimeout(() => applyScroll(), 50);
-        setTimeout(() => applyScroll(), 200);
-        setTimeout(() => {
-          const anchor = applyScroll();
-          if (anchor != null) {
-            let highlightEnd = anchor;
-            if (savedPending.endLine != null) {
-              try {
-                const endLineNum = Math.min(Math.max(savedPending.endLine + 1, 1), view.state.doc.lines);
-                const endLine = view.state.doc.line(endLineNum);
-                highlightEnd = endLine.from + Math.min(savedPending.endCharacter || 0, endLine.length);
-              } catch {}
-            }
-            applyRangeHighlight(view, anchor, highlightEnd);
-            view.focus();
-          }
-        }, 500);
       }
     } catch (err) {
       if (filePath !== currentPath) return;
@@ -729,14 +686,14 @@
   }
 
   // Apply pending cursor position (from Problems panel click-to-navigate).
-  // This effect handles the case where the file is ALREADY OPEN and view already exists.
-  // For new files, loadFile() schedules applyPendingCursor via setTimeout after view creation.
+  // Note: `view` is not $state so the effect won't re-run when view is created.
+  // For new files, applyPendingCursor() is called directly after view creation in loadFile().
+  // This effect handles the case where the file is already open and view already exists.
   $effect(() => {
     const pending = tabsStore.pendingCursorPosition;
     if (!pending || pending.path !== currentPath) return;
-    if (!view) return;
-    // setTimeout(0) defers to next macrotask — enough for already-open files
-    setTimeout(() => applyPendingCursor(), 0);
+    // Defer one frame to let any tab-switch rendering settle
+    requestAnimationFrame(() => applyPendingCursor());
   });
 
   // Listen for outline symbol navigation (from OutlinePanel via LensWorkspace)
