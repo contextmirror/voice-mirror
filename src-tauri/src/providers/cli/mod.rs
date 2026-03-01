@@ -30,56 +30,7 @@ use tokio::sync::mpsc::UnboundedSender;
 use tracing::{info, warn};
 
 use super::{Provider, ProviderConfig, ProviderEvent};
-use crate::util::find_project_root;
-
-/// Strip ANSI escape sequences from text for clean pattern matching.
-///
-/// Handles CSI sequences (ESC [ ... final_byte), OSC sequences (ESC ] ... ST),
-/// and simple two-byte escapes (ESC char).
-fn strip_ansi_codes(input: &str) -> String {
-    let mut out = String::with_capacity(input.len());
-    let mut chars = input.chars().peekable();
-
-    while let Some(c) = chars.next() {
-        if c == '\x1b' {
-            match chars.peek() {
-                Some('[') => {
-                    chars.next(); // consume '['
-                    // CSI: consume until final byte (0x40..=0x7E)
-                    while let Some(&ch) = chars.peek() {
-                        chars.next();
-                        if ('@'..='~').contains(&ch) {
-                            break;
-                        }
-                    }
-                }
-                Some(']') => {
-                    chars.next(); // consume ']'
-                    // OSC: consume until ST (ESC \ or BEL)
-                    while let Some(ch) = chars.next() {
-                        if ch == '\x07' {
-                            break;
-                        }
-                        if ch == '\x1b' {
-                            if chars.peek() == Some(&'\\') {
-                                chars.next();
-                            }
-                            break;
-                        }
-                    }
-                }
-                Some(_) => {
-                    chars.next(); // consume single char after ESC
-                }
-                None => {}
-            }
-        } else {
-            out.push(c);
-        }
-    }
-
-    out
-}
+use crate::util::{find_project_root, strip_ansi_codes};
 
 /// Configuration for a specific CLI tool.
 #[derive(Debug, Clone)]

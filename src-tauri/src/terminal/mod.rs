@@ -424,8 +424,13 @@ impl TerminalManager {
                             for line in text.lines() {
                                 let trimmed = line.trim();
                                 if !trimmed.is_empty() {
-                                    let level = classify_terminal_line(trimmed);
-                                    store.push_project(channel, level, trimmed);
+                                    // Strip ANSI escape codes so Output panel shows clean text
+                                    let clean = crate::util::strip_ansi_codes(trimmed);
+                                    let clean = clean.trim();
+                                    if !clean.is_empty() {
+                                        let level = classify_terminal_line(clean);
+                                        store.push_project(channel, level, clean);
+                                    }
                                 }
                             }
                         }

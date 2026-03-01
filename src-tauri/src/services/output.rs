@@ -471,6 +471,10 @@ impl OutputStore {
             if let Ok(fw) = self.file_writer.read() {
                 if let Some(ref writer) = *fw {
                     writer.append_project(label, &entry);
+                    // Truncate every 100 writes to prevent unbounded disk growth
+                    if entry.id % 100 == 0 {
+                        writer.maybe_truncate_project(label);
+                    }
                 }
             }
 
