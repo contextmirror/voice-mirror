@@ -45,12 +45,10 @@
 
   function setIndentSpaces(size) {
     window.dispatchEvent(new CustomEvent('status-bar-indent-change', { detail: { type: 'spaces', size } }));
-    closeIndentDropdown();
   }
 
   function setIndentTabs(size) {
     window.dispatchEvent(new CustomEvent('status-bar-indent-change', { detail: { type: 'tabs', size } }));
-    closeIndentDropdown();
   }
 
   function convertTo(type) {

@@ -790,15 +790,15 @@
     function handleIndentConvert(e) {
       if (!view) return;
       const { to } = e.detail;
+      const size = currentIndent.size || 2;
       const doc = view.state.doc.toString();
-      const converted = convertIndentation(doc, to, currentIndent.size);
-      if (converted !== doc) {
-        view.dispatch({
-          changes: { from: 0, to: doc.length, insert: converted },
-        });
-      }
-      // Also switch the indent type
-      reconfigureIndent(to, currentIndent.size);
+      const converted = convertIndentation(doc, to, size);
+      // Apply document changes (even if content looks similar, tabs ≠ spaces)
+      view.dispatch({
+        changes: { from: 0, to: doc.length, insert: converted },
+      });
+      // Switch indent type (and reconfigure editor so Tab key uses new mode)
+      reconfigureIndent(to, size);
     }
 
     function handleIndentDetect() {
