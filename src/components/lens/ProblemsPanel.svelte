@@ -14,8 +14,15 @@
   /** Track collapsed file groups */
   let collapsedFiles = $state(new Set());
 
-  // -- Derived: grouped + filtered + sorted diagnostics --
-  let fileGroups = $derived.by(() => {
+  // -- Debounced grouped + filtered + sorted diagnostics --
+  // Uses $state + $effect instead of $derived to debounce rapid LSP updates.
+  // When opening a file, the LSP server briefly clears then re-publishes
+  // diagnostics — without debouncing, the panel flickers as file groups
+  // disappear and reappear.
+  let fileGroups = $state([]);
+  let fileGroupsTimer;
+
+  function computeFileGroups() {
     const rawDiags = lspDiagnosticsStore.rawDiagnostics ?? new Map();
     if (!rawDiags.size) return [];
 
@@ -64,11 +71,52 @@
     }
 
     // Sort file groups alphabetically — stable order prevents visual jumping
-    // when diagnostic counts fluctuate during LSP re-analysis.
-    // Error/warning badges on each file header already indicate severity.
     groups.sort((a, b) => a.filePath.localeCompare(b.filePath));
 
     return groups;
+  }
+
+  // Stabilize file groups across transient LSP re-analysis cycles.
+  // When the LSP server briefly clears diagnostics (count:0) before
+  // re-publishing, we keep the old data for one update cycle to prevent
+  // DOM jumping. If the file is still gone on the NEXT update, it's a
+  // real removal (user fixed the errors) and we drop it.
+  let prevGroupMap = new Map();
+  let pendingRemovals = new Set();
+
+  $effect(() => {
+    // Read reactive dependencies (triggers re-run when they change)
+    lspDiagnosticsStore.rawDiagnostics;
+    showErrors; showWarnings; showInfos; filterText;
+
+    // Debounce: batch rapid LSP updates (clear → re-publish) into one render
+    clearTimeout(fileGroupsTimer);
+    fileGroupsTimer = setTimeout(() => {
+      const newGroups = computeFileGroups();
+      const newPaths = new Set(newGroups.map(g => g.filePath));
+
+      for (const [path, oldGroup] of prevGroupMap) {
+        if (!newPaths.has(path)) {
+          if (pendingRemovals.has(path)) {
+            // Was already missing last cycle — real removal, drop it
+            pendingRemovals.delete(path);
+          } else {
+            // First time missing — keep old data, mark as pending
+            pendingRemovals.add(path);
+            newGroups.push(oldGroup);
+          }
+        } else {
+          // File came back — cancel pending removal
+          pendingRemovals.delete(path);
+        }
+      }
+      newGroups.sort((a, b) => a.filePath.localeCompare(b.filePath));
+
+      prevGroupMap = new Map(newGroups.map(g => [g.filePath, g]));
+      fileGroups = newGroups;
+    }, 80);
+
+    return () => clearTimeout(fileGroupsTimer);
   });
 
   function toggleCollapse(filePath) {
