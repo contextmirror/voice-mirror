@@ -262,6 +262,17 @@
     lsp.reset();
     clearTimeout(sigHelpDebounce);
 
+    // CRITICAL: Destroy old view BEFORE setting currentPath.
+    // Setting currentPath triggers the pending cursor $effect, which checks
+    // `pending.path === currentPath`. If the old view still exists at that
+    // point, the $effect fires applyPendingCursor on the WRONG editor,
+    // consumes the pending cursor, and the real new editor never gets it.
+    // By nulling view first, the $effect's `if (!view) return` guard works.
+    if (view) {
+      view.destroy();
+      view = null;
+    }
+
     currentPath = filePath;
     loading = true;
     error = null;
@@ -511,12 +522,6 @@
         extensions,
       });
 
-      // Destroy old editor if it exists
-      if (view) {
-        view.destroy();
-        view = null;
-      }
-
       loading = false;
       await tick();
 
@@ -687,8 +692,7 @@
         highlightEnd = endLine.from + Math.min(savedPending.endCharacter || 0, endLine.length);
       }
 
-      // Set cursor and scroll — this dispatch will be processed in the same
-      // measure cycle as any pending height map rebuild from fonts.ready
+      // Set cursor and scroll
       const scrollEffect = cmCache?.EditorView?.scrollIntoView(anchor, { y: 'center' });
       view.dispatch({
         selection: { anchor },
