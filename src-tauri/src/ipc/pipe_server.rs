@@ -315,7 +315,37 @@ fn dispatch_message(msg: McpToApp, app_handle: &AppHandle) {
                                 result.push_str(&format!("\n\n--- {} entries (filtered from {} total) ---", count, total));
                                 result
                             } else {
-                                format!("Unknown channel: {}. Available: app, cli, voice, mcp, browser", ch_str)
+                                // Try project channel
+                                let (entries, total) = store.query_project(
+                                    ch_str,
+                                    level.as_deref(),
+                                    last.or(Some(100)),
+                                    search.as_deref(),
+                                );
+                                if total > 0 {
+                                    let lines: Vec<String> = entries.iter().map(|e| e.format_line()).collect();
+                                    let count = lines.len();
+                                    let mut result = lines.join("\n");
+                                    result.push_str(&format!(
+                                        "\n\n--- {} entries (filtered from {} total, project channel) ---",
+                                        count, total
+                                    ));
+                                    result
+                                } else {
+                                    let project_labels: Vec<String> = store.project_summary()
+                                        .iter()
+                                        .map(|ps| ps.label.clone())
+                                        .collect();
+                                    let available = if project_labels.is_empty() {
+                                        String::new()
+                                    } else {
+                                        format!(" Project: {}", project_labels.join(", "))
+                                    };
+                                    format!(
+                                        "Unknown channel: {}. System: app, cli, voice, mcp, browser, frontend.{}",
+                                        ch_str, available
+                                    )
+                                }
                             }
                         }
                         None => {
@@ -323,10 +353,21 @@ fn dispatch_message(msg: McpToApp, app_handle: &AppHandle) {
                             let mut text = String::from("Output Channels:\n");
                             for s in &summaries {
                                 text.push_str(&format!(
-                                    "  {:<8} {:>4} entries ({} error, {} warn, {} info)\n",
+                                    "  {:<10} {:>4} entries ({} error, {} warn, {} info)\n",
                                     format!("{}:", s.channel),
                                     s.total, s.error, s.warn, s.info
                                 ));
+                            }
+
+                            let project_summaries = store.project_summary();
+                            if !project_summaries.is_empty() {
+                                text.push_str("\nProject Channels:\n");
+                                for ps in &project_summaries {
+                                    text.push_str(&format!(
+                                        "  {} ({} entries, {} error, {} warn)\n",
+                                        ps.label, ps.total, ps.error, ps.warn
+                                    ));
+                                }
                             }
                             text
                         }
