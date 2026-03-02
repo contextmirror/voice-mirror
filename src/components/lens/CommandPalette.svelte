@@ -6,6 +6,7 @@
   import { projectStore } from '../../lib/stores/project.svelte.js';
   import { lensStore } from '../../lib/stores/lens.svelte.js';
   import { editorGroupsStore } from '../../lib/stores/editor-groups.svelte.js';
+  import { basename, unwrapResult } from '../../lib/utils.js';
 
   let { visible = $bindable(false), onClose = () => {}, initialMode = 'files' } = $props();
 
@@ -51,7 +52,7 @@
     if (!strippedQuery || cachedFiles.length === 0) return [];
     const results = fuzzysort.go(strippedQuery, cachedFiles, { limit: 20 });
     return results.map(r => ({
-      name: extractFilename(r.target),
+      name: basename(r.target),
       path: r.target,
       score: r.score,
     }));
@@ -142,10 +143,6 @@
   let selectableItems = $derived(allResults.filter(i => i.type !== 'header' && i.type !== 'hint'));
 
   // ── Helpers ──
-
-  function extractFilename(filepath) {
-    return filepath.split(/[/\\]/).pop() || filepath;
-  }
 
   function extractDirectory(filepath) {
     const parts = filepath.split(/[/\\]/);
@@ -259,7 +256,7 @@
     loadingFiles = true;
     try {
       const result = await searchFiles(project.path);
-      const files = result?.data || result || [];
+      const files = unwrapResult(result) || [];
       cachedFiles = Array.isArray(files) ? files : [];
     } catch (err) {
       console.warn('[CommandPalette] Failed to fetch files:', err);

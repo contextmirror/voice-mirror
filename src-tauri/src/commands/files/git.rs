@@ -613,7 +613,7 @@ pub fn git_list_branches(root: Option<String>) -> IpcResponse {
             let stdout = String::from_utf8_lossy(&output.stdout);
             for line in stdout.lines() {
                 let name = line.trim();
-                if name.is_empty() || name.contains("HEAD") { continue; }
+                if name.is_empty() || name.contains("HEAD") || !name.contains('/') { continue; }
                 // Skip remotes that have a local tracking branch with same short name
                 let short = name.split('/').skip(1).collect::<Vec<_>>().join("/");
                 if branches.iter().any(|b| b["name"].as_str() == Some(&short)) {

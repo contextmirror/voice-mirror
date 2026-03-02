@@ -11,6 +11,9 @@
   import SearchPanel from './SearchPanel.svelte';
   import GitCommitPanel from './GitCommitPanel.svelte';
   import { lspDiagnosticsStore } from '../../lib/stores/lsp-diagnostics.svelte.js';
+  import { flattenVisibleEntries, isDescendantOf, getParentPath as navGetParentPath } from '../../lib/file-tree-nav.js';
+  import { toastStore } from '../../lib/stores/toast.svelte.js';
+  import { basename } from '../../lib/utils.js';
 
   let { onFileClick = () => {}, onFileDblClick = () => {}, onChangeClick = () => {}, onChangeDblClick = () => {}, activeFilePath = null, activeDiffPath = null, activeFileHasLsp = false, onSymbolClick = () => {} } = $props();
 
@@ -66,11 +69,19 @@
   // Selected entry for F2 rename shortcut
   let selectedEntry = $state(null);
 
+  // Keyboard navigation state
+  let focusedPath = $state(null);
+  let treeScrollEl = $state(null);
+  let visibleEntries = $derived(flattenVisibleEntries(rootEntries, expandedDirs, dirChildren));
+
+  // Drag-to-move state
+  let dragOverPath = $state(null);
+
   // Reload when active project changes.
   $effect(() => {
     const _idx = projectStore.activeIndex;
     const _len = projectStore.entries.length;
-    const _path = projectStore.activeProject?.path;
+    const _path = projectStore.root;
     expandedDirs = new Set();
     dirChildren = new Map();
     loadRoot();
@@ -102,7 +113,7 @@
 
   async function handleTreeChanged(event) {
     const { root: rootChanged } = event.payload;
-    const currentRoot = projectStore.activeProject?.path || null;
+    const currentRoot = projectStore.root;
     if (!currentRoot) return; // No project open, ignore stale watcher events
 
     if (rootChanged) {
@@ -144,13 +155,13 @@
 
   function handleGitChanged() {
     // Only reload if a project is still open (avoids stale data after project close)
-    if (projectStore.activeProject?.path) {
+    if (projectStore.root) {
       loadGitChanges();
     }
   }
 
   async function loadRoot() {
-    const root = projectStore.activeProject?.path;
+    const root = projectStore.root;
     if (!root) {
       rootEntries = [];
       return;
@@ -166,7 +177,7 @@
   }
 
   async function loadGitChanges() {
-    const root = projectStore.activeProject?.path;
+    const root = projectStore.root;
     if (!root) {
       gitChanges = [];
       currentBranch = '';
@@ -204,7 +215,7 @@
       loadingDirs = loading;
 
       try {
-        const root = projectStore.activeProject?.path || null;
+        const root = projectStore.root;
         const resp = await listDirectory(path, root);
         if (resp && resp.data) {
           const updated = new Map(dirChildren);
@@ -223,6 +234,7 @@
 
   function handleFileClick(entry) {
     selectedEntry = entry;
+    focusedPath = entry.path;
     onFileClick(entry);
   }
 
@@ -230,7 +242,7 @@
 
   async function refreshParent(path) {
     const parentPath = path.includes('/') ? path.substring(0, path.lastIndexOf('/')) : null;
-    const root = projectStore.activeProject?.path || null;
+    const root = projectStore.root;
     try {
       if (parentPath) {
         const resp = await listDirectory(parentPath, root);
@@ -278,7 +290,7 @@
 
   function startRename(entry) {
     editingEntry = entry;
-    editingValue = entry.name || entry.path.split(/[/\\]/).pop();
+    editingValue = entry.name || basename(entry.path);
   }
 
   async function saveRename() {
@@ -294,7 +306,7 @@
       return;
     }
     try {
-      const root = projectStore.activeProject?.path || null;
+      const root = projectStore.root;
       await renameEntry(oldPath, newPath, root);
       cancelRename();
       await refreshParent(oldPath);
@@ -354,7 +366,7 @@
       ? `${creatingIn.parentPath}/${creatingValue.trim()}`
       : creatingValue.trim();
     try {
-      const root = projectStore.activeProject?.path || null;
+      const root = projectStore.root;
       if (creatingIn.type === 'file') {
         await createFile(fullPath, '', root);
       } else {
@@ -405,13 +417,13 @@
   }
 
   function copyProjectPath() {
-    const path = projectStore.activeProject?.path;
+    const path = projectStore.root;
     if (path) navigator.clipboard.writeText(path).catch(() => {});
     closeProjectMenu();
   }
 
   function revealProject() {
-    const path = projectStore.activeProject?.path;
+    const path = projectStore.root;
     if (path) revealInExplorer(path, path).catch(() => {});
     closeProjectMenu();
   }
@@ -429,31 +441,197 @@
     }
   }
 
+  // ── Tree keyboard navigation (arrow keys) ──
+
+  function scrollFocusedIntoView() {
+    if (!focusedPath || !treeScrollEl) return;
+    requestAnimationFrame(() => {
+      const el = treeScrollEl.querySelector(`[data-path="${CSS.escape(focusedPath)}"]`);
+      el?.scrollIntoView({ block: 'nearest' });
+    });
+  }
+
+  function handleTreeKeydown(e) {
+    if (activeTab !== 'files' || !projectTreeOpen) return;
+    if (editingEntry || creatingIn) return;
+
+    const flatList = visibleEntries;
+    if (flatList.length === 0) return;
+
+    const currentIdx = focusedPath
+      ? flatList.findIndex(v => v.entry.path === focusedPath)
+      : -1;
+
+    switch (e.key) {
+      case 'ArrowDown': {
+        e.preventDefault();
+        const next = Math.min(currentIdx + 1, flatList.length - 1);
+        focusedPath = flatList[Math.max(0, next)].entry.path;
+        scrollFocusedIntoView();
+        break;
+      }
+      case 'ArrowUp': {
+        e.preventDefault();
+        const prev = Math.max(currentIdx - 1, 0);
+        focusedPath = flatList[prev].entry.path;
+        scrollFocusedIntoView();
+        break;
+      }
+      case 'ArrowRight': {
+        e.preventDefault();
+        const item = flatList[currentIdx];
+        if (!item) break;
+        if (item.entry.type === 'directory') {
+          if (!expandedDirs.has(item.entry.path)) {
+            toggleDir(item.entry);
+          } else if (currentIdx + 1 < flatList.length && flatList[currentIdx + 1].depth > item.depth) {
+            focusedPath = flatList[currentIdx + 1].entry.path;
+            scrollFocusedIntoView();
+          }
+        }
+        break;
+      }
+      case 'ArrowLeft': {
+        e.preventDefault();
+        const item = flatList[currentIdx];
+        if (!item) break;
+        if (item.entry.type === 'directory' && expandedDirs.has(item.entry.path)) {
+          toggleDir(item.entry);
+        } else if (item.parentPath) {
+          focusedPath = item.parentPath;
+          scrollFocusedIntoView();
+        }
+        break;
+      }
+      case 'Enter': {
+        e.preventDefault();
+        const item = flatList[currentIdx];
+        if (!item) break;
+        if (item.entry.type === 'directory') {
+          toggleDir(item.entry);
+        } else {
+          handleFileClick(item.entry);
+        }
+        break;
+      }
+      case 'Home': {
+        e.preventDefault();
+        if (flatList.length > 0) {
+          focusedPath = flatList[0].entry.path;
+          scrollFocusedIntoView();
+        }
+        break;
+      }
+      case 'End': {
+        e.preventDefault();
+        if (flatList.length > 0) {
+          focusedPath = flatList[flatList.length - 1].entry.path;
+          scrollFocusedIntoView();
+        }
+        break;
+      }
+    }
+  }
+
+  // ── Drag-to-move files between folders ──
+
+  function handleTreeDragOver(e, entry) {
+    if (!e.dataTransfer.types.includes('application/x-voice-mirror-file')) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+    const targetPath = entry.type === 'directory' ? entry.path : navGetParentPath(entry.path);
+    dragOverPath = targetPath || null;
+  }
+
+  function handleTreeDragLeave(e) {
+    // Only clear if actually leaving the tree item (not entering a child)
+    if (e.currentTarget.contains(e.relatedTarget)) return;
+    dragOverPath = null;
+  }
+
+  async function handleTreeDrop(e, entry) {
+    e.preventDefault();
+    e.stopPropagation();
+    dragOverPath = null;
+
+    let raw = e.dataTransfer.getData('application/x-voice-mirror-file');
+    if (!raw) return;
+
+    let data;
+    try { data = JSON.parse(raw); } catch { return; }
+    if (data?.type !== 'file-tree' || !data.entry?.path) return;
+
+    const sourcePath = data.entry.path;
+    const destFolder = entry.type === 'directory' ? entry.path : navGetParentPath(entry.path);
+    const sourceParent = navGetParentPath(sourcePath);
+
+    // No-op: same parent
+    if (destFolder === sourceParent) return;
+
+    // Block: can't move folder into itself or its descendants
+    if (destFolder && isDescendantOf(destFolder, sourcePath)) {
+      toastStore.addToast({ message: 'Cannot move a folder into itself', severity: 'error' });
+      return;
+    }
+
+    const fileName = basename(sourcePath);
+    const newPath = destFolder ? `${destFolder}/${fileName}` : fileName;
+
+    try {
+      const root = projectStore.root;
+      await renameEntry(sourcePath, newPath, root);
+    } catch (err) {
+      const msg = err?.message || String(err);
+      if (msg.includes('already exists')) {
+        toastStore.addToast({ message: `"${fileName}" already exists in the destination folder`, severity: 'error' });
+      } else {
+        toastStore.addToast({ message: `Move failed: ${msg}`, severity: 'error' });
+      }
+    }
+
+    window.dispatchEvent(new CustomEvent('file-tree-drag-end'));
+  }
+
+  function handleEmptyDragOver(e) {
+    if (!e.dataTransfer.types.includes('application/x-voice-mirror-file')) return;
+    if (e.target === e.currentTarget || e.target.classList.contains('tree-scroll')) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      dragOverPath = null;
+    }
+  }
+
+  function handleEmptyDrop(e) {
+    if (e.target !== e.currentTarget && !e.target.classList.contains('tree-scroll')) return;
+    handleTreeDrop(e, { path: '', type: 'directory' });
+  }
+
   // ── Git stage/unstage/discard handlers ──
 
   async function handleStage(change) {
-    const root = projectStore.activeProject?.path;
+    const root = projectStore.root;
     if (!root) return;
     try { await gitStage([change.path], root); await loadGitChanges(); }
     catch (err) { console.error('git stage failed', err); }
   }
 
   async function handleUnstage(change) {
-    const root = projectStore.activeProject?.path;
+    const root = projectStore.root;
     if (!root) return;
     try { await gitUnstage([change.path], root); await loadGitChanges(); }
     catch (err) { console.error('git unstage failed', err); }
   }
 
   async function handleStageAll() {
-    const root = projectStore.activeProject?.path;
+    const root = projectStore.root;
     if (!root) return;
     try { await gitStageAll(root); await loadGitChanges(); }
     catch (err) { console.error('git stage all failed', err); }
   }
 
   async function handleUnstageAll() {
-    const root = projectStore.activeProject?.path;
+    const root = projectStore.root;
     if (!root) return;
     try { await gitUnstageAll(root); await loadGitChanges(); }
     catch (err) { console.error('git unstage all failed', err); }
@@ -461,7 +639,7 @@
 
   async function handleDiscard(change) {
     if (!confirm(`Discard changes to ${change.path}? This cannot be undone.`)) return;
-    const root = projectStore.activeProject?.path;
+    const root = projectStore.root;
     if (!root) return;
     try { await gitDiscard([change.path], root); await loadGitChanges(); }
     catch (err) { console.error('git discard failed', err); }
@@ -521,7 +699,7 @@
         title={projectStore.activeProject.path}
       >
         <svg class="project-name-chevron" class:collapsed={!projectTreeOpen} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-        <span>{projectStore.activeProject.path.split(/[/\\]/).pop()?.toUpperCase() || 'PROJECT'}</span>
+        <span>{basename(projectStore.activeProject.path)?.toUpperCase() || 'PROJECT'}</span>
       </button>
       <div class="project-name-actions">
         <button class="project-action-btn" title="New File" onclick={() => startNewFile(null)}>
@@ -540,7 +718,7 @@
     </div>
 
     <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div class="tree-scroll" oncontextmenu={handleEmptyContextMenu} class:hidden={!projectTreeOpen}>
+    <div class="tree-scroll" tabindex="0" role="tree" oncontextmenu={handleEmptyContextMenu} onkeydown={handleTreeKeydown} ondragover={handleEmptyDragOver} ondrop={handleEmptyDrop} bind:this={treeScrollEl} class:hidden={!projectTreeOpen}>
       {#if creatingIn?.parentPath === ''}
         <div class="tree-item file" style="padding-left: {8 + 18}px">
           <input
@@ -567,6 +745,8 @@
         {creatingIn}
         bind:creatingValue
         {gitStatusMap}
+        {focusedPath}
+        {dragOverPath}
         onToggle={toggleDir}
         onFileClick={handleFileClick}
         onFileDblClick={(entry) => onFileDblClick(entry)}
@@ -575,6 +755,9 @@
         onRenameSave={saveRename}
         onCreateKeydown={handleCreateKeydown}
         onCreateSave={saveCreate}
+        onTreeDragOver={handleTreeDragOver}
+        onTreeDragLeave={handleTreeDragLeave}
+        onTreeDrop={handleTreeDrop}
         {autofocus}
       />
     </div>
@@ -585,7 +768,7 @@
       branch={currentBranch}
       stagedCount={stagedChanges.length}
       onCommit={loadGitChanges}
-      root={projectStore.activeProject?.path}
+      root={projectStore.root}
     />
     <div class="tree-scroll">
       <GitChangesPanel
@@ -613,7 +796,7 @@
   {#if activeTab === 'search'}
     <div class="tree-scroll">
       <SearchPanel onResultClick={(result) => {
-        const name = result.path.split(/[/\\]/).pop() || result.path;
+        const name = basename(result.path);
         onFileClick({ name, path: result.path });
         setTimeout(() => {
           window.dispatchEvent(new CustomEvent('lens-goto-position', {
@@ -782,6 +965,10 @@
     flex: 1;
     overflow-y: auto;
     padding: 4px 0;
+    outline: none;
+  }
+  .tree-scroll:focus-visible {
+    box-shadow: inset 0 0 0 1px var(--accent);
   }
   .tree-scroll.hidden {
     display: none;

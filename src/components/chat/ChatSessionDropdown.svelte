@@ -4,7 +4,8 @@
   import { chatStore } from '../../lib/stores/chat.svelte.js';
   import { navigationStore } from '../../lib/stores/navigation.svelte.js';
   import { chatList, chatLoad, chatSave, chatDelete, chatRename } from '../../lib/api.js';
-  import { uid } from '../../lib/utils.js';
+  import { uid, unwrapResult } from '../../lib/utils.js';
+  import { clampToViewport } from '$lib/clamp-to-viewport.js';
 
   /** Dropdown open state */
   let open = $state(false);
@@ -16,16 +17,7 @@
 
   // Post-render: reposition context menu if it overflows viewport
   $effect(() => {
-    if (contextMenu.visible && contextMenuEl) {
-      const rect = contextMenuEl.getBoundingClientRect();
-      const pad = 4;
-      if (rect.bottom > window.innerHeight - pad) {
-        contextMenuEl.style.top = `${Math.max(pad, window.innerHeight - rect.height - pad)}px`;
-      }
-      if (rect.right > window.innerWidth - pad) {
-        contextMenuEl.style.left = `${Math.max(pad, window.innerWidth - rect.width - pad)}px`;
-      }
-    }
+    if (contextMenu.visible && contextMenuEl) clampToViewport(contextMenuEl);
   });
 
   /** Inline rename state */
@@ -68,7 +60,7 @@
   async function loadMirrorChats() {
     try {
       const result = await chatList();
-      const data = result?.data || result || [];
+      const data = unwrapResult(result) || [];
       mirrorChats = Array.isArray(data)
         ? data.filter((c) => !c.projectPath).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
         : [];
@@ -188,7 +180,7 @@
       name: session.name || (isLensMode ? 'New Session' : 'New Chat'),
       createdAt: session.createdAt || Date.now(),
       updatedAt: Date.now(),
-      projectPath: isLensMode ? (projectStore.activeProject?.path || null) : undefined,
+      projectPath: isLensMode ? (projectStore.root) : undefined,
       messages: chatStore.messages.map((m) => ({
         id: m.id,
         role: m.role,
@@ -255,7 +247,7 @@
       }
 
       const result = await chatLoad(id);
-      const chat = result?.success !== false ? (result?.data || result) : null;
+      const chat = result?.success !== false ? unwrapResult(result) : null;
       if (!chat) {
         chatStore.setSwitching(false);
         return;

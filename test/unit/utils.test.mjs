@@ -6,7 +6,7 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { deepMerge, formatTime, uid } from '../../src/lib/utils.js';
+import { deepMerge, formatTime, uid, basename, unwrapResult } from '../../src/lib/utils.js';
 
 // ============ deepMerge ============
 
@@ -140,5 +140,77 @@ describe('uid', () => {
   it('contains only alphanumeric characters', () => {
     const id = uid();
     assert.ok(/^[a-z0-9]+$/.test(id), `ID "${id}" contains unexpected characters`);
+  });
+});
+
+// ============ basename ============
+
+describe('basename', () => {
+  it('extracts filename from forward-slash path', () => {
+    assert.equal(basename('src/lib/utils.js'), 'utils.js');
+  });
+
+  it('extracts filename from backslash path', () => {
+    assert.equal(basename('src\\lib\\utils.js'), 'utils.js');
+  });
+
+  it('extracts filename from mixed separators', () => {
+    assert.equal(basename('src/lib\\stores/tabs.svelte.js'), 'tabs.svelte.js');
+  });
+
+  it('returns string as-is when no separators', () => {
+    assert.equal(basename('file.txt'), 'file.txt');
+  });
+
+  it('returns null for null input', () => {
+    assert.equal(basename(null), null);
+  });
+
+  it('returns undefined for undefined input', () => {
+    assert.equal(basename(undefined), undefined);
+  });
+
+  it('returns empty string for empty string input', () => {
+    assert.equal(basename(''), '');
+  });
+});
+
+// ============ unwrapResult ============
+
+describe('unwrapResult', () => {
+  it('extracts .data from wrapped result', () => {
+    assert.equal(unwrapResult({ data: 'hello' }), 'hello');
+  });
+
+  it('returns result directly if no .data property', () => {
+    assert.equal(unwrapResult('hello'), 'hello');
+  });
+
+  it('returns result directly if .data is undefined', () => {
+    assert.deepStrictEqual(unwrapResult({ other: 1 }), { other: 1 });
+  });
+
+  it('returns fallback for null result', () => {
+    assert.equal(unwrapResult(null, 'fb'), 'fb');
+  });
+
+  it('returns fallback for undefined result', () => {
+    assert.equal(unwrapResult(undefined, 'fb'), 'fb');
+  });
+
+  it('returns null as default fallback', () => {
+    assert.equal(unwrapResult(null), null);
+  });
+
+  it('preserves falsy .data value 0', () => {
+    assert.equal(unwrapResult({ data: 0 }), 0);
+  });
+
+  it('preserves falsy .data value empty string', () => {
+    assert.equal(unwrapResult({ data: '' }), '');
+  });
+
+  it('preserves falsy .data value false', () => {
+    assert.equal(unwrapResult({ data: false }), false);
   });
 });

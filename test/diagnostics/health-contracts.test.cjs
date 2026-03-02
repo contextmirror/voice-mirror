@@ -89,7 +89,7 @@ describe('App.svelte -- diagnostics wiring', () => {
     assert.ok(appSrc.includes("devServerManager"), 'Should import devServerManager');
   });
 
-  it('passes projectStore.activeProject for project path', () => {
-    assert.ok(appSrc.includes('projectStore.activeProject'), 'Should read activeProject from projectStore');
+  it('passes projectStore root for project path', () => {
+    assert.ok(appSrc.includes('projectStore.root'), 'Should read root from projectStore');
   });
 });

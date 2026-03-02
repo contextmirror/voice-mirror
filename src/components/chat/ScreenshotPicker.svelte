@@ -9,6 +9,7 @@
   import { fade, fly } from 'svelte/transition';
   import { listMonitors, listWindows, captureMonitor, captureWindow } from '../../lib/api.js';
   import { lensStore } from '../../lib/stores/lens.svelte.js';
+  import { unwrapResult } from '../../lib/utils.js';
 
   /** @type {{ onCapture?: (path: string, dataUrl?: string|null) => void, onClose?: () => void, browserSnapshot?: any }} */
   let {
@@ -47,7 +48,7 @@
     error = null;
     try {
       const result = await listMonitors();
-      const data = result?.data || result;
+      const data = unwrapResult(result);
       const list = Array.isArray(data) ? data : [];
       // Sort primary monitor first
       monitors = list.sort((a, b) => (b.primary ? 1 : 0) - (a.primary ? 1 : 0));
@@ -68,7 +69,7 @@
     error = null;
     try {
       const result = await listWindows();
-      const data = result?.data || result;
+      const data = unwrapResult(result);
       windows = Array.isArray(data) ? data : [];
       windowsLoaded = true;
     } catch (err) {
@@ -105,7 +106,7 @@
       } else if (activeTab === 'window' && selectedWindow !== null) {
         result = await captureWindow(selectedWindow);
       }
-      const data = result?.data || result;
+      const data = unwrapResult(result);
       if (data?.path) {
         onCapture(data.path, data.dataUrl || null);
       }

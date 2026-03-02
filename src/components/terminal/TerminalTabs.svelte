@@ -287,7 +287,7 @@
   }
 
   async function problemsSaveToFile() {
-    const root = projectStore.activeProject?.path;
+    const root = projectStore.root;
     if (!root) {
       toastStore.addToast({ message: 'No project open', severity: 'error' });
       closeProblemsContextMenu();

@@ -19,6 +19,7 @@
   import { lspDiagnosticsStore } from '../../lib/stores/lsp-diagnostics.svelte.js';
   import { buildEditorExtensions, createIndentCompartments, detectIndentation, convertIndentation } from '../../lib/editor-extensions.js';
   import { navigationHistoryStore } from '../../lib/stores/navigation-history.svelte.js';
+  import { basename, unwrapResult } from '../../lib/utils.js';
   import { gitGutterPlugin } from '../../lib/editor-git-gutter.js';
   import { loadLanguageExtension } from '../../lib/codemirror-languages.js';
   import { statusBarStore, getLanguageName } from '../../lib/stores/status-bar.svelte.js';
@@ -157,7 +158,7 @@
 
   async function handleFormat() {
     if (!view || !lsp.hasLsp) return;
-    const root = projectStore.activeProject?.path || null;
+    const root = projectStore.root;
     await lsp.formatDocument(view, currentPath, root);
   }
 
@@ -206,7 +207,7 @@
     }
 
     try {
-      const root = projectStore.activeProject?.path || null;
+      const root = projectStore.root;
 
       // Format on save (if enabled)
       if (configStore.value?.editor?.formatOnSave && lsp.hasLsp) {
@@ -233,9 +234,9 @@
   async function reloadFromDisk() {
     if (!view || !currentPath) return;
     try {
-      const root = projectStore.activeProject?.path || null;
+      const root = projectStore.root;
       const result = await readFile(currentPath, root);
-      const data = result?.data || result;
+      const data = unwrapResult(result);
       if (!data?.content || data.content == null) return;
       const currentContent = view.state.doc.toString();
       if (data.content !== currentContent) {
@@ -260,7 +261,7 @@
 
     // Close previous LSP document
     if (currentPath && lsp.hasLsp) {
-      const root = projectStore.activeProject?.path || null;
+      const root = projectStore.root;
       lsp.closeFile(currentPath, root);
     }
     lsp.reset();
@@ -291,7 +292,7 @@
 
     try {
       const cm = await loadCM();
-      const root = projectStore.activeProject?.path || null;
+      const root = projectStore.root;
 
       let data;
       if (isUntitled) {
@@ -301,7 +302,7 @@
         const result = isExternal
           ? await readExternalFile(filePath)
           : await readFile(filePath, root);
-        data = result?.data || result;
+        data = unwrapResult(result);
 
         // Check if tab changed while loading
         if (filePath !== currentPath) return;
@@ -348,7 +349,7 @@
           markdownContent = update.state.doc.toString();
           if (lsp.hasLsp) {
             const content = update.state.doc.toString();
-            const r = projectStore.activeProject?.path || null;
+            const r = projectStore.root;
             lsp.changeFile(currentPath, content, r);
           }
         },
@@ -431,7 +432,7 @@
           const lineInfo = v.state.doc.lineAt(pos);
           const line = lineInfo.number - 1;
           const character = pos - lineInfo.from;
-          const r = projectStore.activeProject?.path || null;
+          const r = projectStore.root;
 
           try {
             // Record departure point for back/forward navigation
@@ -446,7 +447,7 @@
             if (!result?.data?.locations?.length) return true;
 
             const loc = result.data.locations[0];
-            const rootStr = projectStore.activeProject?.path || '';
+            const rootStr = projectStore.root || '';
             const resolved = uriToRelativePath(loc.uri, rootStr);
             if (!resolved) return true;
 
@@ -457,7 +458,7 @@
                 scrollIntoView: true,
               });
             } else {
-              const fileName = resolved.path.split(/[/\\]/).pop() || resolved.path;
+              const fileName = basename(resolved.path);
               tabsStore.openFile({ name: fileName, path: resolved.path, readOnly: resolved.external, external: resolved.external });
             }
           } catch {}
@@ -468,7 +469,7 @@
           const loc = navigationHistoryStore.goBack();
           if (!loc) return;
           if (loc.path !== currentPath) {
-            const name = loc.path.split(/[/\\]/).pop() || loc.path;
+            const name = basename(loc.path);
             tabsStore.openFile({ name, path: loc.path }, loc.groupId);
           }
           // Move cursor to stored position
@@ -485,7 +486,7 @@
           const loc = navigationHistoryStore.goForward();
           if (!loc) return;
           if (loc.path !== currentPath) {
-            const name = loc.path.split(/[/\\]/).pop() || loc.path;
+            const name = basename(loc.path);
             tabsStore.openFile({ name, path: loc.path }, loc.groupId);
           }
           if (view) {
@@ -503,10 +504,10 @@
           statusBarStore.setCursor(lineInfo.number, pos - lineInfo.from + 1);
         },
         getOriginalContent: isExternal ? null : async (filePath) => {
-          const root = projectStore.activeProject?.path || null;
+          const root = projectStore.root;
           try {
             const result = await getFileGitContent(filePath, root);
-            return result?.data || result;
+            return unwrapResult(result);
           } catch { return null; }
         },
         showIndentGuides: configStore.value?.editor?.indentGuides !== false,
@@ -635,9 +636,9 @@
         }
 
         try {
-          const root = projectStore.activeProject?.path || null;
+          const root = projectStore.root;
           const result = await readFile(currentPath, root);
-          const data = result?.data || result;
+          const data = unwrapResult(result);
           if (!data?.content || data.content == null) return;
 
           const currentContent = view.state.doc.toString();
@@ -819,7 +820,7 @@
 
   onDestroy(() => {
     if (currentPath && lsp.hasLsp) {
-      const root = projectStore.activeProject?.path || null;
+      const root = projectStore.root;
       lsp.closeFile(currentPath, root);
     }
     clearTimeout(sigHelpDebounce);
@@ -980,7 +981,7 @@
         view.dispatch({ selection: { anchor: line.from + (ref.range?.start?.character ?? 0) }, scrollIntoView: true });
       }
     } else {
-      const fileName = ref.path.split(/[/\\]/).pop() || ref.path;
+      const fileName = basename(ref.path);
       tabsStore.openFile({ name: fileName, path: ref.path, readOnly: ref.external, external: ref.external });
     }
   }}
@@ -996,7 +997,7 @@
     lsp.setShowCodeActions(false);
     const edit = action.edit;
     if (edit) {
-      const root = projectStore.activeProject?.path || null;
+      const root = projectStore.root;
       await lspApplyWorkspaceEdit(edit, root);
     }
   }}

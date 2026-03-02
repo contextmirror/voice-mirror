@@ -70,7 +70,7 @@
       tabsStore.updateTitle(tab.id, newName);
     } else {
       // For real files, rename on disk
-      const root = projectStore.activeProject?.path || null;
+      const root = projectStore.root;
       const dir = tab.path.substring(0, tab.path.lastIndexOf('/') + 1) || tab.path.substring(0, tab.path.lastIndexOf('\\') + 1);
       const newPath = dir + newName;
       try {

@@ -115,15 +115,11 @@ describe('TabContextMenu.svelte: menu behavior', () => {
   it('has z-index 10002', () => {
     assert.ok(src.includes('z-index: 10002'));
   });
-  it('has Escape key handler', () => {
-    assert.ok(src.includes("e.key === 'Escape'"));
-  });
-  it('has click-outside handler', () => {
-    assert.ok(src.includes('handleClickOutside'));
+  it('uses setupClickOutside for dismiss behavior', () => {
+    assert.ok(src.includes('setupClickOutside'), 'Should use setupClickOutside utility');
   });
   it('clamps position to viewport', () => {
-    assert.ok(src.includes('getBoundingClientRect'), 'Should measure menu for viewport clamping');
-    assert.ok(src.includes('window.innerHeight'), 'Should check viewport bounds');
+    assert.ok(src.includes('clampToViewport'), 'Should use clampToViewport for viewport clamping');
   });
   it('has keyboard shortcut hint for Close', () => {
     assert.ok(src.includes('Ctrl+W'));

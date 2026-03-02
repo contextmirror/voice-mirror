@@ -72,17 +72,13 @@ describe('CodeActionsMenu.svelte: behavior', () => {
     assert.ok(src.includes('onApply(action)'), 'Should call onApply');
   });
 
-  it('closes on Escape key', () => {
-    assert.ok(src.includes("e.key === 'Escape'"), 'Should close on Escape');
-  });
-
-  it('handles click outside', () => {
-    assert.ok(src.includes('handleClickOutside'), 'Should handle click outside');
+  it('uses setupClickOutside for dismiss behavior', () => {
+    assert.ok(src.includes('setupClickOutside'), 'Should use setupClickOutside utility');
   });
 
   it('uses position clamping', () => {
     assert.ok(src.includes('menuStyle'), 'Should have menuStyle');
-    assert.ok(src.includes('getBoundingClientRect'), 'Should measure menu for viewport clamping');
+    assert.ok(src.includes('clampToViewport'), 'Should use clampToViewport for viewport clamping');
   });
 });
 

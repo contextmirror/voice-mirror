@@ -5,6 +5,7 @@
   import { terminalTabsStore } from '../../lib/stores/terminal-tabs.svelte.js';
   import { projectStore } from '../../lib/stores/project.svelte.js';
   import { detectDevServers } from '../../lib/api.js';
+  import { unwrapResult } from '../../lib/utils.js';
   import ServersTab from './ServersTab.svelte';
   import McpTab from './McpTab.svelte';
   import LspTab from './LspTab.svelte';
@@ -150,7 +151,7 @@
     try {
       const result = await detectDevServers(project.path);
       /** @type {any} */
-      const data = result?.data || result || {};
+      const data = unwrapResult(result) || {};
       const list = data.servers || (Array.isArray(data) ? data : []);
       if (Array.isArray(list)) {
         lensStore.setDevServers(list);

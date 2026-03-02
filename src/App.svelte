@@ -100,7 +100,7 @@
 
   // ---- Health monitoring (Layer 2) ----
   registerAllContracts({
-    getProjectPath: () => projectStore.activeProject?.path || null,
+    getProjectPath: () => projectStore.root,
     getOpenTabs: () => tabsStore.tabs,
     getTerminalGroups: () => terminalTabsStore.groups,
     getTerminalInstances: (groupId) => terminalTabsStore.getInstancesForGroup(groupId),

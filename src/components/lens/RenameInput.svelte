@@ -1,4 +1,6 @@
 <script>
+  import { clampToViewport } from '$lib/clamp-to-viewport.js';
+
   let {
     visible = false,
     x = 0,
@@ -43,16 +45,7 @@
 
   // Post-render: reposition if it overflows viewport
   $effect(() => {
-    if (visible && renameEl) {
-      const rect = renameEl.getBoundingClientRect();
-      const pad = 4;
-      if (rect.bottom > window.innerHeight - pad) {
-        renameEl.style.top = `${Math.max(pad, window.innerHeight - rect.height - pad)}px`;
-      }
-      if (rect.right > window.innerWidth - pad) {
-        renameEl.style.left = `${Math.max(pad, window.innerWidth - rect.width - pad)}px`;
-      }
-    }
+    if (visible && renameEl) clampToViewport(renameEl);
   });
 </script>
 

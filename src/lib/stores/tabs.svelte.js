@@ -9,6 +9,7 @@
 
 import { editorGroupsStore } from './editor-groups.svelte.js';
 import { auditEditor } from '../audit-log.js';
+import { basename } from '../utils.js';
 
 /**
  * Show a native Save/Don't Save/Cancel dialog for a dirty tab.
@@ -211,7 +212,7 @@ function createTabsStore() {
       }
 
       // Extract filename for title
-      const name = change.path.split(/[/\\]/).pop() || change.path;
+      const name = basename(change.path);
 
       // Replace existing preview tab in the target group if preview mode is on
       const previewIdx = previewEnabled ? tabs.findIndex(t => t.preview && t.groupId === groupId) : -1;
@@ -568,7 +569,7 @@ function createTabsStore() {
       const targetGroup = editorGroupsStore.allGroupIds.includes(entry.groupId)
         ? entry.groupId
         : editorGroupsStore.focusedGroupId;
-      const name = entry.path.split(/[/\\]/).pop() || entry.path;
+      const name = basename(entry.path);
       if (entry.type === 'diff') {
         this.openDiff({ path: entry.path, status: entry.status || 'modified' }, targetGroup);
       } else {

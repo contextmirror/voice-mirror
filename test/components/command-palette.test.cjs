@@ -485,17 +485,17 @@ describe('CommandPalette: keyboard navigation', () => {
 // ============ File Search ============
 
 describe('CommandPalette: file search helpers', () => {
-  it('defines extractFilename function', () => {
+  it('imports basename from utils.js', () => {
     assert.ok(
-      src.includes('function extractFilename(filepath)'),
-      'Should define extractFilename function'
+      src.includes("import") && src.includes("basename") && src.includes("utils"),
+      'Should import basename from utils.js'
     );
   });
 
-  it('extractFilename splits on / and \\', () => {
+  it('uses basename for filename extraction', () => {
     assert.ok(
-      src.includes("filepath.split(/[/\\\\]/).pop()"),
-      'extractFilename should split on / and \\ and take last element'
+      src.includes("basename("),
+      'Should use basename() utility for filename extraction'
     );
   });
 

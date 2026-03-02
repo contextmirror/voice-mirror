@@ -10,6 +10,7 @@ import { configStore } from './config.svelte.js';
 import { chatStore } from './chat.svelte.js';
 import { aiStatusStore } from './ai-status.svelte.js';
 import { attachmentsStore } from './attachments.svelte.js';
+import { unwrapResult } from '../utils.js';
 
 /** Dedup window (ms) — ignore duplicate transcription text within this period. */
 const TRANSCRIPTION_DEDUP_MS = 3000;
@@ -240,7 +241,7 @@ export async function initVoiceListeners() {
   // Poll initial status
   try {
     const result = await getVoiceStatus();
-    const data = result?.data || result;
+    const data = unwrapResult(result);
     if (data?.running) {
       voiceStore._setRunning(true);
     }

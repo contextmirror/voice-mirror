@@ -169,34 +169,18 @@ describe('FileContextMenu.svelte -- keyboard shortcuts', () => {
 });
 
 describe('FileContextMenu.svelte -- dismiss behavior', () => {
-  it('closes on Escape', () => {
-    assert.ok(src.includes("e.key === 'Escape'"), 'Should close on Escape');
-  });
-
-  it('listens for outside clicks', () => {
-    assert.ok(src.includes('handleClickOutside'), 'Should handle outside clicks');
-  });
-
-  it('adds mousedown listener', () => {
-    assert.ok(src.includes("'mousedown', handleClickOutside"), 'Should listen for mousedown');
-  });
-
-  it('adds keydown listener', () => {
-    assert.ok(src.includes("'keydown', handleKeydown"), 'Should listen for keydown');
+  it('uses setupClickOutside for dismiss behavior', () => {
+    assert.ok(src.includes('setupClickOutside'), 'Should use setupClickOutside utility');
   });
 });
 
 describe('FileContextMenu.svelte -- positioning', () => {
-  it('clamps to viewport width', () => {
-    assert.ok(src.includes('window.innerWidth'), 'Should clamp to viewport width');
+  it('uses clampToViewport for viewport clamping', () => {
+    assert.ok(src.includes('clampToViewport'), 'Should use clampToViewport utility');
   });
 
-  it('clamps to viewport height', () => {
-    assert.ok(src.includes('window.innerHeight'), 'Should clamp to viewport height');
-  });
-
-  it('uses getBoundingClientRect for dynamic clamping', () => {
-    assert.ok(src.includes('getBoundingClientRect'), 'Should measure actual menu size for clamping');
+  it('imports clampToViewport from $lib', () => {
+    assert.ok(src.includes("import { clampToViewport }"), 'Should import clampToViewport');
   });
 });
 

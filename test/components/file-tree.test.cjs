@@ -513,3 +513,154 @@ describe('FileTree.svelte -- Outline tab', () => {
     assert.ok(src.includes('hasLsp={activeFileHasLsp}'), 'Should pass activeFileHasLsp as hasLsp');
   });
 });
+
+describe('FileTree.svelte -- keyboard navigation', () => {
+  it('imports flattenVisibleEntries from file-tree-nav', () => {
+    assert.ok(src.includes('flattenVisibleEntries'), 'Should import flattenVisibleEntries');
+    assert.ok(src.includes('file-tree-nav.js'), 'Should import from file-tree-nav.js');
+  });
+
+  it('has focusedPath state', () => {
+    assert.ok(src.includes('focusedPath = $state('), 'Should have focusedPath state');
+  });
+
+  it('has visibleEntries derived from flattenVisibleEntries', () => {
+    assert.ok(src.includes('visibleEntries'), 'Should have visibleEntries derived');
+    assert.ok(src.includes('flattenVisibleEntries('), 'Should call flattenVisibleEntries');
+  });
+
+  it('has handleTreeKeydown function', () => {
+    assert.ok(src.includes('handleTreeKeydown'), 'Should have handleTreeKeydown');
+  });
+
+  it('handles ArrowDown key', () => {
+    assert.ok(src.includes("'ArrowDown'"), 'Should handle ArrowDown');
+  });
+
+  it('handles ArrowUp key', () => {
+    assert.ok(src.includes("'ArrowUp'"), 'Should handle ArrowUp');
+  });
+
+  it('handles ArrowRight key', () => {
+    assert.ok(src.includes("'ArrowRight'"), 'Should handle ArrowRight');
+  });
+
+  it('handles ArrowLeft key', () => {
+    assert.ok(src.includes("'ArrowLeft'"), 'Should handle ArrowLeft');
+  });
+
+  it('handles Enter key for opening files / toggling dirs', () => {
+    // handleTreeKeydown has its own Enter case
+    const keydownStart = src.indexOf('function handleTreeKeydown');
+    const keydownEnd = src.indexOf('function scrollFocusedIntoView') > keydownStart
+      ? src.indexOf('function scrollFocusedIntoView')
+      : src.indexOf('// ── Git', keydownStart);
+    const body = src.slice(keydownStart, keydownEnd);
+    assert.ok(body.includes("'Enter'"), 'handleTreeKeydown should handle Enter');
+  });
+
+  it('handles Home and End keys', () => {
+    assert.ok(src.includes("'Home'"), 'Should handle Home key');
+    assert.ok(src.includes("'End'"), 'Should handle End key');
+  });
+
+  it('has scrollFocusedIntoView function', () => {
+    assert.ok(src.includes('scrollFocusedIntoView'), 'Should have scrollFocusedIntoView');
+    assert.ok(src.includes('scrollIntoView'), 'Should call scrollIntoView');
+  });
+
+  it('tree-scroll has tabindex="0"', () => {
+    assert.ok(src.includes('tabindex="0"'), 'tree-scroll should have tabindex');
+  });
+
+  it('tree-scroll has role="tree"', () => {
+    assert.ok(src.includes('role="tree"'), 'tree-scroll should have tree role');
+  });
+
+  it('attaches handleTreeKeydown to tree-scroll', () => {
+    assert.ok(src.includes('onkeydown={handleTreeKeydown}'), 'Should attach keydown to tree-scroll');
+  });
+
+  it('passes focusedPath to FileTreeNode', () => {
+    assert.ok(src.includes('{focusedPath}'), 'Should pass focusedPath to FileTreeNode');
+  });
+
+  it('sets focusedPath on file click', () => {
+    const clickStart = src.indexOf('function handleFileClick');
+    const clickEnd = src.indexOf('}', clickStart + 30);
+    const body = src.slice(clickStart, clickEnd);
+    assert.ok(body.includes('focusedPath'), 'handleFileClick should set focusedPath');
+  });
+
+  it('has focus-visible style for tree-scroll', () => {
+    assert.ok(src.includes('.tree-scroll:focus-visible'), 'Should style tree-scroll focus');
+  });
+});
+
+describe('FileTree.svelte -- drag-to-move files', () => {
+  it('imports isDescendantOf from file-tree-nav', () => {
+    assert.ok(src.includes('isDescendantOf'), 'Should import isDescendantOf');
+  });
+
+  it('imports toastStore', () => {
+    assert.ok(src.includes('toastStore'), 'Should import toastStore');
+    assert.ok(src.includes('toast.svelte.js'), 'Should import from toast.svelte.js');
+  });
+
+  it('has dragOverPath state', () => {
+    assert.ok(src.includes('dragOverPath = $state('), 'Should have dragOverPath state');
+  });
+
+  it('has handleTreeDragOver function', () => {
+    assert.ok(src.includes('handleTreeDragOver'), 'Should have handleTreeDragOver');
+  });
+
+  it('has handleTreeDragLeave function', () => {
+    assert.ok(src.includes('handleTreeDragLeave'), 'Should have handleTreeDragLeave');
+  });
+
+  it('has handleTreeDrop function', () => {
+    assert.ok(src.includes('handleTreeDrop'), 'Should have handleTreeDrop');
+  });
+
+  it('calls renameEntry in handleTreeDrop', () => {
+    const dropStart = src.indexOf('async function handleTreeDrop');
+    const dropEnd = src.indexOf('function handleEmptyDragOver');
+    const body = src.slice(dropStart, dropEnd);
+    assert.ok(body.includes('renameEntry('), 'handleTreeDrop should call renameEntry');
+  });
+
+  it('checks isDescendantOf to prevent circular moves', () => {
+    const dropStart = src.indexOf('async function handleTreeDrop');
+    const dropEnd = src.indexOf('function handleEmptyDragOver');
+    const body = src.slice(dropStart, dropEnd);
+    assert.ok(body.includes('isDescendantOf('), 'Should check isDescendantOf');
+  });
+
+  it('shows toast on move errors', () => {
+    const dropStart = src.indexOf('async function handleTreeDrop');
+    const dropEnd = src.indexOf('function handleEmptyDragOver');
+    const body = src.slice(dropStart, dropEnd);
+    assert.ok(body.includes('toastStore.addToast'), 'Should show toast on error');
+  });
+
+  it('passes drag props to FileTreeNode', () => {
+    assert.ok(src.includes('{dragOverPath}'), 'Should pass dragOverPath');
+    assert.ok(src.includes('onTreeDragOver={handleTreeDragOver}'), 'Should pass onTreeDragOver');
+    assert.ok(src.includes('onTreeDragLeave={handleTreeDragLeave}'), 'Should pass onTreeDragLeave');
+    assert.ok(src.includes('onTreeDrop={handleTreeDrop}'), 'Should pass onTreeDrop');
+  });
+
+  it('has handleEmptyDragOver for root-level drops', () => {
+    assert.ok(src.includes('handleEmptyDragOver'), 'Should have handleEmptyDragOver');
+  });
+
+  it('has handleEmptyDrop for root-level drops', () => {
+    assert.ok(src.includes('handleEmptyDrop'), 'Should have handleEmptyDrop');
+  });
+
+  it('attaches drag handlers to tree-scroll', () => {
+    assert.ok(src.includes('ondragover={handleEmptyDragOver}'), 'tree-scroll should have dragover');
+    assert.ok(src.includes('ondrop={handleEmptyDrop}'), 'tree-scroll should have drop');
+  });
+});

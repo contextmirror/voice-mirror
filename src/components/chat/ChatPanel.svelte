@@ -13,6 +13,7 @@
   import { chatLoad, chatSave, exportChatToFile, lensCapturePreview } from '../../lib/api.js';
   import { lensStore } from '../../lib/stores/lens.svelte.js';
   import { save } from '@tauri-apps/plugin-dialog';
+  import { unwrapResult } from '../../lib/utils.js';
   import MessageGroup from './MessageGroup.svelte';
   import ChatInput from './ChatInput.svelte';
   import ScreenshotPicker from './ScreenshotPicker.svelte';
@@ -108,7 +109,7 @@
     if (activeId) {
       try {
         const result = await chatLoad(activeId);
-        const chat = result?.data || result;
+        const chat = unwrapResult(result);
         if (chat) {
           chat.messages = [];
           chat.updatedAt = Date.now();

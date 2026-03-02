@@ -1,7 +1,7 @@
 <script>
   import { chatList, chatLoad, chatSave, chatDelete, chatRename } from '../../lib/api.js';
   import { chatStore } from '../../lib/stores/chat.svelte.js';
-  import { uid } from '../../lib/utils.js';
+  import { uid, unwrapResult } from '../../lib/utils.js';
 
   /** Chat entries from backend */
   let chats = $state([]);
@@ -25,7 +25,7 @@
     loading = true;
     try {
       const result = await chatList();
-      const data = result?.data || result || [];
+      const data = unwrapResult(result) || [];
       // Sort by most recent (backend returns updatedAt as u64 ms)
       // Filter out project-tagged chats — those belong to Lens mode sessions
       chats = Array.isArray(data)
@@ -173,7 +173,7 @@
 
     try {
       const result = await chatLoad(id);
-      const chat = result?.success !== false ? (result?.data || result) : null;
+      const chat = result?.success !== false ? unwrapResult(result) : null;
       if (!chat) return;
 
       chatStore.setActiveChatId(chat.id);

@@ -11,6 +11,7 @@
   import { switchProvider } from '../../lib/stores/ai-status.svelte.js';
   import { navigationStore } from '../../lib/stores/navigation.svelte.js';
   import { scanProviders as apiScanProviders, listModels as apiListModels } from '../../lib/api.js';
+  import { unwrapResult } from '../../lib/utils.js';
   import {
     PROVIDER_NAMES, PROVIDER_ICONS, PROVIDER_GROUPS,
     CLI_PROVIDERS, LOCAL_PROVIDERS, MCP_PROVIDERS, DEFAULT_ENDPOINTS,
@@ -195,7 +196,7 @@
     scanning = true;
     try {
       const result = await apiScanProviders();
-      const data = result?.data || result || {};
+      const data = unwrapResult(result) || {};
 
       // Local LLM server results (online status, models)
       detectedProviders = data.local || [];
@@ -227,7 +228,7 @@
     try {
       const result = await apiListModels(providerType, baseUrl || undefined);
       /** @type {any} */
-      const data = result?.data || result || {};
+      const data = unwrapResult(result) || {};
       if (data.online && data.models?.length > 0) {
         availableModels = data.models;
         // Auto-select first model if none chosen

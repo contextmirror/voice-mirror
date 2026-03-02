@@ -210,3 +210,81 @@ describe('FileTreeNode.svelte', () => {
     assert.ok(styleBlock.includes('.has-warning') && styleBlock.includes('var(--warn'), 'Should use --warn for warnings');
   });
 });
+
+describe('FileTreeNode.svelte -- keyboard navigation support', () => {
+  it('accepts focusedPath prop', () => {
+    assert.ok(src.includes('focusedPath'), 'Should have focusedPath prop');
+  });
+
+  it('has data-path attribute on tree items', () => {
+    assert.ok(src.includes('data-path={entry.path}'), 'Should have data-path attribute');
+  });
+
+  it('has focused CSS class toggle on tree items', () => {
+    assert.ok(src.includes('class:focused={focusedPath === entry.path}'), 'Should toggle focused class');
+  });
+
+  it('has .tree-item.focused CSS rule', () => {
+    const styleIdx = src.indexOf('<style>');
+    const styleBlock = src.slice(styleIdx);
+    assert.ok(styleBlock.includes('.tree-item.focused'), 'Should have focused style rule');
+    assert.ok(styleBlock.includes('outline'), 'Focused style should include outline');
+  });
+
+  it('passes focusedPath to Self recursive component', () => {
+    const selfIdx = src.indexOf('<Self');
+    const selfEnd = src.indexOf('/>', selfIdx);
+    const selfBlock = src.slice(selfIdx, selfEnd);
+    assert.ok(selfBlock.includes('{focusedPath}'), 'Should pass focusedPath to Self');
+  });
+});
+
+describe('FileTreeNode.svelte -- drag-to-move support', () => {
+  it('folders are draggable', () => {
+    // The folder button has both class="tree-item folder" and draggable
+    // The div for editing also has class="tree-item folder" but no draggable
+    // Check that a folder button with draggable exists
+    const folderBtnMatch = /class="tree-item folder"[\s\S]*?draggable="true"[\s\S]*?onclick=\{.*?onToggle/.test(src);
+    assert.ok(folderBtnMatch, 'Folder buttons should be draggable');
+  });
+
+  it('has ondragover on tree items', () => {
+    assert.ok(src.includes('onTreeDragOver'), 'Should have onTreeDragOver prop');
+    assert.ok(src.includes('ondragover='), 'Should have ondragover handler');
+  });
+
+  it('has ondragleave on tree items', () => {
+    assert.ok(src.includes('onTreeDragLeave'), 'Should have onTreeDragLeave prop');
+    assert.ok(src.includes('ondragleave='), 'Should have ondragleave handler');
+  });
+
+  it('has ondrop on tree items', () => {
+    assert.ok(src.includes('onTreeDrop'), 'Should have onTreeDrop prop');
+    assert.ok(src.includes('ondrop='), 'Should have ondrop handler');
+  });
+
+  it('accepts dragOverPath prop', () => {
+    assert.ok(src.includes('dragOverPath'), 'Should have dragOverPath prop');
+  });
+
+  it('has drop-target CSS class toggle on folders', () => {
+    assert.ok(src.includes('class:drop-target'), 'Should toggle drop-target class');
+  });
+
+  it('has .tree-item.drop-target CSS rule', () => {
+    const styleIdx = src.indexOf('<style>');
+    const styleBlock = src.slice(styleIdx);
+    assert.ok(styleBlock.includes('.tree-item.drop-target'), 'Should have drop-target style rule');
+    assert.ok(styleBlock.includes('dashed'), 'Drop target should have dashed outline');
+  });
+
+  it('passes drag props to Self recursive component', () => {
+    const selfIdx = src.indexOf('<Self');
+    const selfEnd = src.indexOf('/>', selfIdx);
+    const selfBlock = src.slice(selfIdx, selfEnd);
+    assert.ok(selfBlock.includes('{dragOverPath}'), 'Should pass dragOverPath to Self');
+    assert.ok(selfBlock.includes('{onTreeDragOver}'), 'Should pass onTreeDragOver to Self');
+    assert.ok(selfBlock.includes('{onTreeDragLeave}'), 'Should pass onTreeDragLeave to Self');
+    assert.ok(selfBlock.includes('{onTreeDrop}'), 'Should pass onTreeDrop to Self');
+  });
+});

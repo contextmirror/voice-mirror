@@ -8,6 +8,7 @@
 import { lspOpenFile, lspCloseFile, lspChangeFile, lspSaveFile, lspRequestCompletion, lspRequestHover, lspRequestDefinition, lspRequestReferences, lspPrepareRename, lspRename, lspApplyWorkspaceEdit, lspRequestCodeActions, lspRequestFormatting, lspRequestSignatureHelp } from './api.js';
 import { projectStore } from './stores/project.svelte.js';
 import { tabsStore } from './stores/tabs.svelte.js';
+import { basename } from './utils.js';
 
 /** Set of file extensions that have LSP support */
 export const LSP_EXTENSIONS = new Set([
@@ -119,14 +120,14 @@ export function createEditorLsp() {
     const lineInfo = view.state.doc.lineAt(pos);
     const line = lineInfo.number - 1;
     const character = pos - lineInfo.from;
-    const root = projectStore.activeProject?.path || null;
+    const root = projectStore.root;
     const currentPath = view._lspPath; // set by FileEditor
 
     try {
       const result = await lspRequestDefinition(currentPath, line, character, root);
       if (!result?.data?.locations?.length) return;
       const loc = result.data.locations[0];
-      const rootStr = projectStore.activeProject?.path || '';
+      const rootStr = projectStore.root || '';
       const resolved = uriToRelativePath(loc.uri, rootStr);
       if (!resolved) return;
       if (resolved.path === currentPath && !resolved.external) {
@@ -136,7 +137,7 @@ export function createEditorLsp() {
           scrollIntoView: true,
         });
       } else {
-        const fileName = resolved.path.split(/[/\\]/).pop() || resolved.path;
+        const fileName = basename(resolved.path);
         tabsStore.openFile({ name: fileName, path: resolved.path, readOnly: resolved.external, external: resolved.external });
       }
     } catch {}
@@ -148,13 +149,13 @@ export function createEditorLsp() {
     const lineInfo = view.state.doc.lineAt(pos);
     const line = lineInfo.number - 1;
     const character = pos - lineInfo.from;
-    const root = projectStore.activeProject?.path || null;
+    const root = projectStore.root;
 
     try {
       const result = await lspRequestReferences(currentPath, line, character, root);
       if (result?.data?.locations?.length) {
         referencesResult = result.data.locations.map(loc => {
-          const rootStr = projectStore.activeProject?.path || '';
+          const rootStr = projectStore.root || '';
           const resolved = uriToRelativePath(loc.uri, rootStr);
           return {
             path: resolved?.path || loc.uri,
@@ -173,7 +174,7 @@ export function createEditorLsp() {
     const lineInfo = view.state.doc.lineAt(pos);
     const line = lineInfo.number - 1;
     const character = pos - lineInfo.from;
-    const root = projectStore.activeProject?.path || null;
+    const root = projectStore.root;
 
     try {
       const result = await lspPrepareRename(currentPath, line, character, root);
@@ -195,7 +196,7 @@ export function createEditorLsp() {
     const lineInfo = view.state.doc.lineAt(pos);
     const line = lineInfo.number - 1;
     const character = pos - lineInfo.from;
-    const root = projectStore.activeProject?.path || null;
+    const root = projectStore.root;
     showRename = false;
 
     try {
@@ -243,14 +244,17 @@ export function createEditorLsp() {
     const sel = view.state.selection.main;
     const startLine = view.state.doc.lineAt(sel.from);
     const endLine = view.state.doc.lineAt(sel.to);
-    const root = projectStore.activeProject?.path || null;
+    const root = projectStore.root;
 
     try {
+      const lspDiags = (diagnosticsAtCursor || [])
+        .map(d => d.lspDiagnostic)
+        .filter(Boolean);
       const result = await lspRequestCodeActions(
         currentPath,
         startLine.number - 1, sel.from - startLine.from,
         endLine.number - 1, sel.to - endLine.from,
-        diagnosticsAtCursor || [],
+        lspDiags,
         root
       );
       if (result?.data?.actions?.length) {
@@ -259,7 +263,9 @@ export function createEditorLsp() {
         codeActions = result.data.actions;
         showCodeActions = true;
       }
-    } catch {}
+    } catch (err) {
+      console.warn('[editor-lsp] Code actions request failed:', err);
+    }
   }
 
   async function requestSignatureHelp(view, currentPath, triggerChar) {
@@ -268,7 +274,7 @@ export function createEditorLsp() {
     const lineInfo = view.state.doc.lineAt(pos);
     const line = lineInfo.number - 1;
     const character = pos - lineInfo.from;
-    const root = projectStore.activeProject?.path || null;
+    const root = projectStore.root;
 
     try {
       const result = await lspRequestSignatureHelp(currentPath, line, character, root);
@@ -299,7 +305,7 @@ export function createEditorLsp() {
       const pos = context.state.doc.lineAt(context.pos);
       const line = pos.number - 1;
       const character = context.pos - pos.from;
-      const root = projectStore.activeProject?.path || null;
+      const root = projectStore.root;
 
       try {
         const result = await lspRequestCompletion(currentPath, line, character, root);
@@ -331,7 +337,7 @@ export function createEditorLsp() {
       const lineInfo = v.state.doc.lineAt(pos);
       const line = lineInfo.number - 1;
       const character = pos - lineInfo.from;
-      const root = projectStore.activeProject?.path || null;
+      const root = projectStore.root;
 
       try {
         const result = await lspRequestHover(currentPath, line, character, root);
@@ -377,6 +383,7 @@ export function createEditorLsp() {
             severity: d.severity || 'error',
             message: d.message,
             source: d.source || undefined,
+            lspDiagnostic: d,
           };
         });
         cachedDiagnostics.set(currentPath, cmDiags);

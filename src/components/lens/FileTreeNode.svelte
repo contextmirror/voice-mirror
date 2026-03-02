@@ -16,6 +16,8 @@
     creatingIn = null,
     creatingValue = $bindable(''),
     gitStatusMap = new Map(),
+    focusedPath = null,
+    dragOverPath = null,
     onToggle = () => {},
     onFileClick = () => {},
     onFileDblClick = () => {},
@@ -25,6 +27,9 @@
     onCreateKeydown = () => {},
     onCreateSave = () => {},
     autofocus = () => {},
+    onTreeDragOver = () => {},
+    onTreeDragLeave = () => {},
+    onTreeDrop = () => {},
   } = $props();
 
   function handleFileDragStart(e, entry) {
@@ -68,9 +73,18 @@
       {@const dirGit = gitStatusMap.get(entry.path)}
       <button
         class="tree-item folder"
+        class:focused={focusedPath === entry.path}
+        class:drop-target={dragOverPath === entry.path}
+        data-path={entry.path}
         style="padding-left: {8 + depth * 16}px"
+        draggable="true"
         onclick={() => onToggle(entry)}
         oncontextmenu={(e) => onContextMenu(e, entry, true, false)}
+        ondragstart={(e) => handleFileDragStart(e, entry)}
+        ondragend={handleFileDragEnd}
+        ondragover={(e) => onTreeDragOver(e, entry)}
+        ondragleave={(e) => onTreeDragLeave(e)}
+        ondrop={(e) => onTreeDrop(e, entry)}
       >
         <span class="tree-chevron">{isExpanded ? 'v' : '>'}</span>
         <svg class="tree-icon"><use href="{spriteUrl}#{chooseIconName(entry.path, 'directory', isExpanded)}" /></svg>
@@ -114,6 +128,8 @@
           {creatingIn}
           bind:creatingValue
           {gitStatusMap}
+          {focusedPath}
+          {dragOverPath}
           {onToggle}
           {onFileClick}
           {onFileDblClick}
@@ -123,6 +139,9 @@
           {onCreateKeydown}
           {onCreateSave}
           {autofocus}
+          {onTreeDragOver}
+          {onTreeDragLeave}
+          {onTreeDrop}
         />
       {/if}
     {/if}
@@ -143,6 +162,8 @@
       {@const fileGit = gitStatusMap.get(entry.path)}
       <button
         class="tree-item file"
+        class:focused={focusedPath === entry.path}
+        data-path={entry.path}
         style="padding-left: {8 + depth * 16 + 18}px"
         draggable="true"
         onclick={() => onFileClick(entry)}
@@ -150,6 +171,9 @@
         oncontextmenu={(e) => onContextMenu(e, entry, false, false)}
         ondragstart={(e) => handleFileDragStart(e, entry)}
         ondragend={handleFileDragEnd}
+        ondragover={(e) => onTreeDragOver(e, entry)}
+        ondragleave={(e) => onTreeDragLeave(e)}
+        ondrop={(e) => onTreeDrop(e, entry)}
       >
         <svg class="tree-icon"><use href="{spriteUrl}#{chooseIconName(entry.path, 'file')}" /></svg>
         <span class="tree-name" class:ignored={entry.ignored} class:has-error={fileDiag?.errors > 0} class:has-warning={fileDiag && fileDiag.errors === 0 && fileDiag.warnings > 0} class:git-added={!entry.ignored && !fileDiag?.errors && !fileDiag?.warnings && fileGit === 'added'} class:git-modified={!entry.ignored && !fileDiag?.errors && !fileDiag?.warnings && fileGit === 'modified'} class:git-deleted={!entry.ignored && !fileDiag?.errors && !fileDiag?.warnings && fileGit === 'deleted'}>{entry.name}</span>
@@ -184,6 +208,16 @@
   }
   .tree-item:hover {
     background: color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+  .tree-item.focused {
+    outline: 1px solid var(--accent);
+    outline-offset: -1px;
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+  }
+  .tree-item.drop-target {
+    background: color-mix(in srgb, var(--accent) 20%, transparent);
+    outline: 1px dashed var(--accent);
+    outline-offset: -1px;
   }
 
   .tree-chevron {

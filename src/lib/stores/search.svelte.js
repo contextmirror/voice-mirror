@@ -59,7 +59,7 @@ function createSearchStore() {
       error = null;
 
       try {
-        const root = projectStore.activeProject?.path || null;
+        const root = projectStore.root;
         const resp = await searchContent(query, {
           root,
           caseSensitive: caseSensitive || null,

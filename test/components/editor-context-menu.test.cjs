@@ -230,12 +230,8 @@ describe('EditorContextMenu.svelte: accessibility', () => {
 });
 
 describe('EditorContextMenu.svelte: dismiss behavior', () => {
-  it('has click-outside handler with capture phase mousedown', () => {
-    assert.ok(src.includes('mousedown'));
-    assert.ok(src.includes('capture') || src.includes('true'));
-  });
-  it('has Escape key handler', () => {
-    assert.ok(src.includes('Escape'));
+  it('uses setupClickOutside for dismiss behavior', () => {
+    assert.ok(src.includes('setupClickOutside'), 'Should use setupClickOutside utility');
   });
   it('has viewport clamping logic', () => {
     assert.ok(

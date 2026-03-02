@@ -11,6 +11,7 @@
   import { checkNpmVersions, updateNpmPackage } from '../../lib/api.js';
   import { toastStore } from '../../lib/stores/toast.svelte.js';
   import Button from '../shared/Button.svelte';
+  import { unwrapResult } from '../../lib/utils.js';
 
   // ---- Bundled components (shipped with the app via Vite) ----
 
@@ -57,7 +58,7 @@
     updateStatus = {};
     try {
       const result = await checkNpmVersions();
-      const data = result?.data || result;
+      const data = unwrapResult(result);
       if (data?.system) systemData = data.system;
       lastChecked = new Date().toLocaleTimeString();
 

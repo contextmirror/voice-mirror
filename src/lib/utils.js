@@ -46,3 +46,24 @@ export function formatTime(timestamp) {
 export function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
+
+/**
+ * Unwrap a Tauri IPC result that may be { data } or the value directly.
+ * @param {*} result - The IPC result to unwrap
+ * @param {*} [fallback=null] - Value to return if result is null/undefined
+ * @returns {*} The unwrapped value
+ */
+export function unwrapResult(result, fallback = null) {
+  if (result == null) return fallback;
+  return result.data !== undefined ? result.data : result;
+}
+
+/**
+ * Extract the filename (last segment) from a path string.
+ * Handles both `/` and `\` separators.
+ * @param {string} path
+ * @returns {string}
+ */
+export function basename(path) {
+  return path?.split(/[/\\]/).pop() || path;
+}

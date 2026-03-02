@@ -5,6 +5,7 @@
   import { projectStore } from '../../lib/stores/project.svelte.js';
   import { devServerManager } from '../../lib/stores/dev-server-manager.svelte.js';
   import { detectDevServers, probePort } from '../../lib/api.js';
+  import { unwrapResult } from '../../lib/utils.js';
 
   let { /** @type {(e: MouseEvent) => void} */ onManage = () => {} } = $props();
 
@@ -51,7 +52,7 @@
     try {
       const result = await detectDevServers(project.path);
       /** @type {any} */
-      const data = result?.data || result || {};
+      const data = unwrapResult(result) || {};
       const list = data.servers || (Array.isArray(data) ? data : []);
       if (Array.isArray(list)) {
         lensStore.setDevServers(list);

@@ -1,4 +1,6 @@
 <script>
+  import { basename } from '../../lib/utils.js';
+
   let {
     references = [],
     visible = false,
@@ -7,10 +9,6 @@
     /** @type {(ref: any) => void} */
     onNavigate = (_ref) => {},
   } = $props();
-
-  function getFileName(path) {
-    return path?.split(/[/\\]/).pop() || path;
-  }
 </script>
 
 {#if visible && references.length > 0}
@@ -25,7 +23,7 @@
           class="reference-item"
           onclick={() => onNavigate(ref)}
         >
-          <span class="ref-file">{getFileName(ref.path || ref.uri)}</span>
+          <span class="ref-file">{basename(ref.path || ref.uri)}</span>
           <span class="ref-line">:{(ref.range?.start?.line ?? ref.line ?? 0) + 1}</span>
         </button>
       {/each}

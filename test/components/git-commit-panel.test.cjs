@@ -204,3 +204,60 @@ describe('GitCommitPanel.svelte -- validation', () => {
     );
   });
 });
+
+// ============ Resilient branch switching ============
+
+describe('GitCommitPanel.svelte -- resilient branch switching', () => {
+  it('does NOT use window.confirm for branch switching', () => {
+    // Extract handleSwitchBranch function body
+    const fnIdx = src.indexOf('async function handleSwitchBranch');
+    const fnEnd = src.indexOf('\n  }', fnIdx) + 4;
+    const fnBody = src.slice(fnIdx, fnEnd);
+    assert.ok(!fnBody.includes('window.confirm'), 'handleSwitchBranch should not use window.confirm');
+  });
+
+  it('imports toastStore', () => {
+    assert.ok(src.includes('toastStore'), 'Should import toastStore');
+    assert.ok(src.includes('toast.svelte.js'), 'Should import from toast.svelte.js');
+  });
+
+  it('has handleCheckoutError function', () => {
+    assert.ok(src.includes('function handleCheckoutError('), 'Should have handleCheckoutError function');
+  });
+
+  it('has stashAndSwitch function', () => {
+    assert.ok(src.includes('async function stashAndSwitch('), 'Should have stashAndSwitch function');
+  });
+
+  it('detects dirty state from git error messages', () => {
+    assert.ok(src.includes("'local changes'"), 'Should detect local changes error');
+    assert.ok(src.includes("'overwritten by checkout'"), 'Should detect overwritten error');
+    assert.ok(src.includes("'Please commit your changes or stash them'"), 'Should detect stash suggestion error');
+  });
+
+  it('calls gitStashSave in stashAndSwitch', () => {
+    const fnIdx = src.indexOf('async function stashAndSwitch');
+    const fnBody = src.slice(fnIdx, src.indexOf('\n  }', fnIdx + 50) + 4);
+    assert.ok(fnBody.includes('gitStashSave('), 'stashAndSwitch should call gitStashSave');
+  });
+
+  it('rolls back stash on checkout failure', () => {
+    const fnIdx = src.indexOf('async function stashAndSwitch');
+    const fnBody = src.slice(fnIdx, src.indexOf('\n  }', fnIdx + 50) + 4);
+    assert.ok(fnBody.includes('gitStashPop('), 'Should pop stash back if checkout fails after stash');
+  });
+
+  it('shows success toast on branch switch', () => {
+    const fnIdx = src.indexOf('async function handleSwitchBranch');
+    const fnBody = src.slice(fnIdx, src.indexOf('\n  }', fnIdx + 50) + 4);
+    assert.ok(fnBody.includes("severity: 'success'"), 'Should show success toast');
+    assert.ok(fnBody.includes('Switched to'), 'Success toast should say Switched to');
+  });
+
+  it('shows warning toast with Stash & Switch action on dirty state', () => {
+    const fnIdx = src.indexOf('function handleCheckoutError');
+    const fnBody = src.slice(fnIdx, src.indexOf('\n  }', fnIdx + 50) + 4);
+    assert.ok(fnBody.includes("severity: 'warning'"), 'Should show warning toast for dirty state');
+    assert.ok(fnBody.includes('Stash & Switch'), 'Warning toast should offer Stash & Switch action');
+  });
+});

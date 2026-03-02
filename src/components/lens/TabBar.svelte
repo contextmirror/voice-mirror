@@ -1,5 +1,6 @@
 <script>
   import { tabsStore } from '../../lib/stores/tabs.svelte.js';
+  import { basename } from '../../lib/utils.js';
   import TabContextMenu from './TabContextMenu.svelte';
 
   let {} = $props();
@@ -19,7 +20,7 @@
       const files = Array.isArray(selected) ? selected : [selected];
       for (const filePath of files) {
         // Extract filename from path
-        const name = filePath.split(/[/\\]/).pop() || filePath;
+        const name = basename(filePath);
         tabsStore.openFile({ name, path: filePath });
         tabsStore.pinTab(filePath);  // Explicitly opened files are permanent
       }

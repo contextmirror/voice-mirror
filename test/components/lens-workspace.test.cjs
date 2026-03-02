@@ -181,7 +181,7 @@ describe('LensWorkspace.svelte', () => {
   it('starts file watcher via $effect when project path is available', () => {
     assert.ok(src.includes('startFileWatching(path)') || src.includes('startFileWatching('),
       'Should call startFileWatching');
-    assert.ok(src.includes('activeProject?.path'), 'Should read activeProject path');
+    assert.ok(src.includes('projectStore.root'), 'Should read project root path');
   });
 
   it('stops file watcher on cleanup (project change or unmount)', () => {

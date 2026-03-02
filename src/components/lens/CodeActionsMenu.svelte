@@ -1,4 +1,7 @@
 <script>
+  import { clampToViewport } from '$lib/clamp-to-viewport.js';
+  import { setupClickOutside } from '$lib/popup-utils.js';
+
   let {
     actions = [],
     visible = false,
@@ -39,40 +42,11 @@
 
   // Post-render: measure actual menu size and reposition if it overflows
   $effect(() => {
-    if (visible && menuEl) {
-      const rect = menuEl.getBoundingClientRect();
-      const pad = 4;
-      if (rect.bottom > window.innerHeight - pad) {
-        menuEl.style.top = `${Math.max(pad, window.innerHeight - rect.height - pad)}px`;
-      }
-      if (rect.right > window.innerWidth - pad) {
-        menuEl.style.left = `${Math.max(pad, window.innerWidth - rect.width - pad)}px`;
-      }
-    }
+    if (visible && menuEl) clampToViewport(menuEl);
   });
 
-  function handleClickOutside(e) {
-    if (menuEl && !menuEl.contains(e.target)) {
-      onClose();
-    }
-  }
-
-  function handleKeydown(e) {
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      onClose();
-    }
-  }
-
   $effect(() => {
-    if (visible) {
-      document.addEventListener('mousedown', handleClickOutside, true);
-      document.addEventListener('keydown', handleKeydown, true);
-      return () => {
-        document.removeEventListener('mousedown', handleClickOutside, true);
-        document.removeEventListener('keydown', handleKeydown, true);
-      };
-    }
+    if (visible) return setupClickOutside(menuEl, onClose);
   });
 </script>
 

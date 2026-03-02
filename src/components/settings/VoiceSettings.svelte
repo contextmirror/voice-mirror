@@ -13,6 +13,7 @@
   import { listen } from '@tauri-apps/api/event';
   import { STT_REGISTRY } from '../../lib/voice-adapters.js';
   import KeybindRecorder from './KeybindRecorder.svelte';
+  import { unwrapResult } from '../../lib/utils.js';
   import TTSConfig from './TTSConfig.svelte';
   import Select from '../shared/Select.svelte';
   import Toggle from '../shared/Toggle.svelte';
@@ -62,7 +63,7 @@
     if (devicesLoaded) return;
     devicesLoaded = true;
     listAudioDevices().then(result => {
-      const data = result?.data || result;
+      const data = unwrapResult(result);
       if (data) {
         audioInputDevices = data.input || data.inputs || [];
         audioOutputDevices = data.output || data.outputs || [];
@@ -72,13 +73,13 @@
     });
 
     // Detect GPU and list installed models
-    detectGpu().then(r => { gpuInfo = r?.data || r; }).catch(() => {});
+    detectGpu().then(r => { gpuInfo = unwrapResult(r); }).catch(() => {});
     refreshInstalledModels();
   });
 
   function refreshInstalledModels() {
     listSttModels().then(r => {
-      const data = r?.data || r;
+      const data = unwrapResult(r);
       installedModels = data?.models || [];
     }).catch(() => {});
   }

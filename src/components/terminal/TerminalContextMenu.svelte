@@ -8,6 +8,7 @@
   import { terminalTabsStore } from '../../lib/stores/terminal-tabs.svelte.js';
   import { devServerManager } from '../../lib/stores/dev-server-manager.svelte.js';
   import { toastStore } from '../../lib/stores/toast.svelte.js';
+  import { clampToViewport } from '$lib/clamp-to-viewport.js';
   import TerminalColorPicker from './TerminalColorPicker.svelte';
   import TerminalIconPicker from './TerminalIconPicker.svelte';
 
@@ -93,16 +94,7 @@
 
   // Post-render: measure actual menu size and reposition if it overflows
   $effect(() => {
-    if (visible && menuEl) {
-      const rect = menuEl.getBoundingClientRect();
-      const pad = 4;
-      if (rect.bottom > window.innerHeight - pad) {
-        menuEl.style.top = `${Math.max(pad, window.innerHeight - rect.height - pad)}px`;
-      }
-      if (rect.right > window.innerWidth - pad) {
-        menuEl.style.left = `${Math.max(pad, window.innerWidth - rect.width - pad)}px`;
-      }
-    }
+    if (visible && menuEl) clampToViewport(menuEl);
   });
 
   // Close on outside click

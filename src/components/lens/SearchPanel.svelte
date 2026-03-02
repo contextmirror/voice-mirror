@@ -1,6 +1,7 @@
 <script>
   import { searchStore } from '../../lib/stores/search.svelte.js';
   import { chooseIconName } from '../../lib/file-icons.js';
+  import { basename } from '../../lib/utils.js';
   import spriteUrl from '../../assets/icons/file-icons-sprite.svg';
 
   let { onResultClick = () => {} } = $props();
@@ -129,7 +130,7 @@
   <div class="search-results">
     {#each searchStore.results as file}
       {@const collapsed = searchStore.collapsedFiles.has(file.path)}
-      {@const fileName = file.path.split(/[/\\]/).pop() || file.path}
+      {@const fileName = basename(file.path)}
       <button
         class="search-file-header"
         onclick={() => searchStore.toggleFileCollapsed(file.path)}

@@ -2,6 +2,9 @@
   import { createFile, createDirectory, renameEntry, deleteEntry, revealInExplorer } from '../../lib/api.js';
   import { projectStore } from '../../lib/stores/project.svelte.js';
   import { toastStore } from '../../lib/stores/toast.svelte.js';
+  import { basename } from '../../lib/utils.js';
+  import { clampToViewport } from '$lib/clamp-to-viewport.js';
+  import { setupClickOutside } from '$lib/popup-utils.js';
 
   let {
     x = 0,
@@ -28,16 +31,7 @@
 
   // Post-render: measure actual menu size and reposition if it overflows
   $effect(() => {
-    if (visible && menuEl) {
-      const rect = menuEl.getBoundingClientRect();
-      const pad = 4;
-      if (rect.bottom > window.innerHeight - pad) {
-        menuEl.style.top = `${Math.max(pad, window.innerHeight - rect.height - pad)}px`;
-      }
-      if (rect.right > window.innerWidth - pad) {
-        menuEl.style.left = `${Math.max(pad, window.innerWidth - rect.width - pad)}px`;
-      }
-    }
+    if (visible && menuEl) clampToViewport(menuEl);
   });
 
   // Check if this file has git changes (for showing "Open Diff")
@@ -49,28 +43,8 @@
     onClose();
   }
 
-  function handleKeydown(e) {
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      close();
-    }
-  }
-
-  function handleClickOutside(e) {
-    if (menuEl && !menuEl.contains(e.target)) {
-      close();
-    }
-  }
-
   $effect(() => {
-    if (visible) {
-      document.addEventListener('mousedown', handleClickOutside, true);
-      document.addEventListener('keydown', handleKeydown, true);
-      return () => {
-        document.removeEventListener('mousedown', handleClickOutside, true);
-        document.removeEventListener('keydown', handleKeydown, true);
-      };
-    }
+    if (visible) return setupClickOutside(menuEl, close);
   });
 
   // ── Actions ──
@@ -107,10 +81,10 @@
   async function handleDelete() {
     close();
     if (!entry) return;
-    const name = entry.name || entry.path.split(/[/\\]/).pop();
+    const name = entry.name || basename(entry.path);
     const kind = isFolder ? 'Folder' : 'File';
     try {
-      const root = projectStore.activeProject?.path || null;
+      const root = projectStore.root;
       await deleteEntry(entry.path, root);
       onAction('delete', entry);
       toastStore.addToast({
@@ -130,7 +104,7 @@
   function handleCopyPath() {
     close();
     if (!entry) return;
-    const root = projectStore.activeProject?.path || '';
+    const root = projectStore.root || '';
     const fullPath = root ? `${root}/${entry.path}` : entry.path;
     navigator.clipboard.writeText(fullPath.replace(/\//g, '\\'));
   }
@@ -145,7 +119,7 @@
     close();
     if (!entry) return;
     try {
-      const root = projectStore.activeProject?.path || null;
+      const root = projectStore.root;
       await revealInExplorer(entry.path, root);
     } catch (err) {
       console.error('FileContextMenu: reveal failed', err);

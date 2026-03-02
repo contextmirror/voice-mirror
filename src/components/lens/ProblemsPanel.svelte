@@ -7,6 +7,7 @@
    */
   import { lspDiagnosticsStore } from '../../lib/stores/lsp-diagnostics.svelte.js';
   import { tabsStore } from '../../lib/stores/tabs.svelte.js';
+  import { basename } from '../../lib/utils.js';
 
   /** @type {{ showErrors: boolean, showWarnings: boolean, showInfos: boolean, filterText: string }} */
   let { showErrors = true, showWarnings = true, showInfos = true, filterText = '' } = $props();
@@ -134,7 +135,7 @@
     const character = diag.range?.start?.character ?? 0;
     const endLine = diag.range?.end?.line;
     const endCharacter = diag.range?.end?.character;
-    const fileName = filePath.split(/[/\\]/).pop() || filePath;
+    const fileName = basename(filePath);
 
     tabsStore.setPendingCursor(filePath, line, character, endLine, endCharacter);
     tabsStore.openFile({ name: fileName, path: filePath });

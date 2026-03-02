@@ -6,7 +6,7 @@
  */
 
 import { getConfig, setConfig, resetConfig as apiResetConfig } from '../api.js';
-import { deepMerge } from '../utils.js';
+import { deepMerge, unwrapResult } from '../utils.js';
 
 /** Default application configuration */
 const DEFAULT_CONFIG = {
@@ -190,7 +190,7 @@ export async function loadConfig() {
   try {
     const result = await getConfig();
     if (result && result.success !== false) {
-      configStore.set(result.data || result);
+      configStore.set(unwrapResult(result));
     }
   } catch (err) {
     console.error('[config] Failed to load:', err);
@@ -206,7 +206,7 @@ export async function updateConfig(patch) {
   try {
     const result = await setConfig(patch);
     if (result && result.success !== false) {
-      configStore.set(result.data || deepMerge(configStore.value, patch));
+      configStore.set(unwrapResult(result, deepMerge(configStore.value, patch)));
     }
   } catch (err) {
     console.error('[config] Failed to update:', err);

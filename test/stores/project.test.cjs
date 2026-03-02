@@ -262,6 +262,17 @@ describe('project: imports', () => {
   });
 });
 
+// ============ root getter ============
+
+describe('project.svelte.js: root getter', () => {
+  it('has a root getter that returns activeProject path or null', () => {
+    const rootGetterIdx = src.indexOf('get root()');
+    assert.ok(rootGetterIdx !== -1, 'Should have a root getter');
+    const body = src.slice(rootGetterIdx, rootGetterIdx + 200);
+    assert.ok(body.includes('activeProject'), 'root getter should reference activeProject');
+  });
+});
+
 // ============ Color palette ============
 
 describe('project: color palette', () => {

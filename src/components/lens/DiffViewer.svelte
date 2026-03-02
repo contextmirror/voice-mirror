@@ -7,6 +7,7 @@
   import DiffToolbar from './DiffToolbar.svelte';
   import DiffMinimap from './DiffMinimap.svelte';
   import { loadLanguageExtension } from '../../lib/codemirror-languages.js';
+  import { basename, unwrapResult } from '../../lib/utils.js';
 
   let { tab } = $props();
 
@@ -44,7 +45,7 @@
 
   // Load changed files when tab is a diff tab
   async function loadChangedFiles() {
-    const root = projectStore.activeProject?.path || null;
+    const root = projectStore.root;
     if (!root) { changedFiles = []; return; }
     try {
       const resp = await getGitChanges(root);
@@ -154,13 +155,13 @@
 
   function menuOpenFile() {
     closeMenu();
-    const fileName = tab.path.split(/[/\\]/).pop() || tab.path;
+    const fileName = basename(tab.path);
     tabsStore.openFile({ name: fileName, path: tab.path });
   }
 
   function menuCopyPath() {
     closeMenu();
-    const root = projectStore.activeProject?.path || '';
+    const root = projectStore.root || '';
     const fullPath = root ? `${root}/${tab.path}` : tab.path;
     navigator.clipboard.writeText(fullPath);
   }
@@ -172,7 +173,7 @@
 
   function menuReveal() {
     closeMenu();
-    revealInExplorer(tab.path, projectStore.activeProject?.path || null);
+    revealInExplorer(tab.path, projectStore.root);
   }
 
   // ── Language support ──
@@ -450,7 +451,7 @@
     // Load diff content (async in effect — capture path to guard against race)
     (async () => {
       try {
-        const root = projectStore.activeProject?.path || null;
+        const root = projectStore.root;
 
         const [oldResult, newResult] = await Promise.all([
           tab.status === 'added'
@@ -464,8 +465,8 @@
         // Guard: tab may have changed while we were loading
         if (tab?.path !== path) return;
 
-        const oldData = oldResult?.data || oldResult;
-        const newData = newResult?.data || newResult;
+        const oldData = unwrapResult(oldResult);
+        const newData = unwrapResult(newResult);
 
         if (oldData?.binary || newData?.binary) {
           isBinary = true;

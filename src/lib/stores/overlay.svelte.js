@@ -12,6 +12,7 @@
 import { listen } from '@tauri-apps/api/event';
 import { setAlwaysOnTop, setWindowSize, setResizable, getWindowPosition, setWindowPosition } from '../api.js';
 import { updateConfig, configStore } from '../stores/config.svelte.js';
+import { unwrapResult } from '../utils.js';
 
 /** Valid orb states */
 const VALID_ORB_STATES = ['idle', 'listening', 'speaking', 'thinking', 'dictating', 'error'];
@@ -74,7 +75,7 @@ function createOverlayStore() {
           // Entering orb mode — save dashboard position + dimensions first
           try {
             const posResult = await getWindowPosition();
-            const pos = posResult?.data || posResult;
+            const pos = unwrapResult(posResult);
             if (pos?.x != null && pos?.y != null) {
               await updateConfig({
                 window: { dashboardX: pos.x, dashboardY: pos.y, expanded: false },
@@ -109,7 +110,7 @@ function createOverlayStore() {
           // Leaving orb mode — save orb position first
           try {
             const posResult = await getWindowPosition();
-            const pos = posResult?.data || posResult;
+            const pos = unwrapResult(posResult);
             if (pos?.x != null && pos?.y != null) {
               await updateConfig({
                 window: { orbX: pos.x, orbY: pos.y, expanded: true }
