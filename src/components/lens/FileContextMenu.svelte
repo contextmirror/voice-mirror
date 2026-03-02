@@ -3,6 +3,7 @@
   import { projectStore } from '../../lib/stores/project.svelte.js';
   import { toastStore } from '../../lib/stores/toast.svelte.js';
   import { basename } from '../../lib/utils.js';
+  import { clampToViewport } from '$lib/clamp-to-viewport.js';
 
   let {
     x = 0,
@@ -29,16 +30,7 @@
 
   // Post-render: measure actual menu size and reposition if it overflows
   $effect(() => {
-    if (visible && menuEl) {
-      const rect = menuEl.getBoundingClientRect();
-      const pad = 4;
-      if (rect.bottom > window.innerHeight - pad) {
-        menuEl.style.top = `${Math.max(pad, window.innerHeight - rect.height - pad)}px`;
-      }
-      if (rect.right > window.innerWidth - pad) {
-        menuEl.style.left = `${Math.max(pad, window.innerWidth - rect.width - pad)}px`;
-      }
-    }
+    if (visible && menuEl) clampToViewport(menuEl);
   });
 
   // Check if this file has git changes (for showing "Open Diff")

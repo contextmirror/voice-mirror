@@ -187,16 +187,12 @@ describe('FileContextMenu.svelte -- dismiss behavior', () => {
 });
 
 describe('FileContextMenu.svelte -- positioning', () => {
-  it('clamps to viewport width', () => {
-    assert.ok(src.includes('window.innerWidth'), 'Should clamp to viewport width');
+  it('uses clampToViewport for viewport clamping', () => {
+    assert.ok(src.includes('clampToViewport'), 'Should use clampToViewport utility');
   });
 
-  it('clamps to viewport height', () => {
-    assert.ok(src.includes('window.innerHeight'), 'Should clamp to viewport height');
-  });
-
-  it('uses getBoundingClientRect for dynamic clamping', () => {
-    assert.ok(src.includes('getBoundingClientRect'), 'Should measure actual menu size for clamping');
+  it('imports clampToViewport from $lib', () => {
+    assert.ok(src.includes("import { clampToViewport }"), 'Should import clampToViewport');
   });
 });
 

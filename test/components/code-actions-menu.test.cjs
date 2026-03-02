@@ -82,7 +82,7 @@ describe('CodeActionsMenu.svelte: behavior', () => {
 
   it('uses position clamping', () => {
     assert.ok(src.includes('menuStyle'), 'Should have menuStyle');
-    assert.ok(src.includes('getBoundingClientRect'), 'Should measure menu for viewport clamping');
+    assert.ok(src.includes('clampToViewport'), 'Should use clampToViewport for viewport clamping');
   });
 });
 
