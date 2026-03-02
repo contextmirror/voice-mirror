@@ -169,20 +169,8 @@ describe('FileContextMenu.svelte -- keyboard shortcuts', () => {
 });
 
 describe('FileContextMenu.svelte -- dismiss behavior', () => {
-  it('closes on Escape', () => {
-    assert.ok(src.includes("e.key === 'Escape'"), 'Should close on Escape');
-  });
-
-  it('listens for outside clicks', () => {
-    assert.ok(src.includes('handleClickOutside'), 'Should handle outside clicks');
-  });
-
-  it('adds mousedown listener', () => {
-    assert.ok(src.includes("'mousedown', handleClickOutside"), 'Should listen for mousedown');
-  });
-
-  it('adds keydown listener', () => {
-    assert.ok(src.includes("'keydown', handleKeydown"), 'Should listen for keydown');
+  it('uses setupClickOutside for dismiss behavior', () => {
+    assert.ok(src.includes('setupClickOutside'), 'Should use setupClickOutside utility');
   });
 });
 

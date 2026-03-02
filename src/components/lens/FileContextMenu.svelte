@@ -4,6 +4,7 @@
   import { toastStore } from '../../lib/stores/toast.svelte.js';
   import { basename } from '../../lib/utils.js';
   import { clampToViewport } from '$lib/clamp-to-viewport.js';
+  import { setupClickOutside } from '$lib/popup-utils.js';
 
   let {
     x = 0,
@@ -42,28 +43,8 @@
     onClose();
   }
 
-  function handleKeydown(e) {
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      close();
-    }
-  }
-
-  function handleClickOutside(e) {
-    if (menuEl && !menuEl.contains(e.target)) {
-      close();
-    }
-  }
-
   $effect(() => {
-    if (visible) {
-      document.addEventListener('mousedown', handleClickOutside, true);
-      document.addEventListener('keydown', handleKeydown, true);
-      return () => {
-        document.removeEventListener('mousedown', handleClickOutside, true);
-        document.removeEventListener('keydown', handleKeydown, true);
-      };
-    }
+    if (visible) return setupClickOutside(menuEl, close);
   });
 
   // ── Actions ──
