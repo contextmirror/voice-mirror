@@ -198,7 +198,7 @@ describe('Terminal.svelte link overlay integration', () => {
   });
 
   it('uses projectStore path for CWD', () => {
-    assert.ok(terminalSource.includes('projectStore.activeProject?.path'));
+    assert.ok(terminalSource.includes('projectStore.root'));
   });
 
   it('opens URLs via tauri shell open', () => {

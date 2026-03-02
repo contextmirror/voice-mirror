@@ -265,7 +265,7 @@ function createCodeActionsGutter(cm, lsp, filePath) {
       const sel = view.state.selection.main;
       const line = view.state.doc.lineAt(sel.head);
       this.lastLineFrom = line.from;
-      const root = projectStore.activeProject?.path || null;
+      const root = projectStore.root;
       try {
         const result = await lspRequestCodeActions(
           filePath,

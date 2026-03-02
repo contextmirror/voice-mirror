@@ -101,7 +101,7 @@
   function handleCopyPath() {
     close();
     if (!tab?.path) return;
-    const root = projectStore.activeProject?.path || '';
+    const root = projectStore.root || '';
     const fullPath = root ? `${root}/${tab.path}` : tab.path;
     navigator.clipboard.writeText(fullPath.replace(/\//g, '\\'));
   }
@@ -116,7 +116,7 @@
     close();
     if (!tab?.path) return;
     try {
-      const root = projectStore.activeProject?.path || null;
+      const root = projectStore.root;
       await revealInExplorer(tab.path, root);
     } catch (err) {
       console.error('TabContextMenu: reveal failed', err);

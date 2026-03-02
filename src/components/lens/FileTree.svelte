@@ -81,7 +81,7 @@
   $effect(() => {
     const _idx = projectStore.activeIndex;
     const _len = projectStore.entries.length;
-    const _path = projectStore.activeProject?.path;
+    const _path = projectStore.root;
     expandedDirs = new Set();
     dirChildren = new Map();
     loadRoot();
@@ -113,7 +113,7 @@
 
   async function handleTreeChanged(event) {
     const { root: rootChanged } = event.payload;
-    const currentRoot = projectStore.activeProject?.path || null;
+    const currentRoot = projectStore.root;
     if (!currentRoot) return; // No project open, ignore stale watcher events
 
     if (rootChanged) {
@@ -155,13 +155,13 @@
 
   function handleGitChanged() {
     // Only reload if a project is still open (avoids stale data after project close)
-    if (projectStore.activeProject?.path) {
+    if (projectStore.root) {
       loadGitChanges();
     }
   }
 
   async function loadRoot() {
-    const root = projectStore.activeProject?.path;
+    const root = projectStore.root;
     if (!root) {
       rootEntries = [];
       return;
@@ -177,7 +177,7 @@
   }
 
   async function loadGitChanges() {
-    const root = projectStore.activeProject?.path;
+    const root = projectStore.root;
     if (!root) {
       gitChanges = [];
       currentBranch = '';
@@ -215,7 +215,7 @@
       loadingDirs = loading;
 
       try {
-        const root = projectStore.activeProject?.path || null;
+        const root = projectStore.root;
         const resp = await listDirectory(path, root);
         if (resp && resp.data) {
           const updated = new Map(dirChildren);
@@ -242,7 +242,7 @@
 
   async function refreshParent(path) {
     const parentPath = path.includes('/') ? path.substring(0, path.lastIndexOf('/')) : null;
-    const root = projectStore.activeProject?.path || null;
+    const root = projectStore.root;
     try {
       if (parentPath) {
         const resp = await listDirectory(parentPath, root);
@@ -306,7 +306,7 @@
       return;
     }
     try {
-      const root = projectStore.activeProject?.path || null;
+      const root = projectStore.root;
       await renameEntry(oldPath, newPath, root);
       cancelRename();
       await refreshParent(oldPath);
@@ -366,7 +366,7 @@
       ? `${creatingIn.parentPath}/${creatingValue.trim()}`
       : creatingValue.trim();
     try {
-      const root = projectStore.activeProject?.path || null;
+      const root = projectStore.root;
       if (creatingIn.type === 'file') {
         await createFile(fullPath, '', root);
       } else {
@@ -417,13 +417,13 @@
   }
 
   function copyProjectPath() {
-    const path = projectStore.activeProject?.path;
+    const path = projectStore.root;
     if (path) navigator.clipboard.writeText(path).catch(() => {});
     closeProjectMenu();
   }
 
   function revealProject() {
-    const path = projectStore.activeProject?.path;
+    const path = projectStore.root;
     if (path) revealInExplorer(path, path).catch(() => {});
     closeProjectMenu();
   }
@@ -579,7 +579,7 @@
     const newPath = destFolder ? `${destFolder}/${fileName}` : fileName;
 
     try {
-      const root = projectStore.activeProject?.path || null;
+      const root = projectStore.root;
       await renameEntry(sourcePath, newPath, root);
     } catch (err) {
       const msg = err?.message || String(err);
@@ -610,28 +610,28 @@
   // ── Git stage/unstage/discard handlers ──
 
   async function handleStage(change) {
-    const root = projectStore.activeProject?.path;
+    const root = projectStore.root;
     if (!root) return;
     try { await gitStage([change.path], root); await loadGitChanges(); }
     catch (err) { console.error('git stage failed', err); }
   }
 
   async function handleUnstage(change) {
-    const root = projectStore.activeProject?.path;
+    const root = projectStore.root;
     if (!root) return;
     try { await gitUnstage([change.path], root); await loadGitChanges(); }
     catch (err) { console.error('git unstage failed', err); }
   }
 
   async function handleStageAll() {
-    const root = projectStore.activeProject?.path;
+    const root = projectStore.root;
     if (!root) return;
     try { await gitStageAll(root); await loadGitChanges(); }
     catch (err) { console.error('git stage all failed', err); }
   }
 
   async function handleUnstageAll() {
-    const root = projectStore.activeProject?.path;
+    const root = projectStore.root;
     if (!root) return;
     try { await gitUnstageAll(root); await loadGitChanges(); }
     catch (err) { console.error('git unstage all failed', err); }
@@ -639,7 +639,7 @@
 
   async function handleDiscard(change) {
     if (!confirm(`Discard changes to ${change.path}? This cannot be undone.`)) return;
-    const root = projectStore.activeProject?.path;
+    const root = projectStore.root;
     if (!root) return;
     try { await gitDiscard([change.path], root); await loadGitChanges(); }
     catch (err) { console.error('git discard failed', err); }
@@ -768,7 +768,7 @@
       branch={currentBranch}
       stagedCount={stagedChanges.length}
       onCommit={loadGitChanges}
-      root={projectStore.activeProject?.path}
+      root={projectStore.root}
     />
     <div class="tree-scroll">
       <GitChangesPanel

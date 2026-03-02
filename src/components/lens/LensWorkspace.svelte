@@ -134,7 +134,7 @@
 
   // Start/stop file watcher when entering Lens mode or switching projects
   $effect(() => {
-    const path = projectStore.activeProject?.path;
+    const path = projectStore.root;
     if (!path) return;
 
     startFileWatching(path).catch((err) => {
@@ -190,7 +190,7 @@
 
   // Start/stop LSP diagnostics store listener on project switch
   $effect(() => {
-    const path = projectStore.activeProject?.path;
+    const path = projectStore.root;
     if (!path) return;
 
     // Shut down LSP servers from previous project before starting new ones

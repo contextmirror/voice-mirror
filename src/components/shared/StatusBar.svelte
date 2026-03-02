@@ -16,7 +16,7 @@
   import { configStore, updateConfig } from '../../lib/stores/config.svelte.js';
 
   // -- Derived state --
-  let hasProject = $derived(!!projectStore.activeProject?.path);
+  let hasProject = $derived(!!projectStore.root);
   let activeView = $derived(navigationStore.activeView);
   let showEditorInfo = $derived(statusBarStore.editorFocused && activeView === 'lens');
 

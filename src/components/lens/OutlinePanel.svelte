@@ -52,7 +52,7 @@
     }
     loading = true;
     try {
-      const root = projectStore.activeProject?.path || null;
+      const root = projectStore.root;
       const result = await lspRequestDocumentSymbols(path, root);
       if (result?.data?.symbols) {
         symbols = result.data.symbols;

@@ -45,7 +45,7 @@
 
   // Load changed files when tab is a diff tab
   async function loadChangedFiles() {
-    const root = projectStore.activeProject?.path || null;
+    const root = projectStore.root;
     if (!root) { changedFiles = []; return; }
     try {
       const resp = await getGitChanges(root);
@@ -161,7 +161,7 @@
 
   function menuCopyPath() {
     closeMenu();
-    const root = projectStore.activeProject?.path || '';
+    const root = projectStore.root || '';
     const fullPath = root ? `${root}/${tab.path}` : tab.path;
     navigator.clipboard.writeText(fullPath);
   }
@@ -173,7 +173,7 @@
 
   function menuReveal() {
     closeMenu();
-    revealInExplorer(tab.path, projectStore.activeProject?.path || null);
+    revealInExplorer(tab.path, projectStore.root);
   }
 
   // ── Language support ──
@@ -451,7 +451,7 @@
     // Load diff content (async in effect — capture path to guard against race)
     (async () => {
       try {
-        const root = projectStore.activeProject?.path || null;
+        const root = projectStore.root;
 
         const [oldResult, newResult] = await Promise.all([
           tab.status === 'added'

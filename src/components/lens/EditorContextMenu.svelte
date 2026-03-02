@@ -193,7 +193,7 @@
 
   function handleCopyPath() {
     close();
-    const root = projectStore.activeProject?.path || '';
+    const root = projectStore.root || '';
     const fullPath = root ? `${root}/${filePath}` : filePath;
     navigator.clipboard.writeText(fullPath.replace(/\//g, '\\'));
   }
@@ -215,7 +215,7 @@
 
   function handleReveal() {
     close();
-    revealInExplorer(filePath, projectStore.activeProject?.path || null);
+    revealInExplorer(filePath, projectStore.root);
   }
 </script>
 

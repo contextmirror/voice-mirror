@@ -111,7 +111,7 @@
     const name = entry.name || basename(entry.path);
     const kind = isFolder ? 'Folder' : 'File';
     try {
-      const root = projectStore.activeProject?.path || null;
+      const root = projectStore.root;
       await deleteEntry(entry.path, root);
       onAction('delete', entry);
       toastStore.addToast({
@@ -131,7 +131,7 @@
   function handleCopyPath() {
     close();
     if (!entry) return;
-    const root = projectStore.activeProject?.path || '';
+    const root = projectStore.root || '';
     const fullPath = root ? `${root}/${entry.path}` : entry.path;
     navigator.clipboard.writeText(fullPath.replace(/\//g, '\\'));
   }
@@ -146,7 +146,7 @@
     close();
     if (!entry) return;
     try {
-      const root = projectStore.activeProject?.path || null;
+      const root = projectStore.root;
       await revealInExplorer(entry.path, root);
     } catch (err) {
       console.error('FileContextMenu: reveal failed', err);

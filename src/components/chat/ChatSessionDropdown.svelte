@@ -188,7 +188,7 @@
       name: session.name || (isLensMode ? 'New Session' : 'New Chat'),
       createdAt: session.createdAt || Date.now(),
       updatedAt: Date.now(),
-      projectPath: isLensMode ? (projectStore.activeProject?.path || null) : undefined,
+      projectPath: isLensMode ? (projectStore.root) : undefined,
       messages: chatStore.messages.map((m) => ({
         id: m.id,
         role: m.role,

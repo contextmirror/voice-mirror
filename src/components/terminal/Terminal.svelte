@@ -440,7 +440,7 @@
           linkOverlay = createLinkOverlay({
             container: containerEl,
             getTerm: () => term,
-            getCwd: () => projectStore.activeProject?.path || '',
+            getCwd: () => projectStore.root || '',
             onOpenUrl: (url) => {
               open(url).catch(err => console.warn('[Terminal] Failed to open URL:', err));
             },

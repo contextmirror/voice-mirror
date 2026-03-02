@@ -167,7 +167,7 @@ describe('search store: search() method', () => {
 
   it('reads project root from projectStore', () => {
     assert.ok(
-      src.includes('projectStore.activeProject'),
+      src.includes('projectStore.root'),
       'search() should read project root from projectStore'
     );
   });

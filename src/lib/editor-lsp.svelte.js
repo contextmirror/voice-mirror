@@ -120,14 +120,14 @@ export function createEditorLsp() {
     const lineInfo = view.state.doc.lineAt(pos);
     const line = lineInfo.number - 1;
     const character = pos - lineInfo.from;
-    const root = projectStore.activeProject?.path || null;
+    const root = projectStore.root;
     const currentPath = view._lspPath; // set by FileEditor
 
     try {
       const result = await lspRequestDefinition(currentPath, line, character, root);
       if (!result?.data?.locations?.length) return;
       const loc = result.data.locations[0];
-      const rootStr = projectStore.activeProject?.path || '';
+      const rootStr = projectStore.root || '';
       const resolved = uriToRelativePath(loc.uri, rootStr);
       if (!resolved) return;
       if (resolved.path === currentPath && !resolved.external) {
@@ -149,13 +149,13 @@ export function createEditorLsp() {
     const lineInfo = view.state.doc.lineAt(pos);
     const line = lineInfo.number - 1;
     const character = pos - lineInfo.from;
-    const root = projectStore.activeProject?.path || null;
+    const root = projectStore.root;
 
     try {
       const result = await lspRequestReferences(currentPath, line, character, root);
       if (result?.data?.locations?.length) {
         referencesResult = result.data.locations.map(loc => {
-          const rootStr = projectStore.activeProject?.path || '';
+          const rootStr = projectStore.root || '';
           const resolved = uriToRelativePath(loc.uri, rootStr);
           return {
             path: resolved?.path || loc.uri,
@@ -174,7 +174,7 @@ export function createEditorLsp() {
     const lineInfo = view.state.doc.lineAt(pos);
     const line = lineInfo.number - 1;
     const character = pos - lineInfo.from;
-    const root = projectStore.activeProject?.path || null;
+    const root = projectStore.root;
 
     try {
       const result = await lspPrepareRename(currentPath, line, character, root);
@@ -196,7 +196,7 @@ export function createEditorLsp() {
     const lineInfo = view.state.doc.lineAt(pos);
     const line = lineInfo.number - 1;
     const character = pos - lineInfo.from;
-    const root = projectStore.activeProject?.path || null;
+    const root = projectStore.root;
     showRename = false;
 
     try {
@@ -244,7 +244,7 @@ export function createEditorLsp() {
     const sel = view.state.selection.main;
     const startLine = view.state.doc.lineAt(sel.from);
     const endLine = view.state.doc.lineAt(sel.to);
-    const root = projectStore.activeProject?.path || null;
+    const root = projectStore.root;
 
     try {
       const lspDiags = (diagnosticsAtCursor || [])
@@ -274,7 +274,7 @@ export function createEditorLsp() {
     const lineInfo = view.state.doc.lineAt(pos);
     const line = lineInfo.number - 1;
     const character = pos - lineInfo.from;
-    const root = projectStore.activeProject?.path || null;
+    const root = projectStore.root;
 
     try {
       const result = await lspRequestSignatureHelp(currentPath, line, character, root);
@@ -305,7 +305,7 @@ export function createEditorLsp() {
       const pos = context.state.doc.lineAt(context.pos);
       const line = pos.number - 1;
       const character = context.pos - pos.from;
-      const root = projectStore.activeProject?.path || null;
+      const root = projectStore.root;
 
       try {
         const result = await lspRequestCompletion(currentPath, line, character, root);
@@ -337,7 +337,7 @@ export function createEditorLsp() {
       const lineInfo = v.state.doc.lineAt(pos);
       const line = lineInfo.number - 1;
       const character = pos - lineInfo.from;
-      const root = projectStore.activeProject?.path || null;
+      const root = projectStore.root;
 
       try {
         const result = await lspRequestHover(currentPath, line, character, root);

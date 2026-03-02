@@ -42,6 +42,11 @@ function createProjectStore() {
       return entries[activeIndex] || null;
     },
 
+    /** Shorthand for the active project's root path, or null */
+    get root() {
+      return this.activeProject?.path || null;
+    },
+
     /**
      * Initialize from loaded config.
      * @param {{ entries?: Array, activeIndex?: number }} config
