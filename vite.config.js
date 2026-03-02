@@ -47,6 +47,12 @@ function copyGhosttyWasm() {
 export default defineConfig(async () => ({
   plugins: [svelte(), copyGhosttyWasm()],
 
+  resolve: {
+    alias: {
+      $lib: resolve(__dirname, 'src/lib'),
+    },
+  },
+
   // Prevent Vite from obscuring Rust errors
   clearScreen: false,
 
