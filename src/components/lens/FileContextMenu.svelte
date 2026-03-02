@@ -2,7 +2,7 @@
   import { createFile, createDirectory, renameEntry, deleteEntry, revealInExplorer } from '../../lib/api.js';
   import { projectStore } from '../../lib/stores/project.svelte.js';
   import { toastStore } from '../../lib/stores/toast.svelte.js';
-  import { basename } from '../../lib/utils.js';
+  import { basename, copyFullPath, copyRelativePath } from '../../lib/utils.js';
   import { clampToViewport } from '$lib/clamp-to-viewport.js';
   import { setupClickOutside } from '$lib/popup-utils.js';
 
@@ -104,15 +104,13 @@
   function handleCopyPath() {
     close();
     if (!entry) return;
-    const root = projectStore.root || '';
-    const fullPath = root ? `${root}/${entry.path}` : entry.path;
-    navigator.clipboard.writeText(fullPath.replace(/\//g, '\\'));
+    copyFullPath(entry.path, projectStore.root);
   }
 
   function handleCopyRelativePath() {
     close();
     if (!entry) return;
-    navigator.clipboard.writeText(entry.path);
+    copyRelativePath(entry.path);
   }
 
   async function handleReveal() {

@@ -6,7 +6,7 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { deepMerge, formatTime, formatLogTime, formatRelativeTime, uid, basename, unwrapResult } from '../../src/lib/utils.js';
+import { deepMerge, formatTime, formatLogTime, formatRelativeTime, uid, basename, unwrapResult, copyFullPath, copyRelativePath } from '../../src/lib/utils.js';
 
 // ============ deepMerge ============
 
@@ -297,5 +297,29 @@ describe('formatRelativeTime', () => {
   it('floors hours (does not round)', () => {
     const ts = Date.now() - 5400000; // 1.5 hours ago
     assert.equal(formatRelativeTime(ts), '1h ago');
+  });
+});
+
+// ============ copyFullPath ============
+
+describe('copyFullPath', () => {
+  it('is exported as a function', () => {
+    assert.equal(typeof copyFullPath, 'function');
+  });
+
+  it('accepts two parameters (relativePath, root)', () => {
+    assert.equal(copyFullPath.length, 2);
+  });
+});
+
+// ============ copyRelativePath ============
+
+describe('copyRelativePath', () => {
+  it('is exported as a function', () => {
+    assert.equal(typeof copyRelativePath, 'function');
+  });
+
+  it('accepts one parameter (relativePath)', () => {
+    assert.equal(copyRelativePath.length, 1);
   });
 });

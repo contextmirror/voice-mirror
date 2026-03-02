@@ -89,3 +89,21 @@ export function unwrapResult(result, fallback = null) {
 export function basename(path) {
   return path?.split(/[/\\]/).pop() || path;
 }
+
+/**
+ * Copy the full OS path (with backslashes on Windows) to clipboard.
+ * @param {string} relativePath
+ * @param {string} [root]
+ */
+export function copyFullPath(relativePath, root) {
+  const full = root ? `${root}/${relativePath}` : relativePath;
+  navigator.clipboard.writeText(full.replace(/\//g, '\\'));
+}
+
+/**
+ * Copy the relative path to clipboard.
+ * @param {string} relativePath
+ */
+export function copyRelativePath(relativePath) {
+  navigator.clipboard.writeText(relativePath);
+}
