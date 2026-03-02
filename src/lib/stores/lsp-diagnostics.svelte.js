@@ -8,6 +8,7 @@
 
 import { listen } from '@tauri-apps/api/event';
 import { uriToRelativePath as _uriToRelativePath } from '../editor-lsp.svelte.js';
+import { severityName } from '../lsp-severity.js';
 
 /** Convert a file:// URI to a project-relative path (string or null).
  *  Wraps the shared uriToRelativePath which returns { path, external }. */
@@ -33,12 +34,9 @@ function createLspDiagnosticsStore() {
     let errors = 0;
     let warnings = 0;
     for (const d of lspDiags) {
-      const sev = d.severity;
-      if (sev === 'error' || sev === 1) {
-        errors++;
-      } else if (sev === 'warning' || sev === 2) {
-        warnings++;
-      }
+      const name = severityName(d.severity);
+      if (name === 'error') errors++;
+      else if (name === 'warning') warnings++;
     }
 
     const updated = new Map(diagnostics);
@@ -99,9 +97,9 @@ function createLspDiagnosticsStore() {
       let infos = 0;
       for (const [, diags] of rawDiagnostics) {
         for (const d of diags) {
-          const sev = d.severity;
-          if (sev === 'error' || sev === 1) errors++;
-          else if (sev === 'warning' || sev === 2) warnings++;
+          const name = severityName(d.severity);
+          if (name === 'error') errors++;
+          else if (name === 'warning') warnings++;
           else infos++;
         }
       }

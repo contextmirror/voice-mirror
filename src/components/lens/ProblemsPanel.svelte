@@ -8,6 +8,7 @@
   import { lspDiagnosticsStore } from '../../lib/stores/lsp-diagnostics.svelte.js';
   import { tabsStore } from '../../lib/stores/tabs.svelte.js';
   import { basename } from '../../lib/utils.js';
+  import { severityName, severityNum, severityLabel as severityLabelFn } from '../../lib/lsp-severity.js';
 
   /** @type {{ showErrors: boolean, showWarnings: boolean, showInfos: boolean, filterText: string }} */
   let { showErrors = true, showWarnings = true, showInfos = true, filterText = '' } = $props();
@@ -33,14 +34,11 @@
     for (const [filePath, diags] of rawDiags) {
       // Filter by severity and text
       const filtered = diags.filter((d) => {
-        const sev = d.severity;
-        const isError = sev === 'error' || sev === 1;
-        const isWarning = sev === 'warning' || sev === 2;
-        const isInfo = sev === 'information' || sev === 3 || sev === 'hint' || sev === 4;
+        const name = severityName(d.severity);
 
-        if (isError && !showErrors) return false;
-        if (isWarning && !showWarnings) return false;
-        if (isInfo && !showInfos) return false;
+        if (name === 'error' && !showErrors) return false;
+        if (name === 'warning' && !showWarnings) return false;
+        if (name === 'info' && !showInfos) return false;
 
         if (lowerFilter) {
           const msg = (d.message || '').toLowerCase();
@@ -57,16 +55,15 @@
 
       // Sort: errors first, then warnings, then info; within same severity by line
       const sorted = filtered.sort((a, b) => {
-        const sevA = typeof a.severity === 'number' ? a.severity : (a.severity === 'error' ? 1 : a.severity === 'warning' ? 2 : 3);
-        const sevB = typeof b.severity === 'number' ? b.severity : (b.severity === 'error' ? 1 : b.severity === 'warning' ? 2 : 3);
-        if (sevA !== sevB) return sevA - sevB;
+        const sevDiff = severityNum(a.severity) - severityNum(b.severity);
+        if (sevDiff !== 0) return sevDiff;
         const lineA = a.range?.start?.line ?? 0;
         const lineB = b.range?.start?.line ?? 0;
         return lineA - lineB;
       });
 
-      const errors = sorted.filter(d => (d.severity === 'error' || d.severity === 1)).length;
-      const warnings = sorted.filter(d => (d.severity === 'warning' || d.severity === 2)).length;
+      const errors = sorted.filter(d => severityName(d.severity) === 'error').length;
+      const warnings = sorted.filter(d => severityName(d.severity) === 'warning').length;
 
       groups.push({ filePath, diagnostics: sorted, errors, warnings });
     }
@@ -141,17 +138,9 @@
     tabsStore.openFile({ name: fileName, path: filePath });
   }
 
-  function severityIcon(sev) {
-    if (sev === 'error' || sev === 1) return 'error';
-    if (sev === 'warning' || sev === 2) return 'warning';
-    return 'info';
-  }
-
-  function severityLabel(sev) {
-    if (sev === 'error' || sev === 1) return 'Error';
-    if (sev === 'warning' || sev === 2) return 'Warning';
-    return 'Info';
-  }
+  // severityIcon and severityLabel delegate to shared lsp-severity helpers
+  const severityIcon = severityName;
+  const severityLabel = severityLabelFn;
 
   function formatSource(diag) {
     let parts = [];
