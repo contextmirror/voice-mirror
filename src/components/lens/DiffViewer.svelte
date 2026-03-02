@@ -7,7 +7,7 @@
   import DiffToolbar from './DiffToolbar.svelte';
   import DiffMinimap from './DiffMinimap.svelte';
   import { loadLanguageExtension } from '../../lib/codemirror-languages.js';
-  import { basename } from '../../lib/utils.js';
+  import { basename, unwrapResult } from '../../lib/utils.js';
 
   let { tab } = $props();
 
@@ -465,8 +465,8 @@
         // Guard: tab may have changed while we were loading
         if (tab?.path !== path) return;
 
-        const oldData = oldResult?.data || oldResult;
-        const newData = newResult?.data || newResult;
+        const oldData = unwrapResult(oldResult);
+        const newData = unwrapResult(newResult);
 
         if (oldData?.binary || newData?.binary) {
           isBinary = true;

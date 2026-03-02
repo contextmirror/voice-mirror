@@ -19,7 +19,7 @@
   import { lspDiagnosticsStore } from '../../lib/stores/lsp-diagnostics.svelte.js';
   import { buildEditorExtensions, createIndentCompartments, detectIndentation, convertIndentation } from '../../lib/editor-extensions.js';
   import { navigationHistoryStore } from '../../lib/stores/navigation-history.svelte.js';
-  import { basename } from '../../lib/utils.js';
+  import { basename, unwrapResult } from '../../lib/utils.js';
   import { gitGutterPlugin } from '../../lib/editor-git-gutter.js';
   import { loadLanguageExtension } from '../../lib/codemirror-languages.js';
   import { statusBarStore, getLanguageName } from '../../lib/stores/status-bar.svelte.js';
@@ -236,7 +236,7 @@
     try {
       const root = projectStore.root;
       const result = await readFile(currentPath, root);
-      const data = result?.data || result;
+      const data = unwrapResult(result);
       if (!data?.content || data.content == null) return;
       const currentContent = view.state.doc.toString();
       if (data.content !== currentContent) {
@@ -302,7 +302,7 @@
         const result = isExternal
           ? await readExternalFile(filePath)
           : await readFile(filePath, root);
-        data = result?.data || result;
+        data = unwrapResult(result);
 
         // Check if tab changed while loading
         if (filePath !== currentPath) return;
@@ -507,7 +507,7 @@
           const root = projectStore.root;
           try {
             const result = await getFileGitContent(filePath, root);
-            return result?.data || result;
+            return unwrapResult(result);
           } catch { return null; }
         },
         showIndentGuides: configStore.value?.editor?.indentGuides !== false,
@@ -638,7 +638,7 @@
         try {
           const root = projectStore.root;
           const result = await readFile(currentPath, root);
-          const data = result?.data || result;
+          const data = unwrapResult(result);
           if (!data?.content || data.content == null) return;
 
           const currentContent = view.state.doc.toString();

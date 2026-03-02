@@ -6,7 +6,7 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { deepMerge, formatTime, uid, basename } from '../../src/lib/utils.js';
+import { deepMerge, formatTime, uid, basename, unwrapResult } from '../../src/lib/utils.js';
 
 // ============ deepMerge ============
 
@@ -172,5 +172,45 @@ describe('basename', () => {
 
   it('returns empty string for empty string input', () => {
     assert.equal(basename(''), '');
+  });
+});
+
+// ============ unwrapResult ============
+
+describe('unwrapResult', () => {
+  it('extracts .data from wrapped result', () => {
+    assert.equal(unwrapResult({ data: 'hello' }), 'hello');
+  });
+
+  it('returns result directly if no .data property', () => {
+    assert.equal(unwrapResult('hello'), 'hello');
+  });
+
+  it('returns result directly if .data is undefined', () => {
+    assert.deepStrictEqual(unwrapResult({ other: 1 }), { other: 1 });
+  });
+
+  it('returns fallback for null result', () => {
+    assert.equal(unwrapResult(null, 'fb'), 'fb');
+  });
+
+  it('returns fallback for undefined result', () => {
+    assert.equal(unwrapResult(undefined, 'fb'), 'fb');
+  });
+
+  it('returns null as default fallback', () => {
+    assert.equal(unwrapResult(null), null);
+  });
+
+  it('preserves falsy .data value 0', () => {
+    assert.equal(unwrapResult({ data: 0 }), 0);
+  });
+
+  it('preserves falsy .data value empty string', () => {
+    assert.equal(unwrapResult({ data: '' }), '');
+  });
+
+  it('preserves falsy .data value false', () => {
+    assert.equal(unwrapResult({ data: false }), false);
   });
 });

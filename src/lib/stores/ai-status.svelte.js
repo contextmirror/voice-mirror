@@ -15,6 +15,7 @@ import { startAI, stopAI, getAIStatus, setProvider as apiSetProvider, speakText 
 import { configStore } from './config.svelte.js';
 import { chatStore } from './chat.svelte.js';
 import { buildLocalLlmInstructions } from '../local-llm-instructions.js';
+import { unwrapResult } from '../utils.js';
 
 const PROVIDER_NAMES = {
   claude: 'Claude Code',
@@ -196,7 +197,7 @@ export async function switchProvider(providerId, opts = {}) {
 export async function refreshStatus() {
   try {
     const result = await getAIStatus();
-    const data = result?.data || result;
+    const data = unwrapResult(result);
     if (data) {
       const name = PROVIDER_NAMES[data.provider] || data.displayName || data.provider || '';
       aiStatusStore._setStatus(!!data.running, data.provider || '', name);

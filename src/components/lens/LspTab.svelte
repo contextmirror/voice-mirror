@@ -1,6 +1,7 @@
 <script>
   import { lspGetStatus, lspRestartServer, lspShutdown, lspGetServerList, lspInstallServer } from '../../lib/api.js';
   import { listen } from '@tauri-apps/api/event';
+  import { unwrapResult } from '../../lib/utils.js';
 
   let { visible = false } = $props();
 
@@ -137,7 +138,7 @@
   async function fetchKnownServers() {
     try {
       const result = await lspGetServerList();
-      const data = result?.data || result;
+      const data = unwrapResult(result);
       if (Array.isArray(data)) {
         knownServers = data;
       }

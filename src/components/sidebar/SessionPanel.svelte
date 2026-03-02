@@ -2,7 +2,7 @@
   import { projectStore } from '../../lib/stores/project.svelte.js';
   import { chatStore } from '../../lib/stores/chat.svelte.js';
   import { chatLoad, chatSave, chatDelete, chatRename } from '../../lib/api.js';
-  import { uid } from '../../lib/utils.js';
+  import { uid, unwrapResult } from '../../lib/utils.js';
 
   let activeProject = $derived(projectStore.activeProject);
   let sessions = $derived(projectStore.sessions);
@@ -214,7 +214,7 @@
       }
 
       const result = await chatLoad(id);
-      const chat = result?.success !== false ? (result?.data || result) : null;
+      const chat = result?.success !== false ? unwrapResult(result) : null;
       if (!chat) return;
 
       chatStore.setActiveChatId(chat.id);

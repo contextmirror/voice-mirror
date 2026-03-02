@@ -147,7 +147,7 @@ describe('ChatList.svelte', () => {
   });
 
   it('imports uid from utils', () => {
-    assert.ok(src.includes("import { uid }"), 'Should import uid');
+    assert.ok(src.includes("import { uid") && src.includes("from '../../lib/utils.js'"), 'Should import uid from utils');
   });
 
   it('has chat-list-container CSS class', () => {

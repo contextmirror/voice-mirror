@@ -7,6 +7,7 @@
   import { browserTabsStore } from '../../lib/stores/browser-tabs.svelte.js';
   import { lensResizeWebview, lensCloseAllTabs, lensClearCache, detectDevServers, designCommand } from '../../lib/api.js';
   import { listen } from '@tauri-apps/api/event';
+  import { unwrapResult } from '../../lib/utils.js';
 
   let containerEl = $state(null);
   let resizeObserver = null;
@@ -164,7 +165,7 @@
     try {
       const result = await detectDevServers(project.path);
       /** @type {any} */
-      const data = result?.data || result || {};
+      const data = unwrapResult(result) || {};
       const servers = data.servers || [];
       const packageManager = data.packageManager || null;
       lensStore.setDevServers(servers);

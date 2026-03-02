@@ -178,8 +178,10 @@ describe('config.svelte.js -- implementation patterns', () => {
 
   it('imports deepMerge from utils', () => {
     assert.ok(
-      src.includes("import { deepMerge } from '../utils.js'") ||
-      src.includes("import { deepMerge } from '../utils'"),
+      src.includes("import { deepMerge") && (
+        src.includes("from '../utils.js'") ||
+        src.includes("from '../utils'")
+      ),
       'Should import deepMerge from utils module'
     );
   });

@@ -6,7 +6,7 @@
   import { projectStore } from '../../lib/stores/project.svelte.js';
   import { lensStore } from '../../lib/stores/lens.svelte.js';
   import { editorGroupsStore } from '../../lib/stores/editor-groups.svelte.js';
-  import { basename } from '../../lib/utils.js';
+  import { basename, unwrapResult } from '../../lib/utils.js';
 
   let { visible = $bindable(false), onClose = () => {}, initialMode = 'files' } = $props();
 
@@ -256,7 +256,7 @@
     loadingFiles = true;
     try {
       const result = await searchFiles(project.path);
-      const files = result?.data || result || [];
+      const files = unwrapResult(result) || [];
       cachedFiles = Array.isArray(files) ? files : [];
     } catch (err) {
       console.warn('[CommandPalette] Failed to fetch files:', err);

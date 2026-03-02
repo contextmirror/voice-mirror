@@ -7,6 +7,7 @@
 
 import { updateConfig } from './config.svelte.js';
 import { chatList } from '../api.js';
+import { unwrapResult } from '../utils.js';
 
 /** 8-color palette for project badges, picked by hashing the folder name */
 const COLOR_PALETTE = [
@@ -125,7 +126,7 @@ function createProjectStore() {
     async loadSessions() {
       try {
         const result = await chatList();
-        const all = result?.data || result || [];
+        const all = unwrapResult(result) || [];
         const list = Array.isArray(all) ? all : [];
         const project = entries[activeIndex];
         if (project) {

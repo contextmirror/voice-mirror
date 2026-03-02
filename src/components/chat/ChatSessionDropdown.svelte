@@ -4,7 +4,7 @@
   import { chatStore } from '../../lib/stores/chat.svelte.js';
   import { navigationStore } from '../../lib/stores/navigation.svelte.js';
   import { chatList, chatLoad, chatSave, chatDelete, chatRename } from '../../lib/api.js';
-  import { uid } from '../../lib/utils.js';
+  import { uid, unwrapResult } from '../../lib/utils.js';
 
   /** Dropdown open state */
   let open = $state(false);
@@ -68,7 +68,7 @@
   async function loadMirrorChats() {
     try {
       const result = await chatList();
-      const data = result?.data || result || [];
+      const data = unwrapResult(result) || [];
       mirrorChats = Array.isArray(data)
         ? data.filter((c) => !c.projectPath).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
         : [];
@@ -255,7 +255,7 @@
       }
 
       const result = await chatLoad(id);
-      const chat = result?.success !== false ? (result?.data || result) : null;
+      const chat = result?.success !== false ? unwrapResult(result) : null;
       if (!chat) {
         chatStore.setSwitching(false);
         return;
