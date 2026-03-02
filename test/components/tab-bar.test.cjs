@@ -124,8 +124,8 @@ describe('TabBar.svelte: icon mapping', () => {
     assert.ok(src.includes("'diff'"), 'Should return diff for diff tab type');
   });
 
-  it('has file type detection', () => {
-    assert.ok(src.includes("'code'") || src.includes("'file'"), 'Should detect file types');
+  it('imports getTabIcon from shared tab-utils', () => {
+    assert.ok(src.includes("import { getTabIcon } from '$lib/tab-utils.js'"), 'Should import getTabIcon from shared utility');
   });
 });
 

@@ -1,6 +1,7 @@
 <script>
   import { tabsStore } from '../../lib/stores/tabs.svelte.js';
   import { basename } from '../../lib/utils.js';
+  import { getTabIcon } from '$lib/tab-utils.js';
   import TabContextMenu from './TabContextMenu.svelte';
 
   let {} = $props();
@@ -29,18 +30,6 @@
     }
   }
 
-  function getTabIcon(tab) {
-    if (tab.type === 'diff') return 'diff';
-    const ext = tab.title?.split('.').pop()?.toLowerCase() || '';
-    if (['js', 'jsx', 'mjs', 'cjs', 'ts', 'tsx'].includes(ext)) return 'code';
-    if (['rs'].includes(ext)) return 'code';
-    if (['css', 'scss', 'less'].includes(ext)) return 'palette';
-    if (['html', 'svelte', 'vue'].includes(ext)) return 'code';
-    if (['json', 'toml', 'yaml', 'yml'].includes(ext)) return 'settings';
-    if (['md', 'txt', 'log'].includes(ext)) return 'doc';
-    if (['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'].includes(ext)) return 'image';
-    return 'file';
-  }
 </script>
 
 <div class="tab-bar">
