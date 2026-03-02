@@ -6,7 +6,7 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { deepMerge, formatTime, uid } from '../../src/lib/utils.js';
+import { deepMerge, formatTime, uid, basename } from '../../src/lib/utils.js';
 
 // ============ deepMerge ============
 
@@ -140,5 +140,37 @@ describe('uid', () => {
   it('contains only alphanumeric characters', () => {
     const id = uid();
     assert.ok(/^[a-z0-9]+$/.test(id), `ID "${id}" contains unexpected characters`);
+  });
+});
+
+// ============ basename ============
+
+describe('basename', () => {
+  it('extracts filename from forward-slash path', () => {
+    assert.equal(basename('src/lib/utils.js'), 'utils.js');
+  });
+
+  it('extracts filename from backslash path', () => {
+    assert.equal(basename('src\\lib\\utils.js'), 'utils.js');
+  });
+
+  it('extracts filename from mixed separators', () => {
+    assert.equal(basename('src/lib\\stores/tabs.svelte.js'), 'tabs.svelte.js');
+  });
+
+  it('returns string as-is when no separators', () => {
+    assert.equal(basename('file.txt'), 'file.txt');
+  });
+
+  it('returns null for null input', () => {
+    assert.equal(basename(null), null);
+  });
+
+  it('returns undefined for undefined input', () => {
+    assert.equal(basename(undefined), undefined);
+  });
+
+  it('returns empty string for empty string input', () => {
+    assert.equal(basename(''), '');
   });
 });

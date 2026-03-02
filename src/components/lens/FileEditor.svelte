@@ -19,6 +19,7 @@
   import { lspDiagnosticsStore } from '../../lib/stores/lsp-diagnostics.svelte.js';
   import { buildEditorExtensions, createIndentCompartments, detectIndentation, convertIndentation } from '../../lib/editor-extensions.js';
   import { navigationHistoryStore } from '../../lib/stores/navigation-history.svelte.js';
+  import { basename } from '../../lib/utils.js';
   import { gitGutterPlugin } from '../../lib/editor-git-gutter.js';
   import { loadLanguageExtension } from '../../lib/codemirror-languages.js';
   import { statusBarStore, getLanguageName } from '../../lib/stores/status-bar.svelte.js';
@@ -457,7 +458,7 @@
                 scrollIntoView: true,
               });
             } else {
-              const fileName = resolved.path.split(/[/\\]/).pop() || resolved.path;
+              const fileName = basename(resolved.path);
               tabsStore.openFile({ name: fileName, path: resolved.path, readOnly: resolved.external, external: resolved.external });
             }
           } catch {}
@@ -468,7 +469,7 @@
           const loc = navigationHistoryStore.goBack();
           if (!loc) return;
           if (loc.path !== currentPath) {
-            const name = loc.path.split(/[/\\]/).pop() || loc.path;
+            const name = basename(loc.path);
             tabsStore.openFile({ name, path: loc.path }, loc.groupId);
           }
           // Move cursor to stored position
@@ -485,7 +486,7 @@
           const loc = navigationHistoryStore.goForward();
           if (!loc) return;
           if (loc.path !== currentPath) {
-            const name = loc.path.split(/[/\\]/).pop() || loc.path;
+            const name = basename(loc.path);
             tabsStore.openFile({ name, path: loc.path }, loc.groupId);
           }
           if (view) {
@@ -980,7 +981,7 @@
         view.dispatch({ selection: { anchor: line.from + (ref.range?.start?.character ?? 0) }, scrollIntoView: true });
       }
     } else {
-      const fileName = ref.path.split(/[/\\]/).pop() || ref.path;
+      const fileName = basename(ref.path);
       tabsStore.openFile({ name: fileName, path: ref.path, readOnly: ref.external, external: ref.external });
     }
   }}

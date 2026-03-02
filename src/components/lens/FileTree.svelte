@@ -13,6 +13,7 @@
   import { lspDiagnosticsStore } from '../../lib/stores/lsp-diagnostics.svelte.js';
   import { flattenVisibleEntries, isDescendantOf, getParentPath as navGetParentPath } from '../../lib/file-tree-nav.js';
   import { toastStore } from '../../lib/stores/toast.svelte.js';
+  import { basename } from '../../lib/utils.js';
 
   let { onFileClick = () => {}, onFileDblClick = () => {}, onChangeClick = () => {}, onChangeDblClick = () => {}, activeFilePath = null, activeDiffPath = null, activeFileHasLsp = false, onSymbolClick = () => {} } = $props();
 
@@ -289,7 +290,7 @@
 
   function startRename(entry) {
     editingEntry = entry;
-    editingValue = entry.name || entry.path.split(/[/\\]/).pop();
+    editingValue = entry.name || basename(entry.path);
   }
 
   async function saveRename() {
@@ -574,7 +575,7 @@
       return;
     }
 
-    const fileName = sourcePath.split('/').pop();
+    const fileName = basename(sourcePath);
     const newPath = destFolder ? `${destFolder}/${fileName}` : fileName;
 
     try {
@@ -698,7 +699,7 @@
         title={projectStore.activeProject.path}
       >
         <svg class="project-name-chevron" class:collapsed={!projectTreeOpen} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-        <span>{projectStore.activeProject.path.split(/[/\\]/).pop()?.toUpperCase() || 'PROJECT'}</span>
+        <span>{basename(projectStore.activeProject.path)?.toUpperCase() || 'PROJECT'}</span>
       </button>
       <div class="project-name-actions">
         <button class="project-action-btn" title="New File" onclick={() => startNewFile(null)}>
@@ -795,7 +796,7 @@
   {#if activeTab === 'search'}
     <div class="tree-scroll">
       <SearchPanel onResultClick={(result) => {
-        const name = result.path.split(/[/\\]/).pop() || result.path;
+        const name = basename(result.path);
         onFileClick({ name, path: result.path });
         setTimeout(() => {
           window.dispatchEvent(new CustomEvent('lens-goto-position', {

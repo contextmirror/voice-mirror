@@ -226,8 +226,8 @@ describe('FileEditor.svelte: go-to-definition navigation', () => {
 
   it('extracts filename from path for tab title', () => {
     assert.ok(
-      src.includes(".split(/[/\\\\]/).pop()"),
-      'Should extract filename from path for display'
+      src.includes("basename("),
+      'Should use basename() utility to extract filename from path for display'
     );
   });
 });

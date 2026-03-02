@@ -2,6 +2,7 @@
   import { createFile, createDirectory, renameEntry, deleteEntry, revealInExplorer } from '../../lib/api.js';
   import { projectStore } from '../../lib/stores/project.svelte.js';
   import { toastStore } from '../../lib/stores/toast.svelte.js';
+  import { basename } from '../../lib/utils.js';
 
   let {
     x = 0,
@@ -107,7 +108,7 @@
   async function handleDelete() {
     close();
     if (!entry) return;
-    const name = entry.name || entry.path.split(/[/\\]/).pop();
+    const name = entry.name || basename(entry.path);
     const kind = isFolder ? 'Folder' : 'File';
     try {
       const root = projectStore.activeProject?.path || null;

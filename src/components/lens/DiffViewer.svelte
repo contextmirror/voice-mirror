@@ -7,6 +7,7 @@
   import DiffToolbar from './DiffToolbar.svelte';
   import DiffMinimap from './DiffMinimap.svelte';
   import { loadLanguageExtension } from '../../lib/codemirror-languages.js';
+  import { basename } from '../../lib/utils.js';
 
   let { tab } = $props();
 
@@ -154,7 +155,7 @@
 
   function menuOpenFile() {
     closeMenu();
-    const fileName = tab.path.split(/[/\\]/).pop() || tab.path;
+    const fileName = basename(tab.path);
     tabsStore.openFile({ name: fileName, path: tab.path });
   }
 

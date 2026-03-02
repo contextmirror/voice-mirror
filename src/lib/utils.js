@@ -46,3 +46,13 @@ export function formatTime(timestamp) {
 export function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
+
+/**
+ * Extract the filename (last segment) from a path string.
+ * Handles both `/` and `\` separators.
+ * @param {string} path
+ * @returns {string}
+ */
+export function basename(path) {
+  return path?.split(/[/\\]/).pop() || path;
+}

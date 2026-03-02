@@ -15,6 +15,7 @@
   import { createLinkOverlay } from '../../lib/terminal-link-overlay.js';
   import { tabsStore } from '../../lib/stores/tabs.svelte.js';
   import { projectStore } from '../../lib/stores/project.svelte.js';
+  import { basename } from '../../lib/utils.js';
   import { open } from '@tauri-apps/plugin-shell';
   import TerminalSearch from './TerminalSearch.svelte';
 
@@ -444,7 +445,7 @@
               open(url).catch(err => console.warn('[Terminal] Failed to open URL:', err));
             },
             onOpenFile: (match) => {
-              const fileName = match.path.split(/[/\\]/).pop() || match.path;
+              const fileName = basename(match.path);
               if (match.line != null) {
                 tabsStore.setPendingCursor(match.path, match.line - 1, (match.col || 1) - 1);
               }

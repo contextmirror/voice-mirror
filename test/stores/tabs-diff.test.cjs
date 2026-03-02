@@ -51,15 +51,15 @@ describe('tabs.svelte.js: openDiff method', () => {
     const openDiffEnd = src.indexOf('},', openDiffStart);
     const openDiffBody = src.slice(openDiffStart, openDiffEnd);
     assert.ok(
-      openDiffBody.includes('.split(') && openDiffBody.includes('.pop()'),
-      'Should extract filename by splitting path and popping last segment'
+      openDiffBody.includes('basename('),
+      'Should extract filename using basename() utility'
     );
   });
 
-  it('handles both forward and back slashes in paths', () => {
+  it('imports basename utility for cross-platform path handling', () => {
     assert.ok(
-      src.includes('[/\\\\]') || src.includes('/[\\/\\\\]/') || src.includes('/[/\\\\]/'),
-      'Should split on both / and \\ for cross-platform paths'
+      src.includes("import") && src.includes("basename") && src.includes("utils"),
+      'Should import basename from utils.js for cross-platform path splitting'
     );
   });
 

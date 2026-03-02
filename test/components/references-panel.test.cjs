@@ -68,8 +68,8 @@ describe('ReferencesPanel.svelte: behavior', () => {
     assert.ok(src.includes('onNavigate(ref)'), 'Should call onNavigate');
   });
 
-  it('has getFileName helper', () => {
-    assert.ok(src.includes('getFileName'), 'Should have getFileName helper');
+  it('imports basename from utils.js for filename extraction', () => {
+    assert.ok(src.includes('basename'), 'Should use basename utility for filename extraction');
   });
 });
 

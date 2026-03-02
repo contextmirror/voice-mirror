@@ -8,6 +8,7 @@
 import { lspOpenFile, lspCloseFile, lspChangeFile, lspSaveFile, lspRequestCompletion, lspRequestHover, lspRequestDefinition, lspRequestReferences, lspPrepareRename, lspRename, lspApplyWorkspaceEdit, lspRequestCodeActions, lspRequestFormatting, lspRequestSignatureHelp } from './api.js';
 import { projectStore } from './stores/project.svelte.js';
 import { tabsStore } from './stores/tabs.svelte.js';
+import { basename } from './utils.js';
 
 /** Set of file extensions that have LSP support */
 export const LSP_EXTENSIONS = new Set([
@@ -136,7 +137,7 @@ export function createEditorLsp() {
           scrollIntoView: true,
         });
       } else {
-        const fileName = resolved.path.split(/[/\\]/).pop() || resolved.path;
+        const fileName = basename(resolved.path);
         tabsStore.openFile({ name: fileName, path: resolved.path, readOnly: resolved.external, external: resolved.external });
       }
     } catch {}
