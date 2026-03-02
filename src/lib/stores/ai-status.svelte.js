@@ -16,23 +16,7 @@ import { configStore } from './config.svelte.js';
 import { chatStore } from './chat.svelte.js';
 import { buildLocalLlmInstructions } from '../local-llm-instructions.js';
 import { unwrapResult } from '../utils.js';
-
-const PROVIDER_NAMES = {
-  claude: 'Claude Code',
-  opencode: 'OpenCode',
-  codex: 'OpenAI Codex',
-  'gemini-cli': 'Gemini CLI',
-  'kimi-cli': 'Kimi CLI',
-  ollama: 'Ollama',
-  lmstudio: 'LM Studio',
-  jan: 'Jan',
-  openai: 'OpenAI',
-  groq: 'Groq',
-  dictation: 'Dictation Only',
-};
-
-/** CLI providers that use a PTY terminal (not HTTP API). */
-const CLI_PROVIDERS = ['claude', 'opencode', 'codex', 'gemini-cli', 'kimi-cli'];
+import { PROVIDER_NAMES, CLI_PROVIDERS } from '$lib/providers.js';
 
 /** Module-level streaming message tracker for API providers. */
 let _apiStreamingMsgId = null;

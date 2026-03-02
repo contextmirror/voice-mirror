@@ -18,9 +18,14 @@ import dictationIcon from '../assets/icons/providers/dictation.svg';
 export const PROVIDER_NAMES = {
   claude: 'Claude Code',
   opencode: 'OpenCode',
+  codex: 'OpenAI Codex',
+  'gemini-cli': 'Gemini CLI',
+  'kimi-cli': 'Kimi CLI',
   ollama: 'Ollama',
   lmstudio: 'LM Studio',
   jan: 'Jan',
+  openai: 'OpenAI',
+  groq: 'Groq',
   dictation: 'Dictation Only',
 };
 
@@ -37,7 +42,7 @@ export const PROVIDER_ICONS = {
 
 // ---- Provider classification ----
 
-export const CLI_PROVIDERS = ['claude', 'opencode'];
+export const CLI_PROVIDERS = ['claude', 'opencode', 'codex', 'gemini-cli', 'kimi-cli'];
 export const LOCAL_PROVIDERS = ['ollama', 'lmstudio', 'jan'];
 export const MCP_PROVIDERS = ['claude', 'opencode'];
 const DICTATION_PROVIDERS = ['dictation'];

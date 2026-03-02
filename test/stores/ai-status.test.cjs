@@ -14,54 +14,52 @@ const src = fs.readFileSync(
   'utf-8'
 );
 
-// ============ PROVIDER_NAMES map ============
+// ============ PROVIDER_NAMES and CLI_PROVIDERS (imported from providers.js) ============
 
-describe('ai-status: PROVIDER_NAMES', () => {
-  const expectedProviders = [
-    ['claude', 'Claude Code'],
-    ['opencode', 'OpenCode'],
-    ['codex', 'OpenAI Codex'],
-    ['gemini-cli', 'Gemini CLI'],
-    ['kimi-cli', 'Kimi CLI'],
-    ['ollama', 'Ollama'],
-    ['lmstudio', 'LM Studio'],
-    ['jan', 'Jan'],
-    ['openai', 'OpenAI'],
-    ['groq', 'Groq'],
-  ];
-
-  for (const [key, name] of expectedProviders) {
-    it(`has entry for "${key}" -> "${name}"`, () => {
-      // Match the key (may be quoted or unquoted depending on if it has hyphens)
-      assert.ok(src.includes(key), `PROVIDER_NAMES should contain key "${key}"`);
-      assert.ok(src.includes(`'${name}'`) || src.includes(`"${name}"`),
-        `PROVIDER_NAMES should map "${key}" to "${name}"`);
-    });
-  }
-
-  it('defines PROVIDER_NAMES as a const', () => {
-    assert.ok(src.includes('const PROVIDER_NAMES'), 'Should define const PROVIDER_NAMES');
-  });
-});
-
-// ============ CLI_PROVIDERS list ============
-
-describe('ai-status: CLI_PROVIDERS', () => {
-  const expectedCli = ['claude', 'opencode', 'codex', 'gemini-cli', 'kimi-cli'];
-
-  it('defines CLI_PROVIDERS as a const array', () => {
-    assert.ok(src.includes('const CLI_PROVIDERS'), 'Should define const CLI_PROVIDERS');
+describe('ai-status: PROVIDER_NAMES and CLI_PROVIDERS', () => {
+  it('imports PROVIDER_NAMES from $lib/providers.js', () => {
+    assert.ok(
+      src.includes('PROVIDER_NAMES') && src.includes("from '$lib/providers.js'"),
+      'Should import PROVIDER_NAMES from $lib/providers.js'
+    );
   });
 
-  for (const provider of expectedCli) {
-    it(`includes "${provider}"`, () => {
-      // CLI_PROVIDERS array should contain this string
-      assert.ok(
-        src.includes(`'${provider}'`) || src.includes(`"${provider}"`),
-        `CLI_PROVIDERS should include "${provider}"`
-      );
-    });
-  }
+  it('imports CLI_PROVIDERS from $lib/providers.js', () => {
+    assert.ok(
+      src.includes('CLI_PROVIDERS') && src.includes("from '$lib/providers.js'"),
+      'Should import CLI_PROVIDERS from $lib/providers.js'
+    );
+  });
+
+  it('does NOT define PROVIDER_NAMES inline (uses shared import)', () => {
+    // Should not have a local "const PROVIDER_NAMES = {" definition
+    assert.ok(
+      !src.includes('const PROVIDER_NAMES ='),
+      'Should not define PROVIDER_NAMES locally — must import from providers.js'
+    );
+  });
+
+  it('does NOT define CLI_PROVIDERS inline (uses shared import)', () => {
+    // Should not have a local "const CLI_PROVIDERS = [" definition
+    assert.ok(
+      !src.includes('const CLI_PROVIDERS ='),
+      'Should not define CLI_PROVIDERS locally — must import from providers.js'
+    );
+  });
+
+  it('uses PROVIDER_NAMES for display name lookups', () => {
+    assert.ok(
+      src.includes('PROVIDER_NAMES['),
+      'Should use PROVIDER_NAMES for provider name lookups'
+    );
+  });
+
+  it('uses CLI_PROVIDERS.includes for provider classification', () => {
+    assert.ok(
+      src.includes('CLI_PROVIDERS.includes('),
+      'Should use CLI_PROVIDERS.includes for provider classification'
+    );
+  });
 });
 
 // ============ Exports ============
@@ -162,6 +160,13 @@ describe('ai-status: imports', () => {
     assert.ok(
       src.includes('chatStore'),
       'Should import/use chatStore for wiring streaming events'
+    );
+  });
+
+  it('imports PROVIDER_NAMES and CLI_PROVIDERS from $lib/providers.js', () => {
+    assert.ok(
+      src.includes("from '$lib/providers.js'"),
+      'Should import from $lib/providers.js'
     );
   });
 });
