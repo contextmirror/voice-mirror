@@ -27,40 +27,32 @@ Work items are grouped by priority and area. Check items off as they're resolved
   - `setupClickOutside(el, onClose)` in `src/lib/popup-utils.js`, 4 capture-phase patterns replaced
   - Pattern A (setTimeout delay, 5 sites) left as-is due to variance in guards/events
 
-- [ ] **`PROVIDER_NAMES` + `CLI_PROVIDERS` divergent copies** (correctness risk)
-  - `providers.js` has 6 entries; `ai-status.svelte.js` has 11 entries with extra providers
-  - `CLI_PROVIDERS` differs: `['claude', 'opencode']` vs `['claude', 'opencode', 'codex', 'gemini-cli', 'kimi-cli']`
-  - Consolidate to single source of truth in `providers.js`
+- [x] **`PROVIDER_NAMES` + `CLI_PROVIDERS` divergent copies** — DONE (commit a99106c8)
+  - Removed dead providers (codex, gemini-cli, kimi-cli, openai, groq) — handled by OpenCode
+  - ai-status.svelte.js now imports from providers.js
 
 ### Medium Priority
 
-- [ ] **LSP severity normalization** (6+ sites)
-  - Create `lspSeverityName(sev)` and `lspSeverityNum(sev)` helpers
-  - Sites: `lsp-diagnostics.svelte.js` (2x), `ProblemsPanel.svelte` (4x), `TerminalTabs.svelte` (1x)
-  - Currently inconsistent: `getTotals()` uses catch-all, `ProblemsPanel` enumerates explicitly
+- [x] **LSP severity normalization** (7+ sites) — DONE (commit ccc876bf)
+  - `severityName()`, `severityNum()`, `severityLabel()` in `src/lib/lsp-severity.js`
+  - Replaced in lsp-diagnostics, ProblemsPanel, TerminalTabs
 
-- [ ] **`formatTime` with 3 different semantics** (4 sites)
-  - `utils.js:34` — locale time (`"2:34 PM"`)
-  - `OutputPanel.svelte:41` — log time (`"HH:MM:SS"`)
-  - `StatusBar.svelte:89` — relative time (`"3m ago"`)
-  - `TerminalTabs.svelte:229` — inline, same as OutputPanel
-  - Add `formatLogTime()` and `formatRelativeTime()` to `utils.js`
+- [x] **`formatTime` with 3 different semantics** (3 sites) — DONE (commit 489cd739)
+  - `formatLogTime()` and `formatRelativeTime()` in `src/lib/utils.js`
+  - Replaced in OutputPanel, TerminalTabs, StatusBar
 
-- [ ] **Duplicate `getTabIcon()`** (2 sites)
-  - `TabBar.svelte:31-43` and `GroupTabBar.svelte:147-158` — identical
-  - Move to `src/lib/tab-utils.js` or `file-icons.js`
+- [x] **Duplicate `getTabIcon()`** (2 sites) — DONE (commit 70618d5c)
+  - Shared `getTabIcon()` in `src/lib/tab-utils.js`
 
 - [ ] **Context menu CSS** (6+ components)
   - Nearly identical `.context-menu` / `.context-menu-item` CSS in: `TabContextMenu`, `FileContextMenu`, `ChatList`, `SessionPanel`, `ProjectStrip`, `TerminalTabs`
   - Extract to `src/styles/context-menu.css` or a shared `ContextMenu.svelte`
 
-- [ ] **Copy full path to clipboard** (3 sites)
-  - `FileContextMenu`, `EditorContextMenu`, `TabContextMenu` — identical path building + clipboard write
-  - Add `copyFullPathToClipboard()` to `utils.js`
+- [x] **Copy full path to clipboard** (3 sites) — DONE (commit 920d8680)
+  - `copyFullPath()` and `copyRelativePath()` in `src/lib/utils.js`
 
-- [ ] **Diff tab badge CSS + markup** (2 sites)
-  - `TabBar.svelte` and `GroupTabBar.svelte` — identical badge rendering + CSS
-  - Extract `TabDiffBadge.svelte`
+- [x] **Diff tab badge CSS + markup** (2 sites) — DONE (commit 920d8680)
+  - Extracted `TabDiffBadge.svelte` component
 
 ### Low Priority
 
