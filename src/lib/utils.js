@@ -40,6 +40,28 @@ export function formatTime(timestamp) {
 }
 
 /**
+ * Format timestamp as HH:MM:SS for log output.
+ * @param {number|string|Date} ts
+ * @returns {string}
+ */
+export function formatLogTime(ts) {
+  return new Date(ts).toTimeString().slice(0, 8);
+}
+
+/**
+ * Format timestamp as relative time (just now, Xm ago, Xh ago, Xd ago).
+ * @param {number} ts - Epoch milliseconds
+ * @returns {string}
+ */
+export function formatRelativeTime(ts) {
+  const diff = Date.now() - ts;
+  if (diff < 60000) return 'just now';
+  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+  return `${Math.floor(diff / 86400000)}d ago`;
+}
+
+/**
  * Generate a unique ID.
  * @returns {string}
  */

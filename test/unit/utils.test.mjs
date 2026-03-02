@@ -6,7 +6,7 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { deepMerge, formatTime, uid, basename, unwrapResult } from '../../src/lib/utils.js';
+import { deepMerge, formatTime, formatLogTime, formatRelativeTime, uid, basename, unwrapResult } from '../../src/lib/utils.js';
 
 // ============ deepMerge ============
 
@@ -212,5 +212,90 @@ describe('unwrapResult', () => {
 
   it('preserves falsy .data value false', () => {
     assert.equal(unwrapResult({ data: false }), false);
+  });
+});
+
+// ============ formatLogTime ============
+
+describe('formatLogTime', () => {
+  it('returns HH:MM:SS format', () => {
+    // 2024-01-15 14:05:30 local time
+    const ts = new Date(2024, 0, 15, 14, 5, 30).getTime();
+    const result = formatLogTime(ts);
+    assert.equal(result, '14:05:30');
+  });
+
+  it('pads single-digit hours with zero', () => {
+    const ts = new Date(2024, 0, 15, 9, 0, 0).getTime();
+    const result = formatLogTime(ts);
+    assert.equal(result, '09:00:00');
+  });
+
+  it('handles midnight', () => {
+    const ts = new Date(2024, 0, 15, 0, 0, 0).getTime();
+    const result = formatLogTime(ts);
+    assert.equal(result, '00:00:00');
+  });
+
+  it('returns exactly 8 characters', () => {
+    assert.equal(formatLogTime(Date.now()).length, 8);
+  });
+
+  it('matches HH:MM:SS pattern', () => {
+    const result = formatLogTime(Date.now());
+    assert.ok(/^\d{2}:\d{2}:\d{2}$/.test(result), `Expected HH:MM:SS, got "${result}"`);
+  });
+});
+
+// ============ formatRelativeTime ============
+
+describe('formatRelativeTime', () => {
+  it('returns "just now" for timestamps less than 60s ago', () => {
+    const ts = Date.now() - 30000; // 30 seconds ago
+    assert.equal(formatRelativeTime(ts), 'just now');
+  });
+
+  it('returns "just now" for current time', () => {
+    assert.equal(formatRelativeTime(Date.now()), 'just now');
+  });
+
+  it('returns minutes ago for 1-59 minutes', () => {
+    const ts = Date.now() - 5 * 60000; // 5 minutes ago
+    assert.equal(formatRelativeTime(ts), '5m ago');
+  });
+
+  it('returns "1m ago" at exactly 60 seconds', () => {
+    const ts = Date.now() - 60000;
+    assert.equal(formatRelativeTime(ts), '1m ago');
+  });
+
+  it('returns hours ago for 1-23 hours', () => {
+    const ts = Date.now() - 3 * 3600000; // 3 hours ago
+    assert.equal(formatRelativeTime(ts), '3h ago');
+  });
+
+  it('returns "1h ago" at exactly 60 minutes', () => {
+    const ts = Date.now() - 3600000;
+    assert.equal(formatRelativeTime(ts), '1h ago');
+  });
+
+  it('returns days ago for 24+ hours', () => {
+    const ts = Date.now() - 2 * 86400000; // 2 days ago
+    assert.equal(formatRelativeTime(ts), '2d ago');
+  });
+
+  it('returns "1d ago" at exactly 24 hours', () => {
+    const ts = Date.now() - 86400000;
+    assert.equal(formatRelativeTime(ts), '1d ago');
+  });
+
+  it('floors minutes (does not round)', () => {
+    const ts = Date.now() - 90000; // 1.5 minutes ago
+    assert.equal(formatRelativeTime(ts), '1m ago');
+  });
+
+  it('floors hours (does not round)', () => {
+    const ts = Date.now() - 5400000; // 1.5 hours ago
+    assert.equal(formatRelativeTime(ts), '1h ago');
   });
 });

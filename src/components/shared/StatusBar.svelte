@@ -14,6 +14,7 @@
   import { devServerManager } from '../../lib/stores/dev-server-manager.svelte.js';
   import { toastStore } from '../../lib/stores/toast.svelte.js';
   import { configStore, updateConfig } from '../../lib/stores/config.svelte.js';
+  import { formatRelativeTime } from '../../lib/utils.js';
 
   // -- Derived state --
   let hasProject = $derived(!!projectStore.root);
@@ -81,18 +82,6 @@
     if (indentDropdownOpen) closeIndentDropdown();
   }
 
-  /**
-   * Format a notification timestamp as relative time.
-   * @param {number} ts - Epoch ms
-   * @returns {string}
-   */
-  function formatTime(ts) {
-    const diff = Date.now() - ts;
-    if (diff < 60000) return 'just now';
-    if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
-    if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
-    return `${Math.floor(diff / 86400000)}d ago`;
-  }
 
   // -- Reactive sync: diagnostics --
   $effect(() => {
@@ -395,7 +384,7 @@
                 <div class="notif-item" class:unread={!notif.read}>
                   <div class="notif-content">
                     <span class="notif-message">{notif.message}</span>
-                    <span class="notif-time">{formatTime(notif.timestamp)}</span>
+                    <span class="notif-time">{formatRelativeTime(notif.timestamp)}</span>
                   </div>
                   <button
                     class="notif-dismiss"
