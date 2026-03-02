@@ -10,6 +10,7 @@
   import { editorGroupsStore } from '../../lib/stores/editor-groups.svelte.js';
   import { projectStore } from '../../lib/stores/project.svelte.js';
   import { revealInExplorer } from '../../lib/api.js';
+  import { copyFullPath, copyRelativePath } from '../../lib/utils.js';
   import { clampToViewport } from '$lib/clamp-to-viewport.js';
   import { setupClickOutside } from '$lib/popup-utils.js';
 
@@ -76,15 +77,13 @@
   function handleCopyPath() {
     close();
     if (!tab?.path) return;
-    const root = projectStore.root || '';
-    const fullPath = root ? `${root}/${tab.path}` : tab.path;
-    navigator.clipboard.writeText(fullPath.replace(/\//g, '\\'));
+    copyFullPath(tab.path, projectStore.root);
   }
 
   function handleCopyRelativePath() {
     close();
     if (!tab?.path) return;
-    navigator.clipboard.writeText(tab.path);
+    copyRelativePath(tab.path);
   }
 
   async function handleReveal() {

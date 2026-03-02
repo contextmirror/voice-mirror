@@ -14,54 +14,36 @@ const src = fs.readFileSync(
   'utf-8'
 );
 
-// ============ PROVIDER_NAMES map ============
+// ============ PROVIDER_NAMES and CLI_PROVIDERS ============
 
-describe('ai-status: PROVIDER_NAMES', () => {
-  const expectedProviders = [
-    ['claude', 'Claude Code'],
-    ['opencode', 'OpenCode'],
-    ['codex', 'OpenAI Codex'],
-    ['gemini-cli', 'Gemini CLI'],
-    ['kimi-cli', 'Kimi CLI'],
-    ['ollama', 'Ollama'],
-    ['lmstudio', 'LM Studio'],
-    ['jan', 'Jan'],
-    ['openai', 'OpenAI'],
-    ['groq', 'Groq'],
-  ];
-
-  for (const [key, name] of expectedProviders) {
-    it(`has entry for "${key}" -> "${name}"`, () => {
-      // Match the key (may be quoted or unquoted depending on if it has hyphens)
-      assert.ok(src.includes(key), `PROVIDER_NAMES should contain key "${key}"`);
-      assert.ok(src.includes(`'${name}'`) || src.includes(`"${name}"`),
-        `PROVIDER_NAMES should map "${key}" to "${name}"`);
-    });
-  }
-
-  it('defines PROVIDER_NAMES as a const', () => {
-    assert.ok(src.includes('const PROVIDER_NAMES'), 'Should define const PROVIDER_NAMES');
-  });
-});
-
-// ============ CLI_PROVIDERS list ============
-
-describe('ai-status: CLI_PROVIDERS', () => {
-  const expectedCli = ['claude', 'opencode', 'codex', 'gemini-cli', 'kimi-cli'];
-
-  it('defines CLI_PROVIDERS as a const array', () => {
-    assert.ok(src.includes('const CLI_PROVIDERS'), 'Should define const CLI_PROVIDERS');
+describe('ai-status: provider constants', () => {
+  it('imports PROVIDER_NAMES from providers.js (not defined inline)', () => {
+    assert.ok(
+      src.includes("import") && src.includes('PROVIDER_NAMES') && src.includes('providers.js'),
+      'Should import PROVIDER_NAMES from providers.js'
+    );
+    assert.ok(
+      !src.includes('const PROVIDER_NAMES'),
+      'Should NOT define PROVIDER_NAMES locally'
+    );
   });
 
-  for (const provider of expectedCli) {
-    it(`includes "${provider}"`, () => {
-      // CLI_PROVIDERS array should contain this string
-      assert.ok(
-        src.includes(`'${provider}'`) || src.includes(`"${provider}"`),
-        `CLI_PROVIDERS should include "${provider}"`
-      );
-    });
-  }
+  it('imports CLI_PROVIDERS from providers.js (not defined inline)', () => {
+    assert.ok(
+      src.includes("import") && src.includes('CLI_PROVIDERS') && src.includes('providers.js'),
+      'Should import CLI_PROVIDERS from providers.js'
+    );
+    assert.ok(
+      !src.includes('const CLI_PROVIDERS'),
+      'Should NOT define CLI_PROVIDERS locally'
+    );
+  });
+
+  it('does not contain removed providers (codex, gemini-cli, kimi-cli, openai, groq)', () => {
+    for (const dead of ['codex', 'gemini-cli', 'kimi-cli', 'openai', 'groq']) {
+      assert.ok(!src.includes(`'${dead}'`), `Should not reference removed provider '${dead}'`);
+    }
+  });
 });
 
 // ============ Exports ============

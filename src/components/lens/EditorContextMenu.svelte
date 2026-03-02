@@ -1,6 +1,7 @@
 <script>
   import { revealInExplorer } from '../../lib/api.js';
   import { projectStore } from '../../lib/stores/project.svelte.js';
+  import { copyFullPath, copyRelativePath } from '../../lib/utils.js';
   import { clampToViewport } from '$lib/clamp-to-viewport.js';
   import { setupClickOutside } from '$lib/popup-utils.js';
 
@@ -166,14 +167,12 @@
 
   function handleCopyPath() {
     close();
-    const root = projectStore.root || '';
-    const fullPath = root ? `${root}/${filePath}` : filePath;
-    navigator.clipboard.writeText(fullPath.replace(/\//g, '\\'));
+    copyFullPath(filePath, projectStore.root);
   }
 
   function handleCopyRelativePath() {
     close();
-    navigator.clipboard.writeText(filePath);
+    copyRelativePath(filePath);
   }
 
   function handleCopyMarkdown() {

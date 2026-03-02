@@ -238,8 +238,9 @@ describe('FileContextMenu.svelte -- delete behavior', () => {
 });
 
 describe('FileContextMenu.svelte -- clipboard', () => {
-  it('uses navigator.clipboard.writeText', () => {
-    assert.ok(src.includes('navigator.clipboard.writeText'), 'Should use clipboard API');
+  it('imports copyFullPath and copyRelativePath from utils', () => {
+    assert.ok(src.includes('copyFullPath'), 'Should import copyFullPath');
+    assert.ok(src.includes('copyRelativePath'), 'Should import copyRelativePath');
   });
 });
 

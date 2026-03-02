@@ -97,17 +97,17 @@ describe('lsp-diagnostics.svelte.js: diagnostic handling', () => {
     assert.ok(src.includes('handleDiagnosticsEvent'), 'Should have event handler');
   });
 
-  it('counts errors by severity', () => {
+  it('counts errors by severity via severityName helper', () => {
     assert.ok(
-      src.includes("sev === 'error'") || src.includes('sev === 1'),
-      'Should count error severity'
+      src.includes('severityName') && src.includes("=== 'error'"),
+      'Should classify severity via severityName and count errors'
     );
   });
 
-  it('counts warnings by severity', () => {
+  it('counts warnings by severity via severityName helper', () => {
     assert.ok(
-      src.includes("sev === 'warning'") || src.includes('sev === 2'),
-      'Should count warning severity'
+      src.includes('severityName') && src.includes("=== 'warning'"),
+      'Should classify severity via severityName and count warnings'
     );
   });
 

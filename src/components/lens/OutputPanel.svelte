@@ -8,6 +8,7 @@
    */
   import { onMount } from 'svelte';
   import { outputStore } from '../../lib/stores/output.svelte.js';
+  import { formatLogTime } from '../../lib/utils.js';
 
   let logContainer;
 
@@ -38,10 +39,6 @@
     }
   }
 
-  function formatTime(ts) {
-    const d = new Date(ts);
-    return d.toTimeString().slice(0, 8);
-  }
 
   onMount(() => {
     outputStore.startListening();
@@ -57,7 +54,7 @@
   >
     {#each outputStore.filteredEntries as entry (entry.id)}
       <div class="log-line {levelClass(entry.level)}">
-        <span class="log-time">{formatTime(entry.timestamp)}</span>
+        <span class="log-time">{formatLogTime(entry.timestamp)}</span>
         <span class="log-level">[{entry.level}]</span>
         <span class="log-msg">{entry.message}</span>
       </div>

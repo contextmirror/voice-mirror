@@ -27,6 +27,8 @@
   import { outputStore } from '../../lib/stores/output.svelte.js';
   import ProblemsPanel from '../lens/ProblemsPanel.svelte';
   import { lspDiagnosticsStore } from '../../lib/stores/lsp-diagnostics.svelte.js';
+  import { severityLabel } from '../../lib/lsp-severity.js';
+  import { formatLogTime } from '../../lib/utils.js';
 
   // ---- Bottom panel mode: ai | output | terminal | problems ----
   let bottomPanelMode = $state('ai');
@@ -226,9 +228,7 @@
 
   function outputContextCopyAll() {
     const lines = outputStore.filteredEntries.map(e => {
-      const d = new Date(e.timestamp);
-      const time = d.toTimeString().slice(0, 8);
-      return `${time} [${e.level}] ${e.message}`;
+      return `${formatLogTime(e.timestamp)} [${e.level}] ${e.message}`;
     });
     navigator.clipboard.writeText(lines.join('\n')).catch(() => {});
     closeOutputContextMenu();
@@ -260,12 +260,8 @@
     problemsContextMenu = { ...problemsContextMenu, visible: false };
   }
 
-  function formatSeverity(sev) {
-    if (sev === 1 || sev === 'error') return 'Error';
-    if (sev === 2 || sev === 'warning') return 'Warning';
-    if (sev === 3 || sev === 'information') return 'Info';
-    return 'Hint';
-  }
+  // formatSeverity delegates to shared lsp-severity helper (collapses 4-tier Hint into 3-tier Info)
+  const formatSeverity = severityLabel;
 
   function problemsCopyAll() {
     const lines = [];
