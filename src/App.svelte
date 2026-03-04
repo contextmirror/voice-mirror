@@ -1,6 +1,7 @@
 <script>
   import { configStore, loadConfig } from './lib/stores/config.svelte.js';
   import { currentThemeName, applyTheme, PRESETS } from './lib/stores/theme.svelte.js';
+  import { CONTEXT_MENU_PRESETS, DEFAULT_CONTEXT_MENU_PRESET, applyContextMenuPreset } from './lib/context-menu-presets.js';
   import { navigationStore } from './lib/stores/navigation.svelte.js';
   import { projectStore } from './lib/stores/project.svelte.js';
   import { overlayStore } from './lib/stores/overlay.svelte.js';
@@ -351,6 +352,11 @@
 
     currentThemeName.value = themeName;
     applyTheme(colors, fonts);
+
+    // Apply context menu preset from config
+    const ctxCfg = cfg?.appearance?.contextMenu;
+    const ctxPreset = CONTEXT_MENU_PRESETS[ctxCfg?.preset] || CONTEXT_MENU_PRESETS[DEFAULT_CONTEXT_MENU_PRESET];
+    applyContextMenuPreset(ctxPreset, ctxCfg?.overrides || null);
   });
 
   /**
