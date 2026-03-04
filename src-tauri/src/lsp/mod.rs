@@ -1803,6 +1803,66 @@ impl LspManager {
         Ok(serde_json::json!({ "edits": edits }))
     }
 
+    /// Request linked editing ranges at a position in a file.
+    ///
+    /// Returns ranges that should be edited simultaneously, such as matching
+    /// HTML open/close tag names (e.g. `<div>` and `</div>`).
+    pub async fn request_linked_editing_range(
+        &mut self,
+        uri: &str,
+        lang_id: &str,
+        line: u32,
+        character: u32,
+        project_root: &str,
+    ) -> Result<Value, String> {
+        let server = self
+            .servers
+            .get_mut(&server_key(lang_id, project_root))
+            .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
+
+        let params = serde_json::json!({
+            "textDocument": { "uri": uri },
+            "position": { "line": line, "character": character }
+        });
+
+        let rx = client::send_request(
+            &mut *server.stdin.lock().await,
+            &server.pending_requests,
+            "textDocument/linkedEditingRange",
+            params,
+            &server.next_id,
+        )
+        .await?;
+
+        let response = tokio::time::timeout(std::time::Duration::from_secs(5), rx)
+            .await
+            .map_err(|_| "Linked editing range request timed out".to_string())?
+            .map_err(|_| "Linked editing range response channel closed".to_string())?;
+
+        let result = response.get("result").cloned().unwrap_or(Value::Null);
+
+        // Result is LinkedEditingRanges { ranges: Range[], wordPattern?: string } or null
+        if result.is_null() {
+            return Ok(serde_json::json!({ "ranges": [] }));
+        }
+
+        let ranges = result
+            .get("ranges")
+            .cloned()
+            .unwrap_or(Value::Array(vec![]));
+        let word_pattern = result
+            .get("wordPattern")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
+        let mut out = serde_json::json!({ "ranges": ranges });
+        if let Some(wp) = word_pattern {
+            out["wordPattern"] = Value::String(wp);
+        }
+
+        Ok(out)
+    }
+
     /// Scan the project directory for files matching the server's extensions
     /// and send `textDocument/didOpen` for each, enabling project-wide diagnostics.
     ///

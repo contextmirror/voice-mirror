@@ -5,7 +5,7 @@
  * event listeners, handlers, and CodeMirror extension factories for the file editor.
  */
 
-import { lspOpenFile, lspCloseFile, lspChangeFile, lspSaveFile, lspRequestCompletion, lspRequestHover, lspRequestDefinition, lspRequestTypeDefinition, lspRequestDeclaration, lspRequestImplementation, lspRequestReferences, lspRequestDocumentHighlight, lspRequestInlayHints, lspPrepareRename, lspRename, lspApplyWorkspaceEdit, lspRequestCodeActions, lspRequestFormatting, lspRequestRangeFormatting, lspRequestSignatureHelp } from './api.js';
+import { lspOpenFile, lspCloseFile, lspChangeFile, lspSaveFile, lspRequestCompletion, lspRequestHover, lspRequestDefinition, lspRequestTypeDefinition, lspRequestDeclaration, lspRequestImplementation, lspRequestReferences, lspRequestDocumentHighlight, lspRequestInlayHints, lspPrepareRename, lspRename, lspApplyWorkspaceEdit, lspRequestCodeActions, lspRequestFormatting, lspRequestRangeFormatting, lspRequestSignatureHelp, lspRequestLinkedEditingRange } from './api.js';
 import { projectStore } from './stores/project.svelte.js';
 import { tabsStore } from './stores/tabs.svelte.js';
 import { basename } from './utils.js';
@@ -418,6 +418,24 @@ export function createEditorLsp() {
     signatureHelpData = null;
   }
 
+  async function handleLinkedEditing(view, currentPath) {
+    if (!view || !hasLsp || !currentPath) return;
+    const pos = view.state.selection.main.head;
+    const lineInfo = view.state.doc.lineAt(pos);
+    const line = lineInfo.number - 1;
+    const character = pos - lineInfo.from;
+    const root = projectStore.root;
+
+    try {
+      const result = await lspRequestLinkedEditingRange(currentPath, line, character, root);
+      if (result?.data?.ranges?.length >= 2) {
+        // For now, just log the ranges — full synchronized editing is a future enhancement.
+        // The ranges identify matching tag pairs (e.g. <div> and </div>).
+        console.debug('[editor-lsp] Linked editing ranges:', result.data.ranges);
+      }
+    } catch {}
+  }
+
   // ── CodeMirror extension factories ──
 
   function completionSource(currentPath) {
@@ -770,6 +788,7 @@ export function createEditorLsp() {
     dismissSignatureHelp,
     formatDocument,
     formatSelection,
+    handleLinkedEditing,
 
     // CodeMirror extension factories
     completionSource,

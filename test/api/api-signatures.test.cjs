@@ -155,6 +155,7 @@ describe('api.js -- critical Tauri command names', () => {
     // LSP
     'lsp_request_formatting',
     'lsp_request_range_formatting',
+    'lsp_request_linked_editing_range',
     'lsp_request_signature_help',
     'lsp_request_type_definition',
     'lsp_request_declaration',
@@ -334,6 +335,7 @@ describe('api.js -- exported async functions', () => {
     'lspApplyWorkspaceEdit',
     'lspRequestFormatting',
     'lspRequestRangeFormatting',
+    'lspRequestLinkedEditingRange',
     'lspRequestSignatureHelp',
     'lspScanProject',
     'lspGetServerList',
