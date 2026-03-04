@@ -953,6 +953,144 @@ pub async fn lsp_resolve_completion_item(
     }
 }
 
+/// Prepare call hierarchy at a cursor position.
+///
+/// Returns an array of CallHierarchyItem to pass to incoming/outgoing calls.
+#[tauri::command]
+pub async fn lsp_prepare_call_hierarchy(
+    path: String,
+    line: u32,
+    character: u32,
+    project_root: String,
+    state: State<'_, LspManagerState>,
+) -> Result<IpcResponse, ()> {
+    let ext = match extension_from_path(&path) {
+        Some(e) => e,
+        None => return Ok(IpcResponse::err("Could not determine file extension")),
+    };
+
+    let lang_id = match detection::language_id_for_extension(&ext) {
+        Some(id) => id.to_string(),
+        None => return Ok(IpcResponse::err(format!("No LSP support for .{} files", ext))),
+    };
+
+    let uri = types::file_uri(&path, &project_root);
+
+    let mut manager = state.0.lock().await;
+    match manager
+        .prepare_call_hierarchy(&uri, &lang_id, line, character, &project_root)
+        .await
+    {
+        Ok(result) => Ok(IpcResponse::ok(result)),
+        Err(e) => Ok(IpcResponse::err(e)),
+    }
+}
+
+/// Request incoming calls for a call hierarchy item.
+#[tauri::command]
+pub async fn lsp_request_incoming_calls(
+    item: serde_json::Value,
+    lang_id: String,
+    project_root: String,
+    state: State<'_, LspManagerState>,
+) -> Result<IpcResponse, ()> {
+    let mut manager = state.0.lock().await;
+    match manager
+        .request_incoming_calls(item, &lang_id, &project_root)
+        .await
+    {
+        Ok(result) => Ok(IpcResponse::ok(result)),
+        Err(e) => Ok(IpcResponse::err(e)),
+    }
+}
+
+/// Request outgoing calls for a call hierarchy item.
+#[tauri::command]
+pub async fn lsp_request_outgoing_calls(
+    item: serde_json::Value,
+    lang_id: String,
+    project_root: String,
+    state: State<'_, LspManagerState>,
+) -> Result<IpcResponse, ()> {
+    let mut manager = state.0.lock().await;
+    match manager
+        .request_outgoing_calls(item, &lang_id, &project_root)
+        .await
+    {
+        Ok(result) => Ok(IpcResponse::ok(result)),
+        Err(e) => Ok(IpcResponse::err(e)),
+    }
+}
+
+/// Prepare type hierarchy at a cursor position.
+///
+/// Returns an array of TypeHierarchyItem to pass to supertypes/subtypes.
+#[tauri::command]
+pub async fn lsp_prepare_type_hierarchy(
+    path: String,
+    line: u32,
+    character: u32,
+    project_root: String,
+    state: State<'_, LspManagerState>,
+) -> Result<IpcResponse, ()> {
+    let ext = match extension_from_path(&path) {
+        Some(e) => e,
+        None => return Ok(IpcResponse::err("Could not determine file extension")),
+    };
+
+    let lang_id = match detection::language_id_for_extension(&ext) {
+        Some(id) => id.to_string(),
+        None => return Ok(IpcResponse::err(format!("No LSP support for .{} files", ext))),
+    };
+
+    let uri = types::file_uri(&path, &project_root);
+
+    let mut manager = state.0.lock().await;
+    match manager
+        .prepare_type_hierarchy(&uri, &lang_id, line, character, &project_root)
+        .await
+    {
+        Ok(result) => Ok(IpcResponse::ok(result)),
+        Err(e) => Ok(IpcResponse::err(e)),
+    }
+}
+
+/// Request supertypes for a type hierarchy item.
+#[tauri::command]
+pub async fn lsp_request_supertypes(
+    item: serde_json::Value,
+    lang_id: String,
+    project_root: String,
+    state: State<'_, LspManagerState>,
+) -> Result<IpcResponse, ()> {
+    let mut manager = state.0.lock().await;
+    match manager
+        .request_supertypes(item, &lang_id, &project_root)
+        .await
+    {
+        Ok(result) => Ok(IpcResponse::ok(result)),
+        Err(e) => Ok(IpcResponse::err(e)),
+    }
+}
+
+/// Request subtypes for a type hierarchy item.
+#[tauri::command]
+pub async fn lsp_request_subtypes(
+    item: serde_json::Value,
+    lang_id: String,
+    project_root: String,
+    state: State<'_, LspManagerState>,
+) -> Result<IpcResponse, ()> {
+    let mut manager = state.0.lock().await;
+    match manager
+        .request_subtypes(item, &lang_id, &project_root)
+        .await
+    {
+        Ok(result) => Ok(IpcResponse::ok(result)),
+        Err(e) => Ok(IpcResponse::err(e)),
+    }
+}
+
 /// Request diagnostics for a document on demand (pull diagnostics).
 ///
 /// Sends `textDocument/diagnostic` to get fresh diagnostics without waiting

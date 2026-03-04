@@ -803,6 +803,30 @@ export async function lspRequestDiagnostics(path, projectRoot) {
   return invoke('lsp_request_diagnostics', { path, projectRoot });
 }
 
+export async function lspPrepareCallHierarchy(path, line, character, projectRoot) {
+  return invoke('lsp_prepare_call_hierarchy', { path, line, character, projectRoot });
+}
+
+export async function lspRequestIncomingCalls(item, langId, projectRoot) {
+  return invoke('lsp_request_incoming_calls', { item, langId, projectRoot });
+}
+
+export async function lspRequestOutgoingCalls(item, langId, projectRoot) {
+  return invoke('lsp_request_outgoing_calls', { item, langId, projectRoot });
+}
+
+export async function lspPrepareTypeHierarchy(path, line, character, projectRoot) {
+  return invoke('lsp_prepare_type_hierarchy', { path, line, character, projectRoot });
+}
+
+export async function lspRequestSupertypes(item, langId, projectRoot) {
+  return invoke('lsp_request_supertypes', { item, langId, projectRoot });
+}
+
+export async function lspRequestSubtypes(item, langId, projectRoot) {
+  return invoke('lsp_request_subtypes', { item, langId, projectRoot });
+}
+
 export async function lspScanProject(langId, projectRoot) {
   return invoke('lsp_scan_project', { langId, projectRoot });
 }

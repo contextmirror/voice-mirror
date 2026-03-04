@@ -169,6 +169,12 @@ describe('api.js -- critical Tauri command names', () => {
     'lsp_scan_project',
     'lsp_resolve_completion_item',
     'lsp_request_diagnostics',
+    'lsp_prepare_call_hierarchy',
+    'lsp_request_incoming_calls',
+    'lsp_request_outgoing_calls',
+    'lsp_prepare_type_hierarchy',
+    'lsp_request_supertypes',
+    'lsp_request_subtypes',
   ];
 
   for (const cmd of criticalCommands) {
@@ -352,6 +358,12 @@ describe('api.js -- exported async functions', () => {
     'lspScanProject',
     'lspResolveCompletionItem',
     'lspRequestDiagnostics',
+    'lspPrepareCallHierarchy',
+    'lspRequestIncomingCalls',
+    'lspRequestOutgoingCalls',
+    'lspPrepareTypeHierarchy',
+    'lspRequestSupertypes',
+    'lspRequestSubtypes',
     'lspGetServerList',
     'lspInstallServer',
     'lspSetServerEnabled',

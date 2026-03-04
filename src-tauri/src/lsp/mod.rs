@@ -2208,6 +2208,214 @@ impl LspManager {
         Ok(result)
     }
 
+    /// Prepare call hierarchy at a position (textDocument/prepareCallHierarchy).
+    ///
+    /// Returns an array of CallHierarchyItem that can be passed to
+    /// `request_incoming_calls` or `request_outgoing_calls`.
+    pub async fn prepare_call_hierarchy(
+        &mut self,
+        uri: &str,
+        lang_id: &str,
+        line: u32,
+        character: u32,
+        project_root: &str,
+    ) -> Result<Value, String> {
+        let server = self
+            .servers
+            .get_mut(&server_key(lang_id, project_root))
+            .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
+
+        let params = serde_json::json!({
+            "textDocument": { "uri": uri },
+            "position": { "line": line, "character": character }
+        });
+
+        let rx = client::send_request(
+            &mut *server.stdin.lock().await,
+            &server.pending_requests,
+            "textDocument/prepareCallHierarchy",
+            params,
+            &server.next_id,
+        )
+        .await?;
+
+        let response = tokio::time::timeout(std::time::Duration::from_secs(10), rx)
+            .await
+            .map_err(|_| "Prepare call hierarchy request timed out".to_string())?
+            .map_err(|_| "Prepare call hierarchy response channel closed".to_string())?;
+
+        let result = response.get("result").cloned().unwrap_or(Value::Null);
+        Ok(result)
+    }
+
+    /// Request incoming calls for a call hierarchy item (callHierarchy/incomingCalls).
+    pub async fn request_incoming_calls(
+        &mut self,
+        item: serde_json::Value,
+        lang_id: &str,
+        project_root: &str,
+    ) -> Result<Value, String> {
+        let server = self
+            .servers
+            .get_mut(&server_key(lang_id, project_root))
+            .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
+
+        let params = serde_json::json!({ "item": item });
+
+        let rx = client::send_request(
+            &mut *server.stdin.lock().await,
+            &server.pending_requests,
+            "callHierarchy/incomingCalls",
+            params,
+            &server.next_id,
+        )
+        .await?;
+
+        let response = tokio::time::timeout(std::time::Duration::from_secs(10), rx)
+            .await
+            .map_err(|_| "Incoming calls request timed out".to_string())?
+            .map_err(|_| "Incoming calls response channel closed".to_string())?;
+
+        let result = response.get("result").cloned().unwrap_or(Value::Null);
+        Ok(result)
+    }
+
+    /// Request outgoing calls for a call hierarchy item (callHierarchy/outgoingCalls).
+    pub async fn request_outgoing_calls(
+        &mut self,
+        item: serde_json::Value,
+        lang_id: &str,
+        project_root: &str,
+    ) -> Result<Value, String> {
+        let server = self
+            .servers
+            .get_mut(&server_key(lang_id, project_root))
+            .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
+
+        let params = serde_json::json!({ "item": item });
+
+        let rx = client::send_request(
+            &mut *server.stdin.lock().await,
+            &server.pending_requests,
+            "callHierarchy/outgoingCalls",
+            params,
+            &server.next_id,
+        )
+        .await?;
+
+        let response = tokio::time::timeout(std::time::Duration::from_secs(10), rx)
+            .await
+            .map_err(|_| "Outgoing calls request timed out".to_string())?
+            .map_err(|_| "Outgoing calls response channel closed".to_string())?;
+
+        let result = response.get("result").cloned().unwrap_or(Value::Null);
+        Ok(result)
+    }
+
+    /// Prepare type hierarchy at a position (textDocument/prepareTypeHierarchy).
+    ///
+    /// Returns an array of TypeHierarchyItem that can be passed to
+    /// `request_supertypes` or `request_subtypes`.
+    pub async fn prepare_type_hierarchy(
+        &mut self,
+        uri: &str,
+        lang_id: &str,
+        line: u32,
+        character: u32,
+        project_root: &str,
+    ) -> Result<Value, String> {
+        let server = self
+            .servers
+            .get_mut(&server_key(lang_id, project_root))
+            .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
+
+        let params = serde_json::json!({
+            "textDocument": { "uri": uri },
+            "position": { "line": line, "character": character }
+        });
+
+        let rx = client::send_request(
+            &mut *server.stdin.lock().await,
+            &server.pending_requests,
+            "textDocument/prepareTypeHierarchy",
+            params,
+            &server.next_id,
+        )
+        .await?;
+
+        let response = tokio::time::timeout(std::time::Duration::from_secs(10), rx)
+            .await
+            .map_err(|_| "Prepare type hierarchy request timed out".to_string())?
+            .map_err(|_| "Prepare type hierarchy response channel closed".to_string())?;
+
+        let result = response.get("result").cloned().unwrap_or(Value::Null);
+        Ok(result)
+    }
+
+    /// Request supertypes for a type hierarchy item (typeHierarchy/supertypes).
+    pub async fn request_supertypes(
+        &mut self,
+        item: serde_json::Value,
+        lang_id: &str,
+        project_root: &str,
+    ) -> Result<Value, String> {
+        let server = self
+            .servers
+            .get_mut(&server_key(lang_id, project_root))
+            .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
+
+        let params = serde_json::json!({ "item": item });
+
+        let rx = client::send_request(
+            &mut *server.stdin.lock().await,
+            &server.pending_requests,
+            "typeHierarchy/supertypes",
+            params,
+            &server.next_id,
+        )
+        .await?;
+
+        let response = tokio::time::timeout(std::time::Duration::from_secs(10), rx)
+            .await
+            .map_err(|_| "Supertypes request timed out".to_string())?
+            .map_err(|_| "Supertypes response channel closed".to_string())?;
+
+        let result = response.get("result").cloned().unwrap_or(Value::Null);
+        Ok(result)
+    }
+
+    /// Request subtypes for a type hierarchy item (typeHierarchy/subtypes).
+    pub async fn request_subtypes(
+        &mut self,
+        item: serde_json::Value,
+        lang_id: &str,
+        project_root: &str,
+    ) -> Result<Value, String> {
+        let server = self
+            .servers
+            .get_mut(&server_key(lang_id, project_root))
+            .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
+
+        let params = serde_json::json!({ "item": item });
+
+        let rx = client::send_request(
+            &mut *server.stdin.lock().await,
+            &server.pending_requests,
+            "typeHierarchy/subtypes",
+            params,
+            &server.next_id,
+        )
+        .await?;
+
+        let response = tokio::time::timeout(std::time::Duration::from_secs(10), rx)
+            .await
+            .map_err(|_| "Subtypes request timed out".to_string())?
+            .map_err(|_| "Subtypes response channel closed".to_string())?;
+
+        let result = response.get("result").cloned().unwrap_or(Value::Null);
+        Ok(result)
+    }
+
     /// Scan the project directory for files matching the server's extensions
     /// and send `textDocument/didOpen` for each, enabling project-wide diagnostics.
     ///
