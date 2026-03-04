@@ -430,7 +430,7 @@ impl LspManager {
                     },
                     "completion": {
                         "completionItem": {
-                            "snippetSupport": false,
+                            "snippetSupport": true,
                             "commitCharactersSupport": false,
                             "documentationFormat": ["plaintext"],
                             "deprecatedSupport": false
@@ -483,11 +483,73 @@ impl LspManager {
                         "dynamicRegistration": false
                     },
                     "publishDiagnostics": {
-                        "relatedInformation": false
+                        "relatedInformation": true,
+                        "versionSupport": true,
+                        "codeDescriptionSupport": true,
+                        "tagSupport": {
+                            "valueSet": [1, 2]
+                        }
+                    },
+                    "documentHighlight": {
+                        "dynamicRegistration": false
+                    },
+                    "typeDefinition": {
+                        "dynamicRegistration": false
+                    },
+                    "declaration": {
+                        "dynamicRegistration": false
+                    },
+                    "implementation": {
+                        "dynamicRegistration": false
+                    },
+                    "linkedEditingRange": {
+                        "dynamicRegistration": false
+                    },
+                    "onTypeFormatting": {
+                        "dynamicRegistration": false
+                    },
+                    "codeLens": {
+                        "dynamicRegistration": false
+                    },
+                    "colorProvider": {
+                        "dynamicRegistration": false
+                    },
+                    "foldingRange": {
+                        "dynamicRegistration": false,
+                        "lineFoldingOnly": true
+                    },
+                    "inlayHint": {
+                        "dynamicRegistration": false
+                    },
+                    "semanticTokens": {
+                        "dynamicRegistration": false,
+                        "requests": {
+                            "full": { "delta": true },
+                            "range": true
+                        },
+                        "tokenTypes": [
+                            "namespace", "type", "class", "enum", "interface",
+                            "struct", "typeParameter", "parameter", "variable",
+                            "property", "enumMember", "event", "function",
+                            "method", "macro", "keyword", "modifier",
+                            "comment", "string", "number", "regexp", "operator",
+                            "decorator"
+                        ],
+                        "tokenModifiers": [
+                            "declaration", "definition", "readonly", "static",
+                            "deprecated", "abstract", "async", "modification",
+                            "documentation", "defaultLibrary"
+                        ],
+                        "formats": ["relative"],
+                        "multilineTokenSupport": false,
+                        "overlappingTokenSupport": false
                     }
                 },
                 "workspace": {
-                    "workspaceFolders": true
+                    "workspaceFolders": true,
+                    "symbol": {
+                        "dynamicRegistration": false
+                    }
                 }
             }
         });
