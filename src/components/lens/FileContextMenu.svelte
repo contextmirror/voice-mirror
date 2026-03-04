@@ -129,67 +129,67 @@
   <div class="context-menu" style={menuStyle} bind:this={menuEl} role="menu">
     {#if !entry}
       <!-- Empty space context menu (project root) -->
-      <button class="context-item" onclick={handleNewFile} role="menuitem">New File...</button>
-      <button class="context-item" onclick={handleNewFolder} role="menuitem">New Folder...</button>
+      <button class="context-menu-item" onclick={handleNewFile} role="menuitem">New File...</button>
+      <button class="context-menu-item" onclick={handleNewFolder} role="menuitem">New Folder...</button>
     {:else if isChange}
       <!-- Changes tab context menu -->
-      <button class="context-item" onclick={handleOpenDiff} role="menuitem">Open Diff</button>
-      <div class="context-separator"></div>
-      <button class="context-item" onclick={handleCopyPath} role="menuitem">
+      <button class="context-menu-item" onclick={handleOpenDiff} role="menuitem">Open Diff</button>
+      <div class="context-menu-divider"></div>
+      <button class="context-menu-item" onclick={handleCopyPath} role="menuitem">
         Copy Path
       </button>
-      <button class="context-item" onclick={handleCopyRelativePath} role="menuitem">
+      <button class="context-menu-item" onclick={handleCopyRelativePath} role="menuitem">
         Copy Relative Path
       </button>
-      <div class="context-separator"></div>
-      <button class="context-item" onclick={handleReveal} role="menuitem">
+      <div class="context-menu-divider"></div>
+      <button class="context-menu-item" onclick={handleReveal} role="menuitem">
         Reveal in File Explorer
       </button>
     {:else if isFolder}
       <!-- Folder context menu -->
-      <button class="context-item" onclick={handleNewFile} role="menuitem">New File...</button>
-      <button class="context-item" onclick={handleNewFolder} role="menuitem">New Folder...</button>
-      <div class="context-separator"></div>
-      <button class="context-item" onclick={handleRenameAction} role="menuitem">
+      <button class="context-menu-item" onclick={handleNewFile} role="menuitem">New File...</button>
+      <button class="context-menu-item" onclick={handleNewFolder} role="menuitem">New Folder...</button>
+      <div class="context-menu-divider"></div>
+      <button class="context-menu-item" onclick={handleRenameAction} role="menuitem">
         Rename
-        <span class="context-shortcut">F2</span>
+        <span class="context-menu-shortcut">F2</span>
       </button>
-      <button class="context-item context-danger" onclick={handleDelete} role="menuitem">Delete</button>
-      <div class="context-separator"></div>
-      <button class="context-item" onclick={handleCopyPath} role="menuitem">
+      <button class="context-menu-item danger" onclick={handleDelete} role="menuitem">Delete</button>
+      <div class="context-menu-divider"></div>
+      <button class="context-menu-item" onclick={handleCopyPath} role="menuitem">
         Copy Path
       </button>
-      <button class="context-item" onclick={handleCopyRelativePath} role="menuitem">
+      <button class="context-menu-item" onclick={handleCopyRelativePath} role="menuitem">
         Copy Relative Path
       </button>
-      <div class="context-separator"></div>
-      <button class="context-item" onclick={handleReveal} role="menuitem">
+      <div class="context-menu-divider"></div>
+      <button class="context-menu-item" onclick={handleReveal} role="menuitem">
         Reveal in File Explorer
       </button>
     {:else}
       <!-- File context menu -->
-      <button class="context-item" onclick={handleOpen} role="menuitem">Open</button>
+      <button class="context-menu-item" onclick={handleOpen} role="menuitem">Open</button>
       {#if hasGitChange}
-        <button class="context-item" onclick={handleOpenDiff} role="menuitem">Open Diff</button>
+        <button class="context-menu-item" onclick={handleOpenDiff} role="menuitem">Open Diff</button>
       {/if}
-      <div class="context-separator"></div>
-      <button class="context-item" onclick={handleNewFile} role="menuitem">New File...</button>
-      <button class="context-item" onclick={handleNewFolder} role="menuitem">New Folder...</button>
-      <div class="context-separator"></div>
-      <button class="context-item" onclick={handleRenameAction} role="menuitem">
+      <div class="context-menu-divider"></div>
+      <button class="context-menu-item" onclick={handleNewFile} role="menuitem">New File...</button>
+      <button class="context-menu-item" onclick={handleNewFolder} role="menuitem">New Folder...</button>
+      <div class="context-menu-divider"></div>
+      <button class="context-menu-item" onclick={handleRenameAction} role="menuitem">
         Rename
-        <span class="context-shortcut">F2</span>
+        <span class="context-menu-shortcut">F2</span>
       </button>
-      <button class="context-item context-danger" onclick={handleDelete} role="menuitem">Delete</button>
-      <div class="context-separator"></div>
-      <button class="context-item" onclick={handleCopyPath} role="menuitem">
+      <button class="context-menu-item danger" onclick={handleDelete} role="menuitem">Delete</button>
+      <div class="context-menu-divider"></div>
+      <button class="context-menu-item" onclick={handleCopyPath} role="menuitem">
         Copy Path
       </button>
-      <button class="context-item" onclick={handleCopyRelativePath} role="menuitem">
+      <button class="context-menu-item" onclick={handleCopyRelativePath} role="menuitem">
         Copy Relative Path
       </button>
-      <div class="context-separator"></div>
-      <button class="context-item" onclick={handleReveal} role="menuitem">
+      <div class="context-menu-divider"></div>
+      <button class="context-menu-item" onclick={handleReveal} role="menuitem">
         Reveal in File Explorer
       </button>
     {/if}
@@ -197,60 +197,17 @@
 {/if}
 
 <style>
+  @import '../../styles/context-menu.css';
+
+  /* FileContextMenu overrides */
   .context-menu {
-    position: fixed;
-    z-index: 10002;
     min-width: 200px;
     max-width: 280px;
-    background: var(--bg-elevated);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 4px 0;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
     -webkit-app-region: no-drag;
-    font-family: var(--font-family);
   }
 
-  .context-item {
-    display: flex;
-    align-items: center;
+  .context-menu-item {
     justify-content: space-between;
-    width: 100%;
-    padding: 6px 12px;
-    border: none;
-    background: transparent;
-    color: var(--text);
-    font-size: 12px;
-    cursor: pointer;
-    text-align: left;
-    font-family: inherit;
     -webkit-app-region: no-drag;
-  }
-
-  .context-item:hover {
-    background: var(--accent);
-    color: var(--bg);
-  }
-
-  .context-item.context-danger:hover {
-    background: var(--danger);
-    color: var(--bg);
-  }
-
-  .context-shortcut {
-    color: var(--muted);
-    font-size: 11px;
-    margin-left: 24px;
-  }
-
-  .context-item:hover .context-shortcut {
-    color: inherit;
-    opacity: 0.7;
-  }
-
-  .context-separator {
-    height: 1px;
-    margin: 4px 8px;
-    background: var(--border);
   }
 </style>
