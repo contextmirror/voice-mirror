@@ -3,11 +3,34 @@
   import { listen } from '@tauri-apps/api/event';
   import { unwrapResult } from '../../lib/utils.js';
 
+  /**
+   * @typedef {Object} LspServerInfo
+   * @property {string} state
+   * @property {string} [serverName]
+   * @property {string} binary
+   * @property {string} languageId
+   * @property {string} projectRoot
+   * @property {string} [version]
+   * @property {number} openDocsCount
+   * @property {number} [pid]
+   * @property {number} crashCount
+   * @property {string} [lastError]
+   * @property {string[]} [stderrLines]
+   */
+
+  /**
+   * @typedef {Object} LspManifestServer
+   * @property {string} id
+   * @property {string} binary
+   * @property {string} languageId
+   * @property {boolean} installed
+   */
+
   let { visible = false } = $props();
 
-  /** @type {Array<any>} Active/running LSP servers from lsp_get_status */
+  /** @type {Array<LspServerInfo>} Active/running LSP servers from lsp_get_status */
   let lspServers = $state([]);
-  /** @type {Array<any>} All known servers from manifest (for install buttons) */
+  /** @type {Array<LspManifestServer>} All known servers from manifest (for install buttons) */
   let knownServers = $state([]);
   /** @type {string|null} Currently expanded server key (languageId::projectRoot) */
   let expandedKey = $state(null);
@@ -36,7 +59,7 @@
 
   /**
    * Get a display name for a server.
-   * @param {any} server
+   * @param {LspServerInfo} server
    * @returns {string}
    */
   function displayName(server) {
@@ -61,7 +84,7 @@
 
   /**
    * Build a unique key for a server row.
-   * @param {any} server
+   * @param {LspServerInfo} server
    * @returns {string}
    */
   function serverKey(server) {
@@ -70,7 +93,7 @@
 
   /**
    * Toggle detail panel for a server.
-   * @param {any} server
+   * @param {LspServerInfo} server
    */
   function toggleDetail(server) {
     const key = serverKey(server);
@@ -79,7 +102,7 @@
 
   /**
    * Restart a single server.
-   * @param {any} server
+   * @param {LspServerInfo} server
    */
   async function handleRestart(server) {
     try {
@@ -91,7 +114,7 @@
 
   /**
    * Stop (shut down) a single server.
-   * @param {any} server
+   * @param {LspServerInfo} server
    */
   async function handleStop(server) {
     try {

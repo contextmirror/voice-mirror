@@ -85,20 +85,16 @@ describe('FileContextMenu.svelte -- structure', () => {
     assert.ok(src.includes('context-menu'), 'Should have context-menu class');
   });
 
-  it('has context-item class', () => {
-    assert.ok(src.includes('context-item'), 'Should have context-item class');
+  it('has context-menu-item class', () => {
+    assert.ok(src.includes('context-menu-item'), 'Should have context-menu-item class');
   });
 
-  it('has context-separator class', () => {
-    assert.ok(src.includes('context-separator'), 'Should have context-separator class');
+  it('has context-menu-divider class', () => {
+    assert.ok(src.includes('context-menu-divider'), 'Should have context-menu-divider class');
   });
 
-  it('uses fixed positioning', () => {
-    assert.ok(src.includes('position: fixed'), 'Should use fixed positioning');
-  });
-
-  it('has z-index 10002', () => {
-    assert.ok(src.includes('z-index: 10002'), 'Should have z-index 10002');
+  it('imports shared context-menu.css', () => {
+    assert.ok(src.includes("@import '../../styles/context-menu.css'"), 'Should import shared context-menu styles');
   });
 
   it('has role=menu', () => {
@@ -113,6 +109,24 @@ describe('FileContextMenu.svelte -- structure', () => {
 describe('FileContextMenu.svelte -- file menu items', () => {
   it('has Open action', () => {
     assert.ok(src.includes('handleOpen'), 'Should have Open handler');
+  });
+
+  it('has Open to the Side action', () => {
+    assert.ok(src.includes('handleOpenToSide'), 'Should have Open to the Side handler');
+    assert.ok(src.includes('Open to the Side'), 'Should show Open to the Side text');
+  });
+
+  it('has onOpenToSide callback prop', () => {
+    assert.ok(src.includes('onOpenToSide'), 'Should have onOpenToSide callback');
+  });
+
+  it('has Open in Terminal action', () => {
+    assert.ok(src.includes('handleOpenInTerminal'), 'Should have Open in Terminal handler');
+    assert.ok(src.includes('Open in Terminal'), 'Should show Open in Terminal text');
+  });
+
+  it('imports terminalTabsStore for Open in Terminal', () => {
+    assert.ok(src.includes('terminalTabsStore'), 'Should import terminalTabsStore');
   });
 
   it('has Open Diff action', () => {
@@ -163,8 +177,8 @@ describe('FileContextMenu.svelte -- keyboard shortcuts', () => {
     assert.ok(src.includes('>F2<'), 'Should show F2 shortcut hint');
   });
 
-  it('has context-shortcut class', () => {
-    assert.ok(src.includes('context-shortcut'), 'Should have shortcut class');
+  it('has context-menu-shortcut class', () => {
+    assert.ok(src.includes('context-menu-shortcut'), 'Should have shortcut class');
   });
 });
 
@@ -233,7 +247,7 @@ describe('FileContextMenu.svelte -- delete behavior', () => {
   });
 
   it('has danger class for delete', () => {
-    assert.ok(src.includes('context-danger'), 'Should have danger class');
+    assert.ok(src.includes('danger'), 'Should have danger class');
   });
 });
 
@@ -249,11 +263,7 @@ describe('FileContextMenu.svelte -- CSS', () => {
     assert.ok(src.includes('-webkit-app-region: no-drag'), 'Should have no-drag');
   });
 
-  it('has box-shadow for elevation', () => {
-    assert.ok(src.includes('box-shadow'), 'Should have box-shadow');
-  });
-
-  it('has border-radius', () => {
-    assert.ok(src.includes('border-radius: 6px'), 'Should have rounded corners');
+  it('imports shared context-menu.css for box-shadow and border-radius', () => {
+    assert.ok(src.includes("@import '../../styles/context-menu.css'"), 'Should import shared context-menu styles');
   });
 });

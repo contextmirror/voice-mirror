@@ -833,6 +833,8 @@
 </div>
 
 <style>
+  @import '../../styles/context-menu.css';
+
   .terminal-tabs-container {
     display: flex;
     flex-direction: column;
@@ -1007,34 +1009,19 @@
   /* -- Context menu -- */
 
   .context-menu {
-    position: fixed;
-    z-index: 10000;
-    background: var(--bg-elevated);
-    border: 1px solid var(--border, rgba(255,255,255,0.1));
-    border-radius: 6px;
     padding: 4px;
-    min-width: 140px;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
   }
 
   .context-menu-item {
-    display: flex;
-    align-items: center;
     gap: 8px;
-    width: 100%;
     padding: 6px 10px;
-    background: none;
-    border: none;
     border-radius: 4px;
-    color: var(--text);
-    font-size: 12px;
-    font-family: var(--font-family);
-    cursor: pointer;
     transition: background 0.1s;
   }
 
   .context-menu-item:hover {
     background: rgba(255,255,255,0.06);
+    color: var(--text);
   }
 
   .context-menu-item.danger {
@@ -1046,8 +1033,6 @@
   }
 
   .context-menu-divider {
-    height: 1px;
-    background: var(--border, rgba(255,255,255,0.06));
     margin: 4px 0;
   }
 

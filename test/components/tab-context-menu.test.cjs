@@ -112,8 +112,8 @@ describe('TabContextMenu.svelte: menu behavior', () => {
   it('has menuitem roles on buttons', () => {
     assert.ok(src.includes('role="menuitem"'));
   });
-  it('has z-index 10002', () => {
-    assert.ok(src.includes('z-index: 10002'));
+  it('imports shared context-menu.css', () => {
+    assert.ok(src.includes("@import '../../styles/context-menu.css'"), 'Should import shared context-menu styles');
   });
   it('uses setupClickOutside for dismiss behavior', () => {
     assert.ok(src.includes('setupClickOutside'), 'Should use setupClickOutside utility');
@@ -124,8 +124,8 @@ describe('TabContextMenu.svelte: menu behavior', () => {
   it('has keyboard shortcut hint for Close', () => {
     assert.ok(src.includes('Ctrl+W'));
   });
-  it('has disabled styling', () => {
-    assert.ok(src.includes(':disabled'));
+  it('has disabled styling via HTML disabled attribute', () => {
+    assert.ok(src.includes('disabled={'), 'Should use HTML disabled attribute on buttons');
   });
 });
 

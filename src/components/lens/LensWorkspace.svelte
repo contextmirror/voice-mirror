@@ -348,6 +348,7 @@
           {#snippet panelB()}
             <FileTree
               onFileClick={(entry) => { showBrowser = false; tabsStore.openFile(entry, editorGroupsStore.focusedGroupId); }}
+              onOpenToSide={(entry) => { showBrowser = false; tabsStore.openFileToSide(entry); }}
               onFileDblClick={(entry) => tabsStore.pinTab(entry.path)}
               onChangeClick={(change) => tabsStore.openDiff(change)}
               onChangeDblClick={(change) => tabsStore.pinTab(`diff:${change.path}`)}

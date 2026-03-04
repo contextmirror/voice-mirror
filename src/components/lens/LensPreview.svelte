@@ -164,7 +164,7 @@
 
     try {
       const result = await detectDevServers(project.path);
-      /** @type {any} */
+      /** @type {{ servers?: unknown[], packageManager?: string }} */
       const data = unwrapResult(result) || {};
       const servers = data.servers || [];
       const packageManager = data.packageManager || null;

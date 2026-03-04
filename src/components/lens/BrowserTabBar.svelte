@@ -1,5 +1,6 @@
 <script>
   import { browserTabsStore } from '../../lib/stores/browser-tabs.svelte.js';
+  import { lensReload, lensHardRefresh } from '../../lib/api.js';
 
   let { onNewTab } = $props();
 
@@ -19,6 +20,21 @@
     contextMenu = { visible: false, x: 0, y: 0, tabId: null };
   }
 
+  function handleContextReload() {
+    closeContextMenu();
+    lensReload();
+  }
+
+  function handleContextHardRefresh() {
+    closeContextMenu();
+    lensHardRefresh();
+  }
+
+  function handleContextNewTab() {
+    closeContextMenu();
+    onNewTab?.();
+  }
+
   function handleContextClose() {
     const id = contextMenu.tabId;
     closeContextMenu();
@@ -36,15 +52,20 @@
   }
 </script>
 
-<div class="browser-tab-bar">
+<div class="browser-tab-bar" role="tablist">
   {#each browserTabsStore.tabs as tab (tab.id)}
-    <button
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div
       class="browser-tab"
       class:active={tab.id === browserTabsStore.activeTabId}
       class:loading={tab.loading}
       onclick={() => browserTabsStore.switchTab(tab.id)}
+      onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') browserTabsStore.switchTab(tab.id); }}
       oncontextmenu={(e) => handleContextMenu(e, tab.id)}
       title={tab.url || tab.title}
+      role="tab"
+      tabindex="0"
+      aria-selected={tab.id === browserTabsStore.activeTabId}
     >
       <span class="browser-tab-title">{truncate(tab.title)}</span>
       {#if browserTabsStore.tabs.length > 1}
@@ -58,7 +79,7 @@
           </svg>
         </button>
       {/if}
-    </button>
+    </div>
   {/each}
   {#if browserTabsStore.canAddTab}
     <button
@@ -78,13 +99,25 @@
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="context-backdrop" onclick={closeContextMenu} oncontextmenu={(e) => { e.preventDefault(); closeContextMenu(); }}></div>
   <div class="context-menu" style="left: {contextMenu.x}px; top: {contextMenu.y}px;">
-    <button class="context-item" onclick={handleContextClose}>
+    <button class="context-menu-item" onclick={handleContextReload}>
+      Reload
+    </button>
+    <button class="context-menu-item" onclick={handleContextHardRefresh}>
+      Hard Refresh
+    </button>
+    <div class="context-menu-divider"></div>
+    <button class="context-menu-item" onclick={handleContextNewTab}>
+      New Tab
+    </button>
+    <button class="context-menu-item" onclick={handleContextClose}>
       Close Tab
     </button>
   </div>
 {/if}
 
 <style>
+  @import '../../styles/context-menu.css';
+
   /* ── Zed-style underline indicator ── */
   .browser-tab-bar {
     display: flex;
@@ -211,39 +244,6 @@
   .context-backdrop {
     position: fixed;
     inset: 0;
-    z-index: 10001;
-  }
-
-  .context-menu {
-    position: fixed;
-    z-index: 10002;
-    min-width: 140px;
-    background: var(--bg-elevated);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 4px 0;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
-    -webkit-app-region: no-drag;
-    font-family: var(--font-family);
-  }
-
-  .context-item {
-    display: flex;
-    align-items: center;
-    width: 100%;
-    padding: 6px 12px;
-    border: none;
-    background: transparent;
-    color: var(--text);
-    font-size: 12px;
-    cursor: pointer;
-    text-align: left;
-    font-family: inherit;
-    -webkit-app-region: no-drag;
-  }
-
-  .context-item:hover {
-    background: var(--accent);
-    color: var(--bg);
+    z-index: 9999;
   }
 </style>

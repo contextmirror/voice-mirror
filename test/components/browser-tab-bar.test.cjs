@@ -83,6 +83,36 @@ describe('BrowserTabBar.svelte: add tab', () => {
   });
 });
 
+describe('BrowserTabBar.svelte: context menu items', () => {
+  it('imports lensReload from api', () => {
+    assert.ok(src.includes('lensReload'), 'Should import lensReload');
+  });
+
+  it('imports lensHardRefresh from api', () => {
+    assert.ok(src.includes('lensHardRefresh'), 'Should import lensHardRefresh');
+  });
+
+  it('has Reload menu item', () => {
+    assert.ok(src.includes('Reload'), 'Should have Reload context menu item');
+  });
+
+  it('has Hard Refresh menu item', () => {
+    assert.ok(src.includes('Hard Refresh'), 'Should have Hard Refresh context menu item');
+  });
+
+  it('has New Tab menu item', () => {
+    assert.ok(src.includes('New Tab'), 'Should have New Tab context menu item');
+  });
+
+  it('has Close Tab menu item', () => {
+    assert.ok(src.includes('Close Tab'), 'Should have Close Tab context menu item');
+  });
+
+  it('has context-menu-divider between groups', () => {
+    assert.ok(src.includes('context-menu-divider'), 'Should have divider between menu groups');
+  });
+});
+
 describe('BrowserTabBar.svelte: tab rendering', () => {
   it('iterates over tabs with #each', () => {
     assert.ok(src.includes('{#each'), 'Should use {#each} to render tabs');

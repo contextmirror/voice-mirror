@@ -1,6 +1,6 @@
 # Voice Mirror Code Audit
 
-Last updated: 2026-03-02
+Last updated: 2026-03-04
 
 Systematic audit of duplication, file sizing, naming, and organization issues.
 Work items are grouped by priority and area. Check items off as they're resolved.
@@ -44,9 +44,10 @@ Work items are grouped by priority and area. Check items off as they're resolved
 - [x] **Duplicate `getTabIcon()`** (2 sites) — DONE (commit 70618d5c)
   - Shared `getTabIcon()` in `src/lib/tab-utils.js`
 
-- [ ] **Context menu CSS** (6+ components)
-  - Nearly identical `.context-menu` / `.context-menu-item` CSS in: `TabContextMenu`, `FileContextMenu`, `ChatList`, `SessionPanel`, `ProjectStrip`, `TerminalTabs`
-  - Extract to `src/styles/context-menu.css` or a shared `ContextMenu.svelte`
+- [x] **Context menu CSS** (10 components) — DONE (commit 1adfac03..99c73380)
+  - Shared `src/styles/context-menu.css` with base styles, 10 components migrated via `@import`
+  - Class names standardised: `.context-item` → `.context-menu-item`, `.context-separator` → `.context-menu-divider`
+  - z-index standardised to 10000
 
 - [x] **Copy full path to clipboard** (3 sites) — DONE (commit 920d8680)
   - `copyFullPath()` and `copyRelativePath()` in `src/lib/utils.js`

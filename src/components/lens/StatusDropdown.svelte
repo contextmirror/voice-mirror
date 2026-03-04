@@ -150,7 +150,7 @@
     lensStore.setDevServerLoading(true);
     try {
       const result = await detectDevServers(project.path);
-      /** @type {any} */
+      /** @type {{ servers?: unknown[], packageManager?: string }} */
       const data = unwrapResult(result) || {};
       const list = data.servers || (Array.isArray(data) ? data : []);
       if (Array.isArray(list)) {

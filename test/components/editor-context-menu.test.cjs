@@ -209,14 +209,11 @@ describe('EditorContextMenu.svelte: styling and layout', () => {
   it('has disabled styling class', () => {
     assert.ok(src.includes('disabled'));
   });
-  it('uses z-index 10002', () => {
-    assert.ok(src.includes('z-index: 10002'));
+  it('imports shared context-menu.css', () => {
+    assert.ok(src.includes("@import '../../styles/context-menu.css'"), 'Should import shared context-menu styles');
   });
   it('uses -webkit-app-region: no-drag', () => {
     assert.ok(src.includes('-webkit-app-region: no-drag'));
-  });
-  it('uses fixed positioning', () => {
-    assert.ok(src.includes('position: fixed'));
   });
 });
 

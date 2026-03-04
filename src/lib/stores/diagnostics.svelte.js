@@ -43,7 +43,7 @@ const EXPECTED_SUBSYSTEMS = [
 /** @type {Map<string, HealthContract>} */
 let contracts = new Map();
 
-/** @type {Record<string, { healthy: boolean, message: string, lastChecked: number, details?: any }>} */
+/** @type {Record<string, { healthy: boolean, message: string, lastChecked: number, details?: Object }>} */
 let results = $state({});
 
 let intervalId = null;

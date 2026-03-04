@@ -34,11 +34,8 @@ describe('TerminalContextMenu.svelte -- props', () => {
 });
 
 describe('TerminalContextMenu.svelte -- positioning', () => {
-  it('uses position: fixed', () => {
-    assert.ok(src.includes('position: fixed'), 'Should use fixed positioning');
-  });
-  it('uses z-index: 10000', () => {
-    assert.ok(src.includes('z-index: 10000'), 'Should have high z-index');
+  it('imports shared context-menu.css (provides position: fixed, z-index)', () => {
+    assert.ok(src.includes("@import '../../styles/context-menu.css'"), 'Should import shared context-menu.css');
   });
   it('positions with x/y coordinates', () => {
     assert.ok(src.includes('left: {x}px') && src.includes('top: {y}px'), 'Should position via props');
