@@ -177,8 +177,8 @@ describe('TerminalTabs.svelte -- Voice Agent context menu', () => {
     assert.ok(src.includes('closeContextMenu'), 'Should close on outside click');
   });
 
-  it('uses fixed positioning', () => {
-    assert.ok(src.includes('position: fixed'), 'Context menu should be fixed positioned');
+  it('imports shared context-menu.css (provides fixed positioning)', () => {
+    assert.ok(src.includes("@import '../../styles/context-menu.css'"), 'Should import shared context-menu.css');
   });
 });
 

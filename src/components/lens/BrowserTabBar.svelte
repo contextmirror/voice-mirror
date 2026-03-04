@@ -78,13 +78,15 @@
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="context-backdrop" onclick={closeContextMenu} oncontextmenu={(e) => { e.preventDefault(); closeContextMenu(); }}></div>
   <div class="context-menu" style="left: {contextMenu.x}px; top: {contextMenu.y}px;">
-    <button class="context-item" onclick={handleContextClose}>
+    <button class="context-menu-item" onclick={handleContextClose}>
       Close Tab
     </button>
   </div>
 {/if}
 
 <style>
+  @import '../../styles/context-menu.css';
+
   /* ── Zed-style underline indicator ── */
   .browser-tab-bar {
     display: flex;
@@ -211,39 +213,6 @@
   .context-backdrop {
     position: fixed;
     inset: 0;
-    z-index: 10001;
-  }
-
-  .context-menu {
-    position: fixed;
-    z-index: 10002;
-    min-width: 140px;
-    background: var(--bg-elevated);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 4px 0;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
-    -webkit-app-region: no-drag;
-    font-family: var(--font-family);
-  }
-
-  .context-item {
-    display: flex;
-    align-items: center;
-    width: 100%;
-    padding: 6px 12px;
-    border: none;
-    background: transparent;
-    color: var(--text);
-    font-size: 12px;
-    cursor: pointer;
-    text-align: left;
-    font-family: inherit;
-    -webkit-app-region: no-drag;
-  }
-
-  .context-item:hover {
-    background: var(--accent);
-    color: var(--bg);
+    z-index: 9999;
   }
 </style>
