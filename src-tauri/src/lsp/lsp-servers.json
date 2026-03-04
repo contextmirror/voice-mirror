@@ -61,7 +61,18 @@
       "priority": "primary",
       "enabled": true,
       "restartPolicy": "on-crash",
-      "initializationOptions": {},
+      "initializationOptions": {
+        "hostInfo": "voice-mirror",
+        "preferences": {
+          "includeInlayParameterNameHints": "none",
+          "includeInlayVariableTypeHints": false,
+          "includeInlayPropertyDeclarationTypeHints": false,
+          "includeInlayFunctionLikeReturnTypeHints": false,
+          "includeInlayEnumMemberValueHints": false,
+          "quotePreference": "auto",
+          "importModuleSpecifierPreference": "shortest"
+        }
+      },
       "settings": {}
     },
     "css": {
