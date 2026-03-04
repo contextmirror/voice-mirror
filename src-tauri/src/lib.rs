@@ -480,6 +480,7 @@ pub fn run() {
             lsp_cmds::lsp_request_document_symbols,
             lsp_cmds::lsp_request_references,
             lsp_cmds::lsp_request_document_highlight,
+            lsp_cmds::lsp_request_inlay_hints,
             lsp_cmds::lsp_request_code_actions,
             lsp_cmds::lsp_prepare_rename,
             lsp_cmds::lsp_rename,

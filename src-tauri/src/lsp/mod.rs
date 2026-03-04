@@ -1266,6 +1266,80 @@ impl LspManager {
         Ok(serde_json::json!({ "highlights": highlights }))
     }
 
+    /// Request inlay hints for a range of lines in a file.
+    ///
+    /// Returns inline type annotations, parameter names, etc. that the
+    /// language server can infer for the given range.
+    pub async fn request_inlay_hints(
+        &mut self,
+        uri: &str,
+        lang_id: &str,
+        start_line: u32,
+        end_line: u32,
+        project_root: &str,
+    ) -> Result<Value, String> {
+        let server = self
+            .servers
+            .get_mut(&server_key(lang_id, project_root))
+            .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
+
+        let params = serde_json::json!({
+            "textDocument": { "uri": uri },
+            "range": {
+                "start": { "line": start_line, "character": 0 },
+                "end": { "line": end_line, "character": 0 }
+            }
+        });
+
+        let rx = client::send_request(
+            &mut *server.stdin.lock().await,
+            &server.pending_requests,
+            "textDocument/inlayHint",
+            params,
+            &server.next_id,
+        )
+        .await?;
+
+        let response = tokio::time::timeout(std::time::Duration::from_secs(5), rx)
+            .await
+            .map_err(|_| "Inlay hints request timed out".to_string())?
+            .map_err(|_| "Inlay hints response channel closed".to_string())?;
+
+        let result = response.get("result").cloned().unwrap_or(Value::Null);
+
+        // Result is InlayHint[] | null
+        let hints: Vec<Value> = if let Some(arr) = result.as_array() {
+            arr.iter()
+                .filter_map(|h| {
+                    let position = h.get("position")?;
+                    let label = h.get("label")?;
+                    // Label can be a string or an array of InlayHintLabelPart
+                    let label_text = if let Some(s) = label.as_str() {
+                        s.to_string()
+                    } else if let Some(parts) = label.as_array() {
+                        parts.iter()
+                            .filter_map(|p| p.get("value").and_then(|v| v.as_str()))
+                            .collect::<Vec<_>>()
+                            .join("")
+                    } else {
+                        return None;
+                    };
+                    Some(serde_json::json!({
+                        "position": position,
+                        "label": label_text,
+                        "kind": h.get("kind").and_then(|k| k.as_u64()).unwrap_or(0),
+                        "paddingLeft": h.get("paddingLeft").and_then(|v| v.as_bool()).unwrap_or(false),
+                        "paddingRight": h.get("paddingRight").and_then(|v| v.as_bool()).unwrap_or(false),
+                    }))
+                })
+                .collect()
+        } else {
+            vec![]
+        };
+
+        Ok(serde_json::json!({ "hints": hints }))
+    }
+
     /// Request code actions for a range in a file.
     pub async fn request_code_actions(
         &mut self,

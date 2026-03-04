@@ -319,6 +319,7 @@ describe('api.js -- exported async functions', () => {
     'lspRequestDocumentSymbols',
     'lspRequestReferences',
     'lspRequestDocumentHighlight',
+    'lspRequestInlayHints',
     'lspRequestCodeActions',
     'lspPrepareRename',
     'lspRename',

@@ -400,6 +400,39 @@ pub async fn lsp_request_document_highlight(
     }
 }
 
+/// Request inlay hints for a range of lines in a file.
+///
+/// Returns inline type annotations, parameter names, etc. for the visible range.
+#[tauri::command]
+pub async fn lsp_request_inlay_hints(
+    path: String,
+    start_line: u32,
+    end_line: u32,
+    project_root: String,
+    state: State<'_, LspManagerState>,
+) -> Result<IpcResponse, ()> {
+    let ext = match extension_from_path(&path) {
+        Some(e) => e,
+        None => return Ok(IpcResponse::err("Could not determine file extension")),
+    };
+
+    let lang_id = match detection::language_id_for_extension(&ext) {
+        Some(id) => id.to_string(),
+        None => return Ok(IpcResponse::err(format!("No LSP support for .{} files", ext))),
+    };
+
+    let uri = types::file_uri(&path, &project_root);
+
+    let mut manager = state.0.lock().await;
+    match manager
+        .request_inlay_hints(&uri, &lang_id, start_line, end_line, &project_root)
+        .await
+    {
+        Ok(result) => Ok(IpcResponse::ok(result)),
+        Err(e) => Ok(IpcResponse::err(e)),
+    }
+}
+
 /// Request code actions for a range in a file.
 #[tauri::command]
 pub async fn lsp_request_code_actions(

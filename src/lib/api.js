@@ -727,6 +727,10 @@ export async function lspRequestDocumentHighlight(path, line, character, project
   return invoke('lsp_request_document_highlight', { path, line, character, projectRoot });
 }
 
+export async function lspRequestInlayHints(path, startLine, endLine, projectRoot) {
+  return invoke('lsp_request_inlay_hints', { path, startLine, endLine, projectRoot });
+}
+
 export async function lspRequestCodeActions(path, rangeStartLine, rangeStartChar, rangeEndLine, rangeEndChar, diagnostics, projectRoot) {
   return invoke('lsp_request_code_actions', { path, rangeStartLine, rangeStartChar, rangeEndLine, rangeEndChar, diagnostics, projectRoot });
 }

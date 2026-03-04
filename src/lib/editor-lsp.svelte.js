@@ -5,7 +5,7 @@
  * event listeners, handlers, and CodeMirror extension factories for the file editor.
  */
 
-import { lspOpenFile, lspCloseFile, lspChangeFile, lspSaveFile, lspRequestCompletion, lspRequestHover, lspRequestDefinition, lspRequestReferences, lspRequestDocumentHighlight, lspPrepareRename, lspRename, lspApplyWorkspaceEdit, lspRequestCodeActions, lspRequestFormatting, lspRequestSignatureHelp } from './api.js';
+import { lspOpenFile, lspCloseFile, lspChangeFile, lspSaveFile, lspRequestCompletion, lspRequestHover, lspRequestDefinition, lspRequestReferences, lspRequestDocumentHighlight, lspRequestInlayHints, lspPrepareRename, lspRename, lspApplyWorkspaceEdit, lspRequestCodeActions, lspRequestFormatting, lspRequestSignatureHelp } from './api.js';
 import { projectStore } from './stores/project.svelte.js';
 import { tabsStore } from './stores/tabs.svelte.js';
 import { basename } from './utils.js';
@@ -443,6 +443,124 @@ export function createEditorLsp() {
     });
   }
 
+  /**
+   * CodeMirror ViewPlugin that renders inlay hints (inline type annotations,
+   * parameter names) via LSP textDocument/inlayHint.
+   *
+   * On viewport change or document change (debounced 500ms), requests inlay
+   * hints for the visible range and renders them as Decoration.widget with
+   * class 'cm-inlay-hint'.
+   *
+   * @param {string} currentPath - current file path for the editor
+   * @param {typeof import('@codemirror/view')} cmView - CodeMirror view module
+   * @param {typeof import('@codemirror/state')} cmState - CodeMirror state module
+   * @returns {import('@codemirror/state').Extension} CM extension
+   */
+  function inlayHintExtension(currentPath, cmView, cmState) {
+    const { ViewPlugin, Decoration, WidgetType } = cmView;
+    const { RangeSet } = cmState;
+
+    class InlayHintWidget extends WidgetType {
+      constructor(label, kind, paddingLeft, paddingRight) {
+        super();
+        this.label = label;
+        this.kind = kind;
+        this.paddingLeft = paddingLeft;
+        this.paddingRight = paddingRight;
+      }
+
+      toDOM() {
+        const span = document.createElement('span');
+        span.className = 'cm-inlay-hint';
+        if (this.kind === 1) span.classList.add('cm-inlay-hint-type');
+        if (this.kind === 2) span.classList.add('cm-inlay-hint-parameter');
+        span.textContent = this.label;
+        if (this.paddingLeft) span.style.marginLeft = '2px';
+        if (this.paddingRight) span.style.marginRight = '2px';
+        return span;
+      }
+
+      eq(other) {
+        return this.label === other.label && this.kind === other.kind
+          && this.paddingLeft === other.paddingLeft && this.paddingRight === other.paddingRight;
+      }
+
+      ignoreEvent() { return true; }
+    }
+
+    return ViewPlugin.fromClass(class {
+      constructor(view) {
+        this.decorations = RangeSet.empty;
+        this._timer = null;
+        this._reqId = 0;
+        this._scheduleRequest(view);
+      }
+
+      update(update) {
+        if (!update.docChanged && !update.viewportChanged) return;
+        this._scheduleRequest(update.view);
+      }
+
+      _scheduleRequest(view) {
+        clearTimeout(this._timer);
+        if (!hasLsp || !currentPath) return;
+
+        const reqId = ++this._reqId;
+        this._timer = setTimeout(() => {
+          this._requestHints(view, reqId);
+        }, 500);
+      }
+
+      async _requestHints(view, reqId) {
+        try {
+          const viewport = view.viewport;
+          const startLine = view.state.doc.lineAt(viewport.from).number - 1;
+          const endLine = view.state.doc.lineAt(viewport.to).number;
+          const root = projectStore.root;
+
+          const result = await lspRequestInlayHints(currentPath, startLine, endLine, root);
+          if (reqId !== this._reqId) return;
+
+          if (!result?.data?.hints?.length) {
+            this.decorations = RangeSet.empty;
+            view.requestMeasure();
+            return;
+          }
+
+          const doc = view.state.doc;
+          const widgets = [];
+          for (const hint of result.data.hints) {
+            const pos = lspPositionToOffset(doc, hint.position);
+            if (pos >= 0 && pos <= doc.length) {
+              widgets.push(
+                Decoration.widget({
+                  widget: new InlayHintWidget(
+                    hint.label,
+                    hint.kind,
+                    hint.paddingLeft,
+                    hint.paddingRight
+                  ),
+                  side: 1, // after the position
+                }).range(pos)
+              );
+            }
+          }
+          widgets.sort((a, b) => a.from - b.from);
+          this.decorations = RangeSet.of(widgets);
+          view.requestMeasure();
+        } catch {
+          // Silently ignore -- inlay hints are best-effort
+        }
+      }
+
+      destroy() {
+        clearTimeout(this._timer);
+      }
+    }, {
+      decorations: v => v.decorations,
+    });
+  }
+
   function diagnosticListener(currentPath, getView, cmCache) {
     return (event) => {
       const { uri, diagnostics: lspDiags } = event.payload;
@@ -532,6 +650,7 @@ export function createEditorLsp() {
     completionSource,
     hoverTooltipExtension,
     documentHighlightExtension,
+    inlayHintExtension,
     diagnosticListener,
 
     // Lifecycle
