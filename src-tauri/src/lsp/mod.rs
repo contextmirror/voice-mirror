@@ -2138,6 +2138,76 @@ impl LspManager {
         Ok(serde_json::json!({ "data": data, "resultId": result_id }))
     }
 
+    /// Resolve a completion item to fill in additional details (documentation, additionalTextEdits).
+    ///
+    /// Takes a `CompletionItem` JSON value (as returned by `textDocument/completion`)
+    /// and sends `completionItem/resolve` to get the full item with lazy-loaded fields.
+    pub async fn resolve_completion_item(
+        &mut self,
+        item: serde_json::Value,
+        lang_id: &str,
+        project_root: &str,
+    ) -> Result<Value, String> {
+        let server = self
+            .servers
+            .get_mut(&server_key(lang_id, project_root))
+            .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
+
+        let rx = client::send_request(
+            &mut *server.stdin.lock().await,
+            &server.pending_requests,
+            "completionItem/resolve",
+            item,
+            &server.next_id,
+        )
+        .await?;
+
+        let response = tokio::time::timeout(std::time::Duration::from_secs(10), rx)
+            .await
+            .map_err(|_| "Completion resolve request timed out".to_string())?
+            .map_err(|_| "Completion resolve response channel closed".to_string())?;
+
+        let result = response.get("result").cloned().unwrap_or(Value::Null);
+        Ok(result)
+    }
+
+    /// Request diagnostics for a document on demand (pull diagnostics).
+    ///
+    /// Sends `textDocument/diagnostic` to the server and returns the diagnostic report.
+    /// This complements the push-based `textDocument/publishDiagnostics` notification.
+    pub async fn request_diagnostics(
+        &mut self,
+        uri: &str,
+        lang_id: &str,
+        project_root: &str,
+    ) -> Result<Value, String> {
+        let server = self
+            .servers
+            .get_mut(&server_key(lang_id, project_root))
+            .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
+
+        let params = serde_json::json!({
+            "textDocument": { "uri": uri }
+        });
+
+        let rx = client::send_request(
+            &mut *server.stdin.lock().await,
+            &server.pending_requests,
+            "textDocument/diagnostic",
+            params,
+            &server.next_id,
+        )
+        .await?;
+
+        let response = tokio::time::timeout(std::time::Duration::from_secs(10), rx)
+            .await
+            .map_err(|_| "Diagnostics request timed out".to_string())?
+            .map_err(|_| "Diagnostics response channel closed".to_string())?;
+
+        let result = response.get("result").cloned().unwrap_or(Value::Null);
+        Ok(result)
+    }
+
     /// Scan the project directory for files matching the server's extensions
     /// and send `textDocument/didOpen` for each, enabling project-wide diagnostics.
     ///

@@ -167,6 +167,8 @@ describe('api.js -- critical Tauri command names', () => {
     'lsp_request_implementation',
     'lsp_request_workspace_symbols',
     'lsp_scan_project',
+    'lsp_resolve_completion_item',
+    'lsp_request_diagnostics',
   ];
 
   for (const cmd of criticalCommands) {
@@ -348,6 +350,8 @@ describe('api.js -- exported async functions', () => {
     'lspRequestFoldingRanges',
     'lspRequestSignatureHelp',
     'lspScanProject',
+    'lspResolveCompletionItem',
+    'lspRequestDiagnostics',
     'lspGetServerList',
     'lspInstallServer',
     'lspSetServerEnabled',

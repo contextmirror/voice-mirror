@@ -932,6 +932,59 @@ pub async fn lsp_apply_workspace_edit(
     IpcResponse::ok(json!({ "filesChanged": files_changed }))
 }
 
+/// Resolve a completion item to fill in lazy-loaded details (documentation, additionalTextEdits).
+///
+/// Unlike most LSP commands, this takes a `lang_id` directly (not a file path)
+/// because the completion item already encodes its origin.
+#[tauri::command]
+pub async fn lsp_resolve_completion_item(
+    item: serde_json::Value,
+    lang_id: String,
+    project_root: String,
+    state: State<'_, LspManagerState>,
+) -> Result<IpcResponse, ()> {
+    let mut manager = state.0.lock().await;
+    match manager
+        .resolve_completion_item(item, &lang_id, &project_root)
+        .await
+    {
+        Ok(result) => Ok(IpcResponse::ok(result)),
+        Err(e) => Ok(IpcResponse::err(e)),
+    }
+}
+
+/// Request diagnostics for a document on demand (pull diagnostics).
+///
+/// Sends `textDocument/diagnostic` to get fresh diagnostics without waiting
+/// for the server to push them via `publishDiagnostics`.
+#[tauri::command]
+pub async fn lsp_request_diagnostics(
+    path: String,
+    project_root: String,
+    state: State<'_, LspManagerState>,
+) -> Result<IpcResponse, ()> {
+    let ext = match extension_from_path(&path) {
+        Some(e) => e,
+        None => return Ok(IpcResponse::err("Could not determine file extension")),
+    };
+
+    let lang_id = match detection::language_id_for_extension(&ext) {
+        Some(id) => id.to_string(),
+        None => return Ok(IpcResponse::err(format!("No LSP support for .{} files", ext))),
+    };
+
+    let uri = types::file_uri(&path, &project_root);
+
+    let mut manager = state.0.lock().await;
+    match manager
+        .request_diagnostics(&uri, &lang_id, &project_root)
+        .await
+    {
+        Ok(result) => Ok(IpcResponse::ok(result)),
+        Err(e) => Ok(IpcResponse::err(e)),
+    }
+}
+
 /// Request code lenses for a document (e.g., "3 references", "Run test").
 #[tauri::command]
 pub async fn lsp_request_code_lens(

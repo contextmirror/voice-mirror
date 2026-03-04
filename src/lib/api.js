@@ -795,6 +795,14 @@ export async function lspRequestFoldingRanges(path, projectRoot) {
   return invoke('lsp_request_folding_ranges', { path, projectRoot });
 }
 
+export async function lspResolveCompletionItem(item, langId, projectRoot) {
+  return invoke('lsp_resolve_completion_item', { item, langId, projectRoot });
+}
+
+export async function lspRequestDiagnostics(path, projectRoot) {
+  return invoke('lsp_request_diagnostics', { path, projectRoot });
+}
+
 export async function lspScanProject(langId, projectRoot) {
   return invoke('lsp_scan_project', { langId, projectRoot });
 }

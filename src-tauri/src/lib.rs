@@ -496,6 +496,8 @@ pub fn run() {
             lsp_cmds::lsp_request_document_colors,
             lsp_cmds::lsp_request_folding_ranges,
             lsp_cmds::lsp_request_semantic_tokens_full,
+            lsp_cmds::lsp_resolve_completion_item,
+            lsp_cmds::lsp_request_diagnostics,
             lsp_cmds::lsp_apply_workspace_edit,
             lsp_cmds::lsp_scan_project,
             lsp_cmds::lsp_get_server_list,
