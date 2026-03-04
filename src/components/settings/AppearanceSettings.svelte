@@ -10,9 +10,12 @@
   import { PRESETS, applyTheme } from '../../lib/stores/theme.svelte.js';
   import { ORB_PRESETS, DEFAULT_ORB_PRESET, overridesToSliders } from '../../lib/orb-presets.js';
 
+  import { CONTEXT_MENU_PRESETS, DEFAULT_CONTEXT_MENU_PRESET, applyContextMenuPreset } from '../../lib/context-menu-presets.js';
+
   import ThemeSection from './appearance/ThemeSection.svelte';
   import OrbSection from './appearance/OrbSection.svelte';
   import MessageCardSection from './appearance/MessageCardSection.svelte';
+  import ContextMenuSection from './appearance/ContextMenuSection.svelte';
   import TypographySection from './appearance/TypographySection.svelte';
   import Button from '../shared/Button.svelte';
 
@@ -47,6 +50,11 @@
   let selectedAiAvatar = $state('cube');
   let selectedUserAvatar = $state('person');
   let customAvatars = $state([]);
+
+  // ---- State: Context Menu ----
+  let selectedCtxPreset = $state(DEFAULT_CONTEXT_MENU_PRESET);
+  let ctxCustomize = $state(false);
+  let ctxOverrides = $state(null);
 
   // ---- State: UI ----
   let saving = $state(false);
@@ -109,6 +117,17 @@
       }
     }
 
+    const ctxCfg = cfg.appearance?.contextMenu;
+    if (ctxCfg) {
+      selectedCtxPreset = ctxCfg.preset || DEFAULT_CONTEXT_MENU_PRESET;
+      if (ctxCfg.overrides) {
+        ctxOverrides = ctxCfg.overrides;
+        ctxCustomize = true;
+      }
+    }
+    const ctxBase = CONTEXT_MENU_PRESETS[selectedCtxPreset] || CONTEXT_MENU_PRESETS[DEFAULT_CONTEXT_MENU_PRESET];
+    applyContextMenuPreset(ctxBase, ctxOverrides);
+
     const cfgColors = cfg.appearance?.colors;
     if (cfgColors && typeof cfgColors === 'object') {
       customizeColors = true;
@@ -165,6 +184,11 @@
     orbAnimSpeed = 1.0;
     orbIconStyle = classicPreset.icons.style;
 
+    selectedCtxPreset = DEFAULT_CONTEXT_MENU_PRESET;
+    ctxCustomize = false;
+    ctxOverrides = null;
+    applyContextMenuPreset(CONTEXT_MENU_PRESETS[DEFAULT_CONTEXT_MENU_PRESET]);
+
     typographyRef?.removeAllInjectedFonts();
     customFonts = [];
 
@@ -180,6 +204,7 @@
           orb: null,
           customFonts: null,
           messageCard: null,
+          contextMenu: null,
         },
       });
       toastStore.addToast({ message: 'Appearance reset to defaults', severity: 'success' });
@@ -220,6 +245,10 @@
             aiAvatar: selectedAiAvatar,
             userAvatar: selectedUserAvatar,
             customAvatars: customAvatars.length > 0 ? customAvatars : null,
+          },
+          contextMenu: {
+            preset: selectedCtxPreset,
+            overrides: ctxCustomize ? ctxOverrides : null,
           },
         },
       };
@@ -269,6 +298,12 @@
     bind:customAvatars
     {fontFamily}
     {fontSize}
+  />
+
+  <ContextMenuSection
+    bind:selectedCtxPreset
+    bind:ctxCustomize
+    bind:ctxOverrides
   />
 
   <TypographySection
