@@ -7,6 +7,20 @@ use lsp_types::DiagnosticSeverity;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
+/// VS Code-compatible "style check" diagnostic codes.
+/// When these codes have severity=error, they are downgraded to warning.
+/// See: VS Code `reportStyleChecksAsWarnings` (default: true)
+pub const STYLE_CHECK_CODES: &[i64] = &[
+    6133, // Variable declared but never used
+    6138, // Property declared but never used
+    6192, // All imports are unused
+    6196, // Variable declared but never read
+    7027, // Unreachable code
+    7028, // Unused label
+    7029, // Fall-through case in switch
+    7030, // Not all code paths return a value
+];
+
 /// Convert a relative file path and project root into a `file://` URI.
 ///
 /// Joins the paths, canonicalizes, and uses `url::Url::from_file_path()`.

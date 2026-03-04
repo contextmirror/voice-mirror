@@ -447,6 +447,22 @@ fn handle_diagnostics(app_handle: &AppHandle, lang_id: &str, msg: &Value) {
                         _ => "unknown".to_string(),
                     };
 
+                    // VS Code-compatible severity remapping: style check codes error → warning
+                    let code_num = d.get("code").and_then(|v| v.as_i64());
+                    let severity = if severity == "error" {
+                        if let Some(code) = code_num {
+                            if super::types::STYLE_CHECK_CODES.contains(&code) {
+                                "warning".to_string()
+                            } else {
+                                severity
+                            }
+                        } else {
+                            severity
+                        }
+                    } else {
+                        severity
+                    };
+
                     DiagnosticItem {
                         range: DiagnosticRange {
                             start: DiagnosticPosition {
