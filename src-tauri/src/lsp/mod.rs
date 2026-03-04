@@ -1966,6 +1966,96 @@ impl LspManager {
         Ok(serde_json::json!({ "lenses": lenses }))
     }
 
+    /// Request document colors for a file (CSS color values, etc.).
+    ///
+    /// Returns an array of ColorInformation objects, each with a `range`
+    /// and `color` (RGBA floats in 0-1).
+    pub async fn request_document_colors(
+        &mut self,
+        uri: &str,
+        lang_id: &str,
+        project_root: &str,
+    ) -> Result<Value, String> {
+        let server = self
+            .servers
+            .get_mut(&server_key(lang_id, project_root))
+            .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
+
+        let params = serde_json::json!({
+            "textDocument": { "uri": uri }
+        });
+
+        let rx = client::send_request(
+            &mut *server.stdin.lock().await,
+            &server.pending_requests,
+            "textDocument/documentColor",
+            params,
+            &server.next_id,
+        )
+        .await?;
+
+        let response = tokio::time::timeout(std::time::Duration::from_secs(10), rx)
+            .await
+            .map_err(|_| "Document colors request timed out".to_string())?
+            .map_err(|_| "Document colors response channel closed".to_string())?;
+
+        let result = response.get("result").cloned().unwrap_or(Value::Null);
+
+        // Result is ColorInformation[] or null
+        let colors = if result.is_array() {
+            result
+        } else {
+            Value::Array(vec![])
+        };
+
+        Ok(serde_json::json!({ "colors": colors }))
+    }
+
+    /// Request folding ranges for a document.
+    ///
+    /// Returns an array of FoldingRange objects with `startLine`, `endLine`,
+    /// optional `startCharacter`, `endCharacter`, and `kind` (comment, imports, region).
+    pub async fn request_folding_ranges(
+        &mut self,
+        uri: &str,
+        lang_id: &str,
+        project_root: &str,
+    ) -> Result<Value, String> {
+        let server = self
+            .servers
+            .get_mut(&server_key(lang_id, project_root))
+            .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
+
+        let params = serde_json::json!({
+            "textDocument": { "uri": uri }
+        });
+
+        let rx = client::send_request(
+            &mut *server.stdin.lock().await,
+            &server.pending_requests,
+            "textDocument/foldingRange",
+            params,
+            &server.next_id,
+        )
+        .await?;
+
+        let response = tokio::time::timeout(std::time::Duration::from_secs(10), rx)
+            .await
+            .map_err(|_| "Folding ranges request timed out".to_string())?
+            .map_err(|_| "Folding ranges response channel closed".to_string())?;
+
+        let result = response.get("result").cloned().unwrap_or(Value::Null);
+
+        // Result is FoldingRange[] or null
+        let ranges = if result.is_array() {
+            result
+        } else {
+            Value::Array(vec![])
+        };
+
+        Ok(serde_json::json!({ "ranges": ranges }))
+    }
+
     /// Request semantic tokens for an entire document.
     ///
     /// Returns the raw `data` array of relative-encoded token data (groups of

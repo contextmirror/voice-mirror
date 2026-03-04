@@ -787,6 +787,14 @@ export async function lspRequestSemanticTokensFull(path, projectRoot) {
   return invoke('lsp_request_semantic_tokens_full', { path, projectRoot });
 }
 
+export async function lspRequestDocumentColors(path, projectRoot) {
+  return invoke('lsp_request_document_colors', { path, projectRoot });
+}
+
+export async function lspRequestFoldingRanges(path, projectRoot) {
+  return invoke('lsp_request_folding_ranges', { path, projectRoot });
+}
+
 export async function lspScanProject(langId, projectRoot) {
   return invoke('lsp_scan_project', { langId, projectRoot });
 }
