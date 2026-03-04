@@ -1920,6 +1920,52 @@ impl LspManager {
         Ok(serde_json::json!({ "edits": edits }))
     }
 
+    /// Request code lenses for a document.
+    ///
+    /// Code lenses are inline annotations above functions (e.g., "3 references",
+    /// "Run test"). Returns an array of CodeLens objects with `range` and
+    /// optional `command`.
+    pub async fn request_code_lens(
+        &mut self,
+        uri: &str,
+        lang_id: &str,
+        project_root: &str,
+    ) -> Result<Value, String> {
+        let server = self
+            .servers
+            .get_mut(&server_key(lang_id, project_root))
+            .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
+
+        let params = serde_json::json!({
+            "textDocument": { "uri": uri }
+        });
+
+        let rx = client::send_request(
+            &mut *server.stdin.lock().await,
+            &server.pending_requests,
+            "textDocument/codeLens",
+            params,
+            &server.next_id,
+        )
+        .await?;
+
+        let response = tokio::time::timeout(std::time::Duration::from_secs(10), rx)
+            .await
+            .map_err(|_| "Code lens request timed out".to_string())?
+            .map_err(|_| "Code lens response channel closed".to_string())?;
+
+        let result = response.get("result").cloned().unwrap_or(Value::Null);
+
+        // Result is CodeLens[] or null
+        let lenses = if result.is_array() {
+            result
+        } else {
+            Value::Array(vec![])
+        };
+
+        Ok(serde_json::json!({ "lenses": lenses }))
+    }
+
     /// Scan the project directory for files matching the server's extensions
     /// and send `textDocument/didOpen` for each, enabling project-wide diagnostics.
     ///

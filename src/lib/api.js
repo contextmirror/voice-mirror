@@ -779,6 +779,10 @@ export async function lspRequestLinkedEditingRange(path, line, character, projec
   return invoke('lsp_request_linked_editing_range', { path, line, character, projectRoot });
 }
 
+export async function lspRequestCodeLens(path, projectRoot) {
+  return invoke('lsp_request_code_lens', { path, projectRoot });
+}
+
 export async function lspScanProject(langId, projectRoot) {
   return invoke('lsp_scan_project', { langId, projectRoot });
 }
