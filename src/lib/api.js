@@ -723,6 +723,10 @@ export async function lspRequestReferences(path, line, character, projectRoot) {
   return invoke('lsp_request_references', { path, line, character, projectRoot });
 }
 
+export async function lspRequestWorkspaceSymbols(query, langId, projectRoot) {
+  return invoke('lsp_request_workspace_symbols', { query, langId, projectRoot });
+}
+
 export async function lspRequestDocumentHighlight(path, line, character, projectRoot) {
   return invoke('lsp_request_document_highlight', { path, line, character, projectRoot });
 }

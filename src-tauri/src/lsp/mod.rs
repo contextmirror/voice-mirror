@@ -1164,6 +1164,52 @@ impl LspManager {
         Ok(serde_json::json!({ "symbols": symbols }))
     }
 
+    /// Request workspace symbols matching a query string.
+    ///
+    /// Unlike textDocument requests, `workspace/symbol` doesn't use a URI.
+    /// It searches across the entire project for symbols matching the query.
+    pub async fn request_workspace_symbols(
+        &mut self,
+        query: &str,
+        lang_id: &str,
+        project_root: &str,
+    ) -> Result<Value, String> {
+        let server = self
+            .servers
+            .get_mut(&server_key(lang_id, project_root))
+            .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
+
+        let params = serde_json::json!({
+            "query": query
+        });
+
+        let rx = client::send_request(
+            &mut *server.stdin.lock().await,
+            &server.pending_requests,
+            "workspace/symbol",
+            params,
+            &server.next_id,
+        )
+        .await?;
+
+        // Workspace symbol search can scan many files — use a longer timeout
+        let response = tokio::time::timeout(std::time::Duration::from_secs(15), rx)
+            .await
+            .map_err(|_| "Workspace symbols request timed out".to_string())?
+            .map_err(|_| "Workspace symbols response channel closed".to_string())?;
+
+        let result = response.get("result").cloned().unwrap_or(Value::Null);
+
+        // Result is SymbolInformation[] or WorkspaceSymbol[]
+        let symbols = if result.is_array() {
+            result
+        } else {
+            Value::Array(vec![])
+        };
+
+        Ok(serde_json::json!({ "symbols": symbols }))
+    }
+
     /// Request all references to a symbol at a position.
     pub async fn request_references(
         &mut self,

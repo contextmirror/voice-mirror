@@ -478,6 +478,7 @@ pub fn run() {
             lsp_cmds::lsp_request_signature_help,
             lsp_cmds::lsp_request_definition,
             lsp_cmds::lsp_request_document_symbols,
+            lsp_cmds::lsp_request_workspace_symbols,
             lsp_cmds::lsp_request_references,
             lsp_cmds::lsp_request_document_highlight,
             lsp_cmds::lsp_request_inlay_hints,

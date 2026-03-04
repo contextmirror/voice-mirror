@@ -367,6 +367,27 @@ pub async fn lsp_request_references(
     }
 }
 
+/// Request workspace symbols matching a query string.
+///
+/// Unlike textDocument requests, this doesn't take a file path — it searches
+/// across the entire project for symbols matching the query.
+#[tauri::command]
+pub async fn lsp_request_workspace_symbols(
+    query: String,
+    lang_id: String,
+    project_root: String,
+    state: State<'_, LspManagerState>,
+) -> Result<IpcResponse, ()> {
+    let mut manager = state.0.lock().await;
+    match manager
+        .request_workspace_symbols(&query, &lang_id, &project_root)
+        .await
+    {
+        Ok(result) => Ok(IpcResponse::ok(result)),
+        Err(e) => Ok(IpcResponse::err(e)),
+    }
+}
+
 /// Request document highlights for a symbol at a position.
 ///
 /// Returns all occurrences of the symbol under the cursor in the current file.

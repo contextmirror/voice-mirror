@@ -156,6 +156,7 @@ describe('api.js -- critical Tauri command names', () => {
     'lsp_request_formatting',
     'lsp_request_range_formatting',
     'lsp_request_signature_help',
+    'lsp_request_workspace_symbols',
     'lsp_scan_project',
   ];
 
@@ -318,6 +319,7 @@ describe('api.js -- exported async functions', () => {
     'lspGetStatus',
     'lspRequestDocumentSymbols',
     'lspRequestReferences',
+    'lspRequestWorkspaceSymbols',
     'lspRequestDocumentHighlight',
     'lspRequestInlayHints',
     'lspRequestCodeActions',
