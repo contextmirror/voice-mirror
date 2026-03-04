@@ -5,7 +5,7 @@
  * event listeners, handlers, and CodeMirror extension factories for the file editor.
  */
 
-import { lspOpenFile, lspCloseFile, lspChangeFile, lspSaveFile, lspRequestCompletion, lspRequestHover, lspRequestDefinition, lspRequestReferences, lspRequestDocumentHighlight, lspRequestInlayHints, lspPrepareRename, lspRename, lspApplyWorkspaceEdit, lspRequestCodeActions, lspRequestFormatting, lspRequestSignatureHelp } from './api.js';
+import { lspOpenFile, lspCloseFile, lspChangeFile, lspSaveFile, lspRequestCompletion, lspRequestHover, lspRequestDefinition, lspRequestReferences, lspRequestDocumentHighlight, lspRequestInlayHints, lspPrepareRename, lspRename, lspApplyWorkspaceEdit, lspRequestCodeActions, lspRequestFormatting, lspRequestRangeFormatting, lspRequestSignatureHelp } from './api.js';
 import { projectStore } from './stores/project.svelte.js';
 import { tabsStore } from './stores/tabs.svelte.js';
 import { basename } from './utils.js';
@@ -235,6 +235,43 @@ export function createEditorLsp() {
       }
     } catch (err) {
       console.warn('[editor-lsp] Format document failed:', err);
+    }
+    return false;
+  }
+
+  async function formatSelection(view, path, root) {
+    if (!hasLsp) return false;
+    const sel = view.state.selection.main;
+    if (sel.from === sel.to) return false; // No selection
+    const startLine = view.state.doc.lineAt(sel.from);
+    const endLine = view.state.doc.lineAt(sel.to);
+    const tabSize = view.state.tabSize || 2;
+    const insertSpaces = true;
+    try {
+      const result = await lspRequestRangeFormatting(
+        path,
+        startLine.number - 1, sel.from - startLine.from,
+        endLine.number - 1, sel.to - endLine.from,
+        tabSize, insertSpaces, root
+      );
+      if (result?.data?.edits?.length > 0) {
+        const doc = view.state.doc;
+        const sorted = [...result.data.edits].sort((a, b) => {
+          const lineA = a.range.start.line;
+          const lineB = b.range.start.line;
+          if (lineA !== lineB) return lineB - lineA;
+          return b.range.start.character - a.range.start.character;
+        });
+        const changes = sorted.map(edit => ({
+          from: lspPositionToOffset(doc, edit.range.start),
+          to: lspPositionToOffset(doc, edit.range.end),
+          insert: edit.newText,
+        }));
+        view.dispatch({ changes });
+        return true;
+      }
+    } catch (err) {
+      console.warn('[editor-lsp] Format selection failed:', err);
     }
     return false;
   }
@@ -645,6 +682,7 @@ export function createEditorLsp() {
     requestSignatureHelp,
     dismissSignatureHelp,
     formatDocument,
+    formatSelection,
 
     // CodeMirror extension factories
     completionSource,
