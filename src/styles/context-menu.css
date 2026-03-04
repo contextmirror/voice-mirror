@@ -1,0 +1,70 @@
+/* Shared context menu styles — imported by all context menu components.
+   Override specific properties in component <style> blocks as needed. */
+
+.context-menu {
+  position: fixed;
+  z-index: 10000;
+  min-width: 140px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 0;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  font-family: var(--font-family);
+}
+
+.context-menu-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 6px 12px;
+  border: none;
+  background: none;
+  color: var(--text);
+  font-size: 12px;
+  font-family: var(--font-family);
+  cursor: pointer;
+  text-align: left;
+}
+
+.context-menu-item:hover {
+  background: var(--accent);
+  color: var(--bg);
+}
+
+.context-menu-item:disabled {
+  color: var(--muted);
+  cursor: default;
+  opacity: 0.5;
+}
+
+.context-menu-item:disabled:hover {
+  background: none;
+  color: var(--muted);
+}
+
+.context-menu-item.danger {
+  color: var(--danger);
+}
+
+.context-menu-item.danger:hover {
+  background: var(--danger);
+  color: var(--bg);
+}
+
+.context-menu-shortcut {
+  color: var(--muted);
+  font-size: 11px;
+  margin-left: 24px;
+}
+
+.context-menu-item:hover:not(:disabled) .context-menu-shortcut {
+  color: inherit;
+  opacity: 0.7;
+}
+
+.context-menu-divider {
+  height: 1px;
+  margin: 4px 8px;
+  background: var(--border);
+}
