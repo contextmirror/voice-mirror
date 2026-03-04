@@ -1863,6 +1863,63 @@ impl LspManager {
         Ok(out)
     }
 
+    /// Request on-type formatting after a trigger character is typed.
+    ///
+    /// Returns text edits to apply when the user types a trigger character
+    /// like `}`, `;`, or `\n`. The server decides which characters trigger
+    /// formatting via its capabilities.
+    pub async fn request_on_type_formatting(
+        &mut self,
+        uri: &str,
+        lang_id: &str,
+        line: u32,
+        character: u32,
+        trigger_char: &str,
+        tab_size: u32,
+        insert_spaces: bool,
+        project_root: &str,
+    ) -> Result<Value, String> {
+        let server = self
+            .servers
+            .get_mut(&server_key(lang_id, project_root))
+            .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
+
+        let params = serde_json::json!({
+            "textDocument": { "uri": uri },
+            "position": { "line": line, "character": character },
+            "ch": trigger_char,
+            "options": {
+                "tabSize": tab_size,
+                "insertSpaces": insert_spaces
+            }
+        });
+
+        let rx = client::send_request(
+            &mut *server.stdin.lock().await,
+            &server.pending_requests,
+            "textDocument/onTypeFormatting",
+            params,
+            &server.next_id,
+        )
+        .await?;
+
+        let response = tokio::time::timeout(std::time::Duration::from_secs(10), rx)
+            .await
+            .map_err(|_| "On-type formatting request timed out".to_string())?
+            .map_err(|_| "On-type formatting response channel closed".to_string())?;
+
+        let result = response.get("result").cloned().unwrap_or(Value::Null);
+
+        // Result is TextEdit[] or null
+        let edits = if result.is_array() {
+            result
+        } else {
+            Value::Array(vec![])
+        };
+
+        Ok(serde_json::json!({ "edits": edits }))
+    }
+
     /// Scan the project directory for files matching the server's extensions
     /// and send `textDocument/didOpen` for each, enabling project-wide diagnostics.
     ///

@@ -490,6 +490,7 @@ pub fn run() {
             lsp_cmds::lsp_rename,
             lsp_cmds::lsp_request_formatting,
             lsp_cmds::lsp_request_range_formatting,
+            lsp_cmds::lsp_request_on_type_formatting,
             lsp_cmds::lsp_request_linked_editing_range,
             lsp_cmds::lsp_apply_workspace_edit,
             lsp_cmds::lsp_scan_project,
