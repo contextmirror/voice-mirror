@@ -318,6 +318,7 @@ describe('api.js -- exported async functions', () => {
     'lspGetStatus',
     'lspRequestDocumentSymbols',
     'lspRequestReferences',
+    'lspRequestDocumentHighlight',
     'lspRequestCodeActions',
     'lspPrepareRename',
     'lspRename',

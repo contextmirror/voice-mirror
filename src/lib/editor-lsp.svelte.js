@@ -5,7 +5,7 @@
  * event listeners, handlers, and CodeMirror extension factories for the file editor.
  */
 
-import { lspOpenFile, lspCloseFile, lspChangeFile, lspSaveFile, lspRequestCompletion, lspRequestHover, lspRequestDefinition, lspRequestReferences, lspPrepareRename, lspRename, lspApplyWorkspaceEdit, lspRequestCodeActions, lspRequestFormatting, lspRequestSignatureHelp } from './api.js';
+import { lspOpenFile, lspCloseFile, lspChangeFile, lspSaveFile, lspRequestCompletion, lspRequestHover, lspRequestDefinition, lspRequestReferences, lspRequestDocumentHighlight, lspPrepareRename, lspRename, lspApplyWorkspaceEdit, lspRequestCodeActions, lspRequestFormatting, lspRequestSignatureHelp } from './api.js';
 import { projectStore } from './stores/project.svelte.js';
 import { tabsStore } from './stores/tabs.svelte.js';
 import { basename } from './utils.js';
@@ -360,6 +360,89 @@ export function createEditorLsp() {
     });
   }
 
+  /**
+   * CodeMirror ViewPlugin that highlights all occurrences of the symbol under
+   * the cursor via LSP textDocument/documentHighlight.
+   *
+   * On cursor position change (debounced 150ms), requests highlights from the
+   * server and applies Decoration.mark with class 'cm-lsp-highlight'.
+   *
+   * @param {string} currentPath - current file path for the editor
+   * @param {typeof import('@codemirror/view')} cmView - CodeMirror view module
+   * @param {typeof import('@codemirror/state')} cmState - CodeMirror state module
+   * @returns {import('@codemirror/state').Extension} CM extension
+   */
+  function documentHighlightExtension(currentPath, cmView, cmState) {
+    const { ViewPlugin, Decoration } = cmView;
+    const { RangeSet } = cmState;
+
+    return ViewPlugin.fromClass(class {
+      constructor(view) {
+        this.decorations = RangeSet.empty;
+        this._timer = null;
+        this._reqId = 0;
+      }
+
+      update(update) {
+        if (!update.selectionSet && !update.docChanged) return;
+        // Clear existing highlights immediately on cursor move
+        this.decorations = RangeSet.empty;
+
+        clearTimeout(this._timer);
+        if (!hasLsp || !currentPath) return;
+
+        const reqId = ++this._reqId;
+        this._timer = setTimeout(() => {
+          this._requestHighlights(update.view, reqId);
+        }, 150);
+      }
+
+      async _requestHighlights(view, reqId) {
+        try {
+          const pos = view.state.selection.main.head;
+          const lineInfo = view.state.doc.lineAt(pos);
+          const line = lineInfo.number - 1;
+          const character = pos - lineInfo.from;
+          const root = projectStore.root;
+
+          const result = await lspRequestDocumentHighlight(currentPath, line, character, root);
+          // Check if a newer request has been made since
+          if (reqId !== this._reqId) return;
+
+          if (!result?.data?.highlights?.length) {
+            this.decorations = RangeSet.empty;
+            view.requestMeasure();
+            return;
+          }
+
+          const doc = view.state.doc;
+          const marks = [];
+          for (const h of result.data.highlights) {
+            const from = lspPositionToOffset(doc, h.range.start);
+            const to = lspPositionToOffset(doc, h.range.end);
+            if (from < to && to <= doc.length) {
+              marks.push(
+                Decoration.mark({ class: 'cm-lsp-highlight' }).range(from, to)
+              );
+            }
+          }
+          // RangeSet.of requires sorted ranges
+          marks.sort((a, b) => a.from - b.from || a.to - b.to);
+          this.decorations = RangeSet.of(marks);
+          view.requestMeasure();
+        } catch {
+          // Silently ignore — highlight is best-effort
+        }
+      }
+
+      destroy() {
+        clearTimeout(this._timer);
+      }
+    }, {
+      decorations: v => v.decorations,
+    });
+  }
+
   function diagnosticListener(currentPath, getView, cmCache) {
     return (event) => {
       const { uri, diagnostics: lspDiags } = event.payload;
@@ -448,6 +531,7 @@ export function createEditorLsp() {
     // CodeMirror extension factories
     completionSource,
     hoverTooltipExtension,
+    documentHighlightExtension,
     diagnosticListener,
 
     // Lifecycle

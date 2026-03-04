@@ -1210,6 +1210,62 @@ impl LspManager {
         Ok(serde_json::json!({ "locations": locations }))
     }
 
+    /// Request document highlights for a symbol at a position.
+    ///
+    /// Returns all occurrences of the symbol under the cursor in the same file,
+    /// with optional highlight kind (text=1, read=2, write=3).
+    pub async fn request_document_highlight(
+        &mut self,
+        uri: &str,
+        lang_id: &str,
+        line: u32,
+        character: u32,
+        project_root: &str,
+    ) -> Result<Value, String> {
+        let server = self
+            .servers
+            .get_mut(&server_key(lang_id, project_root))
+            .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
+
+        let params = serde_json::json!({
+            "textDocument": { "uri": uri },
+            "position": { "line": line, "character": character }
+        });
+
+        let rx = client::send_request(
+            &mut *server.stdin.lock().await,
+            &server.pending_requests,
+            "textDocument/documentHighlight",
+            params,
+            &server.next_id,
+        )
+        .await?;
+
+        let response = tokio::time::timeout(std::time::Duration::from_secs(5), rx)
+            .await
+            .map_err(|_| "Document highlight request timed out".to_string())?
+            .map_err(|_| "Document highlight response channel closed".to_string())?;
+
+        let result = response.get("result").cloned().unwrap_or(Value::Null);
+
+        // Result is DocumentHighlight[] | null
+        let highlights: Vec<Value> = if let Some(arr) = result.as_array() {
+            arr.iter()
+                .filter_map(|h| {
+                    let range = h.get("range")?;
+                    Some(serde_json::json!({
+                        "range": range,
+                        "kind": h.get("kind").and_then(|k| k.as_u64()).unwrap_or(1)
+                    }))
+                })
+                .collect()
+        } else {
+            vec![]
+        };
+
+        Ok(serde_json::json!({ "highlights": highlights }))
+    }
+
     /// Request code actions for a range in a file.
     pub async fn request_code_actions(
         &mut self,

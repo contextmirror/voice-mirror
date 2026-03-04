@@ -723,6 +723,10 @@ export async function lspRequestReferences(path, line, character, projectRoot) {
   return invoke('lsp_request_references', { path, line, character, projectRoot });
 }
 
+export async function lspRequestDocumentHighlight(path, line, character, projectRoot) {
+  return invoke('lsp_request_document_highlight', { path, line, character, projectRoot });
+}
+
 export async function lspRequestCodeActions(path, rangeStartLine, rangeStartChar, rangeEndLine, rangeEndChar, diagnostics, projectRoot) {
   return invoke('lsp_request_code_actions', { path, rangeStartLine, rangeStartChar, rangeEndLine, rangeEndChar, diagnostics, projectRoot });
 }
