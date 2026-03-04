@@ -1966,6 +1966,54 @@ impl LspManager {
         Ok(serde_json::json!({ "lenses": lenses }))
     }
 
+    /// Request semantic tokens for an entire document.
+    ///
+    /// Returns the raw `data` array of relative-encoded token data (groups of
+    /// 5 integers: deltaLine, deltaStartChar, length, tokenType, tokenModifiers).
+    /// The frontend is responsible for decoding and rendering these tokens.
+    pub async fn request_semantic_tokens_full(
+        &mut self,
+        uri: &str,
+        lang_id: &str,
+        project_root: &str,
+    ) -> Result<Value, String> {
+        let server = self
+            .servers
+            .get_mut(&server_key(lang_id, project_root))
+            .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
+
+        let params = serde_json::json!({
+            "textDocument": { "uri": uri }
+        });
+
+        let rx = client::send_request(
+            &mut *server.stdin.lock().await,
+            &server.pending_requests,
+            "textDocument/semanticTokens/full",
+            params,
+            &server.next_id,
+        )
+        .await?;
+
+        let response = tokio::time::timeout(std::time::Duration::from_secs(10), rx)
+            .await
+            .map_err(|_| "Semantic tokens request timed out".to_string())?
+            .map_err(|_| "Semantic tokens response channel closed".to_string())?;
+
+        let result = response.get("result").cloned().unwrap_or(Value::Null);
+
+        // Result is SemanticTokens { resultId?, data: number[] } or null
+        let data = if let Some(d) = result.get("data") {
+            d.clone()
+        } else {
+            Value::Array(vec![])
+        };
+
+        let result_id = result.get("resultId").cloned().unwrap_or(Value::Null);
+
+        Ok(serde_json::json!({ "data": data, "resultId": result_id }))
+    }
+
     /// Scan the project directory for files matching the server's extensions
     /// and send `textDocument/didOpen` for each, enabling project-wide diagnostics.
     ///
