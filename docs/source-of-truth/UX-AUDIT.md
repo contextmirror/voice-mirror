@@ -2,7 +2,7 @@
 
 > Internal doc. Comprehensive audit of interactive surfaces, context menus, keyboard shortcuts, status indicators, tab behaviors, editor micro-interactions, and drag-and-drop. Compared against VS Code and Zed.
 >
-> Last updated: 2026-02-28
+> Last updated: 2026-03-04
 
 ---
 
@@ -41,6 +41,20 @@ All 6 items from the second wave are done:
 | 4 | Ctrl+hover definition underline (ViewPlugin, Decoration.mark, cm-definition-hint CSS) | ✅ Done |
 | 5 | Ctrl+PageUp/PageDown tab cycling (prev/next with wrap-around) | ✅ Done |
 | 6 | Tab drag → split zones (custom MIME, DropZoneOverlay, 5-zone split) | ✅ Done |
+
+### Wave 3 — COMPLETED
+
+Context menu infrastructure and appearance customization:
+
+| # | Fix | Status |
+|---|-----|--------|
+| 1 | Context menu CSS consolidation (10 components → shared `context-menu.css`) | ✅ Done |
+| 2 | Context menu class name standardisation (`.context-item` → `.context-menu-item`) | ✅ Done |
+| 3 | Context menu z-index standardisation (all menus → 10000) | ✅ Done |
+| 4 | Context menu presets in Appearance settings (Default, Rounded, Compact, Flat) | ✅ Done |
+| 5 | Context menu live preview in settings | ✅ Done |
+| 6 | Context menu customize controls (border radius, item radius, padding, font size, shadow) | ✅ Done |
+| 7 | JSDoc type improvements — replaced 15 `@type {any}` with proper types | ✅ Done |
 
 ### Next Priorities
 
@@ -661,7 +675,7 @@ All P0 items completed (status bar done in prior work).
 | ~~15~~ | ~~Terminal tab strip drag reorder~~ | ~~Drag~~ | Removed (acceptable as-is) |
 | 16 | File path breadcrumbs | Status Bar | Medium |
 | 17 | Sidebar badge counts (git changes, errors) | Status Bar | Medium |
-| 18 | Diagnostics panel (unified error list) | Status Bar | Medium-Large | See `docs/implementation/LSP-CONFIG-GAPS.md` |
+| ~~18~~ | ~~Diagnostics panel (unified error list)~~ | ~~Status Bar~~ | ✅ Done (ProblemsPanel — see §2.4) |
 | 19 | Editor context menu: Toggle Comment, Format | Context Menus | Small |
 | 20 | Diff context menu: Revert Hunk | Context Menus | Medium |
 | 21 | File tree: Stage/Unstage/Discard on changes | Context Menus | Small |
@@ -701,3 +715,4 @@ All P0 items completed (status bar done in prior work).
 - **Zed reference repo:** Not cloned locally; comparisons based on published documentation and known features.
 - **Wave 2 closed 6 items** covering tab management (closed tab history, wheel scroll, tab cycling), editor navigation (back/forward, Ctrl+hover underline), and drag-and-drop (tab drag to split zones).
 - **Context menu gaps are mostly small scope.** Adding items to existing menus is straightforward once the pattern exists.
+- **Wave 3 consolidated context menu infrastructure.** All 10 context menu components now share `src/styles/context-menu.css` via `@import`, with CSS custom properties driven by presets. New "Context Menus" section in Appearance settings with 4 presets (Default, Rounded, Compact, Flat), live preview, and customizable overrides.
