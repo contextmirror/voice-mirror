@@ -70,7 +70,7 @@
     fontFamily = cfg.appearance?.fonts?.fontFamily || preset.fonts.fontFamily;
     fontMono = cfg.appearance?.fonts?.fontMono || preset.fonts.fontMono;
 
-    /** @type {any} */
+    /** @type {{ fontSize?: number, bubbleStyle?: string, padding?: number, avatarSize?: number, showAvatars?: boolean, aiAvatar?: string, userAvatar?: string, customAvatars?: Array<{id:string,url:string}> }} */
     const mc = cfg.appearance?.messageCard || {};
     fontSize = parseInt(mc.fontSize) || 14;
     bubbleStyle = mc.bubbleStyle || 'rounded';

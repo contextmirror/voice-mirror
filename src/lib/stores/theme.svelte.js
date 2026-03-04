@@ -206,7 +206,7 @@ export const PRESETS = {
  * @param {{ fontFamily, fontMono }} fonts
  * @returns {Object} Map of CSS property name -> value string
  */
-export function deriveTheme(colors, fonts = /** @type {any} */ ({})) {
+export function deriveTheme(colors, fonts = /** @type {{ fontFamily?: string, fontMono?: string }} */ ({})) {
   const c = colors;
   const f = fonts;
 
@@ -334,7 +334,7 @@ export function deriveTheme(colors, fonts = /** @type {any} */ ({})) {
  * @param {{ bg, bgElevated, text, textStrong, muted, accent, ok, warn, danger, orbCore }} colors
  * @param {{ fontFamily, fontMono }} fonts
  */
-export function applyTheme(colors, fonts = /** @type {any} */ ({})) {
+export function applyTheme(colors, fonts = /** @type {{ fontFamily?: string, fontMono?: string }} */ ({})) {
   const vars = deriveTheme(colors, fonts);
   const root = document.documentElement;
   for (const [prop, value] of Object.entries(vars)) {

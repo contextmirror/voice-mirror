@@ -381,7 +381,7 @@ function createDevServerManager() {
   async function stopExternalServer(port) {
     let killed = false;
     try {
-      /** @type {any} */
+      /** @type {{ success?: boolean, data?: { killed?: boolean }, error?: string }} */
       const result = await killPortProcess(port);
       if (result?.success && result?.data?.killed) {
         killed = true;

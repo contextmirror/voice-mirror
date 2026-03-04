@@ -227,7 +227,7 @@
     availableModels = [];
     try {
       const result = await apiListModels(providerType, baseUrl || undefined);
-      /** @type {any} */
+      /** @type {{ online?: boolean, models?: string[], default?: string }} */
       const data = unwrapResult(result) || {};
       if (data.online && data.models?.length > 0) {
         availableModels = data.models;

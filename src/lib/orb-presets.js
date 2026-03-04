@@ -32,7 +32,18 @@
 //   alpha: 0-1
 //   scale: 0-1 (relative to inner radius)
 
-/** @type {Record<string, any>} */
+/**
+ * @typedef {Object} OrbPreset
+ * @property {string} id
+ * @property {string} name
+ * @property {string} description
+ * @property {Record<string, ({rf:number,gf:number,bf:number,rAdd:number,gAdd:number,bAdd:number}|null)>} stateColors
+ * @property {Record<string, {duration:number,scaleAmt:number,waveform:string}>} animation
+ * @property {Object} render
+ * @property {Object} icons
+ */
+
+/** @type {Record<string, OrbPreset>} */
 export const ORB_PRESETS = {
   classic: {
     id: 'classic',

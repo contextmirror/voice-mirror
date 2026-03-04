@@ -2,7 +2,7 @@
  * api.js -- Wrapper around Tauri invoke for IPC with the Rust backend.
  *
  * Mirrors the Voice Mirror IPC pattern: grouped commands returning
- * { success: boolean, data?: any, error?: string }
+ * { success: boolean, data?: unknown, error?: string }
  *
  * Every Rust #[tauri::command] should have a corresponding wrapper here
  * so that frontend code never calls invoke() directly.

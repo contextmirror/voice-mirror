@@ -6,7 +6,7 @@
     visible = false,
     /** @type {(e?: MouseEvent) => void} */
     onClose = () => {},
-    /** @type {(ref: any) => void} */
+    /** @type {(ref: { uri: string, range: { start: { line: number, character: number }, end: { line: number, character: number } } }) => void} */
     onNavigate = (_ref) => {},
   } = $props();
 </script>

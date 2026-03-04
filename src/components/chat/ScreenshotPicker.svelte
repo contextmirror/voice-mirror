@@ -11,7 +11,7 @@
   import { lensStore } from '../../lib/stores/lens.svelte.js';
   import { unwrapResult } from '../../lib/utils.js';
 
-  /** @type {{ onCapture?: (path: string, dataUrl?: string|null) => void, onClose?: () => void, browserSnapshot?: any }} */
+  /** @type {{ onCapture?: (path: string, dataUrl?: string|null) => void, onClose?: () => void, browserSnapshot?: string|null }} */
   let {
     onCapture = () => {},
     onClose = () => {},

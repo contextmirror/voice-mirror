@@ -24,7 +24,7 @@
       : ''
   );
 
-  /** @type {any} */
+  /** @type {{ showAvatars?: boolean, aiAvatar?: string, userAvatar?: string, customAvatars?: Array<{id:string,url:string}> }} */
   const mc = $derived(configStore.value?.appearance?.messageCard || {});
   const customAvatars = $derived(mc.customAvatars || []);
   const aiAvatar = $derived(resolveAvatar(mc.aiAvatar, customAvatars, 'ai'));
