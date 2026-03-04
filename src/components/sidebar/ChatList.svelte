@@ -559,35 +559,22 @@
   }
 
   /* ========== Context Menu ========== */
+  @import '../../styles/context-menu.css';
+
   .context-menu {
-    position: fixed;
-    z-index: 10000;
-    background: var(--bg-elevated);
-    border: 1px solid var(--border);
     border-radius: var(--radius-md);
-    padding: 4px 0;
-    min-width: 140px;
     box-shadow: var(--shadow-md);
   }
 
   .context-menu-item {
-    display: flex;
-    align-items: center;
     gap: 8px;
-    width: 100%;
-    padding: 6px 12px;
-    background: none;
-    border: none;
-    color: var(--text);
     font-size: 13px;
-    font-family: var(--font-family);
-    cursor: pointer;
-    text-align: left;
     transition: background var(--duration-fast) var(--ease-out);
   }
 
   .context-menu-item:hover {
     background: var(--bg-hover);
+    color: var(--text);
   }
 
   .context-menu-item.danger:hover {
