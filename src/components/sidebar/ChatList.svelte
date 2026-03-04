@@ -418,6 +418,8 @@
 {/if}
 
 <style>
+  @import '../../styles/context-menu.css';
+
   /* ========== Chat List Container ========== */
   .chat-list-container {
     display: flex;
@@ -559,7 +561,6 @@
   }
 
   /* ========== Context Menu ========== */
-  @import '../../styles/context-menu.css';
 
   .context-menu {
     border-radius: var(--radius-md);

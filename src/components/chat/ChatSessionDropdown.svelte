@@ -519,6 +519,8 @@
 </div>
 
 <style>
+  @import '../../styles/context-menu.css';
+
   .session-dropdown {
     position: relative;
     flex-shrink: 0;
@@ -740,7 +742,6 @@
   }
 
   /* Context menu */
-  @import '../../styles/context-menu.css';
 
   .context-menu {
     min-width: 120px;

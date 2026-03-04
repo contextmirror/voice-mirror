@@ -1,5 +1,6 @@
 <script>
   import { browserTabsStore } from '../../lib/stores/browser-tabs.svelte.js';
+  import { lensReload, lensHardRefresh } from '../../lib/api.js';
 
   let { onNewTab } = $props();
 
@@ -19,6 +20,21 @@
     contextMenu = { visible: false, x: 0, y: 0, tabId: null };
   }
 
+  function handleContextReload() {
+    closeContextMenu();
+    lensReload();
+  }
+
+  function handleContextHardRefresh() {
+    closeContextMenu();
+    lensHardRefresh();
+  }
+
+  function handleContextNewTab() {
+    closeContextMenu();
+    onNewTab?.();
+  }
+
   function handleContextClose() {
     const id = contextMenu.tabId;
     closeContextMenu();
@@ -36,15 +52,20 @@
   }
 </script>
 
-<div class="browser-tab-bar">
+<div class="browser-tab-bar" role="tablist">
   {#each browserTabsStore.tabs as tab (tab.id)}
-    <button
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div
       class="browser-tab"
       class:active={tab.id === browserTabsStore.activeTabId}
       class:loading={tab.loading}
       onclick={() => browserTabsStore.switchTab(tab.id)}
+      onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') browserTabsStore.switchTab(tab.id); }}
       oncontextmenu={(e) => handleContextMenu(e, tab.id)}
       title={tab.url || tab.title}
+      role="tab"
+      tabindex="0"
+      aria-selected={tab.id === browserTabsStore.activeTabId}
     >
       <span class="browser-tab-title">{truncate(tab.title)}</span>
       {#if browserTabsStore.tabs.length > 1}
@@ -58,7 +79,7 @@
           </svg>
         </button>
       {/if}
-    </button>
+    </div>
   {/each}
   {#if browserTabsStore.canAddTab}
     <button
@@ -78,6 +99,16 @@
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="context-backdrop" onclick={closeContextMenu} oncontextmenu={(e) => { e.preventDefault(); closeContextMenu(); }}></div>
   <div class="context-menu" style="left: {contextMenu.x}px; top: {contextMenu.y}px;">
+    <button class="context-menu-item" onclick={handleContextReload}>
+      Reload
+    </button>
+    <button class="context-menu-item" onclick={handleContextHardRefresh}>
+      Hard Refresh
+    </button>
+    <div class="context-menu-divider"></div>
+    <button class="context-menu-item" onclick={handleContextNewTab}>
+      New Tab
+    </button>
     <button class="context-menu-item" onclick={handleContextClose}>
       Close Tab
     </button>

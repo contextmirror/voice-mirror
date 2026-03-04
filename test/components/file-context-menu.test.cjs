@@ -111,6 +111,24 @@ describe('FileContextMenu.svelte -- file menu items', () => {
     assert.ok(src.includes('handleOpen'), 'Should have Open handler');
   });
 
+  it('has Open to the Side action', () => {
+    assert.ok(src.includes('handleOpenToSide'), 'Should have Open to the Side handler');
+    assert.ok(src.includes('Open to the Side'), 'Should show Open to the Side text');
+  });
+
+  it('has onOpenToSide callback prop', () => {
+    assert.ok(src.includes('onOpenToSide'), 'Should have onOpenToSide callback');
+  });
+
+  it('has Open in Terminal action', () => {
+    assert.ok(src.includes('handleOpenInTerminal'), 'Should have Open in Terminal handler');
+    assert.ok(src.includes('Open in Terminal'), 'Should show Open in Terminal text');
+  });
+
+  it('imports terminalTabsStore for Open in Terminal', () => {
+    assert.ok(src.includes('terminalTabsStore'), 'Should import terminalTabsStore');
+  });
+
   it('has Open Diff action', () => {
     assert.ok(src.includes('handleOpenDiff'), 'Should have Open Diff handler');
   });

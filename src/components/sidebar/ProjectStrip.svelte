@@ -83,6 +83,8 @@
 {/if}
 
 <style>
+  @import '../../styles/context-menu.css';
+
   .project-strip {
     width: 48px;
     display: flex;
@@ -171,7 +173,6 @@
   }
 
   /* Context Menu */
-  @import '../../styles/context-menu.css';
 
   .context-menu {
     border-radius: var(--radius-md);

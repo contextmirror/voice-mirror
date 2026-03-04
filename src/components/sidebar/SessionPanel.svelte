@@ -339,6 +339,8 @@
 {/if}
 
 <style>
+  @import '../../styles/context-menu.css';
+
   .session-panel {
     flex: 1;
     display: flex;
@@ -461,7 +463,6 @@
   }
 
   /* ========== Context Menu ========== */
-  @import '../../styles/context-menu.css';
 
   .context-menu {
     min-width: 120px;

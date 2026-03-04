@@ -833,6 +833,8 @@
 </div>
 
 <style>
+  @import '../../styles/context-menu.css';
+
   .terminal-tabs-container {
     display: flex;
     flex-direction: column;
@@ -1005,7 +1007,6 @@
   }
 
   /* -- Context menu -- */
-  @import '../../styles/context-menu.css';
 
   .context-menu {
     padding: 4px;

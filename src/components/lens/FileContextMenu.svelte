@@ -2,6 +2,7 @@
   import { createFile, createDirectory, renameEntry, deleteEntry, revealInExplorer } from '../../lib/api.js';
   import { projectStore } from '../../lib/stores/project.svelte.js';
   import { toastStore } from '../../lib/stores/toast.svelte.js';
+  import { terminalTabsStore } from '../../lib/stores/terminal-tabs.svelte.js';
   import { basename, copyFullPath, copyRelativePath } from '../../lib/utils.js';
   import { clampToViewport } from '$lib/clamp-to-viewport.js';
   import { setupClickOutside } from '$lib/popup-utils.js';
@@ -17,6 +18,7 @@
     onClose = () => {},
     onAction = () => {},
     onOpenFile = () => {},
+    onOpenToSide = () => {},
     onOpenDiff = () => {},
     onRename = () => {},
     onNewFile = () => {},
@@ -52,6 +54,25 @@
   async function handleOpen() {
     close();
     if (entry) onOpenFile(entry);
+  }
+
+  async function handleOpenToSide() {
+    close();
+    if (entry) onOpenToSide(entry);
+  }
+
+  async function handleOpenInTerminal() {
+    close();
+    if (!entry) return;
+    const root = projectStore.root;
+    if (!root) return;
+    // For folders, use the folder path; for files, extract parent directory
+    // entry.path is relative with forward slashes (e.g. "src/lib/api.js" or "CHANGELOG.md")
+    let rel = isFolder ? entry.path : entry.path.replace(/\/[^/]+$/, '');
+    // Root-level files have no "/" so rel === entry.path — treat as project root
+    if (!isFolder && rel === entry.path) rel = '';
+    const cwd = rel ? `${root}/${rel}` : root;
+    terminalTabsStore.addTerminalTab({ cwd });
   }
 
   async function handleOpenDiff() {
@@ -149,6 +170,7 @@
       <!-- Folder context menu -->
       <button class="context-menu-item" onclick={handleNewFile} role="menuitem">New File...</button>
       <button class="context-menu-item" onclick={handleNewFolder} role="menuitem">New Folder...</button>
+      <button class="context-menu-item" onclick={handleOpenInTerminal} role="menuitem">Open in Terminal</button>
       <div class="context-menu-divider"></div>
       <button class="context-menu-item" onclick={handleRenameAction} role="menuitem">
         Rename
@@ -169,9 +191,11 @@
     {:else}
       <!-- File context menu -->
       <button class="context-menu-item" onclick={handleOpen} role="menuitem">Open</button>
+      <button class="context-menu-item" onclick={handleOpenToSide} role="menuitem">Open to the Side</button>
       {#if hasGitChange}
         <button class="context-menu-item" onclick={handleOpenDiff} role="menuitem">Open Diff</button>
       {/if}
+      <button class="context-menu-item" onclick={handleOpenInTerminal} role="menuitem">Open in Terminal</button>
       <div class="context-menu-divider"></div>
       <button class="context-menu-item" onclick={handleNewFile} role="menuitem">New File...</button>
       <button class="context-menu-item" onclick={handleNewFolder} role="menuitem">New Folder...</button>

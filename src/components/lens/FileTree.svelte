@@ -15,7 +15,7 @@
   import { toastStore } from '../../lib/stores/toast.svelte.js';
   import { basename } from '../../lib/utils.js';
 
-  let { onFileClick = () => {}, onFileDblClick = () => {}, onChangeClick = () => {}, onChangeDblClick = () => {}, activeFilePath = null, activeDiffPath = null, activeFileHasLsp = false, onSymbolClick = () => {} } = $props();
+  let { onFileClick = () => {}, onFileDblClick = () => {}, onOpenToSide = () => {}, onChangeClick = () => {}, onChangeDblClick = () => {}, activeFilePath = null, activeDiffPath = null, activeFileHasLsp = false, onSymbolClick = () => {} } = $props();
 
   // State
   let activeTab = $state('files');
@@ -833,6 +833,7 @@
   onClose={closeContextMenu}
   onAction={handleContextAction}
   onOpenFile={(entry) => onFileClick(entry)}
+  onOpenToSide={(entry) => onOpenToSide(entry)}
   onOpenDiff={(change) => onChangeClick(change)}
   onRename={(entry) => startRename(entry)}
   onNewFile={(entry) => startNewFile(entry)}
