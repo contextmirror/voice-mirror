@@ -864,6 +864,40 @@ impl LspManager {
         .await
     }
 
+    /// Notify the server of incremental document changes.
+    ///
+    /// Unlike `change_document` which sends the full file content,
+    /// this method sends an array of incremental text edits (each with
+    /// a range and replacement text). This is more efficient for small
+    /// edits in large files when the server supports incremental sync.
+    ///
+    /// Each entry in `changes` should be a JSON object with:
+    /// - `range`: `{ start: { line, character }, end: { line, character } }`
+    /// - `text`: the replacement string
+    pub async fn change_document_incremental(
+        &mut self,
+        uri: &str,
+        lang_id: &str,
+        version: i32,
+        changes: Vec<serde_json::Value>,
+        project_root: &str,
+    ) -> Result<(), String> {
+        let server = self
+            .servers
+            .get_mut(&server_key(lang_id, project_root))
+            .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
+
+        client::send_notification(
+            &mut *server.stdin.lock().await,
+            "textDocument/didChange",
+            serde_json::json!({
+                "textDocument": { "uri": uri, "version": version },
+                "contentChanges": changes
+            }),
+        )
+        .await
+    }
+
     /// Notify the server that a document was saved.
     pub async fn save_document(
         &mut self,
