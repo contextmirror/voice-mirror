@@ -144,53 +144,53 @@
 {#if visible && tab}
   <div class="context-menu" style={menuStyle} bind:this={menuEl} role="menu">
     <!-- File tab actions -->
-    <button class="context-item" onclick={handleClose} role="menuitem">
+    <button class="context-menu-item" onclick={handleClose} role="menuitem">
       Close
-      <span class="context-shortcut">Ctrl+W</span>
+      <span class="context-menu-shortcut">Ctrl+W</span>
     </button>
-    <button class="context-item" onclick={handleCloseOthers} role="menuitem" disabled={!hasOtherTabs}>
+    <button class="context-menu-item" onclick={handleCloseOthers} role="menuitem" disabled={!hasOtherTabs}>
       Close Others
     </button>
-    <button class="context-item" onclick={handleCloseToRight} role="menuitem" disabled={!hasTabsToRight}>
+    <button class="context-menu-item" onclick={handleCloseToRight} role="menuitem" disabled={!hasTabsToRight}>
       Close to the Right
     </button>
-    <button class="context-item" onclick={handleCloseAll} role="menuitem">
+    <button class="context-menu-item" onclick={handleCloseAll} role="menuitem">
       Close All
     </button>
-    <button class="context-item" onclick={handleReopenClosed} role="menuitem" disabled={!tabsStore.canReopenTab}>
+    <button class="context-menu-item" onclick={handleReopenClosed} role="menuitem" disabled={!tabsStore.canReopenTab}>
       Reopen Closed Editor
-      <span class="context-shortcut">Ctrl+Shift+T</span>
+      <span class="context-menu-shortcut">Ctrl+Shift+T</span>
     </button>
 
-    <div class="context-separator"></div>
-    <button class="context-item" onclick={handleRename} role="menuitem">
+    <div class="context-menu-divider"></div>
+    <button class="context-menu-item" onclick={handleRename} role="menuitem">
       Rename
-      <span class="context-shortcut">F2</span>
+      <span class="context-menu-shortcut">F2</span>
     </button>
 
-    <div class="context-separator"></div>
-    <button class="context-item" onclick={handleSplitRight} role="menuitem">
+    <div class="context-menu-divider"></div>
+    <button class="context-menu-item" onclick={handleSplitRight} role="menuitem">
       Split Right
-      <span class="context-shortcut">Ctrl+\</span>
+      <span class="context-menu-shortcut">Ctrl+\</span>
     </button>
-    <button class="context-item" onclick={handleSplitDown} role="menuitem">
+    <button class="context-menu-item" onclick={handleSplitDown} role="menuitem">
       Split Down
     </button>
-    <button class="context-item" onclick={handleOpenToSide} role="menuitem">
+    <button class="context-menu-item" onclick={handleOpenToSide} role="menuitem">
       Open to the Side
-      <span class="context-shortcut">Ctrl+Enter</span>
+      <span class="context-menu-shortcut">Ctrl+Enter</span>
     </button>
 
     {#if hasPath}
-      <div class="context-separator"></div>
-      <button class="context-item" onclick={handleCopyPath} role="menuitem">
+      <div class="context-menu-divider"></div>
+      <button class="context-menu-item" onclick={handleCopyPath} role="menuitem">
         Copy Path
       </button>
-      <button class="context-item" onclick={handleCopyRelativePath} role="menuitem">
+      <button class="context-menu-item" onclick={handleCopyRelativePath} role="menuitem">
         Copy Relative Path
       </button>
-      <div class="context-separator"></div>
-      <button class="context-item" onclick={handleReveal} role="menuitem">
+      <div class="context-menu-divider"></div>
+      <button class="context-menu-item" onclick={handleReveal} role="menuitem">
         Reveal in File Explorer
       </button>
     {/if}
@@ -198,61 +198,17 @@
 {/if}
 
 <style>
+  @import '../../styles/context-menu.css';
+
+  /* TabContextMenu overrides */
   .context-menu {
-    position: fixed;
-    z-index: 10002;
     min-width: 200px;
     max-width: 280px;
-    background: var(--bg-elevated);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 4px 0;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
     -webkit-app-region: no-drag;
-    font-family: var(--font-family);
   }
 
-  .context-item {
-    display: flex;
-    align-items: center;
+  .context-menu-item {
     justify-content: space-between;
-    width: 100%;
-    padding: 6px 12px;
-    border: none;
-    background: transparent;
-    color: var(--text);
-    font-size: 12px;
-    cursor: pointer;
-    text-align: left;
-    font-family: inherit;
     -webkit-app-region: no-drag;
-  }
-
-  .context-item:hover:not(:disabled) {
-    background: var(--accent);
-    color: var(--bg);
-  }
-
-  .context-item:disabled {
-    color: var(--muted);
-    cursor: default;
-    opacity: 0.5;
-  }
-
-  .context-shortcut {
-    color: var(--muted);
-    font-size: 11px;
-    margin-left: 24px;
-  }
-
-  .context-item:hover:not(:disabled) .context-shortcut {
-    color: inherit;
-    opacity: 0.7;
-  }
-
-  .context-separator {
-    height: 1px;
-    margin: 4px 8px;
-    background: var(--border);
   }
 </style>
