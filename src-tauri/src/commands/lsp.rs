@@ -307,6 +307,99 @@ pub async fn lsp_request_definition(
     }
 }
 
+/// Request go-to-type-definition at a position in a file.
+#[tauri::command]
+pub async fn lsp_request_type_definition(
+    path: String,
+    line: u32,
+    character: u32,
+    project_root: String,
+    state: State<'_, LspManagerState>,
+) -> Result<IpcResponse, ()> {
+    let ext = match extension_from_path(&path) {
+        Some(e) => e,
+        None => return Ok(IpcResponse::err("Could not determine file extension")),
+    };
+
+    let lang_id = match detection::language_id_for_extension(&ext) {
+        Some(id) => id.to_string(),
+        None => return Ok(IpcResponse::err(format!("No LSP support for .{} files", ext))),
+    };
+
+    let uri = types::file_uri(&path, &project_root);
+
+    let mut manager = state.0.lock().await;
+    match manager
+        .request_type_definition(&uri, &lang_id, line, character, &project_root)
+        .await
+    {
+        Ok(result) => Ok(IpcResponse::ok(result)),
+        Err(e) => Ok(IpcResponse::err(e)),
+    }
+}
+
+/// Request go-to-declaration at a position in a file.
+#[tauri::command]
+pub async fn lsp_request_declaration(
+    path: String,
+    line: u32,
+    character: u32,
+    project_root: String,
+    state: State<'_, LspManagerState>,
+) -> Result<IpcResponse, ()> {
+    let ext = match extension_from_path(&path) {
+        Some(e) => e,
+        None => return Ok(IpcResponse::err("Could not determine file extension")),
+    };
+
+    let lang_id = match detection::language_id_for_extension(&ext) {
+        Some(id) => id.to_string(),
+        None => return Ok(IpcResponse::err(format!("No LSP support for .{} files", ext))),
+    };
+
+    let uri = types::file_uri(&path, &project_root);
+
+    let mut manager = state.0.lock().await;
+    match manager
+        .request_declaration(&uri, &lang_id, line, character, &project_root)
+        .await
+    {
+        Ok(result) => Ok(IpcResponse::ok(result)),
+        Err(e) => Ok(IpcResponse::err(e)),
+    }
+}
+
+/// Request go-to-implementation at a position in a file.
+#[tauri::command]
+pub async fn lsp_request_implementation(
+    path: String,
+    line: u32,
+    character: u32,
+    project_root: String,
+    state: State<'_, LspManagerState>,
+) -> Result<IpcResponse, ()> {
+    let ext = match extension_from_path(&path) {
+        Some(e) => e,
+        None => return Ok(IpcResponse::err("Could not determine file extension")),
+    };
+
+    let lang_id = match detection::language_id_for_extension(&ext) {
+        Some(id) => id.to_string(),
+        None => return Ok(IpcResponse::err(format!("No LSP support for .{} files", ext))),
+    };
+
+    let uri = types::file_uri(&path, &project_root);
+
+    let mut manager = state.0.lock().await;
+    match manager
+        .request_implementation(&uri, &lang_id, line, character, &project_root)
+        .await
+    {
+        Ok(result) => Ok(IpcResponse::ok(result)),
+        Err(e) => Ok(IpcResponse::err(e)),
+    }
+}
+
 /// Request document symbols (outline) for a file.
 #[tauri::command]
 pub async fn lsp_request_document_symbols(

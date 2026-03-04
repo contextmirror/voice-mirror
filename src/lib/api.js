@@ -711,6 +711,18 @@ export async function lspRequestDefinition(path, line, character, projectRoot) {
   return invoke('lsp_request_definition', { path, line, character, projectRoot });
 }
 
+export async function lspRequestTypeDefinition(path, line, character, projectRoot) {
+  return invoke('lsp_request_type_definition', { path, line, character, projectRoot });
+}
+
+export async function lspRequestDeclaration(path, line, character, projectRoot) {
+  return invoke('lsp_request_declaration', { path, line, character, projectRoot });
+}
+
+export async function lspRequestImplementation(path, line, character, projectRoot) {
+  return invoke('lsp_request_implementation', { path, line, character, projectRoot });
+}
+
 export async function lspGetStatus() {
   return invoke('lsp_get_status');
 }

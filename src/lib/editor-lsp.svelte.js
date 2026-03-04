@@ -5,7 +5,7 @@
  * event listeners, handlers, and CodeMirror extension factories for the file editor.
  */
 
-import { lspOpenFile, lspCloseFile, lspChangeFile, lspSaveFile, lspRequestCompletion, lspRequestHover, lspRequestDefinition, lspRequestReferences, lspRequestDocumentHighlight, lspRequestInlayHints, lspPrepareRename, lspRename, lspApplyWorkspaceEdit, lspRequestCodeActions, lspRequestFormatting, lspRequestRangeFormatting, lspRequestSignatureHelp } from './api.js';
+import { lspOpenFile, lspCloseFile, lspChangeFile, lspSaveFile, lspRequestCompletion, lspRequestHover, lspRequestDefinition, lspRequestTypeDefinition, lspRequestDeclaration, lspRequestImplementation, lspRequestReferences, lspRequestDocumentHighlight, lspRequestInlayHints, lspPrepareRename, lspRename, lspApplyWorkspaceEdit, lspRequestCodeActions, lspRequestFormatting, lspRequestRangeFormatting, lspRequestSignatureHelp } from './api.js';
 import { projectStore } from './stores/project.svelte.js';
 import { tabsStore } from './stores/tabs.svelte.js';
 import { basename } from './utils.js';
@@ -125,6 +125,90 @@ export function createEditorLsp() {
 
     try {
       const result = await lspRequestDefinition(currentPath, line, character, root);
+      if (!result?.data?.locations?.length) return;
+      const loc = result.data.locations[0];
+      const rootStr = projectStore.root || '';
+      const resolved = uriToRelativePath(loc.uri, rootStr);
+      if (!resolved) return;
+      if (resolved.path === currentPath && !resolved.external) {
+        const targetLine = view.state.doc.line(loc.range.start.line + 1);
+        view.dispatch({
+          selection: { anchor: targetLine.from + loc.range.start.character },
+          scrollIntoView: true,
+        });
+      } else {
+        const fileName = basename(resolved.path);
+        tabsStore.openFile({ name: fileName, path: resolved.path, readOnly: resolved.external, external: resolved.external });
+      }
+    } catch {}
+  }
+
+  async function handleGoToTypeDefinition(view, pos) {
+    if (!view || !hasLsp) return;
+    const lineInfo = view.state.doc.lineAt(pos);
+    const line = lineInfo.number - 1;
+    const character = pos - lineInfo.from;
+    const root = projectStore.root;
+    const currentPath = view._lspPath;
+
+    try {
+      const result = await lspRequestTypeDefinition(currentPath, line, character, root);
+      if (!result?.data?.locations?.length) return;
+      const loc = result.data.locations[0];
+      const rootStr = projectStore.root || '';
+      const resolved = uriToRelativePath(loc.uri, rootStr);
+      if (!resolved) return;
+      if (resolved.path === currentPath && !resolved.external) {
+        const targetLine = view.state.doc.line(loc.range.start.line + 1);
+        view.dispatch({
+          selection: { anchor: targetLine.from + loc.range.start.character },
+          scrollIntoView: true,
+        });
+      } else {
+        const fileName = basename(resolved.path);
+        tabsStore.openFile({ name: fileName, path: resolved.path, readOnly: resolved.external, external: resolved.external });
+      }
+    } catch {}
+  }
+
+  async function handleGoToDeclaration(view, pos) {
+    if (!view || !hasLsp) return;
+    const lineInfo = view.state.doc.lineAt(pos);
+    const line = lineInfo.number - 1;
+    const character = pos - lineInfo.from;
+    const root = projectStore.root;
+    const currentPath = view._lspPath;
+
+    try {
+      const result = await lspRequestDeclaration(currentPath, line, character, root);
+      if (!result?.data?.locations?.length) return;
+      const loc = result.data.locations[0];
+      const rootStr = projectStore.root || '';
+      const resolved = uriToRelativePath(loc.uri, rootStr);
+      if (!resolved) return;
+      if (resolved.path === currentPath && !resolved.external) {
+        const targetLine = view.state.doc.line(loc.range.start.line + 1);
+        view.dispatch({
+          selection: { anchor: targetLine.from + loc.range.start.character },
+          scrollIntoView: true,
+        });
+      } else {
+        const fileName = basename(resolved.path);
+        tabsStore.openFile({ name: fileName, path: resolved.path, readOnly: resolved.external, external: resolved.external });
+      }
+    } catch {}
+  }
+
+  async function handleGoToImplementation(view, pos) {
+    if (!view || !hasLsp) return;
+    const lineInfo = view.state.doc.lineAt(pos);
+    const line = lineInfo.number - 1;
+    const character = pos - lineInfo.from;
+    const root = projectStore.root;
+    const currentPath = view._lspPath;
+
+    try {
+      const result = await lspRequestImplementation(currentPath, line, character, root);
       if (!result?.data?.locations?.length) return;
       const loc = result.data.locations[0];
       const rootStr = projectStore.root || '';
@@ -675,6 +759,9 @@ export function createEditorLsp() {
     changeFile,
     saveFile,
     handleGoToDefinition,
+    handleGoToTypeDefinition,
+    handleGoToDeclaration,
+    handleGoToImplementation,
     handleFindReferences,
     handleRenameSymbol,
     executeRename,

@@ -1122,6 +1122,165 @@ impl LspManager {
         Ok(serde_json::json!({ "locations": locations }))
     }
 
+    /// Request go-to-type-definition at a position.
+    pub async fn request_type_definition(
+        &mut self,
+        uri: &str,
+        lang_id: &str,
+        line: u32,
+        character: u32,
+        project_root: &str,
+    ) -> Result<Value, String> {
+        let server = self
+            .servers
+            .get_mut(&server_key(lang_id, project_root))
+            .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
+
+        let params = serde_json::json!({
+            "textDocument": { "uri": uri },
+            "position": { "line": line, "character": character }
+        });
+
+        let rx = client::send_request(
+            &mut *server.stdin.lock().await,
+            &server.pending_requests,
+            "textDocument/typeDefinition",
+            params,
+            &server.next_id,
+        )
+        .await?;
+
+        let response = tokio::time::timeout(std::time::Duration::from_secs(10), rx)
+            .await
+            .map_err(|_| "Type definition request timed out".to_string())?
+            .map_err(|_| "Type definition response channel closed".to_string())?;
+
+        let result = response.get("result").cloned().unwrap_or(Value::Null);
+
+        // Result can be Location | Location[] | LocationLink[]
+        let locations: Vec<Value> = if result.is_array() {
+            result
+                .as_array()
+                .cloned()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|loc| normalize_location(&loc))
+                .collect()
+        } else if result.is_object() {
+            vec![normalize_location(&result)]
+        } else {
+            vec![]
+        };
+
+        Ok(serde_json::json!({ "locations": locations }))
+    }
+
+    /// Request go-to-declaration at a position.
+    pub async fn request_declaration(
+        &mut self,
+        uri: &str,
+        lang_id: &str,
+        line: u32,
+        character: u32,
+        project_root: &str,
+    ) -> Result<Value, String> {
+        let server = self
+            .servers
+            .get_mut(&server_key(lang_id, project_root))
+            .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
+
+        let params = serde_json::json!({
+            "textDocument": { "uri": uri },
+            "position": { "line": line, "character": character }
+        });
+
+        let rx = client::send_request(
+            &mut *server.stdin.lock().await,
+            &server.pending_requests,
+            "textDocument/declaration",
+            params,
+            &server.next_id,
+        )
+        .await?;
+
+        let response = tokio::time::timeout(std::time::Duration::from_secs(10), rx)
+            .await
+            .map_err(|_| "Declaration request timed out".to_string())?
+            .map_err(|_| "Declaration response channel closed".to_string())?;
+
+        let result = response.get("result").cloned().unwrap_or(Value::Null);
+
+        // Result can be Location | Location[] | LocationLink[]
+        let locations: Vec<Value> = if result.is_array() {
+            result
+                .as_array()
+                .cloned()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|loc| normalize_location(&loc))
+                .collect()
+        } else if result.is_object() {
+            vec![normalize_location(&result)]
+        } else {
+            vec![]
+        };
+
+        Ok(serde_json::json!({ "locations": locations }))
+    }
+
+    /// Request go-to-implementation at a position.
+    pub async fn request_implementation(
+        &mut self,
+        uri: &str,
+        lang_id: &str,
+        line: u32,
+        character: u32,
+        project_root: &str,
+    ) -> Result<Value, String> {
+        let server = self
+            .servers
+            .get_mut(&server_key(lang_id, project_root))
+            .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
+
+        let params = serde_json::json!({
+            "textDocument": { "uri": uri },
+            "position": { "line": line, "character": character }
+        });
+
+        let rx = client::send_request(
+            &mut *server.stdin.lock().await,
+            &server.pending_requests,
+            "textDocument/implementation",
+            params,
+            &server.next_id,
+        )
+        .await?;
+
+        let response = tokio::time::timeout(std::time::Duration::from_secs(10), rx)
+            .await
+            .map_err(|_| "Implementation request timed out".to_string())?
+            .map_err(|_| "Implementation response channel closed".to_string())?;
+
+        let result = response.get("result").cloned().unwrap_or(Value::Null);
+
+        // Result can be Location | Location[] | LocationLink[]
+        let locations: Vec<Value> = if result.is_array() {
+            result
+                .as_array()
+                .cloned()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|loc| normalize_location(&loc))
+                .collect()
+        } else if result.is_object() {
+            vec![normalize_location(&result)]
+        } else {
+            vec![]
+        };
+
+        Ok(serde_json::json!({ "locations": locations }))
+    }
+
     /// Request document symbols for a file (outline view).
     pub async fn request_document_symbols(
         &mut self,
