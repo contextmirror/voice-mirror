@@ -223,6 +223,11 @@ const editorTheme = EditorView.theme({
     opacity: '1',
     transform: 'scale(1.15)',
   },
+  // ── Document highlight (same-symbol occurrences) ──
+  '.cm-lsp-highlight': {
+    backgroundColor: 'color-mix(in srgb, var(--accent) 18%, transparent)',
+    borderRadius: '2px',
+  },
 }, { dark: true });
 
 // ── Syntax highlighting ──
