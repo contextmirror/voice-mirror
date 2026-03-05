@@ -5,7 +5,7 @@
  * event listeners, handlers, and CodeMirror extension factories for the file editor.
  */
 
-import { lspOpenFile, lspCloseFile, lspChangeFile, lspSaveFile, lspRequestCompletion, lspRequestHover, lspRequestDefinition, lspRequestTypeDefinition, lspRequestDeclaration, lspRequestImplementation, lspRequestReferences, lspRequestDocumentHighlight, lspRequestInlayHints, lspRequestCodeLens, lspRequestDocumentColors, lspRequestFoldingRanges, lspPrepareRename, lspRename, lspApplyWorkspaceEdit, lspRequestCodeActions, lspRequestFormatting, lspRequestRangeFormatting, lspRequestSignatureHelp, lspRequestLinkedEditingRange, lspRequestOnTypeFormatting } from './api.js';
+import { lspOpenFile, lspCloseFile, lspChangeFile, lspSaveFile, lspRequestCompletion, lspRequestHover, lspRequestDefinition, lspRequestTypeDefinition, lspRequestDeclaration, lspRequestImplementation, lspRequestReferences, lspRequestDocumentHighlight, lspRequestInlayHints, lspRequestCodeLens, lspRequestDocumentColors, lspRequestFoldingRanges, lspRequestSemanticTokensFull, lspPrepareRename, lspRename, lspApplyWorkspaceEdit, lspRequestCodeActions, lspRequestFormatting, lspRequestRangeFormatting, lspRequestSignatureHelp, lspRequestLinkedEditingRange, lspRequestOnTypeFormatting } from './api.js';
 import { foldService } from '@codemirror/language';
 import { projectStore } from './stores/project.svelte.js';
 import { tabsStore } from './stores/tabs.svelte.js';
@@ -977,6 +977,119 @@ export function createEditorLsp() {
     return [fetcher, folder];
   }
 
+  /**
+   * Standard LSP semantic token types legend.
+   * Index position maps to the tokenType integer in the response data.
+   */
+  const SEMANTIC_TOKEN_TYPES = [
+    'namespace', 'type', 'class', 'enum', 'interface', 'struct',
+    'typeParameter', 'parameter', 'variable', 'property', 'enumMember',
+    'event', 'function', 'method', 'macro', 'keyword', 'modifier',
+    'comment', 'string', 'number', 'regexp', 'operator', 'decorator',
+  ];
+
+  /** Token types that get CSS classes (ones that add value beyond syntax highlighting) */
+  const STYLED_TOKEN_TYPES = new Set([
+    'type', 'interface', 'enum', 'enumMember', 'typeParameter',
+    'parameter', 'property', 'namespace', 'decorator', 'macro',
+  ]);
+
+  /**
+   * CodeMirror ViewPlugin that applies semantic token decorations
+   * via LSP textDocument/semanticTokens/full.
+   *
+   * @param {string} currentPath - current file path
+   * @param {typeof import('@codemirror/view')} cmView - CodeMirror view module
+   * @param {typeof import('@codemirror/state')} cmState - CodeMirror state module
+   * @returns {import('@codemirror/state').Extension} CM extension
+   */
+  function semanticTokensExtension(currentPath, cmView, cmState) {
+    const { ViewPlugin, Decoration } = cmView;
+    const { RangeSet } = cmState;
+
+    return ViewPlugin.fromClass(class {
+      constructor(view) {
+        this.decorations = RangeSet.empty;
+        this._timer = null;
+        this._reqId = 0;
+        this._scheduleRequest(view);
+      }
+
+      update(update) {
+        if (!update.docChanged) return;
+        this._scheduleRequest(update.view);
+      }
+
+      _scheduleRequest(view) {
+        clearTimeout(this._timer);
+        if (!hasLsp || !currentPath) return;
+
+        const reqId = ++this._reqId;
+        this._timer = setTimeout(() => {
+          this._requestTokens(view, reqId);
+        }, 500);
+      }
+
+      async _requestTokens(view, reqId) {
+        try {
+          const root = projectStore.root;
+          const result = await lspRequestSemanticTokensFull(currentPath, root);
+          if (reqId !== this._reqId) return;
+
+          const data = result?.data?.tokens?.data;
+          if (!data?.length) {
+            this.decorations = RangeSet.empty;
+            view.requestMeasure();
+            return;
+          }
+
+          const doc = view.state.doc;
+          const marks = [];
+          let line = 0;
+          let char = 0;
+
+          for (let i = 0; i < data.length; i += 5) {
+            const deltaLine = data[i];
+            const deltaStartChar = data[i + 1];
+            const length = data[i + 2];
+            const tokenTypeIdx = data[i + 3];
+
+            line += deltaLine;
+            char = deltaLine > 0 ? deltaStartChar : char + deltaStartChar;
+
+            const tokenType = SEMANTIC_TOKEN_TYPES[tokenTypeIdx];
+            if (!tokenType || !STYLED_TOKEN_TYPES.has(tokenType)) continue;
+
+            // Convert 0-based line/char to document offset
+            const lineNum = line + 1; // CM lines are 1-based
+            if (lineNum > doc.lines) continue;
+            const lineObj = doc.line(lineNum);
+            const from = lineObj.from + char;
+            const to = from + length;
+            if (to > doc.length) continue;
+
+            marks.push(
+              Decoration.mark({ class: `cm-semantic-${tokenType}` }).range(from, to)
+            );
+          }
+
+          // RangeSet.of requires sorted ranges
+          marks.sort((a, b) => a.from - b.from || a.to - b.to);
+          this.decorations = RangeSet.of(marks);
+          view.requestMeasure();
+        } catch {
+          // Silently ignore — semantic tokens are best-effort
+        }
+      }
+
+      destroy() {
+        clearTimeout(this._timer);
+      }
+    }, {
+      decorations: v => v.decorations,
+    });
+  }
+
   function diagnosticListener(currentPath, getView, cmCache) {
     return (event) => {
       const { uri, diagnostics: lspDiags } = event.payload;
@@ -1075,6 +1188,7 @@ export function createEditorLsp() {
     codeLensExtension,
     documentColorsExtension,
     foldingRangeExtension,
+    semanticTokensExtension,
     diagnosticListener,
 
     // Lifecycle

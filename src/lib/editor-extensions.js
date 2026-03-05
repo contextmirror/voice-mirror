@@ -448,6 +448,7 @@ export function buildEditorExtensions(cm, lsp, options) {
     extensions.push(lsp.codeLensExtension(filePath, cm, cm));
     extensions.push(lsp.documentColorsExtension(filePath, cm, cm));
     extensions.push(...lsp.foldingRangeExtension(filePath, cm));
+    extensions.push(lsp.semanticTokensExtension(filePath, cm, cm));
   }
 
   // Ctrl+hover definition underline hint

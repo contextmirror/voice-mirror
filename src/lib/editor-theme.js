@@ -262,6 +262,17 @@ const editorTheme = EditorView.theme({
     marginRight: '4px',
     verticalAlign: 'middle',
   },
+  // ── Semantic tokens (LSP-provided token coloring) ──
+  '.cm-semantic-type': { color: 'var(--cm-type)' },
+  '.cm-semantic-interface': { color: 'var(--cm-type)', fontStyle: 'italic' },
+  '.cm-semantic-enum': { color: 'var(--cm-type)' },
+  '.cm-semantic-enumMember': { color: 'var(--cm-constant)' },
+  '.cm-semantic-typeParameter': { color: 'var(--cm-type)', opacity: '0.85' },
+  '.cm-semantic-parameter': { color: 'var(--cm-variable)' },
+  '.cm-semantic-property': { color: 'var(--cm-property)' },
+  '.cm-semantic-namespace': { color: 'var(--cm-keyword)' },
+  '.cm-semantic-decorator': { color: 'var(--cm-keyword)', fontStyle: 'italic' },
+  '.cm-semantic-macro': { color: 'var(--cm-function)', fontWeight: 'bold' },
 }, { dark: true });
 
 // ── Syntax highlighting ──
