@@ -5,7 +5,8 @@
  * event listeners, handlers, and CodeMirror extension factories for the file editor.
  */
 
-import { lspOpenFile, lspCloseFile, lspChangeFile, lspSaveFile, lspRequestCompletion, lspRequestHover, lspRequestDefinition, lspRequestTypeDefinition, lspRequestDeclaration, lspRequestImplementation, lspRequestReferences, lspRequestDocumentHighlight, lspRequestInlayHints, lspRequestCodeLens, lspRequestDocumentColors, lspPrepareRename, lspRename, lspApplyWorkspaceEdit, lspRequestCodeActions, lspRequestFormatting, lspRequestRangeFormatting, lspRequestSignatureHelp, lspRequestLinkedEditingRange, lspRequestOnTypeFormatting } from './api.js';
+import { lspOpenFile, lspCloseFile, lspChangeFile, lspSaveFile, lspRequestCompletion, lspRequestHover, lspRequestDefinition, lspRequestTypeDefinition, lspRequestDeclaration, lspRequestImplementation, lspRequestReferences, lspRequestDocumentHighlight, lspRequestInlayHints, lspRequestCodeLens, lspRequestDocumentColors, lspRequestFoldingRanges, lspPrepareRename, lspRename, lspApplyWorkspaceEdit, lspRequestCodeActions, lspRequestFormatting, lspRequestRangeFormatting, lspRequestSignatureHelp, lspRequestLinkedEditingRange, lspRequestOnTypeFormatting } from './api.js';
+import { foldService } from '@codemirror/language';
 import { projectStore } from './stores/project.svelte.js';
 import { tabsStore } from './stores/tabs.svelte.js';
 import { basename } from './utils.js';
@@ -902,6 +903,80 @@ export function createEditorLsp() {
     });
   }
 
+  /**
+   * CodeMirror extensions that provide LSP-based folding ranges.
+   * A ViewPlugin fetches ranges asynchronously; a foldService serves
+   * them synchronously to CodeMirror's fold system.
+   *
+   * @param {string} currentPath - current file path
+   * @param {typeof import('@codemirror/view')} cmView - CodeMirror view module
+   * @returns {import('@codemirror/state').Extension[]} CM extensions array
+   */
+  function foldingRangeExtension(currentPath, cmView) {
+    const { ViewPlugin } = cmView;
+
+    // Shared cache between the ViewPlugin (writer) and foldService (reader)
+    let cachedRanges = [];
+
+    const fetcher = ViewPlugin.fromClass(class {
+      constructor(view) {
+        this._timer = null;
+        this._reqId = 0;
+        this._scheduleRequest(view);
+      }
+
+      update(update) {
+        if (!update.docChanged) return;
+        this._scheduleRequest(update.view);
+      }
+
+      _scheduleRequest(view) {
+        clearTimeout(this._timer);
+        if (!hasLsp || !currentPath) return;
+
+        const reqId = ++this._reqId;
+        this._timer = setTimeout(() => {
+          this._requestRanges(view, reqId);
+        }, 500);
+      }
+
+      async _requestRanges(view, reqId) {
+        try {
+          const root = projectStore.root;
+          const result = await lspRequestFoldingRanges(currentPath, root);
+          if (reqId !== this._reqId) return;
+
+          cachedRanges = (result?.data?.ranges || []).map(r => ({
+            startLine: r.startLine,
+            endLine: r.endLine,
+          }));
+        } catch {
+          // Silently ignore
+        }
+      }
+
+      destroy() {
+        clearTimeout(this._timer);
+        cachedRanges = [];
+      }
+    });
+
+    const folder = foldService.of((state, lineStart, _lineEnd) => {
+      const line = state.doc.lineAt(lineStart);
+      const lineNum = line.number - 1; // 0-based (LSP uses 0-based lines)
+      for (const r of cachedRanges) {
+        if (r.startLine === lineNum) {
+          const endLineNum = Math.min(r.endLine + 1, state.doc.lines);
+          const endLine = state.doc.line(endLineNum);
+          return { from: line.to, to: endLine.to };
+        }
+      }
+      return null;
+    });
+
+    return [fetcher, folder];
+  }
+
   function diagnosticListener(currentPath, getView, cmCache) {
     return (event) => {
       const { uri, diagnostics: lspDiags } = event.payload;
@@ -999,6 +1074,7 @@ export function createEditorLsp() {
     inlayHintExtension,
     codeLensExtension,
     documentColorsExtension,
+    foldingRangeExtension,
     diagnosticListener,
 
     // Lifecycle
