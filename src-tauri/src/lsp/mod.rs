@@ -2105,13 +2105,38 @@ impl LspManager {
         let result = response.get("result").cloned().unwrap_or(Value::Null);
 
         // Result is CodeLens[] or null
-        let lenses = if result.is_array() {
-            result
+        let mut lenses: Vec<Value> = if let Value::Array(arr) = result {
+            arr
         } else {
-            Value::Array(vec![])
+            vec![]
         };
 
-        Ok(serde_json::json!({ "lenses": lenses }))
+        // Resolve lenses that don't have a command yet (e.g. typescript-language-server
+        // returns lenses without commands, requiring codeLens/resolve for each).
+        for lens in &mut lenses {
+            if lens.get("command").is_some() && !lens["command"].is_null() {
+                continue;
+            }
+            let rx = client::send_request(
+                &mut *server.stdin.lock().await,
+                &server.pending_requests,
+                "codeLens/resolve",
+                lens.clone(),
+                &server.next_id,
+            )
+            .await;
+            if let Ok(rx) = rx {
+                if let Ok(Ok(resp)) =
+                    tokio::time::timeout(std::time::Duration::from_secs(5), rx).await
+                {
+                    if let Some(resolved) = resp.get("result") {
+                        *lens = resolved.clone();
+                    }
+                }
+            }
+        }
+
+        Ok(serde_json::json!({ "lenses": Value::Array(lenses) }))
     }
 
     /// Request document colors for a file (CSS color values, etc.).

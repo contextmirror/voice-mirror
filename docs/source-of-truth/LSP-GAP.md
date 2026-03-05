@@ -131,8 +131,8 @@ VS Code remaps 8 "style check" diagnostic codes from Error → Warning. This is 
 | Feature | LSP Method | VS Code | Voice Mirror | Impl | Tested |
 |---------|-----------|---------|-------------|:----:|:------:|
 | Signature help | `textDocument/signatureHelp` | Full (auto on `(`) | Full (auto on `(` `,` + Ctrl+Shift+Space) | ✅ | ✅ |
-| Inlay hints | `textDocument/inlayHint` | Full (resolve on hover) | Full (+ CM extension) | ✅ | |
-| Code lens | `textDocument/codeLens` | Full (resolve + refresh) | Full (+ CM extension) | ✅ | |
+| Inlay hints | `textDocument/inlayHint` | Full (resolve on hover) | Full (+ CM extension) | ✅ | ✅ |
+| Code lens | `textDocument/codeLens` | Full (resolve + refresh) | Full (+ CM extension) | ✅ | ✅ |
 
 ### Formatting & Editing
 
@@ -174,11 +174,11 @@ VS Code remaps 8 "style check" diagnostic codes from Error → Warning. This is 
 | Core (5) | 5/5 | 5/5 | 5/5 | 5/5 |
 | Navigation Tier 1 (5) | 5/5 | 5/5 | 5/5 | 5/5 |
 | Navigation Tier 2 (6) | 6/6 | 6/6 | 6/6 | 3/6 ⏭️3 |
-| Inline Assistance (3) | 3/3 | 3/3 | 3/3 | 1/3 |
+| Inline Assistance (3) | 3/3 | 3/3 | 3/3 | 3/3 |
 | Formatting & Editing (5) | 5/5 | 5/5 | 5/5 | 0/5 |
 | Visual (3) | 3/3 | 3/3 | 3/3 | 0/3 |
 | Infrastructure (10) | 10/10 | 10/10 | 10/10 | 0/10 |
-| **Total** | **37/37** | **37/37** | **37/37** | **14/37** |
+| **Total** | **37/37** | **37/37** | **37/37** | **16/37** |
 
 > All features are implementation-complete including frontend CodeMirror wiring. The "Tested" column will be filled in during manual verification with screenshots.
 

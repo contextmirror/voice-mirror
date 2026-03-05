@@ -722,7 +722,7 @@ export function createEditorLsp() {
    */
   function codeLensExtension(currentPath, cmView, cmState) {
     const { ViewPlugin, Decoration, WidgetType } = cmView;
-    const { RangeSet } = cmState;
+    const { RangeSet, StateField, StateEffect } = cmState;
 
     class CodeLensWidget extends WidgetType {
       constructor(title) {
@@ -744,9 +744,23 @@ export function createEditorLsp() {
       ignoreEvent() { return true; }
     }
 
-    return ViewPlugin.fromClass(class {
+    // Block decorations MUST come from a StateField, not a ViewPlugin.
+    const setCodeLenses = StateEffect.define();
+
+    const codeLensField = StateField.define({
+      create() { return Decoration.none; },
+      update(decos, tr) {
+        for (const e of tr.effects) {
+          if (e.is(setCodeLenses)) return e.value;
+        }
+        return tr.docChanged ? Decoration.none : decos;
+      },
+      provide: f => cmView.EditorView.decorations.from(f),
+    });
+
+    // ViewPlugin handles async fetching and dispatches effects to the StateField.
+    const codeLensFetcher = ViewPlugin.fromClass(class {
       constructor(view) {
-        this.decorations = RangeSet.empty;
         this._timer = null;
         this._reqId = 0;
         this._scheduleRequest(view);
@@ -774,30 +788,29 @@ export function createEditorLsp() {
           if (reqId !== this._reqId) return;
 
           if (!result?.data?.lenses?.length) {
-            this.decorations = RangeSet.empty;
-            view.requestMeasure();
+            view.dispatch({ effects: setCodeLenses.of(Decoration.none) });
             return;
           }
 
           const doc = view.state.doc;
           const widgets = [];
           for (const lens of result.data.lenses) {
-            // Skip lenses without a command (they need codeLens/resolve)
             if (!lens.command?.title) continue;
             const pos = lspPositionToOffset(doc, lens.range.start);
             if (pos >= 0 && pos <= doc.length) {
               widgets.push(
                 Decoration.widget({
                   widget: new CodeLensWidget(lens.command.title),
-                  side: -1, // before the line content
+                  side: -1,
                   block: true,
                 }).range(pos)
               );
             }
           }
           widgets.sort((a, b) => a.from - b.from);
-          this.decorations = RangeSet.of(widgets);
-          view.requestMeasure();
+          view.dispatch({
+            effects: setCodeLenses.of(RangeSet.of(widgets)),
+          });
         } catch {
           // Silently ignore — code lenses are best-effort
         }
@@ -806,9 +819,9 @@ export function createEditorLsp() {
       destroy() {
         clearTimeout(this._timer);
       }
-    }, {
-      decorations: v => v.decorations,
     });
+
+    return [codeLensField, codeLensFetcher];
   }
 
   /**
@@ -975,9 +988,12 @@ export function createEditorLsp() {
       const lineNum = line.number - 1; // 0-based (LSP uses 0-based lines)
       for (const r of cachedRanges) {
         if (r.startLine === lineNum) {
+          // Convert 0-based LSP endLine to 1-based CM line number
           const endLineNum = Math.min(r.endLine + 1, state.doc.lines);
           const endLine = state.doc.line(endLineNum);
-          return { from: line.to, to: endLine.to };
+          // Use endLine.from (not .to) to keep closing delimiter visible,
+          // matching CodeMirror's foldInside convention and VS Code behavior
+          return { from: line.to, to: endLine.from };
         }
       }
       return null;

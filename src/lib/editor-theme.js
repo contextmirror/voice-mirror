@@ -79,6 +79,19 @@ const editorTheme = EditorView.theme({
     border: 'none',
     color: 'var(--cm-fold-placeholder)',
   },
+  // Hover-only fold gutter arrows (VS Code default: showFoldingControls=mouseover)
+  '.cm-foldGutter span': {
+    opacity: '0',
+    transition: 'opacity 0.15s ease',
+  },
+  // Show fold arrows when hovering the gutter area
+  '.cm-gutters:hover .cm-foldGutter span': {
+    opacity: '1',
+  },
+  // Always show arrows on folded (collapsed) lines — title="Unfold line"
+  '.cm-foldGutter span[title="Unfold line"]': {
+    opacity: '1',
+  },
   '.cm-tooltip': {
     border: '1px solid var(--border)',
     backgroundColor: 'var(--cm-tooltip-bg)',

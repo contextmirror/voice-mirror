@@ -73,7 +73,16 @@
           "importModuleSpecifierPreference": "shortest"
         }
       },
-      "settings": {}
+      "settings": {
+        "typescript": {
+          "referencesCodeLens": { "enabled": false },
+          "implementationsCodeLens": { "enabled": false }
+        },
+        "javascript": {
+          "referencesCodeLens": { "enabled": false },
+          "implementationsCodeLens": { "enabled": false }
+        }
+      }
     },
     "css": {
       "name": "CSS Language Server",
