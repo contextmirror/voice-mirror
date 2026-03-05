@@ -228,6 +228,21 @@ const editorTheme = EditorView.theme({
     backgroundColor: 'color-mix(in srgb, var(--accent) 18%, transparent)',
     borderRadius: '2px',
   },
+  // ── Inlay hints (type annotations, parameter names) ──
+  '.cm-inlay-hint': {
+    color: '#969696',
+    backgroundColor: 'rgba(150, 150, 150, 0.1)',
+    fontSize: '0.9em',
+    padding: '0 4px',
+    borderRadius: '3px',
+    fontFamily: 'inherit',
+  },
+  '.cm-inlay-hint-type': {
+    fontStyle: 'italic',
+  },
+  '.cm-inlay-hint-parameter': {
+    opacity: '0.8',
+  },
 }, { dark: true });
 
 // ── Syntax highlighting ──

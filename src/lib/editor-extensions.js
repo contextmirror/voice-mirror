@@ -442,6 +442,7 @@ export function buildEditorExtensions(cm, lsp, options) {
       { key: 'Ctrl-Shift-Space', run: (v) => { lsp.requestSignatureHelp(v, filePath, null); return true; } },
     ]));
     extensions.push(lsp.documentHighlightExtension(filePath, cm, cm));
+    extensions.push(lsp.inlayHintExtension(filePath, cm, cm));
   }
 
   // Ctrl+hover definition underline hint
