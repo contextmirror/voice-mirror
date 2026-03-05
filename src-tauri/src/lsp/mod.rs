@@ -2580,13 +2580,20 @@ impl LspManager {
         lang_id: &str,
         project_root: &str,
     ) -> Result<usize, String> {
-        // Load the manifest to get extensions for this server
+        // Load the manifest to get extensions for this server.
+        // Look up directly by server ID first (handles supplementary servers like "eslint"
+        // whose key doesn't map back to a file extension).
         let manifest = manifest::load_manifest()
             .map_err(|e| format!("Failed to load manifest: {}", e))?;
 
-        let ext = self.extension_for_language(lang_id);
-        let (_server_id, entry) = manifest::find_server_for_extension(&manifest, &ext)
-            .ok_or_else(|| format!("No manifest entry for language '{}'", lang_id))?;
+        let entry = if let Some(e) = manifest.servers.get(lang_id) {
+            e.clone()
+        } else {
+            let ext = self.extension_for_language(lang_id);
+            manifest::find_server_for_extension(&manifest, &ext)
+                .map(|(_, e)| e)
+                .ok_or_else(|| format!("No manifest entry for language '{}'", lang_id))?
+        };
 
         // Collect matching files from the project
         let extensions: Vec<String> = entry.extensions.iter()
