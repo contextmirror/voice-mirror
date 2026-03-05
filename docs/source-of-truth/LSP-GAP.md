@@ -294,7 +294,7 @@ VS Code remaps 8 "style check" diagnostic codes from Error → Warning. This is 
 | ~~Hover tooltip positioned below cursor~~ | ~~Tooltip appeared below the line, blocking code.~~ Fixed: added `above: true` to tooltip config. | ~~Medium~~ ✅ |
 | ~~Missing `implicitProjectConfiguration` in workspace/configuration~~ | ~~False "Property does not exist" errors in JS files.~~ Fixed: added `workspace/didChangeConfiguration` notification + client-side diagnostic filtering (`code > 0 && code < 2000` for JS files, matching VS Code's checkJs=false behavior). | ~~High~~ ✅ |
 | ~~Smart tooltip positioning (VS Code parity)~~ | ~~Tooltips used fixed positioning.~~ Fixed: `applySmartPosition()` utility with VS Code-matching margins (30px top, 24px bottom), dynamic flip. Hover=above, rename/code actions=below. | ~~Medium~~ ✅ |
-| ~~Hover tooltip type expansion~~ | ~~Both vtsls and typescript-language-server show `options: {}`.~~ Fixed: enhanced hover via vtsls `typescript.tsserverRequest` → `quickinfo` with `verbosityLevel`, converting `displayString`+`documentation`+`tags` to VS Code-matching markdown. | ~~Low~~ ✅ |
+| ~~Hover tooltip type expansion~~ | ~~Types showed collapsed (`options: {}`).~~ Root cause: `textDocument/didOpen` sent server key (`"typescript"`) instead of correct LSP languageId (`"javascript"` for .js files), breaking JSDoc type inference. Fixed: `lsp_language_id()` mapping + switched to typescript-language-server (uses `displayParts` for expanded types). | ~~Low~~ ✅ |
 
 ---
 

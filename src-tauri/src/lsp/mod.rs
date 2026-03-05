@@ -150,6 +150,20 @@ impl LspManager {
         )
         .ok_or_else(|| format!("No LSP server configured for language '{}'", lang_id))?;
 
+        self.start_server(lang_id, project_root, server_info).await
+    }
+
+    /// Start a server from an already-detected `ServerInfo`.
+    ///
+    /// Handles auto-install, spawning, initialization, and reader loop setup.
+    /// Callers must check `servers.contains_key` before calling.
+    async fn start_server(
+        &mut self,
+        lang_id: &str,
+        project_root: &str,
+        server_info: detection::ServerInfo,
+    ) -> Result<(), String> {
+
         // If server binary not found, attempt auto-install
         let server_info = if !server_info.installed {
             // Load manifest to get install config
@@ -222,8 +236,13 @@ impl LspManager {
                 }
             }
 
-            // Retry detection after install
-            detection::detect_for_extension(&self.extension_for_language(lang_id))
+            // Retry detection after install using the server's own extension
+            let retry_ext = entry
+                .extensions
+                .first()
+                .map(|e| e.trim_start_matches('.').to_string())
+                .unwrap_or_else(|| self.extension_for_language(lang_id));
+            detection::detect_for_extension(&retry_ext)
                 .ok_or_else(|| format!("Server '{}' still not found after install", server_id))?
         } else {
             server_info
@@ -622,9 +641,9 @@ impl LspManager {
         client::send_notification(&mut *stdin.lock().await, "initialized", serde_json::json!({})).await?;
 
         // Send workspace/didChangeConfiguration with settings from the manifest.
-        // vtsls and other servers use this to receive initial configuration.
+        // LSP servers use this to receive initial configuration.
         // Settings are structured using VS Code's namespace format (e.g.,
-        // typescript.*, javascript.*, vtsls.*).
+        // typescript.*, javascript.*).
         let settings = manifest::load_manifest()
             .ok()
             .and_then(|m| {
@@ -724,9 +743,17 @@ impl LspManager {
         }
 
         let mut started = Vec::new();
-        for info in &server_infos {
+        for info in server_infos {
             let server_id = info.language_id.clone();
-            if let Err(e) = self.ensure_server(&server_id, project_root).await {
+            // Skip if already running
+            if self.servers.contains_key(&server_key(&server_id, project_root)) {
+                started.push(server_id);
+                continue;
+            }
+            // Use start_server directly — avoids the lang_id → extension → detect
+            // round-trip that fails for supplementary servers like "eslint" whose
+            // server key doesn't map back to a file extension.
+            if let Err(e) = self.start_server(&server_id, project_root, info).await {
                 warn!("Failed to start '{}' server for .{}: {}", server_id, ext, e);
             } else {
                 started.push(server_id);
@@ -1057,10 +1084,9 @@ impl LspManager {
 
     /// Request hover information at a position.
     ///
-    /// For TypeScript/JavaScript files served by vtsls, attempts an enhanced hover
-    /// via `workspace/executeCommand` → `typescript.tsserverRequest` → `quickinfo`
-    /// with `verbosityLevel` for expanded type signatures (matching VS Code behavior).
-    /// Falls back to standard `textDocument/hover` if the enhanced path fails.
+    /// Delegates to `standard_hover` which sends `textDocument/hover`.
+    /// typescript-language-server uses tsserver's `displayParts` for expanded
+    /// type signatures (matching VS Code behavior).
     pub async fn request_hover(
         &mut self,
         uri: &str,
@@ -2958,7 +2984,7 @@ fn quickinfo_to_markdown(body: &Value) -> String {
     // documentation → string or SymbolDisplayPart[] → text
     if let Some(doc_val) = body.get("documentation") {
         if let Some(s) = doc_val.as_str() {
-            // Plain string format (some vtsls versions)
+            // Plain string format
             doc_text = s.trim().to_string();
         } else if let Some(docs) = doc_val.as_array() {
             // SymbolDisplayPart[] format

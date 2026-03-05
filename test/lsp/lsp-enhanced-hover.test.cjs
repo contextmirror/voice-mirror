@@ -2,8 +2,8 @@
  * lsp-enhanced-hover.test.cjs -- Source-inspection tests for hover rendering.
  *
  * Validates that request_hover uses the standard textDocument/hover path
- * (vtsls already formats markdown like VS Code), and that the
- * quickinfo_to_markdown helper exists for potential non-vtsls use.
+ * (typescript-language-server formats markdown via displayParts), and that
+ * the quickinfo_to_markdown helper exists for potential direct tsserver use.
  */
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
@@ -38,7 +38,7 @@ describe('mod.rs: request_hover uses standard textDocument/hover', () => {
   });
 });
 
-describe('mod.rs: quickinfo_to_markdown helper (retained for non-vtsls)', () => {
+describe('mod.rs: quickinfo_to_markdown helper (retained for direct tsserver use)', () => {
   it('function exists', () => {
     assert.ok(
       modSrc.includes('fn quickinfo_to_markdown'),

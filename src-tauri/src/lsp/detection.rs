@@ -319,7 +319,7 @@ mod tests {
             assert!(info.is_some(), "Should detect server for .{}", ext);
             let info = info.unwrap();
             assert_eq!(info.language_id, "typescript");
-            assert_eq!(info.binary, "vtsls");
+            assert_eq!(info.binary, "typescript-language-server");
             assert_eq!(info.args, vec!["--stdio"]);
             assert_eq!(info.server_id.as_deref(), Some("typescript"));
         }

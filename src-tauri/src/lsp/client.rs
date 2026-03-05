@@ -429,8 +429,8 @@ fn handle_diagnostics(app_handle: &AppHandle, lang_id: &str, msg: &Value) {
         .to_string();
 
     // VS Code-compatible: suppress semantic diagnostics (code >= 2000) for .js files
-    // when checkJs is false. Neither typescript-language-server nor vtsls filter these
-    // natively — VS Code's client-side extension handles this suppression.
+    // when checkJs is false. typescript-language-server doesn't filter these natively —
+    // VS Code's client-side extension handles this suppression.
     let is_js_file = uri.ends_with(".js")
         || uri.ends_with(".jsx")
         || uri.ends_with(".mjs")
