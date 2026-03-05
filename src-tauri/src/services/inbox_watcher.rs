@@ -3,8 +3,6 @@
 //! Watches the MCP inbox JSON file for changes and forwards messages
 //! as Tauri events (`mcp-inbox-message`). This bridges the Node.js
 //! MCP server with the Tauri frontend.
-//!
-//! Port of `electron/services/inbox-watcher.js`.
 
 use std::collections::HashSet;
 use std::path::PathBuf;

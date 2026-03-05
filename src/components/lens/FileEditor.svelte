@@ -53,8 +53,6 @@
     lineNumber: 0,
   });
 
-  // Signature help positioning
-  let sigHelpCoords = $state({ x: 0, y: 0 });
   let sigHelpDebounce = null;
 
   // Indentation state (compartments for dynamic reconfiguration)
@@ -71,8 +69,8 @@
     if (cmCache) return cmCache;
     const [
       { EditorView, basicSetup },
-      { EditorState, EditorSelection, StateEffect, StateField, RangeSet },
-      { keymap, hoverTooltip, ViewPlugin, Decoration, gutter, GutterMarker },
+      { EditorState, EditorSelection, StateEffect, StateField, RangeSet, Annotation },
+      { keymap, hoverTooltip, ViewPlugin, Decoration, WidgetType, gutter, GutterMarker },
       { autocompletion },
       { setDiagnostics, lintGutter },
     ] = await Promise.all([
@@ -82,7 +80,7 @@
       import('@codemirror/autocomplete'),
       import('@codemirror/lint'),
     ]);
-    cmCache = { EditorView, basicSetup, EditorState, EditorSelection, StateEffect, StateField, RangeSet, keymap, hoverTooltip, ViewPlugin, Decoration, gutter, GutterMarker, autocompletion, setDiagnostics, lintGutter };
+    cmCache = { EditorView, basicSetup, EditorState, EditorSelection, StateEffect, StateField, RangeSet, Annotation, keymap, hoverTooltip, ViewPlugin, Decoration, WidgetType, gutter, GutterMarker, autocompletion, setDiagnostics, lintGutter };
     return cmCache;
   }
 
@@ -370,10 +368,6 @@
               clearTimeout(sigHelpDebounce);
               sigHelpDebounce = setTimeout(async () => {
                 await lsp.requestSignatureHelp(update.view, currentPath, lastChar);
-                if (lsp.showSignatureHelp && update.view) {
-                  const coords = update.view.coordsAtPos(update.view.state.selection.main.head);
-                  if (coords) sigHelpCoords = { x: coords.left, y: coords.top };
-                }
               }, 80);
             } else if (lastChar === ')') {
               clearTimeout(sigHelpDebounce);
@@ -382,10 +376,6 @@
               clearTimeout(sigHelpDebounce);
               sigHelpDebounce = setTimeout(async () => {
                 await lsp.requestSignatureHelp(update.view, currentPath, null);
-                if (lsp.showSignatureHelp && update.view) {
-                  const coords = update.view.coordsAtPos(update.view.state.selection.main.head);
-                  if (coords) sigHelpCoords = { x: coords.left, y: coords.top };
-                }
               }, 150);
             }
           },
@@ -991,7 +981,8 @@
   actions={lsp.codeActions}
   visible={lsp.showCodeActions}
   x={lsp.codeActionsPosition.x}
-  y={lsp.codeActionsPosition.y}
+  above={lsp.codeActionsPosition.above}
+  below={lsp.codeActionsPosition.below}
   onClose={() => { lsp.setShowCodeActions(false); }}
   onApply={async (action) => {
     lsp.setShowCodeActions(false);
@@ -1006,7 +997,8 @@
 <RenameInput
   visible={lsp.showRename}
   x={lsp.renamePosition.x}
-  y={lsp.renamePosition.y}
+  above={lsp.renamePosition.above}
+  below={lsp.renamePosition.below}
   currentName={lsp.renamePlaceholder}
   onConfirm={(newName) => { lsp.executeRename(view, currentPath, newName); }}
   onCancel={() => { lsp.setShowRename(false); }}
@@ -1015,8 +1007,8 @@
 <SignatureHelp
   visible={lsp.showSignatureHelp}
   data={lsp.signatureHelpData}
-  cursorX={sigHelpCoords.x}
-  cursorY={sigHelpCoords.y}
+  cursorX={lsp.signatureHelpCoords.x}
+  cursorY={lsp.signatureHelpCoords.y}
   onDismiss={() => lsp.dismissSignatureHelp()}
 />
 

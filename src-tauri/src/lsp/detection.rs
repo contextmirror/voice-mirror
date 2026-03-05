@@ -62,39 +62,71 @@ pub fn resolve_node_script(info: &ServerInfo) -> Option<(String, Vec<String>)> {
     // Walk node_modules packages, read package.json bin field
     for entry in std::fs::read_dir(&node_modules).ok()? {
         let pkg_dir = entry.ok()?.path();
-        let pkg_json = pkg_dir.join("package.json");
-        if !pkg_json.exists() {
+
+        // Handle scoped packages (@scope/package) — descend one level
+        if pkg_dir
+            .file_name()
+            .map(|n| n.to_string_lossy().starts_with('@'))
+            .unwrap_or(false)
+        {
+            if let Ok(scoped_entries) = std::fs::read_dir(&pkg_dir) {
+                for scoped_entry in scoped_entries.flatten() {
+                    if let Some(result) =
+                        try_resolve_bin(&scoped_entry.path(), &binary_name, &info.args)
+                    {
+                        return Some(result);
+                    }
+                }
+            }
             continue;
         }
 
-        let content = std::fs::read_to_string(&pkg_json).ok()?;
-        let json: serde_json::Value = serde_json::from_str(&content).ok()?;
+        if let Some(result) = try_resolve_bin(&pkg_dir, &binary_name, &info.args) {
+            return Some(result);
+        }
+    }
 
-        // bin can be a string (single binary) or an object (multiple)
-        let script_rel = match &json["bin"] {
-            serde_json::Value::String(s) => {
-                // Single binary: package name must match
-                let pkg_name = json["name"].as_str().unwrap_or("");
-                if pkg_name == binary_name {
-                    Some(s.clone())
-                } else {
-                    None
-                }
-            }
-            serde_json::Value::Object(map) => {
-                map.get(&binary_name).and_then(|v| v.as_str()).map(|s| s.to_string())
-            }
-            _ => None,
-        };
+    None
+}
 
-        if let Some(rel_path) = script_rel {
-            let script = pkg_dir.join(&rel_path);
-            if script.exists() {
-                let node = which::which("node").ok()?;
-                let mut args = vec![script.to_string_lossy().to_string()];
-                args.extend(info.args.iter().cloned());
-                return Some((node.to_string_lossy().to_string(), args));
+/// Try to resolve a binary name from a package directory's package.json bin field.
+fn try_resolve_bin(
+    pkg_dir: &std::path::Path,
+    binary_name: &str,
+    extra_args: &[String],
+) -> Option<(String, Vec<String>)> {
+    let pkg_json = pkg_dir.join("package.json");
+    if !pkg_json.exists() {
+        return None;
+    }
+
+    let content = std::fs::read_to_string(&pkg_json).ok()?;
+    let json: serde_json::Value = serde_json::from_str(&content).ok()?;
+
+    // bin can be a string (single binary) or an object (multiple)
+    let script_rel = match &json["bin"] {
+        serde_json::Value::String(s) => {
+            // Single binary: package name must match
+            let pkg_name = json["name"].as_str().unwrap_or("");
+            if pkg_name == binary_name {
+                Some(s.clone())
+            } else {
+                None
             }
+        }
+        serde_json::Value::Object(map) => {
+            map.get(binary_name).and_then(|v| v.as_str()).map(|s| s.to_string())
+        }
+        _ => None,
+    };
+
+    if let Some(rel_path) = script_rel {
+        let script = pkg_dir.join(&rel_path);
+        if script.exists() {
+            let node = which::which("node").ok()?;
+            let mut args = vec![script.to_string_lossy().to_string()];
+            args.extend(extra_args.iter().cloned());
+            return Some((node.to_string_lossy().to_string(), args));
         }
     }
 

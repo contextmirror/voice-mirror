@@ -120,7 +120,7 @@ describe('mod.rs: multi-server lifecycle', () => {
   it('ensure_servers_for_extension logs warnings for failed starts', () => {
     const fnBody = modSrc.substring(
       modSrc.indexOf('fn ensure_servers_for_extension'),
-      modSrc.indexOf('fn ensure_servers_for_extension') + 800
+      modSrc.indexOf('fn ensure_servers_for_extension') + 1200
     );
     assert.ok(
       fnBody.includes('warn!'),

@@ -61,8 +61,28 @@
       "priority": "primary",
       "enabled": true,
       "restartPolicy": "on-crash",
-      "initializationOptions": {},
-      "settings": {}
+      "initializationOptions": {
+        "hostInfo": "voice-mirror",
+        "preferences": {
+          "includeInlayParameterNameHints": "none",
+          "includeInlayVariableTypeHints": false,
+          "includeInlayPropertyDeclarationTypeHints": false,
+          "includeInlayFunctionLikeReturnTypeHints": false,
+          "includeInlayEnumMemberValueHints": false,
+          "quotePreference": "auto",
+          "importModuleSpecifierPreference": "shortest"
+        }
+      },
+      "settings": {
+        "typescript": {
+          "referencesCodeLens": { "enabled": false },
+          "implementationsCodeLens": { "enabled": false }
+        },
+        "javascript": {
+          "referencesCodeLens": { "enabled": false },
+          "implementationsCodeLens": { "enabled": false }
+        }
+      }
     },
     "css": {
       "name": "CSS Language Server",

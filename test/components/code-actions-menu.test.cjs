@@ -76,9 +76,8 @@ describe('CodeActionsMenu.svelte: behavior', () => {
     assert.ok(src.includes('setupClickOutside'), 'Should use setupClickOutside utility');
   });
 
-  it('uses position clamping', () => {
-    assert.ok(src.includes('menuStyle'), 'Should have menuStyle');
-    assert.ok(src.includes('clampToViewport'), 'Should use clampToViewport for viewport clamping');
+  it('uses smart position clamping', () => {
+    assert.ok(src.includes('applySmartPosition'), 'Should use applySmartPosition for viewport-aware positioning');
   });
 });
 

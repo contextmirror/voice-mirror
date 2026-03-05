@@ -57,6 +57,32 @@ pub(crate) fn server_key(lang_id: &str, project_root: &str) -> String {
     format!("{}::{}", lang_id, project_root)
 }
 
+/// Map a file extension (without dot) to the correct LSP `languageId`.
+///
+/// The server key in the manifest (e.g. `"typescript"`) is NOT the same as the
+/// LSP language ID sent in `textDocument/didOpen`. For example, `.js` files
+/// must use `"javascript"`, not `"typescript"`, so tsserver applies
+/// JavaScript-specific inference (JSDoc type expansion, etc.).
+pub(crate) fn lsp_language_id(ext: &str) -> &str {
+    match ext {
+        "js" | "mjs" | "cjs" => "javascript",
+        "jsx" => "javascriptreact",
+        "ts" | "mts" | "cts" => "typescript",
+        "tsx" => "typescriptreact",
+        "css" => "css",
+        "scss" => "scss",
+        "less" => "less",
+        "html" | "htm" => "html",
+        "json" => "json",
+        "jsonc" => "jsonc",
+        "svelte" => "svelte",
+        "rs" => "rust",
+        "md" => "markdown",
+        "py" => "python",
+        _ => ext,
+    }
+}
+
 /// A running LSP server process.
 pub struct LspServer {
     pub language_id: String,
@@ -123,6 +149,20 @@ impl LspManager {
             &self.extension_for_language(lang_id),
         )
         .ok_or_else(|| format!("No LSP server configured for language '{}'", lang_id))?;
+
+        self.start_server(lang_id, project_root, server_info).await
+    }
+
+    /// Start a server from an already-detected `ServerInfo`.
+    ///
+    /// Handles auto-install, spawning, initialization, and reader loop setup.
+    /// Callers must check `servers.contains_key` before calling.
+    async fn start_server(
+        &mut self,
+        lang_id: &str,
+        project_root: &str,
+        server_info: detection::ServerInfo,
+    ) -> Result<(), String> {
 
         // If server binary not found, attempt auto-install
         let server_info = if !server_info.installed {
@@ -196,8 +236,13 @@ impl LspManager {
                 }
             }
 
-            // Retry detection after install
-            detection::detect_for_extension(&self.extension_for_language(lang_id))
+            // Retry detection after install using the server's own extension
+            let retry_ext = entry
+                .extensions
+                .first()
+                .map(|e| e.trim_start_matches('.').to_string())
+                .unwrap_or_else(|| self.extension_for_language(lang_id));
+            detection::detect_for_extension(&retry_ext)
                 .ok_or_else(|| format!("Server '{}' still not found after install", server_id))?
         } else {
             server_info
@@ -430,7 +475,7 @@ impl LspManager {
                     },
                     "completion": {
                         "completionItem": {
-                            "snippetSupport": false,
+                            "snippetSupport": true,
                             "commitCharactersSupport": false,
                             "documentationFormat": ["plaintext"],
                             "deprecatedSupport": false
@@ -483,11 +528,73 @@ impl LspManager {
                         "dynamicRegistration": false
                     },
                     "publishDiagnostics": {
-                        "relatedInformation": false
+                        "relatedInformation": true,
+                        "versionSupport": true,
+                        "codeDescriptionSupport": true,
+                        "tagSupport": {
+                            "valueSet": [1, 2]
+                        }
+                    },
+                    "documentHighlight": {
+                        "dynamicRegistration": false
+                    },
+                    "typeDefinition": {
+                        "dynamicRegistration": false
+                    },
+                    "declaration": {
+                        "dynamicRegistration": false
+                    },
+                    "implementation": {
+                        "dynamicRegistration": false
+                    },
+                    "linkedEditingRange": {
+                        "dynamicRegistration": true
+                    },
+                    "onTypeFormatting": {
+                        "dynamicRegistration": false
+                    },
+                    "codeLens": {
+                        "dynamicRegistration": false
+                    },
+                    "colorProvider": {
+                        "dynamicRegistration": false
+                    },
+                    "foldingRange": {
+                        "dynamicRegistration": false,
+                        "lineFoldingOnly": true
+                    },
+                    "inlayHint": {
+                        "dynamicRegistration": false
+                    },
+                    "semanticTokens": {
+                        "dynamicRegistration": false,
+                        "requests": {
+                            "full": { "delta": true },
+                            "range": true
+                        },
+                        "tokenTypes": [
+                            "namespace", "type", "class", "enum", "interface",
+                            "struct", "typeParameter", "parameter", "variable",
+                            "property", "enumMember", "event", "function",
+                            "method", "macro", "keyword", "modifier",
+                            "comment", "string", "number", "regexp", "operator",
+                            "decorator"
+                        ],
+                        "tokenModifiers": [
+                            "declaration", "definition", "readonly", "static",
+                            "deprecated", "abstract", "async", "modification",
+                            "documentation", "defaultLibrary"
+                        ],
+                        "formats": ["relative"],
+                        "multilineTokenSupport": false,
+                        "overlappingTokenSupport": false
                     }
                 },
                 "workspace": {
-                    "workspaceFolders": true
+                    "workspaceFolders": true,
+                    "symbol": {
+                        "dynamicRegistration": false
+                    }
                 }
             }
         });
@@ -530,8 +637,41 @@ impl LspManager {
             }
         }
 
+        // Log linked editing support for debugging
+        let raw_caps = response
+            .get("result")
+            .and_then(|r| r.get("capabilities"));
+        if let Some(caps) = raw_caps {
+            if let Some(le) = caps.get("linkedEditingRangeProvider") {
+                info!("[{}] linkedEditingRangeProvider: {}", lang_id, le);
+            } else {
+                info!("[{}] linkedEditingRangeProvider: NOT advertised", lang_id);
+            }
+        }
+
         // Send initialized notification
         client::send_notification(&mut *stdin.lock().await, "initialized", serde_json::json!({})).await?;
+
+        // Send workspace/didChangeConfiguration with settings from the manifest.
+        // LSP servers use this to receive initial configuration.
+        // Settings are structured using VS Code's namespace format (e.g.,
+        // typescript.*, javascript.*).
+        let settings = manifest::load_manifest()
+            .ok()
+            .and_then(|m| {
+                server_info
+                    .server_id
+                    .as_deref()
+                    .and_then(|id| m.servers.get(id).cloned())
+            })
+            .map(|entry| entry.settings)
+            .unwrap_or(serde_json::json!({}));
+        client::send_notification(
+            &mut *stdin.lock().await,
+            "workspace/didChangeConfiguration",
+            serde_json::json!({ "settings": settings }),
+        )
+        .await?;
 
         info!(
             "LSP server '{}' initialized for language '{}'",
@@ -615,9 +755,17 @@ impl LspManager {
         }
 
         let mut started = Vec::new();
-        for info in &server_infos {
+        for info in server_infos {
             let server_id = info.language_id.clone();
-            if let Err(e) = self.ensure_server(&server_id, project_root).await {
+            // Skip if already running
+            if self.servers.contains_key(&server_key(&server_id, project_root)) {
+                started.push(server_id);
+                continue;
+            }
+            // Use start_server directly — avoids the lang_id → extension → detect
+            // round-trip that fails for supplementary servers like "eslint" whose
+            // server key doesn't map back to a file extension.
+            if let Err(e) = self.start_server(&server_id, project_root, info).await {
                 warn!("Failed to start '{}' server for .{}: {}", server_id, ext, e);
             } else {
                 started.push(server_id);
@@ -627,21 +775,26 @@ impl LspManager {
     }
 
     /// Open a document in the LSP server.
+    ///
+    /// `server_id` is the manifest key (e.g. `"typescript"`) used for the
+    /// HashMap lookup.  The actual LSP `languageId` sent in `textDocument/didOpen`
+    /// is derived from the file extension so that tsserver sees `.js` as
+    /// `"javascript"`, not `"typescript"`.
     pub async fn open_document(
         &mut self,
         uri: &str,
-        lang_id: &str,
+        server_id: &str,
         content: &str,
         project_root: &str,
     ) -> Result<(), String> {
         let server = self
             .servers
-            .get_mut(&server_key(lang_id, project_root))
-            .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
+            .get_mut(&server_key(server_id, project_root))
+            .ok_or_else(|| format!("No LSP server running for '{}'", server_id))?;
 
         // Cancel any pending idle shutdown timer
         if let Some(tx) = server.idle_cancel.take() {
-            info!("Cancelling idle shutdown timer for '{}' — new document opened", lang_id);
+            info!("Cancelling idle shutdown timer for '{}' — new document opened", server_id);
             let _ = tx.send(true);
         }
 
@@ -666,13 +819,23 @@ impl LspManager {
             return Ok(());
         }
 
+        // Resolve the correct LSP languageId from the file extension.
+        // The server_id ("typescript") differs from the LSP languageId
+        // ("javascript" for .js files). Using the wrong ID prevents tsserver
+        // from applying JS-specific inference like JSDoc type expansion.
+        let file_language_id = uri
+            .rsplit('.')
+            .next()
+            .map(|ext| lsp_language_id(ext).to_string())
+            .unwrap_or_else(|| server_id.to_string());
+
         client::send_notification(
             &mut *server.stdin.lock().await,
             "textDocument/didOpen",
             serde_json::json!({
                 "textDocument": {
                     "uri": uri,
-                    "languageId": lang_id,
+                    "languageId": file_language_id,
                     "version": 1,
                     "text": content
                 }
@@ -802,6 +965,40 @@ impl LspManager {
         .await
     }
 
+    /// Notify the server of incremental document changes.
+    ///
+    /// Unlike `change_document` which sends the full file content,
+    /// this method sends an array of incremental text edits (each with
+    /// a range and replacement text). This is more efficient for small
+    /// edits in large files when the server supports incremental sync.
+    ///
+    /// Each entry in `changes` should be a JSON object with:
+    /// - `range`: `{ start: { line, character }, end: { line, character } }`
+    /// - `text`: the replacement string
+    pub async fn change_document_incremental(
+        &mut self,
+        uri: &str,
+        lang_id: &str,
+        version: i32,
+        changes: Vec<serde_json::Value>,
+        project_root: &str,
+    ) -> Result<(), String> {
+        let server = self
+            .servers
+            .get_mut(&server_key(lang_id, project_root))
+            .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
+
+        client::send_notification(
+            &mut *server.stdin.lock().await,
+            "textDocument/didChange",
+            serde_json::json!({
+                "textDocument": { "uri": uri, "version": version },
+                "contentChanges": changes
+            }),
+        )
+        .await
+    }
+
     /// Notify the server that a document was saved.
     pub async fn save_document(
         &mut self,
@@ -898,6 +1095,10 @@ impl LspManager {
     }
 
     /// Request hover information at a position.
+    ///
+    /// Delegates to `standard_hover` which sends `textDocument/hover`.
+    /// typescript-language-server uses tsserver's `displayParts` for expanded
+    /// type signatures (matching VS Code behavior).
     pub async fn request_hover(
         &mut self,
         uri: &str,
@@ -906,10 +1107,22 @@ impl LspManager {
         character: u32,
         project_root: &str,
     ) -> Result<Value, String> {
+        let key = server_key(lang_id, project_root);
+        self.standard_hover(uri, line, character, &key).await
+    }
+
+    /// Standard LSP textDocument/hover request.
+    async fn standard_hover(
+        &mut self,
+        uri: &str,
+        line: u32,
+        character: u32,
+        server_key: &str,
+    ) -> Result<Value, String> {
         let server = self
             .servers
-            .get_mut(&server_key(lang_id, project_root))
-            .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
+            .get_mut(server_key)
+            .ok_or_else(|| format!("No LSP server running for key '{}'", server_key))?;
 
         let params = serde_json::json!({
             "textDocument": { "uri": uri },
@@ -932,20 +1145,28 @@ impl LspManager {
 
         let result = response.get("result").cloned().unwrap_or(Value::Null);
 
-        // Extract hover contents
-        let contents = if let Some(contents) = result.get("contents") {
+        // Extract hover contents, preserving the kind field
+        let (contents, kind) = if let Some(contents) = result.get("contents") {
             match contents {
-                Value::String(s) => s.clone(),
+                Value::String(s) => (s.clone(), "plaintext".to_string()),
                 Value::Object(obj) => {
                     // MarkupContent: { kind, value }
-                    obj.get("value")
+                    let kind = obj
+                        .get("kind")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("markdown")
+                        .to_string();
+                    let value = obj
+                        .get("value")
                         .and_then(|v| v.as_str())
                         .unwrap_or("")
-                        .to_string()
+                        .to_string();
+                    (value, kind)
                 }
                 Value::Array(arr) => {
                     // MarkedString[]
-                    arr.iter()
+                    let text = arr
+                        .iter()
                         .filter_map(|item| {
                             if let Value::String(s) = item {
                                 Some(s.as_str())
@@ -954,15 +1175,16 @@ impl LspManager {
                             }
                         })
                         .collect::<Vec<_>>()
-                        .join("\n\n")
+                        .join("\n\n");
+                    (text, "markdown".to_string())
                 }
-                _ => String::new(),
+                _ => (String::new(), "plaintext".to_string()),
             }
         } else {
-            String::new()
+            (String::new(), "plaintext".to_string())
         };
 
-        Ok(serde_json::json!({ "contents": contents }))
+        Ok(serde_json::json!({ "contents": { "kind": kind, "value": contents } }))
     }
 
     /// Request signature help at a position.
@@ -1060,6 +1282,165 @@ impl LspManager {
         Ok(serde_json::json!({ "locations": locations }))
     }
 
+    /// Request go-to-type-definition at a position.
+    pub async fn request_type_definition(
+        &mut self,
+        uri: &str,
+        lang_id: &str,
+        line: u32,
+        character: u32,
+        project_root: &str,
+    ) -> Result<Value, String> {
+        let server = self
+            .servers
+            .get_mut(&server_key(lang_id, project_root))
+            .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
+
+        let params = serde_json::json!({
+            "textDocument": { "uri": uri },
+            "position": { "line": line, "character": character }
+        });
+
+        let rx = client::send_request(
+            &mut *server.stdin.lock().await,
+            &server.pending_requests,
+            "textDocument/typeDefinition",
+            params,
+            &server.next_id,
+        )
+        .await?;
+
+        let response = tokio::time::timeout(std::time::Duration::from_secs(10), rx)
+            .await
+            .map_err(|_| "Type definition request timed out".to_string())?
+            .map_err(|_| "Type definition response channel closed".to_string())?;
+
+        let result = response.get("result").cloned().unwrap_or(Value::Null);
+
+        // Result can be Location | Location[] | LocationLink[]
+        let locations: Vec<Value> = if result.is_array() {
+            result
+                .as_array()
+                .cloned()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|loc| normalize_location(&loc))
+                .collect()
+        } else if result.is_object() {
+            vec![normalize_location(&result)]
+        } else {
+            vec![]
+        };
+
+        Ok(serde_json::json!({ "locations": locations }))
+    }
+
+    /// Request go-to-declaration at a position.
+    pub async fn request_declaration(
+        &mut self,
+        uri: &str,
+        lang_id: &str,
+        line: u32,
+        character: u32,
+        project_root: &str,
+    ) -> Result<Value, String> {
+        let server = self
+            .servers
+            .get_mut(&server_key(lang_id, project_root))
+            .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
+
+        let params = serde_json::json!({
+            "textDocument": { "uri": uri },
+            "position": { "line": line, "character": character }
+        });
+
+        let rx = client::send_request(
+            &mut *server.stdin.lock().await,
+            &server.pending_requests,
+            "textDocument/declaration",
+            params,
+            &server.next_id,
+        )
+        .await?;
+
+        let response = tokio::time::timeout(std::time::Duration::from_secs(10), rx)
+            .await
+            .map_err(|_| "Declaration request timed out".to_string())?
+            .map_err(|_| "Declaration response channel closed".to_string())?;
+
+        let result = response.get("result").cloned().unwrap_or(Value::Null);
+
+        // Result can be Location | Location[] | LocationLink[]
+        let locations: Vec<Value> = if result.is_array() {
+            result
+                .as_array()
+                .cloned()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|loc| normalize_location(&loc))
+                .collect()
+        } else if result.is_object() {
+            vec![normalize_location(&result)]
+        } else {
+            vec![]
+        };
+
+        Ok(serde_json::json!({ "locations": locations }))
+    }
+
+    /// Request go-to-implementation at a position.
+    pub async fn request_implementation(
+        &mut self,
+        uri: &str,
+        lang_id: &str,
+        line: u32,
+        character: u32,
+        project_root: &str,
+    ) -> Result<Value, String> {
+        let server = self
+            .servers
+            .get_mut(&server_key(lang_id, project_root))
+            .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
+
+        let params = serde_json::json!({
+            "textDocument": { "uri": uri },
+            "position": { "line": line, "character": character }
+        });
+
+        let rx = client::send_request(
+            &mut *server.stdin.lock().await,
+            &server.pending_requests,
+            "textDocument/implementation",
+            params,
+            &server.next_id,
+        )
+        .await?;
+
+        let response = tokio::time::timeout(std::time::Duration::from_secs(10), rx)
+            .await
+            .map_err(|_| "Implementation request timed out".to_string())?
+            .map_err(|_| "Implementation response channel closed".to_string())?;
+
+        let result = response.get("result").cloned().unwrap_or(Value::Null);
+
+        // Result can be Location | Location[] | LocationLink[]
+        let locations: Vec<Value> = if result.is_array() {
+            result
+                .as_array()
+                .cloned()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|loc| normalize_location(&loc))
+                .collect()
+        } else if result.is_object() {
+            vec![normalize_location(&result)]
+        } else {
+            vec![]
+        };
+
+        Ok(serde_json::json!({ "locations": locations }))
+    }
+
     /// Request document symbols for a file (outline view).
     pub async fn request_document_symbols(
         &mut self,
@@ -1093,6 +1474,52 @@ impl LspManager {
         let result = response.get("result").cloned().unwrap_or(Value::Null);
 
         // Result can be DocumentSymbol[] or SymbolInformation[]
+        let symbols = if result.is_array() {
+            result
+        } else {
+            Value::Array(vec![])
+        };
+
+        Ok(serde_json::json!({ "symbols": symbols }))
+    }
+
+    /// Request workspace symbols matching a query string.
+    ///
+    /// Unlike textDocument requests, `workspace/symbol` doesn't use a URI.
+    /// It searches across the entire project for symbols matching the query.
+    pub async fn request_workspace_symbols(
+        &mut self,
+        query: &str,
+        lang_id: &str,
+        project_root: &str,
+    ) -> Result<Value, String> {
+        let server = self
+            .servers
+            .get_mut(&server_key(lang_id, project_root))
+            .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
+
+        let params = serde_json::json!({
+            "query": query
+        });
+
+        let rx = client::send_request(
+            &mut *server.stdin.lock().await,
+            &server.pending_requests,
+            "workspace/symbol",
+            params,
+            &server.next_id,
+        )
+        .await?;
+
+        // Workspace symbol search can scan many files — use a longer timeout
+        let response = tokio::time::timeout(std::time::Duration::from_secs(15), rx)
+            .await
+            .map_err(|_| "Workspace symbols request timed out".to_string())?
+            .map_err(|_| "Workspace symbols response channel closed".to_string())?;
+
+        let result = response.get("result").cloned().unwrap_or(Value::Null);
+
+        // Result is SymbolInformation[] or WorkspaceSymbol[]
         let symbols = if result.is_array() {
             result
         } else {
@@ -1146,6 +1573,136 @@ impl LspManager {
         };
 
         Ok(serde_json::json!({ "locations": locations }))
+    }
+
+    /// Request document highlights for a symbol at a position.
+    ///
+    /// Returns all occurrences of the symbol under the cursor in the same file,
+    /// with optional highlight kind (text=1, read=2, write=3).
+    pub async fn request_document_highlight(
+        &mut self,
+        uri: &str,
+        lang_id: &str,
+        line: u32,
+        character: u32,
+        project_root: &str,
+    ) -> Result<Value, String> {
+        let server = self
+            .servers
+            .get_mut(&server_key(lang_id, project_root))
+            .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
+
+        let params = serde_json::json!({
+            "textDocument": { "uri": uri },
+            "position": { "line": line, "character": character }
+        });
+
+        let rx = client::send_request(
+            &mut *server.stdin.lock().await,
+            &server.pending_requests,
+            "textDocument/documentHighlight",
+            params,
+            &server.next_id,
+        )
+        .await?;
+
+        let response = tokio::time::timeout(std::time::Duration::from_secs(5), rx)
+            .await
+            .map_err(|_| "Document highlight request timed out".to_string())?
+            .map_err(|_| "Document highlight response channel closed".to_string())?;
+
+        let result = response.get("result").cloned().unwrap_or(Value::Null);
+
+        // Result is DocumentHighlight[] | null
+        let highlights: Vec<Value> = if let Some(arr) = result.as_array() {
+            arr.iter()
+                .filter_map(|h| {
+                    let range = h.get("range")?;
+                    Some(serde_json::json!({
+                        "range": range,
+                        "kind": h.get("kind").and_then(|k| k.as_u64()).unwrap_or(1)
+                    }))
+                })
+                .collect()
+        } else {
+            vec![]
+        };
+
+        Ok(serde_json::json!({ "highlights": highlights }))
+    }
+
+    /// Request inlay hints for a range of lines in a file.
+    ///
+    /// Returns inline type annotations, parameter names, etc. that the
+    /// language server can infer for the given range.
+    pub async fn request_inlay_hints(
+        &mut self,
+        uri: &str,
+        lang_id: &str,
+        start_line: u32,
+        end_line: u32,
+        project_root: &str,
+    ) -> Result<Value, String> {
+        let server = self
+            .servers
+            .get_mut(&server_key(lang_id, project_root))
+            .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
+
+        let params = serde_json::json!({
+            "textDocument": { "uri": uri },
+            "range": {
+                "start": { "line": start_line, "character": 0 },
+                "end": { "line": end_line, "character": 0 }
+            }
+        });
+
+        let rx = client::send_request(
+            &mut *server.stdin.lock().await,
+            &server.pending_requests,
+            "textDocument/inlayHint",
+            params,
+            &server.next_id,
+        )
+        .await?;
+
+        let response = tokio::time::timeout(std::time::Duration::from_secs(5), rx)
+            .await
+            .map_err(|_| "Inlay hints request timed out".to_string())?
+            .map_err(|_| "Inlay hints response channel closed".to_string())?;
+
+        let result = response.get("result").cloned().unwrap_or(Value::Null);
+
+        // Result is InlayHint[] | null
+        let hints: Vec<Value> = if let Some(arr) = result.as_array() {
+            arr.iter()
+                .filter_map(|h| {
+                    let position = h.get("position")?;
+                    let label = h.get("label")?;
+                    // Label can be a string or an array of InlayHintLabelPart
+                    let label_text = if let Some(s) = label.as_str() {
+                        s.to_string()
+                    } else if let Some(parts) = label.as_array() {
+                        parts.iter()
+                            .filter_map(|p| p.get("value").and_then(|v| v.as_str()))
+                            .collect::<Vec<_>>()
+                            .join("")
+                    } else {
+                        return None;
+                    };
+                    Some(serde_json::json!({
+                        "position": position,
+                        "label": label_text,
+                        "kind": h.get("kind").and_then(|k| k.as_u64()).unwrap_or(0),
+                        "paddingLeft": h.get("paddingLeft").and_then(|v| v.as_bool()).unwrap_or(false),
+                        "paddingRight": h.get("paddingRight").and_then(|v| v.as_bool()).unwrap_or(false),
+                    }))
+                })
+                .collect()
+        } else {
+            vec![]
+        };
+
+        Ok(serde_json::json!({ "hints": hints }))
     }
 
     /// Request code actions for a range in a file.
@@ -1406,6 +1963,652 @@ impl LspManager {
         Ok(serde_json::json!({ "edits": edits }))
     }
 
+    /// Request linked editing ranges at a position in a file.
+    ///
+    /// Returns ranges that should be edited simultaneously, such as matching
+    /// HTML open/close tag names (e.g. `<div>` and `</div>`).
+    pub async fn request_linked_editing_range(
+        &mut self,
+        uri: &str,
+        lang_id: &str,
+        line: u32,
+        character: u32,
+        project_root: &str,
+    ) -> Result<Value, String> {
+        let server = self
+            .servers
+            .get_mut(&server_key(lang_id, project_root))
+            .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
+
+        debug!("[{}] linkedEditingRange uri={} line={} char={}", lang_id, uri, line, character);
+
+        let params = serde_json::json!({
+            "textDocument": { "uri": uri },
+            "position": { "line": line, "character": character }
+        });
+
+        let rx = client::send_request(
+            &mut *server.stdin.lock().await,
+            &server.pending_requests,
+            "textDocument/linkedEditingRange",
+            params,
+            &server.next_id,
+        )
+        .await?;
+
+        let response = tokio::time::timeout(std::time::Duration::from_secs(5), rx)
+            .await
+            .map_err(|_| "Linked editing range request timed out".to_string())?
+            .map_err(|_| "Linked editing range response channel closed".to_string())?;
+
+        let result = response.get("result").cloned().unwrap_or(Value::Null);
+
+        // Result is LinkedEditingRanges { ranges: Range[], wordPattern?: string } or null
+        if result.is_null() {
+            return Ok(serde_json::json!({ "ranges": [] }));
+        }
+
+        let ranges = result
+            .get("ranges")
+            .cloned()
+            .unwrap_or(Value::Array(vec![]));
+        let word_pattern = result
+            .get("wordPattern")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
+        let mut out = serde_json::json!({ "ranges": ranges });
+        if let Some(wp) = word_pattern {
+            out["wordPattern"] = Value::String(wp);
+        }
+
+        Ok(out)
+    }
+
+    /// Request on-type formatting after a trigger character is typed.
+    ///
+    /// Returns text edits to apply when the user types a trigger character
+    /// like `}`, `;`, or `\n`. The server decides which characters trigger
+    /// formatting via its capabilities.
+    pub async fn request_on_type_formatting(
+        &mut self,
+        uri: &str,
+        lang_id: &str,
+        line: u32,
+        character: u32,
+        trigger_char: &str,
+        tab_size: u32,
+        insert_spaces: bool,
+        project_root: &str,
+    ) -> Result<Value, String> {
+        let server = self
+            .servers
+            .get_mut(&server_key(lang_id, project_root))
+            .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
+
+        let params = serde_json::json!({
+            "textDocument": { "uri": uri },
+            "position": { "line": line, "character": character },
+            "ch": trigger_char,
+            "options": {
+                "tabSize": tab_size,
+                "insertSpaces": insert_spaces
+            }
+        });
+
+        let rx = client::send_request(
+            &mut *server.stdin.lock().await,
+            &server.pending_requests,
+            "textDocument/onTypeFormatting",
+            params,
+            &server.next_id,
+        )
+        .await?;
+
+        let response = tokio::time::timeout(std::time::Duration::from_secs(10), rx)
+            .await
+            .map_err(|_| "On-type formatting request timed out".to_string())?
+            .map_err(|_| "On-type formatting response channel closed".to_string())?;
+
+        let result = response.get("result").cloned().unwrap_or(Value::Null);
+
+        // Result is TextEdit[] or null
+        let edits = if result.is_array() {
+            result
+        } else {
+            Value::Array(vec![])
+        };
+
+        Ok(serde_json::json!({ "edits": edits }))
+    }
+
+    /// Request code lenses for a document.
+    ///
+    /// Code lenses are inline annotations above functions (e.g., "3 references",
+    /// "Run test"). Returns an array of CodeLens objects with `range` and
+    /// optional `command`.
+    pub async fn request_code_lens(
+        &mut self,
+        uri: &str,
+        lang_id: &str,
+        project_root: &str,
+    ) -> Result<Value, String> {
+        let server = self
+            .servers
+            .get_mut(&server_key(lang_id, project_root))
+            .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
+
+        let params = serde_json::json!({
+            "textDocument": { "uri": uri }
+        });
+
+        let rx = client::send_request(
+            &mut *server.stdin.lock().await,
+            &server.pending_requests,
+            "textDocument/codeLens",
+            params,
+            &server.next_id,
+        )
+        .await?;
+
+        let response = tokio::time::timeout(std::time::Duration::from_secs(10), rx)
+            .await
+            .map_err(|_| "Code lens request timed out".to_string())?
+            .map_err(|_| "Code lens response channel closed".to_string())?;
+
+        let result = response.get("result").cloned().unwrap_or(Value::Null);
+
+        // Result is CodeLens[] or null
+        let mut lenses: Vec<Value> = if let Value::Array(arr) = result {
+            arr
+        } else {
+            vec![]
+        };
+
+        // Resolve lenses that don't have a command yet (e.g. typescript-language-server
+        // returns lenses without commands, requiring codeLens/resolve for each).
+        for lens in &mut lenses {
+            if lens.get("command").is_some() && !lens["command"].is_null() {
+                continue;
+            }
+            let rx = client::send_request(
+                &mut *server.stdin.lock().await,
+                &server.pending_requests,
+                "codeLens/resolve",
+                lens.clone(),
+                &server.next_id,
+            )
+            .await;
+            if let Ok(rx) = rx {
+                if let Ok(Ok(resp)) =
+                    tokio::time::timeout(std::time::Duration::from_secs(5), rx).await
+                {
+                    if let Some(resolved) = resp.get("result") {
+                        *lens = resolved.clone();
+                    }
+                }
+            }
+        }
+
+        Ok(serde_json::json!({ "lenses": Value::Array(lenses) }))
+    }
+
+    /// Request document colors for a file (CSS color values, etc.).
+    ///
+    /// Returns an array of ColorInformation objects, each with a `range`
+    /// and `color` (RGBA floats in 0-1).
+    pub async fn request_document_colors(
+        &mut self,
+        uri: &str,
+        lang_id: &str,
+        project_root: &str,
+    ) -> Result<Value, String> {
+        let server = self
+            .servers
+            .get_mut(&server_key(lang_id, project_root))
+            .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
+
+        let params = serde_json::json!({
+            "textDocument": { "uri": uri }
+        });
+
+        let rx = client::send_request(
+            &mut *server.stdin.lock().await,
+            &server.pending_requests,
+            "textDocument/documentColor",
+            params,
+            &server.next_id,
+        )
+        .await?;
+
+        let response = tokio::time::timeout(std::time::Duration::from_secs(10), rx)
+            .await
+            .map_err(|_| "Document colors request timed out".to_string())?
+            .map_err(|_| "Document colors response channel closed".to_string())?;
+
+        let result = response.get("result").cloned().unwrap_or(Value::Null);
+
+        // Result is ColorInformation[] or null
+        let colors = if result.is_array() {
+            result
+        } else {
+            Value::Array(vec![])
+        };
+
+        Ok(serde_json::json!({ "colors": colors }))
+    }
+
+    /// Request folding ranges for a document.
+    ///
+    /// Returns an array of FoldingRange objects with `startLine`, `endLine`,
+    /// optional `startCharacter`, `endCharacter`, and `kind` (comment, imports, region).
+    pub async fn request_folding_ranges(
+        &mut self,
+        uri: &str,
+        lang_id: &str,
+        project_root: &str,
+    ) -> Result<Value, String> {
+        let server = self
+            .servers
+            .get_mut(&server_key(lang_id, project_root))
+            .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
+
+        let params = serde_json::json!({
+            "textDocument": { "uri": uri }
+        });
+
+        let rx = client::send_request(
+            &mut *server.stdin.lock().await,
+            &server.pending_requests,
+            "textDocument/foldingRange",
+            params,
+            &server.next_id,
+        )
+        .await?;
+
+        let response = tokio::time::timeout(std::time::Duration::from_secs(10), rx)
+            .await
+            .map_err(|_| "Folding ranges request timed out".to_string())?
+            .map_err(|_| "Folding ranges response channel closed".to_string())?;
+
+        let result = response.get("result").cloned().unwrap_or(Value::Null);
+
+        // Result is FoldingRange[] or null
+        let ranges = if result.is_array() {
+            result
+        } else {
+            Value::Array(vec![])
+        };
+
+        Ok(serde_json::json!({ "ranges": ranges }))
+    }
+
+    /// Request semantic tokens for an entire document.
+    ///
+    /// Returns the raw `data` array of relative-encoded token data (groups of
+    /// 5 integers: deltaLine, deltaStartChar, length, tokenType, tokenModifiers).
+    /// The frontend is responsible for decoding and rendering these tokens.
+    pub async fn request_semantic_tokens_full(
+        &mut self,
+        uri: &str,
+        lang_id: &str,
+        project_root: &str,
+    ) -> Result<Value, String> {
+        let server = self
+            .servers
+            .get_mut(&server_key(lang_id, project_root))
+            .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
+
+        let params = serde_json::json!({
+            "textDocument": { "uri": uri }
+        });
+
+        let rx = client::send_request(
+            &mut *server.stdin.lock().await,
+            &server.pending_requests,
+            "textDocument/semanticTokens/full",
+            params,
+            &server.next_id,
+        )
+        .await?;
+
+        let response = tokio::time::timeout(std::time::Duration::from_secs(10), rx)
+            .await
+            .map_err(|_| "Semantic tokens request timed out".to_string())?
+            .map_err(|_| "Semantic tokens response channel closed".to_string())?;
+
+        let result = response.get("result").cloned().unwrap_or(Value::Null);
+
+        // Result is SemanticTokens { resultId?, data: number[] } or null
+        let data = if let Some(d) = result.get("data") {
+            d.clone()
+        } else {
+            Value::Array(vec![])
+        };
+
+        let result_id = result.get("resultId").cloned().unwrap_or(Value::Null);
+
+        Ok(serde_json::json!({ "data": data, "resultId": result_id }))
+    }
+
+    /// Resolve a completion item to fill in additional details (documentation, additionalTextEdits).
+    ///
+    /// Takes a `CompletionItem` JSON value (as returned by `textDocument/completion`)
+    /// and sends `completionItem/resolve` to get the full item with lazy-loaded fields.
+    pub async fn resolve_completion_item(
+        &mut self,
+        item: serde_json::Value,
+        lang_id: &str,
+        project_root: &str,
+    ) -> Result<Value, String> {
+        let server = self
+            .servers
+            .get_mut(&server_key(lang_id, project_root))
+            .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
+
+        let rx = client::send_request(
+            &mut *server.stdin.lock().await,
+            &server.pending_requests,
+            "completionItem/resolve",
+            item,
+            &server.next_id,
+        )
+        .await?;
+
+        let response = tokio::time::timeout(std::time::Duration::from_secs(10), rx)
+            .await
+            .map_err(|_| "Completion resolve request timed out".to_string())?
+            .map_err(|_| "Completion resolve response channel closed".to_string())?;
+
+        let result = response.get("result").cloned().unwrap_or(Value::Null);
+        Ok(result)
+    }
+
+    /// Request diagnostics for a document on demand (pull diagnostics).
+    ///
+    /// Sends `textDocument/diagnostic` to the server and returns the diagnostic report.
+    /// This complements the push-based `textDocument/publishDiagnostics` notification.
+    pub async fn request_diagnostics(
+        &mut self,
+        uri: &str,
+        lang_id: &str,
+        project_root: &str,
+    ) -> Result<Value, String> {
+        let server = self
+            .servers
+            .get_mut(&server_key(lang_id, project_root))
+            .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
+
+        let params = serde_json::json!({
+            "textDocument": { "uri": uri }
+        });
+
+        let rx = client::send_request(
+            &mut *server.stdin.lock().await,
+            &server.pending_requests,
+            "textDocument/diagnostic",
+            params,
+            &server.next_id,
+        )
+        .await?;
+
+        let response = tokio::time::timeout(std::time::Duration::from_secs(10), rx)
+            .await
+            .map_err(|_| "Diagnostics request timed out".to_string())?
+            .map_err(|_| "Diagnostics response channel closed".to_string())?;
+
+        let result = response.get("result").cloned().unwrap_or(Value::Null);
+        Ok(result)
+    }
+
+    /// Prepare call hierarchy at a position (textDocument/prepareCallHierarchy).
+    ///
+    /// Returns an array of CallHierarchyItem that can be passed to
+    /// `request_incoming_calls` or `request_outgoing_calls`.
+    pub async fn prepare_call_hierarchy(
+        &mut self,
+        uri: &str,
+        lang_id: &str,
+        line: u32,
+        character: u32,
+        project_root: &str,
+    ) -> Result<Value, String> {
+        let server = self
+            .servers
+            .get_mut(&server_key(lang_id, project_root))
+            .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
+
+        let params = serde_json::json!({
+            "textDocument": { "uri": uri },
+            "position": { "line": line, "character": character }
+        });
+
+        let rx = client::send_request(
+            &mut *server.stdin.lock().await,
+            &server.pending_requests,
+            "textDocument/prepareCallHierarchy",
+            params,
+            &server.next_id,
+        )
+        .await?;
+
+        let response = tokio::time::timeout(std::time::Duration::from_secs(10), rx)
+            .await
+            .map_err(|_| "Prepare call hierarchy request timed out".to_string())?
+            .map_err(|_| "Prepare call hierarchy response channel closed".to_string())?;
+
+        let result = response.get("result").cloned().unwrap_or(Value::Null);
+        Ok(result)
+    }
+
+    /// Request incoming calls for a call hierarchy item (callHierarchy/incomingCalls).
+    pub async fn request_incoming_calls(
+        &mut self,
+        item: serde_json::Value,
+        lang_id: &str,
+        project_root: &str,
+    ) -> Result<Value, String> {
+        let server = self
+            .servers
+            .get_mut(&server_key(lang_id, project_root))
+            .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
+
+        let params = serde_json::json!({ "item": item });
+
+        let rx = client::send_request(
+            &mut *server.stdin.lock().await,
+            &server.pending_requests,
+            "callHierarchy/incomingCalls",
+            params,
+            &server.next_id,
+        )
+        .await?;
+
+        let response = tokio::time::timeout(std::time::Duration::from_secs(10), rx)
+            .await
+            .map_err(|_| "Incoming calls request timed out".to_string())?
+            .map_err(|_| "Incoming calls response channel closed".to_string())?;
+
+        let result = response.get("result").cloned().unwrap_or(Value::Null);
+        Ok(result)
+    }
+
+    /// Request outgoing calls for a call hierarchy item (callHierarchy/outgoingCalls).
+    pub async fn request_outgoing_calls(
+        &mut self,
+        item: serde_json::Value,
+        lang_id: &str,
+        project_root: &str,
+    ) -> Result<Value, String> {
+        let server = self
+            .servers
+            .get_mut(&server_key(lang_id, project_root))
+            .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
+
+        let params = serde_json::json!({ "item": item });
+
+        let rx = client::send_request(
+            &mut *server.stdin.lock().await,
+            &server.pending_requests,
+            "callHierarchy/outgoingCalls",
+            params,
+            &server.next_id,
+        )
+        .await?;
+
+        let response = tokio::time::timeout(std::time::Duration::from_secs(10), rx)
+            .await
+            .map_err(|_| "Outgoing calls request timed out".to_string())?
+            .map_err(|_| "Outgoing calls response channel closed".to_string())?;
+
+        let result = response.get("result").cloned().unwrap_or(Value::Null);
+        Ok(result)
+    }
+
+    /// Prepare type hierarchy at a position (textDocument/prepareTypeHierarchy).
+    ///
+    /// Returns an array of TypeHierarchyItem that can be passed to
+    /// `request_supertypes` or `request_subtypes`.
+    pub async fn prepare_type_hierarchy(
+        &mut self,
+        uri: &str,
+        lang_id: &str,
+        line: u32,
+        character: u32,
+        project_root: &str,
+    ) -> Result<Value, String> {
+        let server = self
+            .servers
+            .get_mut(&server_key(lang_id, project_root))
+            .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
+
+        let params = serde_json::json!({
+            "textDocument": { "uri": uri },
+            "position": { "line": line, "character": character }
+        });
+
+        let rx = client::send_request(
+            &mut *server.stdin.lock().await,
+            &server.pending_requests,
+            "textDocument/prepareTypeHierarchy",
+            params,
+            &server.next_id,
+        )
+        .await?;
+
+        let response = tokio::time::timeout(std::time::Duration::from_secs(10), rx)
+            .await
+            .map_err(|_| "Prepare type hierarchy request timed out".to_string())?
+            .map_err(|_| "Prepare type hierarchy response channel closed".to_string())?;
+
+        let result = response.get("result").cloned().unwrap_or(Value::Null);
+        Ok(result)
+    }
+
+    /// Request supertypes for a type hierarchy item (typeHierarchy/supertypes).
+    pub async fn request_supertypes(
+        &mut self,
+        item: serde_json::Value,
+        lang_id: &str,
+        project_root: &str,
+    ) -> Result<Value, String> {
+        let server = self
+            .servers
+            .get_mut(&server_key(lang_id, project_root))
+            .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
+
+        let params = serde_json::json!({ "item": item });
+
+        let rx = client::send_request(
+            &mut *server.stdin.lock().await,
+            &server.pending_requests,
+            "typeHierarchy/supertypes",
+            params,
+            &server.next_id,
+        )
+        .await?;
+
+        let response = tokio::time::timeout(std::time::Duration::from_secs(10), rx)
+            .await
+            .map_err(|_| "Supertypes request timed out".to_string())?
+            .map_err(|_| "Supertypes response channel closed".to_string())?;
+
+        let result = response.get("result").cloned().unwrap_or(Value::Null);
+        Ok(result)
+    }
+
+    /// Request subtypes for a type hierarchy item (typeHierarchy/subtypes).
+    pub async fn request_subtypes(
+        &mut self,
+        item: serde_json::Value,
+        lang_id: &str,
+        project_root: &str,
+    ) -> Result<Value, String> {
+        let server = self
+            .servers
+            .get_mut(&server_key(lang_id, project_root))
+            .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
+
+        let params = serde_json::json!({ "item": item });
+
+        let rx = client::send_request(
+            &mut *server.stdin.lock().await,
+            &server.pending_requests,
+            "typeHierarchy/subtypes",
+            params,
+            &server.next_id,
+        )
+        .await?;
+
+        let response = tokio::time::timeout(std::time::Duration::from_secs(10), rx)
+            .await
+            .map_err(|_| "Subtypes request timed out".to_string())?
+            .map_err(|_| "Subtypes response channel closed".to_string())?;
+
+        let result = response.get("result").cloned().unwrap_or(Value::Null);
+        Ok(result)
+    }
+
+    /// Request selection ranges for given positions in a document.
+    ///
+    /// The `textDocument/selectionRange` request returns a linked list of
+    /// ranges for each position, enabling smart expand/shrink selection
+    /// (word -> expression -> statement -> block -> function -> file).
+    pub async fn request_selection_range(
+        &mut self,
+        uri: &str,
+        lang_id: &str,
+        positions: Vec<serde_json::Value>,
+        project_root: &str,
+    ) -> Result<Value, String> {
+        let server = self
+            .servers
+            .get_mut(&server_key(lang_id, project_root))
+            .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
+
+        let params = serde_json::json!({
+            "textDocument": { "uri": uri },
+            "positions": positions
+        });
+
+        let rx = client::send_request(
+            &mut *server.stdin.lock().await,
+            &server.pending_requests,
+            "textDocument/selectionRange",
+            params,
+            &server.next_id,
+        )
+        .await?;
+
+        let response = tokio::time::timeout(std::time::Duration::from_secs(10), rx)
+            .await
+            .map_err(|_| "Selection range request timed out".to_string())?
+            .map_err(|_| "Selection range response channel closed".to_string())?;
+
+        let result = response.get("result").cloned().unwrap_or(Value::Null);
+        Ok(result)
+    }
+
     /// Scan the project directory for files matching the server's extensions
     /// and send `textDocument/didOpen` for each, enabling project-wide diagnostics.
     ///
@@ -1416,13 +2619,20 @@ impl LspManager {
         lang_id: &str,
         project_root: &str,
     ) -> Result<usize, String> {
-        // Load the manifest to get extensions for this server
+        // Load the manifest to get extensions for this server.
+        // Look up directly by server ID first (handles supplementary servers like "eslint"
+        // whose key doesn't map back to a file extension).
         let manifest = manifest::load_manifest()
             .map_err(|e| format!("Failed to load manifest: {}", e))?;
 
-        let ext = self.extension_for_language(lang_id);
-        let (_server_id, entry) = manifest::find_server_for_extension(&manifest, &ext)
-            .ok_or_else(|| format!("No manifest entry for language '{}'", lang_id))?;
+        let entry = if let Some(e) = manifest.servers.get(lang_id) {
+            e.clone()
+        } else {
+            let ext = self.extension_for_language(lang_id);
+            manifest::find_server_for_extension(&manifest, &ext)
+                .map(|(_, e)| e)
+                .ok_or_else(|| format!("No manifest entry for language '{}'", lang_id))?
+        };
 
         // Collect matching files from the project
         let extensions: Vec<String> = entry.extensions.iter()
@@ -1470,19 +2680,7 @@ impl LspManager {
                 .extension()
                 .map(|e| e.to_string_lossy().to_string())
                 .unwrap_or_default();
-            let file_lang_id = detection::language_id_for_extension(&file_ext)
-                .and_then(|id| {
-                    // Look up the actual languageId from the manifest (e.g. "javascript" vs "typescript")
-                    let m = manifest::load_manifest().ok()?;
-                    let e = m.servers.get(&id)?;
-                    // Find which language corresponds to this extension
-                    for lang in &e.languages {
-                        // Use the first language if the extension matches
-                        return Some(lang.clone());
-                    }
-                    None
-                })
-                .unwrap_or_else(|| lang_id.to_string());
+            let file_lang_id = lsp_language_id(&file_ext).to_string();
 
             // Send didOpen for this background file
             let server = match self.servers.get_mut(&key) {
@@ -1806,4 +3004,307 @@ fn normalize_location(loc: &Value) -> Value {
         "uri": loc.get("uri").cloned().unwrap_or(Value::Null),
         "range": loc.get("range").cloned().unwrap_or(Value::Null),
     })
+}
+
+/// Convert a tsserver `quickinfo` response body to markdown matching VS Code's format.
+///
+/// The response body contains:
+/// - `displayString`: the type signature (wrapped in a TypeScript code block)
+/// - `documentation`: `SymbolDisplayPart[]` (joined as plain text)
+/// - `tags`: `JSDocTagInfo[]` (formatted as `*@name* \`param\` — description`)
+#[allow(dead_code)]
+fn quickinfo_to_markdown(body: &Value) -> String {
+    // VS Code renders hover as separate markdown parts with --- dividers between them.
+    // We replicate that: code block | --- | documentation | --- | tags
+    let mut code_block = String::new();
+    let mut doc_text = String::new();
+    let mut tag_lines: Vec<String> = Vec::new();
+
+    // displayString → ```typescript code block (matches VS Code hover.ts:89-90)
+    if let Some(display) = body.get("displayString").and_then(|v| v.as_str()) {
+        if !display.is_empty() {
+            code_block = format!("```typescript\n{}\n```", display);
+        }
+    }
+
+    // documentation → string or SymbolDisplayPart[] → text
+    if let Some(doc_val) = body.get("documentation") {
+        if let Some(s) = doc_val.as_str() {
+            // Plain string format
+            doc_text = s.trim().to_string();
+        } else if let Some(docs) = doc_val.as_array() {
+            // SymbolDisplayPart[] format
+            let text: String = docs
+                .iter()
+                .filter_map(|p| p.get("text").and_then(|t| t.as_str()))
+                .collect::<Vec<_>>()
+                .join("");
+            doc_text = text.trim().to_string();
+        }
+    }
+
+    // tags → JSDocTagInfo[] → formatted markdown (matches VS Code textRendering.ts)
+    if let Some(tags) = body.get("tags").and_then(|v| v.as_array()) {
+        for tag in tags {
+            let name = tag.get("name").and_then(|v| v.as_str()).unwrap_or("");
+            if name.is_empty() {
+                continue;
+            }
+
+            let tag_text_val = tag.get("text");
+            let label = format!("*@{}*", name);
+
+            // Helper: extract the full text from either a string or SymbolDisplayPart[]
+            let full_text = match tag_text_val {
+                Some(v) if v.is_string() => v.as_str().unwrap_or("").to_string(),
+                Some(v) if v.is_array() => {
+                    v.as_array().unwrap()
+                        .iter()
+                        .filter_map(|p| p.get("text").and_then(|t| t.as_str()))
+                        .collect::<Vec<_>>()
+                        .join("")
+                }
+                _ => String::new(),
+            };
+
+            match name {
+                "param" | "template" => {
+                    // Extract parameter name and description.
+                    // Array format: find parameterName/typeParameterName kind part
+                    // String format: "paramName - description" or "paramName description"
+                    if let Some(arr) = tag_text_val.and_then(|v| v.as_array()) {
+                        let param_name = arr
+                            .iter()
+                            .find(|p| {
+                                p.get("kind").and_then(|k| k.as_str())
+                                    == Some("parameterName")
+                                    || p.get("kind").and_then(|k| k.as_str())
+                                        == Some("typeParameterName")
+                            })
+                            .and_then(|p| p.get("text").and_then(|t| t.as_str()))
+                            .unwrap_or("");
+                        let doc: String = arr
+                            .iter()
+                            .filter(|p| {
+                                p.get("kind").and_then(|k| k.as_str()) == Some("text")
+                            })
+                            .filter_map(|p| p.get("text").and_then(|t| t.as_str()))
+                            .collect::<Vec<_>>()
+                            .join("");
+                        let doc = doc.trim_start_matches(|c: char| c == '-' || c == ' ');
+                        if param_name.is_empty() {
+                            tag_lines.push(label);
+                        } else if doc.is_empty() {
+                            tag_lines.push(format!("{} `{}`", label, param_name));
+                        } else {
+                            tag_lines.push(format!(
+                                "{} `{}` \u{2014} {}",
+                                label, param_name, doc
+                            ));
+                        }
+                    } else if !full_text.is_empty() {
+                        // String format: "paramName - description" or "paramName description"
+                        let (pname, pdesc) = if let Some(dash_idx) = full_text.find(" - ") {
+                            (&full_text[..dash_idx], full_text[dash_idx + 3..].trim())
+                        } else if let Some(space_idx) = full_text.find(' ') {
+                            (&full_text[..space_idx], full_text[space_idx + 1..].trim())
+                        } else {
+                            (full_text.as_str(), "")
+                        };
+                        if pdesc.is_empty() {
+                            tag_lines.push(format!("{} `{}`", label, pname));
+                        } else {
+                            tag_lines.push(format!(
+                                "{} `{}` \u{2014} {}",
+                                label, pname, pdesc
+                            ));
+                        }
+                    } else {
+                        tag_lines.push(label);
+                    }
+                }
+                "example" => {
+                    if full_text.is_empty() {
+                        tag_lines.push(label);
+                    } else {
+                        tag_lines.push(format!("{}\n```tsx\n{}\n```", label, full_text));
+                    }
+                }
+                _ => {
+                    if full_text.is_empty() {
+                        tag_lines.push(label);
+                    } else {
+                        tag_lines.push(format!("{} \u{2014} {}", label, full_text));
+                    }
+                }
+            }
+        }
+    }
+
+    // Assemble with --- separators between sections (matching VS Code's hover rendering)
+    let mut sections: Vec<String> = Vec::new();
+    if !code_block.is_empty() {
+        sections.push(code_block);
+    }
+    if !doc_text.is_empty() {
+        sections.push(doc_text);
+    }
+    if !tag_lines.is_empty() {
+        sections.push(tag_lines.join("\n\n"));
+    }
+    sections.join("\n\n---\n\n")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn quickinfo_display_string_becomes_code_block() {
+        let body = serde_json::json!({
+            "displayString": "(parameter) options: CreateOptions",
+            "documentation": [],
+            "tags": []
+        });
+        let md = quickinfo_to_markdown(&body);
+        assert!(
+            md.contains("```typescript\n(parameter) options: CreateOptions\n```"),
+            "displayString should be wrapped in a typescript code block, got: {}",
+            md
+        );
+    }
+
+    #[test]
+    fn quickinfo_documentation_joined_as_text() {
+        let body = serde_json::json!({
+            "displayString": "(parameter) x: number",
+            "documentation": [
+                { "text": "The x coordinate", "kind": "text" }
+            ],
+            "tags": []
+        });
+        let md = quickinfo_to_markdown(&body);
+        assert!(
+            md.contains("The x coordinate"),
+            "documentation text should appear in output, got: {}",
+            md
+        );
+    }
+
+    #[test]
+    fn quickinfo_multi_part_documentation() {
+        let body = serde_json::json!({
+            "displayString": "function foo(): void",
+            "documentation": [
+                { "text": "Does ", "kind": "text" },
+                { "text": "something", "kind": "text" },
+                { "text": " useful.", "kind": "text" }
+            ],
+            "tags": []
+        });
+        let md = quickinfo_to_markdown(&body);
+        assert!(
+            md.contains("Does something useful."),
+            "multi-part documentation should be joined, got: {}",
+            md
+        );
+    }
+
+    #[test]
+    fn quickinfo_param_tag_formatted() {
+        let body = serde_json::json!({
+            "displayString": "function greet(name: string): void",
+            "documentation": [],
+            "tags": [
+                {
+                    "name": "param",
+                    "text": [
+                        { "text": "name", "kind": "parameterName" },
+                        { "text": " ", "kind": "space" },
+                        { "text": "- The person's name", "kind": "text" }
+                    ]
+                }
+            ]
+        });
+        let md = quickinfo_to_markdown(&body);
+        assert!(
+            md.contains("*@param*") && md.contains("`name`"),
+            "param tag should be formatted with italic label and code param, got: {}",
+            md
+        );
+    }
+
+    #[test]
+    fn quickinfo_returns_tag_formatted() {
+        let body = serde_json::json!({
+            "displayString": "function add(a: number, b: number): number",
+            "documentation": [],
+            "tags": [
+                {
+                    "name": "returns",
+                    "text": [
+                        { "text": "The sum of a and b", "kind": "text" }
+                    ]
+                }
+            ]
+        });
+        let md = quickinfo_to_markdown(&body);
+        assert!(
+            md.contains("*@returns*"),
+            "returns tag should have italic label, got: {}",
+            md
+        );
+        assert!(
+            md.contains("The sum of a and b"),
+            "returns tag body should appear, got: {}",
+            md
+        );
+    }
+
+    #[test]
+    fn quickinfo_empty_body_returns_empty() {
+        let body = serde_json::json!({});
+        let md = quickinfo_to_markdown(&body);
+        assert!(md.is_empty(), "empty body should produce empty string, got: {}", md);
+    }
+
+    #[test]
+    fn quickinfo_display_string_only() {
+        let body = serde_json::json!({
+            "displayString": "const MAX: number"
+        });
+        let md = quickinfo_to_markdown(&body);
+        assert!(
+            md.contains("```typescript\nconst MAX: number\n```"),
+            "should work with just displayString, got: {}",
+            md
+        );
+        // Should not have trailing newlines or separators
+        assert!(
+            !md.ends_with("\n\n"),
+            "should not have trailing double newline"
+        );
+    }
+
+    #[test]
+    fn quickinfo_example_tag_becomes_codeblock() {
+        let body = serde_json::json!({
+            "displayString": "function parse(s: string): Data",
+            "documentation": [],
+            "tags": [
+                {
+                    "name": "example",
+                    "text": [
+                        { "text": "parse('{\"a\":1}')", "kind": "text" }
+                    ]
+                }
+            ]
+        });
+        let md = quickinfo_to_markdown(&body);
+        assert!(
+            md.contains("*@example*"),
+            "example tag should have label, got: {}",
+            md
+        );
+    }
 }

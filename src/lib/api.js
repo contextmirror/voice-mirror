@@ -711,6 +711,18 @@ export async function lspRequestDefinition(path, line, character, projectRoot) {
   return invoke('lsp_request_definition', { path, line, character, projectRoot });
 }
 
+export async function lspRequestTypeDefinition(path, line, character, projectRoot) {
+  return invoke('lsp_request_type_definition', { path, line, character, projectRoot });
+}
+
+export async function lspRequestDeclaration(path, line, character, projectRoot) {
+  return invoke('lsp_request_declaration', { path, line, character, projectRoot });
+}
+
+export async function lspRequestImplementation(path, line, character, projectRoot) {
+  return invoke('lsp_request_implementation', { path, line, character, projectRoot });
+}
+
 export async function lspGetStatus() {
   return invoke('lsp_get_status');
 }
@@ -721,6 +733,18 @@ export async function lspRequestDocumentSymbols(path, projectRoot) {
 
 export async function lspRequestReferences(path, line, character, projectRoot) {
   return invoke('lsp_request_references', { path, line, character, projectRoot });
+}
+
+export async function lspRequestWorkspaceSymbols(query, langId, projectRoot) {
+  return invoke('lsp_request_workspace_symbols', { query, langId, projectRoot });
+}
+
+export async function lspRequestDocumentHighlight(path, line, character, projectRoot) {
+  return invoke('lsp_request_document_highlight', { path, line, character, projectRoot });
+}
+
+export async function lspRequestInlayHints(path, startLine, endLine, projectRoot) {
+  return invoke('lsp_request_inlay_hints', { path, startLine, endLine, projectRoot });
 }
 
 export async function lspRequestCodeActions(path, rangeStartLine, rangeStartChar, rangeEndLine, rangeEndChar, diagnostics, projectRoot) {
@@ -745,6 +769,66 @@ export async function lspRequestFormatting(path, tabSize, insertSpaces, projectR
 
 export async function lspRequestRangeFormatting(path, rangeStartLine, rangeStartChar, rangeEndLine, rangeEndChar, tabSize, insertSpaces, projectRoot) {
   return invoke('lsp_request_range_formatting', { path, rangeStartLine, rangeStartChar, rangeEndLine, rangeEndChar, tabSize, insertSpaces, projectRoot });
+}
+
+export async function lspRequestOnTypeFormatting(path, line, character, triggerChar, tabSize, insertSpaces, projectRoot) {
+  return invoke('lsp_request_on_type_formatting', { path, line, character, triggerChar, tabSize, insertSpaces, projectRoot });
+}
+
+export async function lspRequestLinkedEditingRange(path, line, character, projectRoot) {
+  return invoke('lsp_request_linked_editing_range', { path, line, character, projectRoot });
+}
+
+export async function lspRequestCodeLens(path, projectRoot) {
+  return invoke('lsp_request_code_lens', { path, projectRoot });
+}
+
+export async function lspRequestSemanticTokensFull(path, projectRoot) {
+  return invoke('lsp_request_semantic_tokens_full', { path, projectRoot });
+}
+
+export async function lspRequestDocumentColors(path, projectRoot) {
+  return invoke('lsp_request_document_colors', { path, projectRoot });
+}
+
+export async function lspRequestFoldingRanges(path, projectRoot) {
+  return invoke('lsp_request_folding_ranges', { path, projectRoot });
+}
+
+export async function lspResolveCompletionItem(item, langId, projectRoot) {
+  return invoke('lsp_resolve_completion_item', { item, langId, projectRoot });
+}
+
+export async function lspRequestDiagnostics(path, projectRoot) {
+  return invoke('lsp_request_diagnostics', { path, projectRoot });
+}
+
+export async function lspPrepareCallHierarchy(path, line, character, projectRoot) {
+  return invoke('lsp_prepare_call_hierarchy', { path, line, character, projectRoot });
+}
+
+export async function lspRequestIncomingCalls(item, langId, projectRoot) {
+  return invoke('lsp_request_incoming_calls', { item, langId, projectRoot });
+}
+
+export async function lspRequestOutgoingCalls(item, langId, projectRoot) {
+  return invoke('lsp_request_outgoing_calls', { item, langId, projectRoot });
+}
+
+export async function lspPrepareTypeHierarchy(path, line, character, projectRoot) {
+  return invoke('lsp_prepare_type_hierarchy', { path, line, character, projectRoot });
+}
+
+export async function lspRequestSupertypes(item, langId, projectRoot) {
+  return invoke('lsp_request_supertypes', { item, langId, projectRoot });
+}
+
+export async function lspRequestSubtypes(item, langId, projectRoot) {
+  return invoke('lsp_request_subtypes', { item, langId, projectRoot });
+}
+
+export async function lspRequestSelectionRange(path, positions, projectRoot) {
+  return invoke('lsp_request_selection_range', { path, positions, projectRoot });
 }
 
 export async function lspScanProject(langId, projectRoot) {

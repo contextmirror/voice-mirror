@@ -440,7 +440,17 @@ export function buildEditorExtensions(cm, lsp, options) {
       { key: 'Shift-F12', run: (v) => { lsp.handleFindReferences(v, filePath); return true; } },
       { key: 'Mod-.', run: (v) => { lsp.handleCodeActions(v, filePath); return true; } },
       { key: 'Ctrl-Shift-Space', run: (v) => { lsp.requestSignatureHelp(v, filePath, null); return true; } },
+      { key: 'Ctrl-F12', run: (v) => { lsp.handleGoToImplementation(v, v.state.selection.main.head); return true; } },
+      { key: 'Shift-Alt-F', run: (v) => { lsp.formatSelection(v, filePath); return true; } },
     ]));
+    extensions.push(lsp.documentHighlightExtension(filePath, cm, cm));
+    extensions.push(lsp.inlayHintExtension(filePath, cm, cm));
+    extensions.push(...lsp.codeLensExtension(filePath, cm, cm));
+    extensions.push(lsp.documentColorsExtension(filePath, cm, cm));
+    extensions.push(...lsp.foldingRangeExtension(filePath, cm));
+    extensions.push(lsp.semanticTokensExtension(filePath, cm, cm));
+    extensions.push(lsp.onTypeFormattingExtension(filePath, cm));
+    extensions.push(...lsp.linkedEditingExtension(filePath, cm, cm));
   }
 
   // Ctrl+hover definition underline hint
@@ -458,6 +468,24 @@ export function buildEditorExtensions(cm, lsp, options) {
   // Context menu + optional Ctrl+Click go-to-definition
   const domHandlers = {
     contextmenu: onContextMenu,
+    // Reject drops from our internal drag system (tab reorder, file tree)
+    // so CodeMirror doesn't try to insert drag data as text
+    drop: (e) => {
+      if (e.dataTransfer.types.includes('application/x-voice-mirror-tab') ||
+          e.dataTransfer.types.includes('application/x-voice-mirror-file')) {
+        e.preventDefault();
+        return true;
+      }
+      return false;
+    },
+    dragover: (e) => {
+      if (e.dataTransfer.types.includes('application/x-voice-mirror-tab') ||
+          e.dataTransfer.types.includes('application/x-voice-mirror-file')) {
+        // Don't show CM's drop cursor for our internal drags
+        return true;
+      }
+      return false;
+    },
   };
 
   if (lsp.hasLsp && onClick) {

@@ -36,7 +36,6 @@
     const data = { type: 'file-tree', entry: { name: entry.name, path: entry.path } };
     e.dataTransfer.effectAllowed = 'all';
     e.dataTransfer.setData('application/x-voice-mirror-file', JSON.stringify(data));
-    e.dataTransfer.setData('text/plain', JSON.stringify(data));
 
     const ghost = document.createElement('div');
     ghost.textContent = entry.name;

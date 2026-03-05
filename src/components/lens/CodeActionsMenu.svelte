@@ -1,12 +1,13 @@
 <script>
-  import { clampToViewport } from '$lib/clamp-to-viewport.js';
+  import { applySmartPosition } from '$lib/smart-position.js';
   import { setupClickOutside } from '$lib/popup-utils.js';
 
   let {
     actions = [],
     visible = false,
     x = 0,
-    y = 0,
+    above = 0,
+    below = 0,
     onClose = () => {},
     onApply = () => {},
   } = $props();
@@ -36,13 +37,11 @@
 
   let totalActions = $derived(groups.reduce((sum, g) => sum + g.items.length, 0));
 
-  let menuStyle = $derived.by(() => {
-    return `left: ${x}px; top: ${y}px;`;
-  });
-
-  // Post-render: measure actual menu size and reposition if it overflows
+  // Smart positioning: prefer below (VS Code default), flip above if no room
   $effect(() => {
-    if (visible && menuEl) clampToViewport(menuEl);
+    if (visible && menuEl) {
+      applySmartPosition(menuEl, { above, below }, { prefer: 'below', x });
+    }
   });
 
   $effect(() => {
@@ -51,7 +50,7 @@
 </script>
 
 {#if visible && totalActions > 0}
-  <div class="code-actions-menu" style={menuStyle} bind:this={menuEl} role="menu">
+  <div class="code-actions-menu" bind:this={menuEl} role="menu">
     {#each groups as group, gi}
       {#if gi > 0}
         <div class="code-actions-separator"></div>

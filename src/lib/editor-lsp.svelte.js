@@ -5,10 +5,12 @@
  * event listeners, handlers, and CodeMirror extension factories for the file editor.
  */
 
-import { lspOpenFile, lspCloseFile, lspChangeFile, lspSaveFile, lspRequestCompletion, lspRequestHover, lspRequestDefinition, lspRequestReferences, lspPrepareRename, lspRename, lspApplyWorkspaceEdit, lspRequestCodeActions, lspRequestFormatting, lspRequestSignatureHelp } from './api.js';
+import { lspOpenFile, lspCloseFile, lspChangeFile, lspSaveFile, lspRequestCompletion, lspRequestHover, lspRequestDefinition, lspRequestTypeDefinition, lspRequestDeclaration, lspRequestImplementation, lspRequestReferences, lspRequestDocumentHighlight, lspRequestInlayHints, lspRequestCodeLens, lspRequestDocumentColors, lspRequestFoldingRanges, lspRequestSemanticTokensFull, lspPrepareRename, lspRename, lspApplyWorkspaceEdit, lspRequestCodeActions, lspRequestFormatting, lspRequestRangeFormatting, lspRequestSignatureHelp, lspRequestLinkedEditingRange, lspRequestOnTypeFormatting } from './api.js';
+import { foldService } from '@codemirror/language';
 import { projectStore } from './stores/project.svelte.js';
 import { tabsStore } from './stores/tabs.svelte.js';
 import { basename } from './utils.js';
+import { renderHoverMarkdown } from './hover-markdown.js';
 
 /** Set of file extensions that have LSP support */
 export const LSP_EXTENSIONS = new Set([
@@ -87,6 +89,7 @@ export function createEditorLsp() {
   let showSignatureHelp = $state(false);
   let signatureHelpData = $state(null);
   let signatureHelpPos = $state(0);
+  let signatureHelpCoords = $state({ x: 0, y: 0 });
 
   let lspDebounceTimer = null;
 
@@ -143,6 +146,90 @@ export function createEditorLsp() {
     } catch {}
   }
 
+  async function handleGoToTypeDefinition(view, pos) {
+    if (!view || !hasLsp) return;
+    const lineInfo = view.state.doc.lineAt(pos);
+    const line = lineInfo.number - 1;
+    const character = pos - lineInfo.from;
+    const root = projectStore.root;
+    const currentPath = view._lspPath;
+
+    try {
+      const result = await lspRequestTypeDefinition(currentPath, line, character, root);
+      if (!result?.data?.locations?.length) return;
+      const loc = result.data.locations[0];
+      const rootStr = projectStore.root || '';
+      const resolved = uriToRelativePath(loc.uri, rootStr);
+      if (!resolved) return;
+      if (resolved.path === currentPath && !resolved.external) {
+        const targetLine = view.state.doc.line(loc.range.start.line + 1);
+        view.dispatch({
+          selection: { anchor: targetLine.from + loc.range.start.character },
+          scrollIntoView: true,
+        });
+      } else {
+        const fileName = basename(resolved.path);
+        tabsStore.openFile({ name: fileName, path: resolved.path, readOnly: resolved.external, external: resolved.external });
+      }
+    } catch {}
+  }
+
+  async function handleGoToDeclaration(view, pos) {
+    if (!view || !hasLsp) return;
+    const lineInfo = view.state.doc.lineAt(pos);
+    const line = lineInfo.number - 1;
+    const character = pos - lineInfo.from;
+    const root = projectStore.root;
+    const currentPath = view._lspPath;
+
+    try {
+      const result = await lspRequestDeclaration(currentPath, line, character, root);
+      if (!result?.data?.locations?.length) return;
+      const loc = result.data.locations[0];
+      const rootStr = projectStore.root || '';
+      const resolved = uriToRelativePath(loc.uri, rootStr);
+      if (!resolved) return;
+      if (resolved.path === currentPath && !resolved.external) {
+        const targetLine = view.state.doc.line(loc.range.start.line + 1);
+        view.dispatch({
+          selection: { anchor: targetLine.from + loc.range.start.character },
+          scrollIntoView: true,
+        });
+      } else {
+        const fileName = basename(resolved.path);
+        tabsStore.openFile({ name: fileName, path: resolved.path, readOnly: resolved.external, external: resolved.external });
+      }
+    } catch {}
+  }
+
+  async function handleGoToImplementation(view, pos) {
+    if (!view || !hasLsp) return;
+    const lineInfo = view.state.doc.lineAt(pos);
+    const line = lineInfo.number - 1;
+    const character = pos - lineInfo.from;
+    const root = projectStore.root;
+    const currentPath = view._lspPath;
+
+    try {
+      const result = await lspRequestImplementation(currentPath, line, character, root);
+      if (!result?.data?.locations?.length) return;
+      const loc = result.data.locations[0];
+      const rootStr = projectStore.root || '';
+      const resolved = uriToRelativePath(loc.uri, rootStr);
+      if (!resolved) return;
+      if (resolved.path === currentPath && !resolved.external) {
+        const targetLine = view.state.doc.line(loc.range.start.line + 1);
+        view.dispatch({
+          selection: { anchor: targetLine.from + loc.range.start.character },
+          scrollIntoView: true,
+        });
+      } else {
+        const fileName = basename(resolved.path);
+        tabsStore.openFile({ name: fileName, path: resolved.path, readOnly: resolved.external, external: resolved.external });
+      }
+    } catch {}
+  }
+
   async function handleFindReferences(view, currentPath) {
     if (!view || !hasLsp || !currentPath) return;
     const pos = view.state.selection.main.head;
@@ -180,7 +267,7 @@ export function createEditorLsp() {
       const result = await lspPrepareRename(currentPath, line, character, root);
       if (result?.data) {
         const coords = view.coordsAtPos(pos);
-        renamePosition = { x: coords?.left || 0, y: (coords?.bottom || 0) + 4 };
+        renamePosition = { x: coords?.left || 0, above: (coords?.top || 0) - 4, below: (coords?.bottom || 0) + 4 };
         renamePlaceholder = result.data.placeholder || view.state.sliceDoc(
           lspPositionToOffset(view.state.doc, result.data.range?.start || { line, character }),
           lspPositionToOffset(view.state.doc, result.data.range?.end || { line, character })
@@ -239,6 +326,100 @@ export function createEditorLsp() {
     return false;
   }
 
+  async function formatSelection(view, path, root) {
+    if (!hasLsp) return false;
+    root = root || projectStore.root;
+    const sel = view.state.selection.main;
+    if (sel.from === sel.to) return false; // No selection
+    const startLine = view.state.doc.lineAt(sel.from);
+    const endLine = view.state.doc.lineAt(sel.to);
+    const tabSize = view.state.tabSize || 2;
+    const insertSpaces = true;
+    try {
+      const result = await lspRequestRangeFormatting(
+        path,
+        startLine.number - 1, sel.from - startLine.from,
+        endLine.number - 1, sel.to - endLine.from,
+        tabSize, insertSpaces, root
+      );
+      if (result?.data?.edits?.length > 0) {
+        const doc = view.state.doc;
+        const sorted = [...result.data.edits].sort((a, b) => {
+          const lineA = a.range.start.line;
+          const lineB = b.range.start.line;
+          if (lineA !== lineB) return lineB - lineA;
+          return b.range.start.character - a.range.start.character;
+        });
+        const changes = sorted.map(edit => ({
+          from: lspPositionToOffset(doc, edit.range.start),
+          to: lspPositionToOffset(doc, edit.range.end),
+          insert: edit.newText,
+        }));
+        view.dispatch({ changes });
+        return true;
+      }
+    } catch (err) {
+      console.warn('[editor-lsp] Format selection failed:', err);
+    }
+    return false;
+  }
+
+  /**
+   * CodeMirror ViewPlugin that triggers LSP on-type formatting
+   * when the user types `;`, `}`, or Enter.
+   */
+  function onTypeFormattingExtension(currentPath, cmView) {
+    const ON_TYPE_TRIGGERS = new Set([';', '}', '\n']);
+
+    return cmView.ViewPlugin.fromClass(class {
+      update(update) {
+        if (!update.docChanged || !hasLsp || !currentPath) return;
+
+        // Detect inserted trigger character from the transaction
+        let triggerChar = null;
+        let triggerPos = null;
+        update.changes.iterChanges((_fromA, _toA, _fromB, toB, inserted) => {
+          if (triggerChar) return; // only first trigger
+          const text = inserted.toString();
+          if (text.length === 1 && ON_TYPE_TRIGGERS.has(text)) {
+            triggerChar = text;
+            triggerPos = toB;
+          } else if (text === '\r\n' || text === '\r') {
+            triggerChar = '\n';
+            triggerPos = toB;
+          }
+        });
+
+        if (!triggerChar || triggerPos == null) return;
+
+        const view = update.view;
+        const lineInfo = view.state.doc.lineAt(triggerPos);
+        const line = lineInfo.number - 1;
+        const character = triggerPos - lineInfo.from;
+        const tabSize = view.state.tabSize || 2;
+        const root = projectStore.root;
+
+        lspRequestOnTypeFormatting(currentPath, line, character, triggerChar, tabSize, true, root)
+          .then(result => {
+            if (!result?.data?.edits?.length) return;
+            const doc = view.state.doc;
+            const sorted = [...result.data.edits].sort((a, b) => {
+              if (a.range.start.line !== b.range.start.line)
+                return b.range.start.line - a.range.start.line;
+              return b.range.start.character - a.range.start.character;
+            });
+            const changes = sorted.map(edit => ({
+              from: lspPositionToOffset(doc, edit.range.start),
+              to: lspPositionToOffset(doc, edit.range.end),
+              insert: edit.newText,
+            }));
+            view.dispatch({ changes });
+          })
+          .catch(() => {});
+      }
+    });
+  }
+
   async function handleCodeActions(view, currentPath, diagnosticsAtCursor) {
     if (!view || !hasLsp || !currentPath) return;
     const sel = view.state.selection.main;
@@ -259,7 +440,7 @@ export function createEditorLsp() {
       );
       if (result?.data?.actions?.length) {
         const coords = view.coordsAtPos(sel.head);
-        codeActionsPosition = { x: coords?.left || 0, y: (coords?.bottom || 0) + 4 };
+        codeActionsPosition = { x: coords?.left || 0, above: (coords?.top || 0) - 4, below: (coords?.bottom || 0) + 4 };
         codeActions = result.data.actions;
         showCodeActions = true;
       }
@@ -282,6 +463,9 @@ export function createEditorLsp() {
         signatureHelpData = result.data;
         signatureHelpPos = pos;
         showSignatureHelp = true;
+        // Update cursor coordinates for tooltip positioning
+        const coords = view.coordsAtPos(pos);
+        if (coords) signatureHelpCoords = { x: coords.left, y: coords.top };
       } else {
         showSignatureHelp = false;
         signatureHelpData = null;
@@ -297,11 +481,228 @@ export function createEditorLsp() {
     signatureHelpData = null;
   }
 
+  async function handleLinkedEditing(view, currentPath) {
+    if (!view || !hasLsp || !currentPath) return;
+    const pos = view.state.selection.main.head;
+    const lineInfo = view.state.doc.lineAt(pos);
+    const line = lineInfo.number - 1;
+    const character = pos - lineInfo.from;
+    const root = projectStore.root;
+
+    try {
+      const result = await lspRequestLinkedEditingRange(currentPath, line, character, root);
+      if (result?.data?.ranges?.length >= 2) {
+        // For now, just log the ranges — full synchronized editing is a future enhancement.
+        // The ranges identify matching tag pairs (e.g. <div> and </div>).
+        console.debug('[editor-lsp] Linked editing ranges:', result.data.ranges);
+      }
+    } catch {}
+  }
+
+  /**
+   * CodeMirror ViewPlugin that synchronizes editing of HTML tag pairs
+   * via LSP textDocument/linkedEditingRange.
+   *
+   * When the cursor is inside a tag name, it fetches linked ranges from LSP
+   * and highlights them. Edits to one range are mirrored to the other.
+   */
+  function linkedEditingExtension(currentPath, cmView, cmState) {
+    const { ViewPlugin, Decoration } = cmView;
+    const { StateEffect, StateField, RangeSet, Annotation, EditorState, EditorSelection } = cmState;
+
+    const setLinkedRanges = StateEffect.define();
+    // Annotation to tag transactions from our mirrored edits
+    const linkedEditTag = Annotation.define();
+
+    const linkedMark = Decoration.mark({ class: 'cm-linked-editing' });
+
+    function buildDecos(ranges) {
+      if (!ranges) return Decoration.none;
+      const marks = ranges
+        .slice()
+        .sort((a, b) => a.from - b.from)
+        .map(r => linkedMark.range(r.from, r.to));
+      return RangeSet.of(marks);
+    }
+
+    const linkedField = StateField.define({
+      create() { return { ranges: null, decos: Decoration.none }; },
+      update(val, tr) {
+        for (const e of tr.effects) {
+          if (e.is(setLinkedRanges)) return e.value;
+        }
+        if (tr.docChanged && val.ranges) {
+          // If this is our own mirrored edit, map ranges through changes
+          if (tr.annotation(linkedEditTag)) {
+            const newRanges = val.ranges.map(r => ({
+              from: tr.changes.mapPos(r.from, -1),
+              to: tr.changes.mapPos(r.to, 1),
+            }));
+            // Validate ranges are still sane
+            const doc = tr.state.doc;
+            if (newRanges.every(r => r.from >= 0 && r.to <= doc.length && r.from < r.to)) {
+              return { ranges: newRanges, decos: buildDecos(newRanges) };
+            }
+          }
+          // External edit — invalidate, fetcher will re-query
+          return { ranges: null, decos: Decoration.none };
+        }
+        return val;
+      },
+    });
+
+    const linkedFetcher = ViewPlugin.fromClass(class {
+      constructor(view) {
+        this._timer = null;
+        this._reqId = 0;
+        this._lastPos = -1;
+        this._scheduleCheck(view);
+      }
+
+      update(update) {
+        if (!update.selectionSet && !update.docChanged) return;
+        this._scheduleCheck(update.view);
+      }
+
+      _scheduleCheck(view) {
+        clearTimeout(this._timer);
+        if (!hasLsp || !currentPath) return;
+
+        const pos = view.state.selection.main.head;
+        if (pos === this._lastPos && !view.state.field(linkedField).ranges) return;
+        this._lastPos = pos;
+
+        const reqId = ++this._reqId;
+        this._timer = setTimeout(() => {
+          this._fetchRanges(view, reqId);
+        }, 150);
+      }
+
+      async _fetchRanges(view, reqId) {
+        try {
+          const pos = view.state.selection.main.head;
+          const lineInfo = view.state.doc.lineAt(pos);
+          const line = lineInfo.number - 1;
+          const character = pos - lineInfo.from;
+          const root = projectStore.root;
+
+          const result = await lspRequestLinkedEditingRange(currentPath, line, character, root);
+          if (reqId !== this._reqId) return;
+
+          if (!result?.data?.ranges?.length || result.data.ranges.length < 2) {
+            const current = view.state.field(linkedField);
+            if (current.ranges) {
+              view.dispatch({ effects: setLinkedRanges.of({ ranges: null, decos: Decoration.none }) });
+            }
+            return;
+          }
+
+          const doc = view.state.doc;
+          const ranges = result.data.ranges.map(r => ({
+            from: lspPositionToOffset(doc, r.start),
+            to: lspPositionToOffset(doc, r.end),
+          })).filter(r => r.from >= 0 && r.to <= doc.length && r.from < r.to);
+
+          if (ranges.length < 2) return;
+
+          view.dispatch({
+            effects: setLinkedRanges.of({ ranges, decos: buildDecos(ranges) }),
+          });
+        } catch {
+          // Silently ignore
+        }
+      }
+
+      destroy() {
+        clearTimeout(this._timer);
+      }
+    });
+
+    // Transaction filter: mirror ALL edits (typing + backspace/delete) within linked ranges
+    const linkedMirrorFilter = EditorState.transactionFilter.of(tr => {
+      if (tr.annotation(linkedEditTag)) return tr;
+      if (!tr.docChanged) return tr;
+
+      const field = tr.startState.field(linkedField);
+      if (!field.ranges || field.ranges.length < 2) return tr;
+
+      // Collect individual changes from the transaction
+      const editChanges = [];
+      tr.changes.iterChanges((fromA, toA, fromB, toB, inserted) => {
+        editChanges.push({ from: fromA, to: toA, insert: inserted.toString() });
+      });
+
+      // Only mirror single-change transactions (normal typing/deletion)
+      if (editChanges.length !== 1) return tr;
+      const change = editChanges[0];
+
+      // Find which linked range contains this edit
+      const editRange = field.ranges.find(r => change.from >= r.from && change.to <= r.to);
+      if (!editRange) return tr;
+
+      const offsetInRange = change.from - editRange.from;
+      const deleteLen = change.to - change.from;
+      const allChanges = [change];
+
+      for (const r of field.ranges) {
+        if (r === editRange) continue;
+        const mirrorFrom = r.from + offsetInRange;
+        const mirrorTo = mirrorFrom + deleteLen;
+        if (mirrorFrom >= r.from && mirrorTo <= r.to) {
+          allChanges.push({ from: mirrorFrom, to: mirrorTo, insert: change.insert });
+        }
+      }
+
+      if (allChanges.length <= 1) return tr;
+
+      // Sort in document order (required by ChangeSet)
+      allChanges.sort((a, b) => a.from - b.from);
+
+      // Compute cursor position: account for mirror changes before the user's edit
+      let shift = 0;
+      for (const c of allChanges) {
+        if (c.from >= change.from) break;
+        shift += c.insert.length - (c.to - c.from);
+      }
+      const cursorPos = change.from + change.insert.length + shift;
+
+      return {
+        changes: allChanges,
+        selection: EditorSelection.cursor(cursorPos),
+        annotations: linkedEditTag.of(true),
+        scrollIntoView: true,
+      };
+    });
+
+    // Provide decorations from the StateField
+    const linkedDecorations = cmView.EditorView.decorations.compute([linkedField], state => {
+      return state.field(linkedField).decos;
+    });
+
+    return [linkedField, linkedFetcher, linkedMirrorFilter, linkedDecorations];
+  }
+
   // ── CodeMirror extension factories ──
+
+  const COMPLETION_TRIGGERS = new Set(['.', ':', '<', '"', '/', '@', '#', '(']);
 
   function completionSource(currentPath) {
     return async function lspCompletionSource(context) {
       if (!hasLsp || !currentPath) return null;
+
+      // Only activate on explicit invocation (Ctrl+Space), trigger characters,
+      // or when typing an identifier. Avoids completions on }, ), ;, etc.
+      if (!context.explicit) {
+        const word = context.matchBefore(/\w+/);
+        if (!word) {
+          // Check if the character before the cursor is a trigger character
+          const before = context.pos > 0
+            ? context.state.sliceDoc(context.pos - 1, context.pos)
+            : '';
+          if (!COMPLETION_TRIGGERS.has(before)) return null;
+        }
+      }
+
       const pos = context.state.doc.lineAt(context.pos);
       const line = pos.number - 1;
       const character = context.pos - pos.from;
@@ -329,6 +730,8 @@ export function createEditorLsp() {
 
   function hoverTooltipExtension(currentPath, hoverTooltip) {
     return hoverTooltip(async (v, pos) => {
+      // Skip hover when rename or code actions are active
+      if (showRename || showCodeActions) return null;
       // Skip hover tooltip if there's a diagnostic at this position
       // (CodeMirror's lint tooltip already shows diagnostic info)
       const diags = cachedDiagnostics.get(currentPath) || [];
@@ -345,18 +748,625 @@ export function createEditorLsp() {
 
         return {
           pos,
+          above: true,
           create() {
             const dom = document.createElement('div');
             dom.className = 'lsp-hover-tooltip';
-            dom.textContent = typeof result.data.contents === 'string'
+            const raw = typeof result.data.contents === 'string'
               ? result.data.contents
               : result.data.contents.value || '';
+            dom.innerHTML = renderHoverMarkdown(raw);
             return { dom };
           },
         };
       } catch {
         return null;
       }
+    });
+  }
+
+  /**
+   * CodeMirror ViewPlugin that highlights all occurrences of the symbol under
+   * the cursor via LSP textDocument/documentHighlight.
+   *
+   * On cursor position change (debounced 150ms), requests highlights from the
+   * server and applies Decoration.mark with class 'cm-lsp-highlight'.
+   *
+   * @param {string} currentPath - current file path for the editor
+   * @param {typeof import('@codemirror/view')} cmView - CodeMirror view module
+   * @param {typeof import('@codemirror/state')} cmState - CodeMirror state module
+   * @returns {import('@codemirror/state').Extension} CM extension
+   */
+  function documentHighlightExtension(currentPath, cmView, cmState) {
+    const { ViewPlugin, Decoration } = cmView;
+    const { RangeSet } = cmState;
+
+    return ViewPlugin.fromClass(class {
+      constructor(view) {
+        this.decorations = RangeSet.empty;
+        this._timer = null;
+        this._reqId = 0;
+      }
+
+      update(update) {
+        if (!update.selectionSet && !update.docChanged) return;
+        // Clear existing highlights immediately on cursor move
+        this.decorations = RangeSet.empty;
+
+        clearTimeout(this._timer);
+        if (!hasLsp || !currentPath) return;
+
+        const reqId = ++this._reqId;
+        this._timer = setTimeout(() => {
+          this._requestHighlights(update.view, reqId);
+        }, 150);
+      }
+
+      async _requestHighlights(view, reqId) {
+        try {
+          const pos = view.state.selection.main.head;
+          const lineInfo = view.state.doc.lineAt(pos);
+          const line = lineInfo.number - 1;
+          const character = pos - lineInfo.from;
+          const root = projectStore.root;
+
+          const result = await lspRequestDocumentHighlight(currentPath, line, character, root);
+          // Check if a newer request has been made since
+          if (reqId !== this._reqId) return;
+
+          if (!result?.data?.highlights?.length) {
+            this.decorations = RangeSet.empty;
+            view.requestMeasure();
+            return;
+          }
+
+          const doc = view.state.doc;
+          const marks = [];
+          for (const h of result.data.highlights) {
+            const from = lspPositionToOffset(doc, h.range.start);
+            const to = lspPositionToOffset(doc, h.range.end);
+            if (from < to && to <= doc.length) {
+              marks.push(
+                Decoration.mark({ class: 'cm-lsp-highlight' }).range(from, to)
+              );
+            }
+          }
+          // RangeSet.of requires sorted ranges
+          marks.sort((a, b) => a.from - b.from || a.to - b.to);
+          this.decorations = RangeSet.of(marks);
+          view.requestMeasure();
+        } catch {
+          // Silently ignore — highlight is best-effort
+        }
+      }
+
+      destroy() {
+        clearTimeout(this._timer);
+      }
+    }, {
+      decorations: v => v.decorations,
+    });
+  }
+
+  /**
+   * CodeMirror ViewPlugin that renders inlay hints (inline type annotations,
+   * parameter names) via LSP textDocument/inlayHint.
+   *
+   * On viewport change or document change (debounced 500ms), requests inlay
+   * hints for the visible range and renders them as Decoration.widget with
+   * class 'cm-inlay-hint'.
+   *
+   * @param {string} currentPath - current file path for the editor
+   * @param {typeof import('@codemirror/view')} cmView - CodeMirror view module
+   * @param {typeof import('@codemirror/state')} cmState - CodeMirror state module
+   * @returns {import('@codemirror/state').Extension} CM extension
+   */
+  function inlayHintExtension(currentPath, cmView, cmState) {
+    const { ViewPlugin, Decoration, WidgetType } = cmView;
+    const { RangeSet } = cmState;
+
+    class InlayHintWidget extends WidgetType {
+      constructor(label, kind, paddingLeft, paddingRight) {
+        super();
+        this.label = label;
+        this.kind = kind;
+        this.paddingLeft = paddingLeft;
+        this.paddingRight = paddingRight;
+      }
+
+      toDOM() {
+        const span = document.createElement('span');
+        span.className = 'cm-inlay-hint';
+        if (this.kind === 1) span.classList.add('cm-inlay-hint-type');
+        if (this.kind === 2) span.classList.add('cm-inlay-hint-parameter');
+        span.textContent = this.label;
+        if (this.paddingLeft) span.style.marginLeft = '2px';
+        if (this.paddingRight) span.style.marginRight = '2px';
+        return span;
+      }
+
+      eq(other) {
+        return this.label === other.label && this.kind === other.kind
+          && this.paddingLeft === other.paddingLeft && this.paddingRight === other.paddingRight;
+      }
+
+      ignoreEvent() { return true; }
+    }
+
+    return ViewPlugin.fromClass(class {
+      constructor(view) {
+        this.decorations = RangeSet.empty;
+        this._timer = null;
+        this._reqId = 0;
+        this._scheduleRequest(view);
+      }
+
+      update(update) {
+        if (!update.docChanged && !update.viewportChanged) return;
+        this._scheduleRequest(update.view);
+      }
+
+      _scheduleRequest(view) {
+        clearTimeout(this._timer);
+        if (!hasLsp || !currentPath) return;
+
+        const reqId = ++this._reqId;
+        this._timer = setTimeout(() => {
+          this._requestHints(view, reqId);
+        }, 500);
+      }
+
+      async _requestHints(view, reqId) {
+        try {
+          const viewport = view.viewport;
+          const startLine = view.state.doc.lineAt(viewport.from).number - 1;
+          const endLine = view.state.doc.lineAt(viewport.to).number;
+          const root = projectStore.root;
+
+          const result = await lspRequestInlayHints(currentPath, startLine, endLine, root);
+          if (reqId !== this._reqId) return;
+
+          if (!result?.data?.hints?.length) {
+            this.decorations = RangeSet.empty;
+            view.requestMeasure();
+            return;
+          }
+
+          const doc = view.state.doc;
+          const widgets = [];
+          for (const hint of result.data.hints) {
+            const pos = lspPositionToOffset(doc, hint.position);
+            if (pos >= 0 && pos <= doc.length) {
+              widgets.push(
+                Decoration.widget({
+                  widget: new InlayHintWidget(
+                    hint.label,
+                    hint.kind,
+                    hint.paddingLeft,
+                    hint.paddingRight
+                  ),
+                  side: 1, // after the position
+                }).range(pos)
+              );
+            }
+          }
+          widgets.sort((a, b) => a.from - b.from);
+          this.decorations = RangeSet.of(widgets);
+          view.requestMeasure();
+        } catch {
+          // Silently ignore -- inlay hints are best-effort
+        }
+      }
+
+      destroy() {
+        clearTimeout(this._timer);
+      }
+    }, {
+      decorations: v => v.decorations,
+    });
+  }
+
+  /**
+   * CodeMirror ViewPlugin that renders code lenses (reference counts, test links)
+   * via LSP textDocument/codeLens.
+   *
+   * @param {string} currentPath - current file path
+   * @param {typeof import('@codemirror/view')} cmView - CodeMirror view module
+   * @param {typeof import('@codemirror/state')} cmState - CodeMirror state module
+   * @returns {import('@codemirror/state').Extension} CM extension
+   */
+  function codeLensExtension(currentPath, cmView, cmState) {
+    const { ViewPlugin, Decoration, WidgetType } = cmView;
+    const { RangeSet, StateField, StateEffect } = cmState;
+
+    class CodeLensWidget extends WidgetType {
+      constructor(title) {
+        super();
+        this.title = title;
+      }
+
+      toDOM() {
+        const span = document.createElement('span');
+        span.className = 'cm-code-lens';
+        span.textContent = this.title;
+        return span;
+      }
+
+      eq(other) {
+        return this.title === other.title;
+      }
+
+      ignoreEvent() { return true; }
+    }
+
+    // Block decorations MUST come from a StateField, not a ViewPlugin.
+    const setCodeLenses = StateEffect.define();
+
+    const codeLensField = StateField.define({
+      create() { return Decoration.none; },
+      update(decos, tr) {
+        for (const e of tr.effects) {
+          if (e.is(setCodeLenses)) return e.value;
+        }
+        return tr.docChanged ? Decoration.none : decos;
+      },
+      provide: f => cmView.EditorView.decorations.from(f),
+    });
+
+    // ViewPlugin handles async fetching and dispatches effects to the StateField.
+    const codeLensFetcher = ViewPlugin.fromClass(class {
+      constructor(view) {
+        this._timer = null;
+        this._reqId = 0;
+        this._scheduleRequest(view);
+      }
+
+      update(update) {
+        if (!update.docChanged) return;
+        this._scheduleRequest(update.view);
+      }
+
+      _scheduleRequest(view) {
+        clearTimeout(this._timer);
+        if (!hasLsp || !currentPath) return;
+
+        const reqId = ++this._reqId;
+        this._timer = setTimeout(() => {
+          this._requestLenses(view, reqId);
+        }, 1000);
+      }
+
+      async _requestLenses(view, reqId) {
+        try {
+          const root = projectStore.root;
+          const result = await lspRequestCodeLens(currentPath, root);
+          if (reqId !== this._reqId) return;
+
+          if (!result?.data?.lenses?.length) {
+            view.dispatch({ effects: setCodeLenses.of(Decoration.none) });
+            return;
+          }
+
+          const doc = view.state.doc;
+          const widgets = [];
+          for (const lens of result.data.lenses) {
+            if (!lens.command?.title) continue;
+            const pos = lspPositionToOffset(doc, lens.range.start);
+            if (pos >= 0 && pos <= doc.length) {
+              widgets.push(
+                Decoration.widget({
+                  widget: new CodeLensWidget(lens.command.title),
+                  side: -1,
+                  block: true,
+                }).range(pos)
+              );
+            }
+          }
+          widgets.sort((a, b) => a.from - b.from);
+          view.dispatch({
+            effects: setCodeLenses.of(RangeSet.of(widgets)),
+          });
+        } catch {
+          // Silently ignore — code lenses are best-effort
+        }
+      }
+
+      destroy() {
+        clearTimeout(this._timer);
+      }
+    });
+
+    return [codeLensField, codeLensFetcher];
+  }
+
+  /**
+   * CodeMirror ViewPlugin that renders inline color swatches
+   * via LSP textDocument/documentColor.
+   *
+   * @param {string} currentPath - current file path
+   * @param {typeof import('@codemirror/view')} cmView - CodeMirror view module
+   * @param {typeof import('@codemirror/state')} cmState - CodeMirror state module
+   * @returns {import('@codemirror/state').Extension} CM extension
+   */
+  function documentColorsExtension(currentPath, cmView, cmState) {
+    const { ViewPlugin, Decoration, WidgetType } = cmView;
+    const { RangeSet } = cmState;
+
+    class ColorSwatchWidget extends WidgetType {
+      constructor(r, g, b, a) {
+        super();
+        this.r = r;
+        this.g = g;
+        this.b = b;
+        this.a = a;
+      }
+
+      toDOM() {
+        const span = document.createElement('span');
+        span.className = 'cm-color-swatch';
+        span.style.background = `rgba(${Math.round(this.r * 255)}, ${Math.round(this.g * 255)}, ${Math.round(this.b * 255)}, ${this.a})`;
+        return span;
+      }
+
+      eq(other) {
+        return this.r === other.r && this.g === other.g && this.b === other.b && this.a === other.a;
+      }
+
+      ignoreEvent() { return true; }
+    }
+
+    return ViewPlugin.fromClass(class {
+      constructor(view) {
+        this.decorations = RangeSet.empty;
+        this._timer = null;
+        this._reqId = 0;
+        this._scheduleRequest(view);
+      }
+
+      update(update) {
+        if (!update.docChanged) return;
+        this._scheduleRequest(update.view);
+      }
+
+      _scheduleRequest(view) {
+        clearTimeout(this._timer);
+        if (!hasLsp || !currentPath) return;
+
+        const reqId = ++this._reqId;
+        this._timer = setTimeout(() => {
+          this._requestColors(view, reqId);
+        }, 500);
+      }
+
+      async _requestColors(view, reqId) {
+        try {
+          const root = projectStore.root;
+          const result = await lspRequestDocumentColors(currentPath, root);
+          if (reqId !== this._reqId) return;
+
+          if (!result?.data?.colors?.length) {
+            this.decorations = RangeSet.empty;
+            view.requestMeasure();
+            return;
+          }
+
+          const doc = view.state.doc;
+          const widgets = [];
+          for (const item of result.data.colors) {
+            const pos = lspPositionToOffset(doc, item.range.start);
+            if (pos >= 0 && pos <= doc.length) {
+              const { red, green, blue, alpha } = item.color;
+              widgets.push(
+                Decoration.widget({
+                  widget: new ColorSwatchWidget(red, green, blue, alpha ?? 1),
+                  side: -1, // before the color value
+                }).range(pos)
+              );
+            }
+          }
+          widgets.sort((a, b) => a.from - b.from);
+          this.decorations = RangeSet.of(widgets);
+          view.requestMeasure();
+        } catch {
+          // Silently ignore — document colors are best-effort
+        }
+      }
+
+      destroy() {
+        clearTimeout(this._timer);
+      }
+    }, {
+      decorations: v => v.decorations,
+    });
+  }
+
+  /**
+   * CodeMirror extensions that provide LSP-based folding ranges.
+   * A ViewPlugin fetches ranges asynchronously; a foldService serves
+   * them synchronously to CodeMirror's fold system.
+   *
+   * @param {string} currentPath - current file path
+   * @param {typeof import('@codemirror/view')} cmView - CodeMirror view module
+   * @returns {import('@codemirror/state').Extension[]} CM extensions array
+   */
+  function foldingRangeExtension(currentPath, cmView) {
+    const { ViewPlugin } = cmView;
+
+    // Shared cache between the ViewPlugin (writer) and foldService (reader)
+    let cachedRanges = [];
+
+    const fetcher = ViewPlugin.fromClass(class {
+      constructor(view) {
+        this._timer = null;
+        this._reqId = 0;
+        this._scheduleRequest(view);
+      }
+
+      update(update) {
+        if (!update.docChanged) return;
+        this._scheduleRequest(update.view);
+      }
+
+      _scheduleRequest(view) {
+        clearTimeout(this._timer);
+        if (!hasLsp || !currentPath) return;
+
+        const reqId = ++this._reqId;
+        this._timer = setTimeout(() => {
+          this._requestRanges(view, reqId);
+        }, 500);
+      }
+
+      async _requestRanges(view, reqId) {
+        try {
+          const root = projectStore.root;
+          const result = await lspRequestFoldingRanges(currentPath, root);
+          if (reqId !== this._reqId) return;
+
+          cachedRanges = (result?.data?.ranges || []).map(r => ({
+            startLine: r.startLine,
+            endLine: r.endLine,
+          }));
+        } catch {
+          // Silently ignore
+        }
+      }
+
+      destroy() {
+        clearTimeout(this._timer);
+        cachedRanges = [];
+      }
+    });
+
+    const folder = foldService.of((state, lineStart, _lineEnd) => {
+      const line = state.doc.lineAt(lineStart);
+      const lineNum = line.number - 1; // 0-based (LSP uses 0-based lines)
+      for (const r of cachedRanges) {
+        if (r.startLine === lineNum) {
+          // Convert 0-based LSP endLine to 1-based CM line number
+          const endLineNum = Math.min(r.endLine + 1, state.doc.lines);
+          const endLine = state.doc.line(endLineNum);
+          // Use endLine.from (not .to) to keep closing delimiter visible,
+          // matching CodeMirror's foldInside convention and VS Code behavior
+          return { from: line.to, to: endLine.from };
+        }
+      }
+      return null;
+    });
+
+    return [fetcher, folder];
+  }
+
+  /**
+   * Standard LSP semantic token types legend.
+   * Index position maps to the tokenType integer in the response data.
+   */
+  const SEMANTIC_TOKEN_TYPES = [
+    'namespace', 'type', 'class', 'enum', 'interface', 'struct',
+    'typeParameter', 'parameter', 'variable', 'property', 'enumMember',
+    'event', 'function', 'method', 'macro', 'keyword', 'modifier',
+    'comment', 'string', 'number', 'regexp', 'operator', 'decorator',
+  ];
+
+  /** Token types that get CSS classes (ones that add value beyond syntax highlighting) */
+  const STYLED_TOKEN_TYPES = new Set([
+    'type', 'interface', 'enum', 'enumMember', 'typeParameter',
+    'parameter', 'property', 'namespace', 'decorator', 'macro',
+  ]);
+
+  /**
+   * CodeMirror ViewPlugin that applies semantic token decorations
+   * via LSP textDocument/semanticTokens/full.
+   *
+   * @param {string} currentPath - current file path
+   * @param {typeof import('@codemirror/view')} cmView - CodeMirror view module
+   * @param {typeof import('@codemirror/state')} cmState - CodeMirror state module
+   * @returns {import('@codemirror/state').Extension} CM extension
+   */
+  function semanticTokensExtension(currentPath, cmView, cmState) {
+    const { ViewPlugin, Decoration } = cmView;
+    const { RangeSet } = cmState;
+
+    return ViewPlugin.fromClass(class {
+      constructor(view) {
+        this.decorations = RangeSet.empty;
+        this._timer = null;
+        this._reqId = 0;
+        this._scheduleRequest(view);
+      }
+
+      update(update) {
+        if (!update.docChanged) return;
+        this._scheduleRequest(update.view);
+      }
+
+      _scheduleRequest(view) {
+        clearTimeout(this._timer);
+        if (!hasLsp || !currentPath) return;
+
+        const reqId = ++this._reqId;
+        this._timer = setTimeout(() => {
+          this._requestTokens(view, reqId);
+        }, 500);
+      }
+
+      async _requestTokens(view, reqId) {
+        try {
+          const root = projectStore.root;
+          const result = await lspRequestSemanticTokensFull(currentPath, root);
+          if (reqId !== this._reqId) return;
+
+          const data = result?.data?.tokens?.data;
+          if (!data?.length) {
+            this.decorations = RangeSet.empty;
+            view.requestMeasure();
+            return;
+          }
+
+          const doc = view.state.doc;
+          const marks = [];
+          let line = 0;
+          let char = 0;
+
+          for (let i = 0; i < data.length; i += 5) {
+            const deltaLine = data[i];
+            const deltaStartChar = data[i + 1];
+            const length = data[i + 2];
+            const tokenTypeIdx = data[i + 3];
+
+            line += deltaLine;
+            char = deltaLine > 0 ? deltaStartChar : char + deltaStartChar;
+
+            const tokenType = SEMANTIC_TOKEN_TYPES[tokenTypeIdx];
+            if (!tokenType || !STYLED_TOKEN_TYPES.has(tokenType)) continue;
+
+            // Convert 0-based line/char to document offset
+            const lineNum = line + 1; // CM lines are 1-based
+            if (lineNum > doc.lines) continue;
+            const lineObj = doc.line(lineNum);
+            const from = lineObj.from + char;
+            const to = from + length;
+            if (to > doc.length) continue;
+
+            marks.push(
+              Decoration.mark({ class: `cm-semantic-${tokenType}` }).range(from, to)
+            );
+          }
+
+          // RangeSet.of requires sorted ranges
+          marks.sort((a, b) => a.from - b.from || a.to - b.to);
+          this.decorations = RangeSet.of(marks);
+          view.requestMeasure();
+        } catch {
+          // Silently ignore — semantic tokens are best-effort
+        }
+      }
+
+      destroy() {
+        clearTimeout(this._timer);
+      }
+    }, {
+      decorations: v => v.decorations,
     });
   }
 
@@ -423,6 +1433,7 @@ export function createEditorLsp() {
     get showSignatureHelp() { return showSignatureHelp; },
     get signatureHelpData() { return signatureHelpData; },
     get signatureHelpPos() { return signatureHelpPos; },
+    get signatureHelpCoords() { return signatureHelpCoords; },
 
     // Setters
     setHasLsp(val) { hasLsp = val; },
@@ -437,6 +1448,9 @@ export function createEditorLsp() {
     changeFile,
     saveFile,
     handleGoToDefinition,
+    handleGoToTypeDefinition,
+    handleGoToDeclaration,
+    handleGoToImplementation,
     handleFindReferences,
     handleRenameSymbol,
     executeRename,
@@ -444,10 +1458,20 @@ export function createEditorLsp() {
     requestSignatureHelp,
     dismissSignatureHelp,
     formatDocument,
+    formatSelection,
+    handleLinkedEditing,
 
     // CodeMirror extension factories
     completionSource,
     hoverTooltipExtension,
+    documentHighlightExtension,
+    inlayHintExtension,
+    codeLensExtension,
+    documentColorsExtension,
+    foldingRangeExtension,
+    semanticTokensExtension,
+    onTypeFormattingExtension,
+    linkedEditingExtension,
     diagnosticListener,
 
     // Lifecycle

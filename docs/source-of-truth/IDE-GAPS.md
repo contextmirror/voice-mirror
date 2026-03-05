@@ -54,92 +54,19 @@ What's missing is everything that makes a "real IDE" feel seamless — the gaps 
 
 ## LSP Feature Comparison
 
-> Detailed comparison of Language Server Protocol support. Voice Mirror implements core LSP (Tier 1). VS Code and Zed implement nearly everything.
-> Data sourced from reference repos: `E:\Projects\references\VSCode\` and `E:\Projects\references\Zed\`.
+> Full LSP gap analysis lives in [`docs/source-of-truth/LSP-GAP.md`](LSP-GAP.md) — configuration alignment, 37-feature matrix, behavior differences, and implementation priorities.
 
-| LSP Feature | VS Code | Zed | Cursor | Voice Mirror | Priority |
-|-------------|---------|-----|--------|-------------|----------|
-| **Core (Tier 0 — baseline)** | | | | | |
-| Diagnostics (errors/warnings) | Full | Full | Full | Full | Done |
-| Completions | Full (resolve + snippets) | Full (resolve + snippets) | Full | Basic (no resolve/snippets) | Low |
-| Hover tooltips | Full (markdown, grace period) | Full (markdown, keyboard grace) | Full | Full | Done |
-| Go-to-definition | Full | Full | Full | Full | Done |
-| Document sync (open/change/save/close) | Full | Full | Full | Full (full sync, not incremental) | Done |
-| **Navigation (Tier 1 — shipped)** | | | | | |
-| Find all references | Full | Full (multi-server) | Full | Full | Done |
-| Rename symbol | Full (prepare + workspace edit) | Full (prepare) | Full | Full (prepare + multi-file) | Done |
-| Code actions / quick fixes | Full (resolve + filtering) | Full (resolve + filtering) | Full | Basic (no resolve) | Low |
-| Document symbols / outline | Full | Full (+ tree-sitter fallback) | Full | Full | Done |
-| Document highlight | Full | Full | Full | None | Low |
-| **Navigation (Tier 2 — not implemented)** | | | | | |
-| Type definition | Full | Full | Full | None | Low |
-| Go-to-declaration | Full | Full | Full | None | Low |
-| Go-to-implementation | Full | Full (multi-server) | Full | None | Low |
-| Call hierarchy (incoming/outgoing) | Full | None | Full | None | Very low |
-| Type hierarchy | Full | None | Full | None | Very low |
-| Workspace symbols (cross-project) | Full | Full (multi-server) | Full | None | Medium |
-| **Inline Assistance** | | | | | |
-| Signature help (parameter hints) | Full (auto on `(`) | Full | Full | Full (auto on `(` `,` + Ctrl+Shift+Space) | Done |
-| Inlay hints (inline types) | Full (resolve on hover) | Full (50-row chunking) | Full | None | Medium |
-| Code lens (inline annotations) | Full | Full (resolve + refresh) | Full | None | Low |
-| **Formatting & Editing** | | | | | |
-| Document formatting | Full | Full | Full | Full (Shift+Alt+F + format-on-save) | Done |
-| Range formatting | Full | Full | Full | None (backend ready, no UI) | Low |
-| On-type formatting | Full | Full | Full | None | Low |
-| Linked editing (HTML tag pairs) | Full | Full | Full | None | Low |
-| Selection range (smart select) | Full | None | Full | None | Very low |
-| **Visual Enhancements** | | | | | |
-| Semantic tokens (token highlighting) | Full (delta encoding) | Full (delta, augments syntax) | Full | None | Low |
-| Document colors (CSS color picker) | Full | Full | Full | None | Low |
-| Folding ranges (LSP-aware) | Full | Full (kind support) | Full | None | Low |
-| **Infrastructure** | | | | | |
-| Manifest-driven server registry | N/A (built-in) | N/A (built-in) | N/A | Full (lsp-servers.json, 7 servers) | Done |
-| Auto-download LSP servers (npm + GitHub Releases) | Full (built-in) | Full (extensions) | Full | Full (npm + github-release with gzip) | Done |
-| Server config (initOptions + workspace/config) | Full | Full | Full | Full (manifest-driven) | Done |
-| Multi-server per file | Full | Full (primary + supplementary) | Full | Full (primary + supplementary routing) | Done |
-| Remote LSP (SSH) | Full | Full (SshLspAdapter) | Full | None | Not planned |
-| Crash recovery (auto-restart) | Full (backoff) | Full | Full | Full (exponential backoff, max 5, doc replay) | Done |
-| Health monitoring (stale requests) | Full | Full | Full | Full (30s threshold, Unresponsive state) | Done |
-| Idle shutdown (resource management) | Full | Full | Full | Full (60s timer, auto-restart on reopen) | Done |
-| Project-wide scanning | Full | Full | Full | Full (background didOpen, batched 10/100ms) | Done |
-| Pull diagnostics (refresh) | Full | Full | Full | None | Low |
+**Current:** 19/37 features (51%). Core editing complete, infrastructure complete, Tier 2 features in progress.
 
-### Summary
-
-| Category | VS Code | Zed | Cursor | Voice Mirror |
-|----------|---------|-----|--------|-------------|
-| **Features implemented** | 29/29 | 26/29 | 29/29 | 18/29 |
-| **Core editing** | Complete | Complete | Complete | Complete |
-| **Navigation** | Complete | Near-complete | Complete | Tier 1 done |
-| **Inline assistance** | Complete | Complete | Complete | Signature help done |
-| **Formatting** | Complete | Complete | Complete | Document formatting done |
-| **Visual** | Complete | Complete | Complete | None |
-| **Infrastructure** | Complete | Complete | Complete | Complete (crash recovery, multi-server, scanning, idle shutdown, health monitoring) |
-
-### LSP Priorities for Voice Mirror
-
-**Worth doing (high value/effort ratio):**
-1. ~~**Signature help** — Shows parameter info on `(`. Users expect this. Medium effort (new Rust handler + CM tooltip).~~ ✓ Done (auto on `(` `,` + Ctrl+Shift+Space)
-2. ~~**Document formatting** — Format on save / format selection. Users expect this. Medium effort.~~ ✓ Done (Shift+Alt+F + format-on-save)
-3. **Workspace symbols** — Cross-project symbol search. Feeds into Command Palette expansion.
-4. **Inlay hints** — Inline type annotations. Nice for TS/Rust. Medium effort (chunking optional).
-
-**Nice but not critical:**
-5. Linked editing — HTML tag pair editing. Small scope.
-6. On-type formatting — Auto-indent. Small scope.
-7. Type/declaration/implementation navigation — More "go-to" targets. Small per feature.
-8. Code lens — "N references" above functions. Medium effort.
-9. **Incremental document sync** — Currently we send the full file content on every `didChange` (full sync). VS Code/Zed send only the changed characters + position (incremental sync). Negligible for normal files, but adds serialization overhead on very large files (10K+ lines). Requires converting CodeMirror change descriptions into LSP `TextDocumentContentChangeEvent` ranges. Small-medium effort.
-10. **Range formatting** — Format selection (Ctrl+K Ctrl+F). Backend ready (Rust command + API wrapper), just needs a `formatSelection()` frontend method + keybinding. Small effort.
-
-**Skip for now:**
-- Semantic tokens — marginal visual improvement over syntax highlighting
-- Document colors — niche (CSS-only)
-- Call/type hierarchy — complex UI for rare use cases
-- Remote LSP — Voice Mirror is a local desktop app
-- Selection range — CodeMirror has built-in smart selection
-
-**Voice Mirror's LSP advantage:** AI handles what LSP can't. "What does this function do?" is answered by the chat terminal, not hover tooltips. "Refactor this module" goes through Claude Code, not LSP code actions. Our LSP needs to cover the basics that users expect from a code editor — the AI handles everything above that.
+| Category | VS Code | Voice Mirror | Coverage |
+|----------|---------|-------------|----------|
+| Core (5) | 5/5 | 5/5 | 100% |
+| Navigation Tier 1 (5) | 5/5 | 4/5 | 80% |
+| Navigation Tier 2 (6) | 6/6 | 0/6 | 0% |
+| Inline Assistance (3) | 3/3 | 1/3 | 33% |
+| Formatting & Editing (5) | 5/5 | 1/5 | 20% |
+| Visual (3) | 3/3 | 0/3 | 0% |
+| Infrastructure (10) | 10/10 | 8/10 | 80% |
 
 ---
 

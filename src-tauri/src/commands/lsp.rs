@@ -307,6 +307,99 @@ pub async fn lsp_request_definition(
     }
 }
 
+/// Request go-to-type-definition at a position in a file.
+#[tauri::command]
+pub async fn lsp_request_type_definition(
+    path: String,
+    line: u32,
+    character: u32,
+    project_root: String,
+    state: State<'_, LspManagerState>,
+) -> Result<IpcResponse, ()> {
+    let ext = match extension_from_path(&path) {
+        Some(e) => e,
+        None => return Ok(IpcResponse::err("Could not determine file extension")),
+    };
+
+    let lang_id = match detection::language_id_for_extension(&ext) {
+        Some(id) => id.to_string(),
+        None => return Ok(IpcResponse::err(format!("No LSP support for .{} files", ext))),
+    };
+
+    let uri = types::file_uri(&path, &project_root);
+
+    let mut manager = state.0.lock().await;
+    match manager
+        .request_type_definition(&uri, &lang_id, line, character, &project_root)
+        .await
+    {
+        Ok(result) => Ok(IpcResponse::ok(result)),
+        Err(e) => Ok(IpcResponse::err(e)),
+    }
+}
+
+/// Request go-to-declaration at a position in a file.
+#[tauri::command]
+pub async fn lsp_request_declaration(
+    path: String,
+    line: u32,
+    character: u32,
+    project_root: String,
+    state: State<'_, LspManagerState>,
+) -> Result<IpcResponse, ()> {
+    let ext = match extension_from_path(&path) {
+        Some(e) => e,
+        None => return Ok(IpcResponse::err("Could not determine file extension")),
+    };
+
+    let lang_id = match detection::language_id_for_extension(&ext) {
+        Some(id) => id.to_string(),
+        None => return Ok(IpcResponse::err(format!("No LSP support for .{} files", ext))),
+    };
+
+    let uri = types::file_uri(&path, &project_root);
+
+    let mut manager = state.0.lock().await;
+    match manager
+        .request_declaration(&uri, &lang_id, line, character, &project_root)
+        .await
+    {
+        Ok(result) => Ok(IpcResponse::ok(result)),
+        Err(e) => Ok(IpcResponse::err(e)),
+    }
+}
+
+/// Request go-to-implementation at a position in a file.
+#[tauri::command]
+pub async fn lsp_request_implementation(
+    path: String,
+    line: u32,
+    character: u32,
+    project_root: String,
+    state: State<'_, LspManagerState>,
+) -> Result<IpcResponse, ()> {
+    let ext = match extension_from_path(&path) {
+        Some(e) => e,
+        None => return Ok(IpcResponse::err("Could not determine file extension")),
+    };
+
+    let lang_id = match detection::language_id_for_extension(&ext) {
+        Some(id) => id.to_string(),
+        None => return Ok(IpcResponse::err(format!("No LSP support for .{} files", ext))),
+    };
+
+    let uri = types::file_uri(&path, &project_root);
+
+    let mut manager = state.0.lock().await;
+    match manager
+        .request_implementation(&uri, &lang_id, line, character, &project_root)
+        .await
+    {
+        Ok(result) => Ok(IpcResponse::ok(result)),
+        Err(e) => Ok(IpcResponse::err(e)),
+    }
+}
+
 /// Request document symbols (outline) for a file.
 #[tauri::command]
 pub async fn lsp_request_document_symbols(
@@ -360,6 +453,93 @@ pub async fn lsp_request_references(
     let mut manager = state.0.lock().await;
     match manager
         .request_references(&uri, &lang_id, line, character, &project_root)
+        .await
+    {
+        Ok(result) => Ok(IpcResponse::ok(result)),
+        Err(e) => Ok(IpcResponse::err(e)),
+    }
+}
+
+/// Request workspace symbols matching a query string.
+///
+/// Unlike textDocument requests, this doesn't take a file path — it searches
+/// across the entire project for symbols matching the query.
+#[tauri::command]
+pub async fn lsp_request_workspace_symbols(
+    query: String,
+    lang_id: String,
+    project_root: String,
+    state: State<'_, LspManagerState>,
+) -> Result<IpcResponse, ()> {
+    let mut manager = state.0.lock().await;
+    match manager
+        .request_workspace_symbols(&query, &lang_id, &project_root)
+        .await
+    {
+        Ok(result) => Ok(IpcResponse::ok(result)),
+        Err(e) => Ok(IpcResponse::err(e)),
+    }
+}
+
+/// Request document highlights for a symbol at a position.
+///
+/// Returns all occurrences of the symbol under the cursor in the current file.
+#[tauri::command]
+pub async fn lsp_request_document_highlight(
+    path: String,
+    line: u32,
+    character: u32,
+    project_root: String,
+    state: State<'_, LspManagerState>,
+) -> Result<IpcResponse, ()> {
+    let ext = match extension_from_path(&path) {
+        Some(e) => e,
+        None => return Ok(IpcResponse::err("Could not determine file extension")),
+    };
+
+    let lang_id = match detection::language_id_for_extension(&ext) {
+        Some(id) => id.to_string(),
+        None => return Ok(IpcResponse::err(format!("No LSP support for .{} files", ext))),
+    };
+
+    let uri = types::file_uri(&path, &project_root);
+
+    let mut manager = state.0.lock().await;
+    match manager
+        .request_document_highlight(&uri, &lang_id, line, character, &project_root)
+        .await
+    {
+        Ok(result) => Ok(IpcResponse::ok(result)),
+        Err(e) => Ok(IpcResponse::err(e)),
+    }
+}
+
+/// Request inlay hints for a range of lines in a file.
+///
+/// Returns inline type annotations, parameter names, etc. for the visible range.
+#[tauri::command]
+pub async fn lsp_request_inlay_hints(
+    path: String,
+    start_line: u32,
+    end_line: u32,
+    project_root: String,
+    state: State<'_, LspManagerState>,
+) -> Result<IpcResponse, ()> {
+    let ext = match extension_from_path(&path) {
+        Some(e) => e,
+        None => return Ok(IpcResponse::err("Could not determine file extension")),
+    };
+
+    let lang_id = match detection::language_id_for_extension(&ext) {
+        Some(id) => id.to_string(),
+        None => return Ok(IpcResponse::err(format!("No LSP support for .{} files", ext))),
+    };
+
+    let uri = types::file_uri(&path, &project_root);
+
+    let mut manager = state.0.lock().await;
+    match manager
+        .request_inlay_hints(&uri, &lang_id, start_line, end_line, &project_root)
         .await
     {
         Ok(result) => Ok(IpcResponse::ok(result)),
@@ -549,6 +729,74 @@ pub async fn lsp_request_range_formatting(
     }
 }
 
+/// Request on-type formatting after a trigger character is typed.
+///
+/// Sends `textDocument/onTypeFormatting` with the trigger character and
+/// formatting options. Returns text edits to apply.
+#[tauri::command]
+pub async fn lsp_request_on_type_formatting(
+    path: String,
+    line: u32,
+    character: u32,
+    trigger_char: String,
+    tab_size: u32,
+    insert_spaces: bool,
+    project_root: String,
+    state: State<'_, LspManagerState>,
+) -> Result<IpcResponse, ()> {
+    let ext = match extension_from_path(&path) {
+        Some(e) => e,
+        None => return Ok(IpcResponse::err("Could not determine file extension")),
+    };
+
+    let lang_id = match detection::language_id_for_extension(&ext) {
+        Some(id) => id.to_string(),
+        None => return Ok(IpcResponse::err(format!("No LSP support for .{} files", ext))),
+    };
+
+    let uri = types::file_uri(&path, &project_root);
+
+    let mut manager = state.0.lock().await;
+    match manager
+        .request_on_type_formatting(&uri, &lang_id, line, character, &trigger_char, tab_size, insert_spaces, &project_root)
+        .await
+    {
+        Ok(result) => Ok(IpcResponse::ok(result)),
+        Err(e) => Ok(IpcResponse::err(e)),
+    }
+}
+
+/// Request linked editing ranges at a position (e.g. matching HTML tag pairs).
+#[tauri::command]
+pub async fn lsp_request_linked_editing_range(
+    path: String,
+    line: u32,
+    character: u32,
+    project_root: String,
+    state: State<'_, LspManagerState>,
+) -> Result<IpcResponse, ()> {
+    let ext = match extension_from_path(&path) {
+        Some(e) => e,
+        None => return Ok(IpcResponse::err("Could not determine file extension")),
+    };
+
+    let lang_id = match detection::language_id_for_extension(&ext) {
+        Some(id) => id.to_string(),
+        None => return Ok(IpcResponse::err(format!("No LSP support for .{} files", ext))),
+    };
+
+    let uri = types::file_uri(&path, &project_root);
+
+    let mut manager = state.0.lock().await;
+    match manager
+        .request_linked_editing_range(&uri, &lang_id, line, character, &project_root)
+        .await
+    {
+        Ok(result) => Ok(IpcResponse::ok(result)),
+        Err(e) => Ok(IpcResponse::err(e)),
+    }
+}
+
 /// Apply a workspace edit (multi-file text edits from rename or code actions).
 ///
 /// Parses a WorkspaceEdit's `changes` map (uri -> TextEdit[]), reads each file,
@@ -682,6 +930,354 @@ pub async fn lsp_apply_workspace_edit(
     }
 
     IpcResponse::ok(json!({ "filesChanged": files_changed }))
+}
+
+/// Resolve a completion item to fill in lazy-loaded details (documentation, additionalTextEdits).
+///
+/// Unlike most LSP commands, this takes a `lang_id` directly (not a file path)
+/// because the completion item already encodes its origin.
+#[tauri::command]
+pub async fn lsp_resolve_completion_item(
+    item: serde_json::Value,
+    lang_id: String,
+    project_root: String,
+    state: State<'_, LspManagerState>,
+) -> Result<IpcResponse, ()> {
+    let mut manager = state.0.lock().await;
+    match manager
+        .resolve_completion_item(item, &lang_id, &project_root)
+        .await
+    {
+        Ok(result) => Ok(IpcResponse::ok(result)),
+        Err(e) => Ok(IpcResponse::err(e)),
+    }
+}
+
+/// Prepare call hierarchy at a cursor position.
+///
+/// Returns an array of CallHierarchyItem to pass to incoming/outgoing calls.
+#[tauri::command]
+pub async fn lsp_prepare_call_hierarchy(
+    path: String,
+    line: u32,
+    character: u32,
+    project_root: String,
+    state: State<'_, LspManagerState>,
+) -> Result<IpcResponse, ()> {
+    let ext = match extension_from_path(&path) {
+        Some(e) => e,
+        None => return Ok(IpcResponse::err("Could not determine file extension")),
+    };
+
+    let lang_id = match detection::language_id_for_extension(&ext) {
+        Some(id) => id.to_string(),
+        None => return Ok(IpcResponse::err(format!("No LSP support for .{} files", ext))),
+    };
+
+    let uri = types::file_uri(&path, &project_root);
+
+    let mut manager = state.0.lock().await;
+    match manager
+        .prepare_call_hierarchy(&uri, &lang_id, line, character, &project_root)
+        .await
+    {
+        Ok(result) => Ok(IpcResponse::ok(result)),
+        Err(e) => Ok(IpcResponse::err(e)),
+    }
+}
+
+/// Request incoming calls for a call hierarchy item.
+#[tauri::command]
+pub async fn lsp_request_incoming_calls(
+    item: serde_json::Value,
+    lang_id: String,
+    project_root: String,
+    state: State<'_, LspManagerState>,
+) -> Result<IpcResponse, ()> {
+    let mut manager = state.0.lock().await;
+    match manager
+        .request_incoming_calls(item, &lang_id, &project_root)
+        .await
+    {
+        Ok(result) => Ok(IpcResponse::ok(result)),
+        Err(e) => Ok(IpcResponse::err(e)),
+    }
+}
+
+/// Request outgoing calls for a call hierarchy item.
+#[tauri::command]
+pub async fn lsp_request_outgoing_calls(
+    item: serde_json::Value,
+    lang_id: String,
+    project_root: String,
+    state: State<'_, LspManagerState>,
+) -> Result<IpcResponse, ()> {
+    let mut manager = state.0.lock().await;
+    match manager
+        .request_outgoing_calls(item, &lang_id, &project_root)
+        .await
+    {
+        Ok(result) => Ok(IpcResponse::ok(result)),
+        Err(e) => Ok(IpcResponse::err(e)),
+    }
+}
+
+/// Prepare type hierarchy at a cursor position.
+///
+/// Returns an array of TypeHierarchyItem to pass to supertypes/subtypes.
+#[tauri::command]
+pub async fn lsp_prepare_type_hierarchy(
+    path: String,
+    line: u32,
+    character: u32,
+    project_root: String,
+    state: State<'_, LspManagerState>,
+) -> Result<IpcResponse, ()> {
+    let ext = match extension_from_path(&path) {
+        Some(e) => e,
+        None => return Ok(IpcResponse::err("Could not determine file extension")),
+    };
+
+    let lang_id = match detection::language_id_for_extension(&ext) {
+        Some(id) => id.to_string(),
+        None => return Ok(IpcResponse::err(format!("No LSP support for .{} files", ext))),
+    };
+
+    let uri = types::file_uri(&path, &project_root);
+
+    let mut manager = state.0.lock().await;
+    match manager
+        .prepare_type_hierarchy(&uri, &lang_id, line, character, &project_root)
+        .await
+    {
+        Ok(result) => Ok(IpcResponse::ok(result)),
+        Err(e) => Ok(IpcResponse::err(e)),
+    }
+}
+
+/// Request supertypes for a type hierarchy item.
+#[tauri::command]
+pub async fn lsp_request_supertypes(
+    item: serde_json::Value,
+    lang_id: String,
+    project_root: String,
+    state: State<'_, LspManagerState>,
+) -> Result<IpcResponse, ()> {
+    let mut manager = state.0.lock().await;
+    match manager
+        .request_supertypes(item, &lang_id, &project_root)
+        .await
+    {
+        Ok(result) => Ok(IpcResponse::ok(result)),
+        Err(e) => Ok(IpcResponse::err(e)),
+    }
+}
+
+/// Request subtypes for a type hierarchy item.
+#[tauri::command]
+pub async fn lsp_request_subtypes(
+    item: serde_json::Value,
+    lang_id: String,
+    project_root: String,
+    state: State<'_, LspManagerState>,
+) -> Result<IpcResponse, ()> {
+    let mut manager = state.0.lock().await;
+    match manager
+        .request_subtypes(item, &lang_id, &project_root)
+        .await
+    {
+        Ok(result) => Ok(IpcResponse::ok(result)),
+        Err(e) => Ok(IpcResponse::err(e)),
+    }
+}
+
+/// Request selection ranges for positions in a document.
+///
+/// Returns a linked list of ranges per position, enabling smart
+/// expand/shrink selection (word -> expression -> statement -> block -> function).
+#[tauri::command]
+pub async fn lsp_request_selection_range(
+    path: String,
+    positions: serde_json::Value,
+    project_root: String,
+    state: State<'_, LspManagerState>,
+) -> Result<IpcResponse, ()> {
+    let ext = match extension_from_path(&path) {
+        Some(e) => e,
+        None => return Ok(IpcResponse::err("Could not determine file extension")),
+    };
+
+    let lang_id = match detection::language_id_for_extension(&ext) {
+        Some(id) => id.to_string(),
+        None => return Ok(IpcResponse::err(format!("No LSP support for .{} files", ext))),
+    };
+
+    let uri = types::file_uri(&path, &project_root);
+
+    let positions_vec = positions
+        .as_array()
+        .map(|a| a.to_vec())
+        .unwrap_or_default();
+
+    let mut manager = state.0.lock().await;
+    match manager
+        .request_selection_range(&uri, &lang_id, positions_vec, &project_root)
+        .await
+    {
+        Ok(result) => Ok(IpcResponse::ok(result)),
+        Err(e) => Ok(IpcResponse::err(e)),
+    }
+}
+
+/// Request diagnostics for a document on demand (pull diagnostics).
+///
+/// Sends `textDocument/diagnostic` to get fresh diagnostics without waiting
+/// for the server to push them via `publishDiagnostics`.
+#[tauri::command]
+pub async fn lsp_request_diagnostics(
+    path: String,
+    project_root: String,
+    state: State<'_, LspManagerState>,
+) -> Result<IpcResponse, ()> {
+    let ext = match extension_from_path(&path) {
+        Some(e) => e,
+        None => return Ok(IpcResponse::err("Could not determine file extension")),
+    };
+
+    let lang_id = match detection::language_id_for_extension(&ext) {
+        Some(id) => id.to_string(),
+        None => return Ok(IpcResponse::err(format!("No LSP support for .{} files", ext))),
+    };
+
+    let uri = types::file_uri(&path, &project_root);
+
+    let mut manager = state.0.lock().await;
+    match manager
+        .request_diagnostics(&uri, &lang_id, &project_root)
+        .await
+    {
+        Ok(result) => Ok(IpcResponse::ok(result)),
+        Err(e) => Ok(IpcResponse::err(e)),
+    }
+}
+
+/// Request code lenses for a document (e.g., "3 references", "Run test").
+#[tauri::command]
+pub async fn lsp_request_code_lens(
+    path: String,
+    project_root: String,
+    state: State<'_, LspManagerState>,
+) -> Result<IpcResponse, ()> {
+    let ext = match extension_from_path(&path) {
+        Some(e) => e,
+        None => return Ok(IpcResponse::err("Could not determine file extension")),
+    };
+
+    let lang_id = match detection::language_id_for_extension(&ext) {
+        Some(id) => id.to_string(),
+        None => return Ok(IpcResponse::err(format!("No LSP support for .{} files", ext))),
+    };
+
+    let uri = types::file_uri(&path, &project_root);
+
+    let mut manager = state.0.lock().await;
+    match manager
+        .request_code_lens(&uri, &lang_id, &project_root)
+        .await
+    {
+        Ok(result) => Ok(IpcResponse::ok(result)),
+        Err(e) => Ok(IpcResponse::err(e)),
+    }
+}
+
+/// Request document colors for a file (CSS color picker support).
+#[tauri::command]
+pub async fn lsp_request_document_colors(
+    path: String,
+    project_root: String,
+    state: State<'_, LspManagerState>,
+) -> Result<IpcResponse, ()> {
+    let ext = match extension_from_path(&path) {
+        Some(e) => e,
+        None => return Ok(IpcResponse::err("Could not determine file extension")),
+    };
+
+    let lang_id = match detection::language_id_for_extension(&ext) {
+        Some(id) => id.to_string(),
+        None => return Ok(IpcResponse::err(format!("No LSP support for .{} files", ext))),
+    };
+
+    let uri = types::file_uri(&path, &project_root);
+
+    let mut manager = state.0.lock().await;
+    match manager
+        .request_document_colors(&uri, &lang_id, &project_root)
+        .await
+    {
+        Ok(result) => Ok(IpcResponse::ok(result)),
+        Err(e) => Ok(IpcResponse::err(e)),
+    }
+}
+
+/// Request folding ranges for a document (LSP-aware code folding).
+#[tauri::command]
+pub async fn lsp_request_folding_ranges(
+    path: String,
+    project_root: String,
+    state: State<'_, LspManagerState>,
+) -> Result<IpcResponse, ()> {
+    let ext = match extension_from_path(&path) {
+        Some(e) => e,
+        None => return Ok(IpcResponse::err("Could not determine file extension")),
+    };
+
+    let lang_id = match detection::language_id_for_extension(&ext) {
+        Some(id) => id.to_string(),
+        None => return Ok(IpcResponse::err(format!("No LSP support for .{} files", ext))),
+    };
+
+    let uri = types::file_uri(&path, &project_root);
+
+    let mut manager = state.0.lock().await;
+    match manager
+        .request_folding_ranges(&uri, &lang_id, &project_root)
+        .await
+    {
+        Ok(result) => Ok(IpcResponse::ok(result)),
+        Err(e) => Ok(IpcResponse::err(e)),
+    }
+}
+
+/// Request semantic tokens for an entire document.
+///
+/// Returns relative-encoded token data (groups of 5 integers) and an
+/// optional `resultId` for future delta requests.
+#[tauri::command]
+pub async fn lsp_request_semantic_tokens_full(
+    path: String,
+    project_root: String,
+    state: State<'_, LspManagerState>,
+) -> Result<IpcResponse, ()> {
+    let ext = match extension_from_path(&path) {
+        Some(e) => e,
+        None => return Ok(IpcResponse::err("Could not determine file extension")),
+    };
+
+    let lang_id = match detection::language_id_for_extension(&ext) {
+        Some(id) => id.to_string(),
+        None => return Ok(IpcResponse::err(format!("No LSP support for .{} files", ext))),
+    };
+
+    let uri = types::file_uri(&path, &project_root);
+
+    let mut manager = state.0.lock().await;
+    match manager
+        .request_semantic_tokens_full(&uri, &lang_id, &project_root)
+        .await
+    {
+        Ok(result) => Ok(IpcResponse::ok(result)),
+        Err(e) => Ok(IpcResponse::err(e)),
+    }
 }
 
 /// Scan project files for a language and send didOpen to the LSP server.

@@ -83,10 +83,10 @@ describe('lsp-servers.json: svelte excludes', () => {
 });
 
 describe('lsp-servers.json: typescript dependency', () => {
-  it('typescript server installs typescript SDK', () => {
+  it('typescript server installs typescript-language-server', () => {
     assert.ok(
-      manifest.servers.typescript.install.packages.includes('typescript'),
-      'TypeScript server should install typescript SDK'
+      manifest.servers.typescript.install.packages.includes('typescript-language-server'),
+      'TypeScript server should install typescript-language-server'
     );
   });
 

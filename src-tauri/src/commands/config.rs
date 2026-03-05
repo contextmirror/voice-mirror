@@ -1,4 +1,3 @@
-use crate::config::migration;
 use crate::config::persistence;
 use crate::config::schema::AppConfig;
 use crate::services::platform;
@@ -101,29 +100,3 @@ pub fn get_platform_info() -> IpcResponse {
     }))
 }
 
-/// Migrate config from the old Electron app.
-///
-/// Checks if an Electron config exists, reads and maps it to the Tauri
-/// config format. Returns the migrated config for user confirmation --
-/// does NOT auto-apply.
-#[tauri::command]
-pub fn migrate_electron_config() -> IpcResponse {
-    match migration::migrate_electron_config() {
-        Ok(Some(config)) => {
-            match serde_json::to_value(&config) {
-                Ok(val) => IpcResponse::ok(serde_json::json!({
-                    "found": true,
-                    "config": val
-                })),
-                Err(e) => IpcResponse::err(format!("Serialize error: {}", e)),
-            }
-        }
-        Ok(None) => {
-            IpcResponse::ok(serde_json::json!({
-                "found": false,
-                "config": null
-            }))
-        }
-        Err(e) => IpcResponse::err(e),
-    }
-}

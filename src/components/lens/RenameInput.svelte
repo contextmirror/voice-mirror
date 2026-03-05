@@ -1,20 +1,29 @@
 <script>
-  import { clampToViewport } from '$lib/clamp-to-viewport.js';
+  import { applySmartPosition } from '$lib/smart-position.js';
 
   let {
     visible = false,
     x = 0,
-    y = 0,
+    above = 0,
+    below = 0,
     currentName = '',
     onConfirm = () => {},
     onCancel = () => {},
   } = $props();
 
   let inputValue = $state('');
+  let renameEl = $state(null);
 
   $effect(() => {
     if (visible) {
       inputValue = currentName;
+    }
+  });
+
+  // Smart positioning: prefer below (VS Code default), flip above if no room
+  $effect(() => {
+    if (visible && renameEl) {
+      applySmartPosition(renameEl, { above, below }, { prefer: 'below', x });
     }
   });
 
@@ -40,17 +49,10 @@
     node.focus();
     node.select();
   }
-
-  let renameEl = $state(null);
-
-  // Post-render: reposition if it overflows viewport
-  $effect(() => {
-    if (visible && renameEl) clampToViewport(renameEl);
-  });
 </script>
 
 {#if visible}
-  <div class="rename-input" style="left: {x}px; top: {y}px;" bind:this={renameEl}>
+  <div class="rename-input" bind:this={renameEl}>
     <input
       type="text"
       bind:value={inputValue}

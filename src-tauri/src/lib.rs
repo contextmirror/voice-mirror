@@ -37,62 +37,6 @@ use tracing::{info, warn};
 pub type PreloadedTtsState = std::sync::Mutex<Option<Box<dyn voice::tts::TtsEngine>>>;
 
 
-/// Migrate data from the old Electron app directory to the new Tauri directory.
-///
-/// Moves `models/` and `memory/` subdirectories if they exist in the old location
-/// but not in the new one. Errors are logged but never block startup.
-fn migrate_electron_data() {
-    use std::path::PathBuf;
-
-    let old_data_dir = dirs::config_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("voice-mirror-electron")
-        .join("data");
-    let new_data_dir = crate::services::platform::get_data_dir();
-
-    if !old_data_dir.exists() {
-        info!("No Electron data directory found, skipping migration");
-        return;
-    }
-
-    if let Err(e) = std::fs::create_dir_all(&new_data_dir) {
-        warn!("Failed to create new data directory {}: {}", new_data_dir.display(), e);
-        return;
-    }
-
-    let mut migrated = false;
-    for subdir in &["models", "memory"] {
-        let old_path = old_data_dir.join(subdir);
-        let new_path = new_data_dir.join(subdir);
-        if old_path.exists() && !new_path.exists() {
-            match std::fs::rename(&old_path, &new_path) {
-                Ok(()) => {
-                    info!(
-                        "Migrated {} -> {}",
-                        old_path.display(),
-                        new_path.display()
-                    );
-                    migrated = true;
-                }
-                Err(e) => {
-                    warn!(
-                        "Failed to migrate {} -> {}: {}",
-                        old_path.display(),
-                        new_path.display(),
-                        e
-                    );
-                }
-            }
-        }
-    }
-
-    if migrated {
-        info!("Data migration from Electron directory complete");
-    } else {
-        info!("No Electron data to migrate (already migrated or no matching subdirectories)");
-    }
-}
-
 /// Rotate the current log session directory to a timestamped archive,
 /// then prune archives beyond the retention limit.
 fn rotate_log_sessions() {
@@ -334,7 +278,6 @@ pub fn run() {
             config_cmds::set_config,
             config_cmds::reset_config,
             config_cmds::get_platform_info,
-            config_cmds::migrate_electron_config,
             // Window
             window_cmds::get_window_position,
             window_cmds::set_window_position,
@@ -477,13 +420,34 @@ pub fn run() {
             lsp_cmds::lsp_request_hover,
             lsp_cmds::lsp_request_signature_help,
             lsp_cmds::lsp_request_definition,
+            lsp_cmds::lsp_request_type_definition,
+            lsp_cmds::lsp_request_declaration,
+            lsp_cmds::lsp_request_implementation,
             lsp_cmds::lsp_request_document_symbols,
+            lsp_cmds::lsp_request_workspace_symbols,
             lsp_cmds::lsp_request_references,
+            lsp_cmds::lsp_request_document_highlight,
+            lsp_cmds::lsp_request_inlay_hints,
             lsp_cmds::lsp_request_code_actions,
             lsp_cmds::lsp_prepare_rename,
             lsp_cmds::lsp_rename,
             lsp_cmds::lsp_request_formatting,
             lsp_cmds::lsp_request_range_formatting,
+            lsp_cmds::lsp_request_on_type_formatting,
+            lsp_cmds::lsp_request_linked_editing_range,
+            lsp_cmds::lsp_request_code_lens,
+            lsp_cmds::lsp_request_document_colors,
+            lsp_cmds::lsp_request_folding_ranges,
+            lsp_cmds::lsp_request_semantic_tokens_full,
+            lsp_cmds::lsp_resolve_completion_item,
+            lsp_cmds::lsp_request_diagnostics,
+            lsp_cmds::lsp_prepare_call_hierarchy,
+            lsp_cmds::lsp_request_incoming_calls,
+            lsp_cmds::lsp_request_outgoing_calls,
+            lsp_cmds::lsp_prepare_type_hierarchy,
+            lsp_cmds::lsp_request_supertypes,
+            lsp_cmds::lsp_request_subtypes,
+            lsp_cmds::lsp_request_selection_range,
             lsp_cmds::lsp_apply_workspace_edit,
             lsp_cmds::lsp_scan_project,
             lsp_cmds::lsp_get_server_list,
@@ -509,9 +473,6 @@ pub fn run() {
             output_cmds::list_project_channels,
         ])
         .setup(|app| {
-            // Migrate data from old Electron directory before anything reads it
-            migrate_electron_data();
-
             // Set app handle on OutputStore for live event emission
             {
                 let output_store = app.state::<std::sync::Arc<crate::services::output::OutputStore>>();

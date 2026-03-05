@@ -83,9 +83,8 @@ describe('RenameInput.svelte: rendering', () => {
     assert.ok(src.includes('{#if visible}'), 'Should check visible');
   });
 
-  it('positions using x and y', () => {
-    assert.ok(src.includes('left: {x}px'), 'Should position with x');
-    assert.ok(src.includes('top: {y}px'), 'Should position with y');
+  it('uses smart positioning', () => {
+    assert.ok(src.includes('applySmartPosition'), 'Should use applySmartPosition for viewport-aware positioning');
   });
 
   it('binds input value', () => {

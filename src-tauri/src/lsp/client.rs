@@ -358,6 +358,12 @@ async fn handle_server_request(
 
             send_response(stdin, id, result).await;
         }
+        "client/registerCapability" | "client/unregisterCapability" => {
+            debug!("[{}] Acknowledging {} (id={})", lang_id, method, id);
+            // Respond with empty success — we don't track dynamic registrations
+            // but must acknowledge to avoid the server thinking registration failed.
+            send_response(stdin, id, Value::Null).await;
+        }
         _ => {
             debug!("[{}] Unhandled server request: {} (id={})", lang_id, method, id);
             // Respond with null for unrecognized requests to avoid blocking the server
@@ -428,11 +434,26 @@ fn handle_diagnostics(app_handle: &AppHandle, lang_id: &str, msg: &Value) {
         .unwrap_or("")
         .to_string();
 
+    // VS Code-compatible: suppress semantic diagnostics (code >= 2000) for .js files
+    // when checkJs is false. typescript-language-server doesn't filter these natively —
+    // VS Code's client-side extension handles this suppression.
+    let is_js_file = uri.ends_with(".js")
+        || uri.ends_with(".jsx")
+        || uri.ends_with(".mjs")
+        || uri.ends_with(".cjs");
+
     let diagnostics = params
         .get("diagnostics")
         .and_then(|v| v.as_array())
         .map(|arr| {
             arr.iter()
+                .filter(|d| {
+                    if !is_js_file {
+                        return true;
+                    }
+                    let code = d.get("code").and_then(|v| v.as_i64()).unwrap_or(0);
+                    code > 0 && code < 2000
+                })
                 .map(|d| {
                     let range = d.get("range").cloned().unwrap_or(Value::Null);
                     let start = range.get("start").cloned().unwrap_or(Value::Null);
@@ -445,6 +466,22 @@ fn handle_diagnostics(app_handle: &AppHandle, lang_id: &str, msg: &Value) {
                         Some(3) => "info".to_string(),
                         Some(4) => "hint".to_string(),
                         _ => "unknown".to_string(),
+                    };
+
+                    // VS Code-compatible severity remapping: style check codes error → warning
+                    let code_num = d.get("code").and_then(|v| v.as_i64());
+                    let severity = if severity == "error" {
+                        if let Some(code) = code_num {
+                            if super::types::STYLE_CHECK_CODES.contains(&code) {
+                                "warning".to_string()
+                            } else {
+                                severity
+                            }
+                        } else {
+                            severity
+                        }
+                    } else {
+                        severity
                     };
 
                     DiagnosticItem {
@@ -495,12 +532,20 @@ fn handle_diagnostics(app_handle: &AppHandle, lang_id: &str, msg: &Value) {
         diagnostics,
     };
 
-    info!(
-        "[{}] Publishing {} diagnostics for {}",
-        lang_id,
-        event.diagnostics.len(),
-        event.uri
-    );
+    if event.diagnostics.is_empty() {
+        debug!(
+            "[{}] Publishing 0 diagnostics for {}",
+            lang_id,
+            event.uri
+        );
+    } else {
+        info!(
+            "[{}] Publishing {} diagnostics for {}",
+            lang_id,
+            event.diagnostics.len(),
+            event.uri
+        );
+    }
 
     if let Err(e) = app_handle.emit("lsp-diagnostics", &event) {
         warn!("Failed to emit lsp-diagnostics event: {}", e);
