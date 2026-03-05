@@ -366,6 +366,26 @@ describe('editor-lsp.svelte.js: signature help', () => {
   });
 });
 
+describe('editor-lsp.svelte.js: hover tooltip markdown rendering', () => {
+  it('imports renderHoverMarkdown from hover-markdown', () => {
+    assert.ok(src.includes("from './hover-markdown"), 'Should import from hover-markdown');
+  });
+
+  it('uses innerHTML instead of textContent for hover tooltip', () => {
+    assert.ok(src.includes('dom.innerHTML'), 'Should use innerHTML for rendered markdown');
+    // Should NOT use textContent for hover content anymore
+    const hoverSection = src.slice(
+      src.indexOf('function hoverTooltipExtension'),
+      src.indexOf('function documentHighlightExtension') || src.length
+    );
+    assert.ok(!hoverSection.includes('dom.textContent'), 'Should not use textContent in hover tooltip');
+  });
+
+  it('calls renderHoverMarkdown in hover tooltip', () => {
+    assert.ok(src.includes('renderHoverMarkdown('), 'Should call renderHoverMarkdown');
+  });
+});
+
 describe('editor-lsp.svelte.js: diagnostics handling', () => {
   it('uses lspPositionToOffset for diagnostic positions', () => {
     assert.ok(src.includes('lspPositionToOffset'), 'Should use lspPositionToOffset');

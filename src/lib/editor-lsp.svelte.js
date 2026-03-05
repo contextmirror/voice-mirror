@@ -10,6 +10,7 @@ import { foldService } from '@codemirror/language';
 import { projectStore } from './stores/project.svelte.js';
 import { tabsStore } from './stores/tabs.svelte.js';
 import { basename } from './utils.js';
+import { renderHoverMarkdown } from './hover-markdown.js';
 
 /** Set of file extensions that have LSP support */
 export const LSP_EXTENSIONS = new Set([
@@ -265,7 +266,7 @@ export function createEditorLsp() {
       const result = await lspPrepareRename(currentPath, line, character, root);
       if (result?.data) {
         const coords = view.coordsAtPos(pos);
-        renamePosition = { x: coords?.left || 0, y: (coords?.bottom || 0) + 4 };
+        renamePosition = { x: coords?.left || 0, above: (coords?.top || 0) - 4, below: (coords?.bottom || 0) + 4 };
         renamePlaceholder = result.data.placeholder || view.state.sliceDoc(
           lspPositionToOffset(view.state.doc, result.data.range?.start || { line, character }),
           lspPositionToOffset(view.state.doc, result.data.range?.end || { line, character })
@@ -382,7 +383,7 @@ export function createEditorLsp() {
       );
       if (result?.data?.actions?.length) {
         const coords = view.coordsAtPos(sel.head);
-        codeActionsPosition = { x: coords?.left || 0, y: (coords?.bottom || 0) + 4 };
+        codeActionsPosition = { x: coords?.left || 0, above: (coords?.top || 0) - 4, below: (coords?.bottom || 0) + 4 };
         codeActions = result.data.actions;
         showCodeActions = true;
       }
@@ -470,6 +471,8 @@ export function createEditorLsp() {
 
   function hoverTooltipExtension(currentPath, hoverTooltip) {
     return hoverTooltip(async (v, pos) => {
+      // Skip hover when rename or code actions are active
+      if (showRename || showCodeActions) return null;
       // Skip hover tooltip if there's a diagnostic at this position
       // (CodeMirror's lint tooltip already shows diagnostic info)
       const diags = cachedDiagnostics.get(currentPath) || [];
@@ -486,12 +489,14 @@ export function createEditorLsp() {
 
         return {
           pos,
+          above: true,
           create() {
             const dom = document.createElement('div');
             dom.className = 'lsp-hover-tooltip';
-            dom.textContent = typeof result.data.contents === 'string'
+            const raw = typeof result.data.contents === 'string'
               ? result.data.contents
               : result.data.contents.value || '';
+            dom.innerHTML = renderHoverMarkdown(raw);
             return { dom };
           },
         };

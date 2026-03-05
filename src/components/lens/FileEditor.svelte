@@ -991,7 +991,8 @@
   actions={lsp.codeActions}
   visible={lsp.showCodeActions}
   x={lsp.codeActionsPosition.x}
-  y={lsp.codeActionsPosition.y}
+  above={lsp.codeActionsPosition.above}
+  below={lsp.codeActionsPosition.below}
   onClose={() => { lsp.setShowCodeActions(false); }}
   onApply={async (action) => {
     lsp.setShowCodeActions(false);
@@ -1006,7 +1007,8 @@
 <RenameInput
   visible={lsp.showRename}
   x={lsp.renamePosition.x}
-  y={lsp.renamePosition.y}
+  above={lsp.renamePosition.above}
+  below={lsp.renamePosition.below}
   currentName={lsp.renamePlaceholder}
   onConfirm={(newName) => { lsp.executeRename(view, currentPath, newName); }}
   onCancel={() => { lsp.setShowRename(false); }}

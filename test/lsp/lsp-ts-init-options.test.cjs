@@ -1,7 +1,7 @@
 /**
- * lsp-ts-init-options.test.cjs -- Source-inspection tests for TypeScript server init options.
+ * lsp-ts-init-options.test.cjs -- Source-inspection tests for TypeScript server config.
  *
- * Validates VS Code-compatible initialization options in the manifest.
+ * Validates initialization options and settings in the manifest for typescript-language-server.
  */
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
@@ -15,42 +15,33 @@ const manifest = JSON.parse(fs.readFileSync(
 const tsEntry = manifest.servers.typescript;
 
 describe('lsp-servers.json: TypeScript initializationOptions', () => {
-  it('has non-empty initializationOptions', () => {
-    assert.ok(tsEntry.initializationOptions && Object.keys(tsEntry.initializationOptions).length > 0,
-      'TypeScript should have non-empty initializationOptions');
-  });
-
-  it('has preferences object', () => {
-    assert.ok(tsEntry.initializationOptions.preferences, 'Should have preferences');
-  });
-
-  it('has includeInlayParameterNameHints preference', () => {
-    assert.ok('includeInlayParameterNameHints' in tsEntry.initializationOptions.preferences,
-      'Should have includeInlayParameterNameHints');
-  });
-
-  it('has includeInlayVariableTypeHints preference', () => {
-    assert.ok('includeInlayVariableTypeHints' in tsEntry.initializationOptions.preferences,
-      'Should have includeInlayVariableTypeHints');
-  });
-
-  it('has includeInlayFunctionLikeReturnTypeHints preference', () => {
-    assert.ok('includeInlayFunctionLikeReturnTypeHints' in tsEntry.initializationOptions.preferences,
-      'Should have includeInlayFunctionLikeReturnTypeHints');
-  });
-
-  it('has includeInlayPropertyDeclarationTypeHints preference', () => {
-    assert.ok('includeInlayPropertyDeclarationTypeHints' in tsEntry.initializationOptions.preferences,
-      'Should have includeInlayPropertyDeclarationTypeHints');
-  });
-
-  it('has includeInlayEnumMemberValueHints preference', () => {
-    assert.ok('includeInlayEnumMemberValueHints' in tsEntry.initializationOptions.preferences,
-      'Should have includeInlayEnumMemberValueHints');
-  });
-
   it('has hostInfo set to voice-mirror', () => {
-    assert.ok(tsEntry.initializationOptions.hostInfo === 'voice-mirror',
+    assert.equal(tsEntry.initializationOptions.hostInfo, 'voice-mirror',
       'hostInfo should be voice-mirror');
+  });
+
+  it('has inlay hint preferences', () => {
+    const prefs = tsEntry.initializationOptions.preferences;
+    assert.ok(prefs, 'Should have preferences');
+    assert.equal(prefs.includeInlayParameterNameHints, 'none');
+    assert.equal(prefs.includeInlayVariableTypeHints, false);
+    assert.equal(prefs.includeInlayFunctionLikeReturnTypeHints, false);
+  });
+});
+
+describe('lsp-servers.json: TypeScript server uses typescript-language-server', () => {
+  it('installs typescript-language-server', () => {
+    assert.ok(tsEntry.install.packages.includes('typescript-language-server'),
+      'Should install typescript-language-server');
+  });
+
+  it('installs typescript', () => {
+    assert.ok(tsEntry.install.packages.includes('typescript'),
+      'Should install typescript');
+  });
+
+  it('uses typescript-language-server command', () => {
+    assert.equal(tsEntry.command, 'typescript-language-server',
+      'Should use typescript-language-server command');
   });
 });

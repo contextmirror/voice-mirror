@@ -7,11 +7,13 @@
 
 ---
 
-## Current Status: 37/37 Features (All 5 Waves Complete)
+## Current Status: 37/37 Features (All 5 Waves + Frontend Wiring Complete)
 
-Voice Mirror's LSP now has full feature parity with VS Code across all categories — core editing, navigation, inline assistance, formatting, visual enhancements, and infrastructure. All 22 implementation tasks across 5 waves are complete.
+Voice Mirror's LSP now has full feature parity with VS Code across all categories — core editing, navigation, inline assistance, formatting, visual enhancements, and infrastructure. All 22 backend tasks across 5 waves are complete, plus 7 frontend wiring tasks connecting visual features to CodeMirror.
 
 **Configuration alignment** with VS Code is complete — severity remapping, enriched `publishDiagnostics` capability declarations, and TypeScript server initialization options are all implemented.
+
+**Frontend wiring** (7 tasks) is complete — document highlights, inlay hints, code lens, document colors, folding ranges, semantic tokens are all rendered in CodeMirror. Navigation keybindings (Ctrl-F12, Shift-Alt-F) and context menu items (Go to Type Definition, Go to Implementation, Format Selection) are wired.
 
 ---
 
@@ -95,90 +97,90 @@ VS Code remaps 8 "style check" diagnostic codes from Error → Warning. This is 
 
 ### Core (Tier 0 — baseline)
 
-| Feature | LSP Method | VS Code | Voice Mirror | Status |
-|---------|-----------|---------|-------------|--------|
-| Diagnostics (errors/warnings) | `publishDiagnostics` | Full | Full | **Done** |
-| Completions | `textDocument/completion` | Full (resolve + snippets) | Full (resolve + snippets) | **Done** |
-| Hover tooltips | `textDocument/hover` | Full (markdown, grace period) | Full | **Done** |
-| Go-to-definition | `textDocument/definition` | Full | Full | **Done** |
-| Document sync (open/change/save/close) | `didOpen/didChange/didSave/didClose` | Full (incremental sync) | Full (incremental sync) | **Done** |
+| Feature | LSP Method | VS Code | Voice Mirror | Impl | Tested |
+|---------|-----------|---------|-------------|:----:|:------:|
+| Diagnostics (errors/warnings) | `publishDiagnostics` | Full | Full | ✅ | ✅ |
+| Completions | `textDocument/completion` | Full (resolve + snippets) | Full (resolve + snippets) | ✅ | ✅ |
+| Hover tooltips | `textDocument/hover` | Full (markdown, grace period) | Full | ✅ | ✅ |
+| Go-to-definition | `textDocument/definition` | Full | Full | ✅ | ✅ |
+| Document sync (open/change/save/close) | `didOpen/didChange/didSave/didClose` | Full (incremental sync) | Full (incremental sync) | ✅ | ✅ |
 
 ### Navigation (Tier 1 — shipped)
 
-| Feature | LSP Method | VS Code | Voice Mirror | Status |
-|---------|-----------|---------|-------------|--------|
-| Find all references | `textDocument/references` | Full | Full | **Done** |
-| Rename symbol | `prepareRename` + `rename` | Full (workspace edit) | Full (multi-file) | **Done** |
-| Code actions / quick fixes | `textDocument/codeAction` | Full (resolve + filtering) | Full (resolve + filtering) | **Done** |
-| Document symbols / outline | `textDocument/documentSymbol` | Full | Full | **Done** |
-| Document highlight | `textDocument/documentHighlight` | Full | Full | **Done** |
+| Feature | LSP Method | VS Code | Voice Mirror | Impl | Tested |
+|---------|-----------|---------|-------------|:----:|:------:|
+| Find all references | `textDocument/references` | Full | Full | ✅ | ✅ |
+| Rename symbol | `prepareRename` + `rename` | Full (workspace edit) | Full (multi-file) | ✅ | ✅ |
+| Code actions / quick fixes | `textDocument/codeAction` | Full (resolve + filtering) | Full (resolve + filtering) | ✅ | ✅ |
+| Document symbols / outline | `textDocument/documentSymbol` | Full | Full | ✅ | ✅ |
+| Document highlight | `textDocument/documentHighlight` | Full | Full (+ CM extension) | ✅ | ✅ |
 
 ### Navigation (Tier 2 — complete)
 
-| Feature | LSP Method | VS Code | Voice Mirror | Status |
-|---------|-----------|---------|-------------|--------|
-| Type definition | `textDocument/typeDefinition` | Full | Full | **Done** |
-| Go-to-declaration | `textDocument/declaration` | Full | Full | **Done** |
-| Go-to-implementation | `textDocument/implementation` | Full | Full | **Done** |
-| Workspace symbols | `workspace/symbol` | Full | Full | **Done** |
-| Call hierarchy | `callHierarchy/incomingCalls` | Full | Full | **Done** |
-| Type hierarchy | `typeHierarchy/subtypes` | Full | Full | **Done** |
+| Feature | LSP Method | VS Code | Voice Mirror | Impl | Tested |
+|---------|-----------|---------|-------------|:----:|:------:|
+| Type definition | `textDocument/typeDefinition` | Full | Full (+ context menu) | ✅ | ❌ |
+| Go-to-declaration | `textDocument/declaration` | Full | Full | ✅ | |
+| Go-to-implementation | `textDocument/implementation` | Full | Full (+ Ctrl-F12 + context menu) | ✅ | |
+| Workspace symbols | `workspace/symbol` | Full | Full | ✅ | |
+| Call hierarchy | `callHierarchy/incomingCalls` | Full | Full | ✅ | |
+| Type hierarchy | `typeHierarchy/subtypes` | Full | Full | ✅ | |
 
 ### Inline Assistance
 
-| Feature | LSP Method | VS Code | Voice Mirror | Status |
-|---------|-----------|---------|-------------|--------|
-| Signature help | `textDocument/signatureHelp` | Full (auto on `(`) | Full (auto on `(` `,` + Ctrl+Shift+Space) | **Done** |
-| Inlay hints | `textDocument/inlayHint` | Full (resolve on hover) | Full | **Done** |
-| Code lens | `textDocument/codeLens` | Full (resolve + refresh) | Full (backend) | **Done (backend)** |
+| Feature | LSP Method | VS Code | Voice Mirror | Impl | Tested |
+|---------|-----------|---------|-------------|:----:|:------:|
+| Signature help | `textDocument/signatureHelp` | Full (auto on `(`) | Full (auto on `(` `,` + Ctrl+Shift+Space) | ✅ | |
+| Inlay hints | `textDocument/inlayHint` | Full (resolve on hover) | Full (+ CM extension) | ✅ | |
+| Code lens | `textDocument/codeLens` | Full (resolve + refresh) | Full (+ CM extension) | ✅ | |
 
 ### Formatting & Editing
 
-| Feature | LSP Method | VS Code | Voice Mirror | Status |
-|---------|-----------|---------|-------------|--------|
-| Document formatting | `textDocument/formatting` | Full | Full (Shift+Alt+F + format-on-save) | **Done** |
-| Range formatting | `textDocument/rangeFormatting` | Full | Full (backend + frontend method) | **Done** |
-| On-type formatting | `textDocument/onTypeFormatting` | Full | Full | **Done** |
-| Linked editing | `textDocument/linkedEditingRange` | Full | Full | **Done** |
-| Selection range | `textDocument/selectionRange` | Full | Full | **Done** |
+| Feature | LSP Method | VS Code | Voice Mirror | Impl | Tested |
+|---------|-----------|---------|-------------|:----:|:------:|
+| Document formatting | `textDocument/formatting` | Full | Full (Shift+Alt+F + format-on-save) | ✅ | |
+| Range formatting | `textDocument/rangeFormatting` | Full | Full (Shift+Alt+F + context menu) | ✅ | |
+| On-type formatting | `textDocument/onTypeFormatting` | Full | Full | ✅ | |
+| Linked editing | `textDocument/linkedEditingRange` | Full | Full | ✅ | |
+| Selection range | `textDocument/selectionRange` | Full | Full | ✅ | |
 
 ### Visual Enhancements
 
-| Feature | LSP Method | VS Code | Voice Mirror | Status |
-|---------|-----------|---------|-------------|--------|
-| Semantic tokens | `textDocument/semanticTokens` | Full (delta encoding) | Full (backend) | **Done (backend)** |
-| Document colors | `textDocument/documentColor` | Full (color picker) | Full (backend) | **Done (backend)** |
-| Folding ranges | `textDocument/foldingRange` | Full (kind support) | Full (backend) | **Done (backend)** |
+| Feature | LSP Method | VS Code | Voice Mirror | Impl | Tested |
+|---------|-----------|---------|-------------|:----:|:------:|
+| Semantic tokens | `textDocument/semanticTokens` | Full (delta encoding) | Full (+ CM extension, 10 token types) | ✅ | |
+| Document colors | `textDocument/documentColor` | Full (color picker) | Full (+ CM swatch widget) | ✅ | |
+| Folding ranges | `textDocument/foldingRange` | Full (kind support) | Full (+ CM foldService) | ✅ | |
 
 ### Infrastructure
 
-| Feature | VS Code | Voice Mirror | Status |
-|---------|---------|-------------|--------|
-| Server registry | Built-in | Full (lsp-servers.json, 7 servers) | **Done** |
-| Auto-download servers | Built-in | Full (npm + github-release) | **Done** |
-| Server config (initOptions + workspace/config) | Full | Full (manifest-driven + VS Code-compatible init options) | **Done** |
-| Multi-server per file | Full | Full (primary + supplementary routing) | **Done** |
-| Crash recovery | Full (backoff) | Full (exponential backoff, max 5, doc replay) | **Done** |
-| Health monitoring | Full | Full (30s threshold, Unresponsive state) | **Done** |
-| Idle shutdown | Full | Full (60s timer, auto-restart on reopen) | **Done** |
-| Project-wide scanning | Full | Full (background didOpen, batched 10/100ms) | **Done** |
-| Pull diagnostics | Full | Full | **Done** |
-| Remote LSP (SSH) | Full | None | Not planned |
+| Feature | VS Code | Voice Mirror | Impl | Tested |
+|---------|---------|-------------|:----:|:------:|
+| Server registry | Built-in | Full (lsp-servers.json, 7 servers) | ✅ | |
+| Auto-download servers | Built-in | Full (npm + github-release) | ✅ | |
+| Server config (initOptions + workspace/config) | Full | Full (manifest-driven + VS Code-compatible init options) | ✅ | |
+| Multi-server per file | Full | Full (primary + supplementary routing) | ✅ | |
+| Crash recovery | Full (backoff) | Full (exponential backoff, max 5, doc replay) | ✅ | |
+| Health monitoring | Full | Full (30s threshold, Unresponsive state) | ✅ | |
+| Idle shutdown | Full | Full (60s timer, auto-restart on reopen) | ✅ | |
+| Project-wide scanning | Full | Full (background didOpen, batched 10/100ms) | ✅ | |
+| Pull diagnostics | Full | Full | ✅ | |
+| Remote LSP (SSH) | Full | None | N/A | N/A |
 
 ### Summary
 
-| Category | VS Code | Voice Mirror | Coverage |
-|----------|---------|-------------|----------|
-| Core (5) | 5/5 | 5/5 | 100% |
-| Navigation Tier 1 (5) | 5/5 | 5/5 | 100% |
-| Navigation Tier 2 (6) | 6/6 | 6/6 | 100% |
-| Inline Assistance (3) | 3/3 | 3/3 | 100% |
-| Formatting & Editing (5) | 5/5 | 5/5 | 100% |
-| Visual (3) | 3/3 | 3/3 | 100% |
-| Infrastructure (10) | 10/10 | 10/10 | 100% |
-| **Total** | **37/37** | **37/37** | **100%** |
+| Category | VS Code | Voice Mirror | Impl | Tested |
+|----------|---------|-------------|:----:|:------:|
+| Core (5) | 5/5 | 5/5 | 5/5 | 5/5 |
+| Navigation Tier 1 (5) | 5/5 | 5/5 | 5/5 | 5/5 |
+| Navigation Tier 2 (6) | 6/6 | 6/6 | 6/6 | 0/6 |
+| Inline Assistance (3) | 3/3 | 3/3 | 3/3 | 0/3 |
+| Formatting & Editing (5) | 5/5 | 5/5 | 5/5 | 0/5 |
+| Visual (3) | 3/3 | 3/3 | 3/3 | 0/3 |
+| Infrastructure (10) | 10/10 | 10/10 | 10/10 | 0/10 |
+| **Total** | **37/37** | **37/37** | **37/37** | **10/37** |
 
-> **Note:** Some visual features (Code Lens, Semantic Tokens, Document Colors, Folding Ranges) are "backend complete" — the Rust LSP backend handles the protocol and Tauri commands exist, but CodeMirror rendering extensions are not yet wired. They are counted as Done because the LSP integration is complete.
+> All features are implementation-complete including frontend CodeMirror wiring. The "Tested" column will be filled in during manual verification with screenshots.
 
 ---
 
@@ -246,10 +248,10 @@ VS Code remaps 8 "style check" diagnostic codes from Error → Warning. This is 
 
 | # | Item | Status | Note |
 |---|------|--------|------|
-| 13 | **Code lens** | ✅ Done (backend) | Backend + Tauri command; CM widget not yet wired |
-| 14 | **Semantic tokens** | ✅ Done (backend) | Backend + Tauri command; CM token highlighting not yet wired |
-| 15 | **Document colors** | ✅ Done (backend) | Backend + Tauri command; CM color picker widget not yet wired |
-| 16 | **Folding ranges** | ✅ Done (backend) | Backend + Tauri command; CM fold service override not yet wired |
+| 13 | **Code lens** | ✅ Done | Backend + Tauri command + CM CodeLensWidget |
+| 14 | **Semantic tokens** | ✅ Done | Backend + Tauri command + CM mark decorations (10 token types) |
+| 15 | **Document colors** | ✅ Done | Backend + Tauri command + CM ColorSwatchWidget |
+| 16 | **Folding ranges** | ✅ Done | Backend + Tauri command + CM foldService |
 
 ### Wave 5: Deep Polish -- COMPLETE
 
@@ -262,9 +264,41 @@ VS Code remaps 8 "style check" diagnostic codes from Error → Warning. This is 
 | 21 | **Type hierarchy** | ✅ Done |
 | 22 | **Selection range** | ✅ Done |
 
+### Wave 6: Frontend Wiring -- COMPLETE
+
+| # | Item | Status | Commit |
+|---|------|--------|--------|
+| 23 | **Document highlight CM extension** | ✅ Done | `274ca8f2` |
+| 24 | **Inlay hints CM extension + WidgetType** | ✅ Done | `8c8073be` |
+| 25 | **Navigation keybindings + context menu** | ✅ Done | `dc2403e4` |
+| 26 | **Code lens CM extension** | ✅ Done | `dcb825d3` |
+| 27 | **Document colors CM extension** | ✅ Done | `7db0ade7` |
+| 28 | **Folding ranges CM integration** | ✅ Done | `a772f94f` |
+| 29 | **Semantic tokens CM extension** | ✅ Done | `f1d72559` |
+
+**Key additions:**
+- 6 new ViewPlugin factories in `editor-lsp.svelte.js`
+- 16 new CSS classes in `editor-theme.js`
+- `WidgetType` added to cmCache
+- Keybindings: Ctrl-F12 (Implementation), Shift-Alt-F (Format Selection)
+- Context menu: Go to Type Definition, Go to Implementation, Format Selection
+
 ---
 
-## 5. Files Cleanup
+## 5. Known Issues
+
+| Issue | Detail | Priority |
+|-------|--------|----------|
+| Quick Fix keybinding (Ctrl+.) not working | Ctrl+. doesn't trigger code actions from keyboard — only works via right-click context menu → "Quick Fix..." | Medium |
+| Go to Type Definition not working | Right-click → "Go to Type Definition" does nothing. VS Code shows type definition correctly. | High |
+| ~~Hover tooltip positioned below cursor~~ | ~~Tooltip appeared below the line, blocking code.~~ Fixed: added `above: true` to tooltip config. | ~~Medium~~ ✅ |
+| ~~Missing `implicitProjectConfiguration` in workspace/configuration~~ | ~~False "Property does not exist" errors in JS files.~~ Fixed: added `workspace/didChangeConfiguration` notification + client-side diagnostic filtering (`code > 0 && code < 2000` for JS files, matching VS Code's checkJs=false behavior). | ~~High~~ ✅ |
+| ~~Smart tooltip positioning (VS Code parity)~~ | ~~Tooltips used fixed positioning.~~ Fixed: `applySmartPosition()` utility with VS Code-matching margins (30px top, 24px bottom), dynamic flip. Hover=above, rename/code actions=below. | ~~Medium~~ ✅ |
+| ~~Hover tooltip type expansion~~ | ~~Both vtsls and typescript-language-server show `options: {}`.~~ Fixed: enhanced hover via vtsls `typescript.tsserverRequest` → `quickinfo` with `verbosityLevel`, converting `displayString`+`documentation`+`tags` to VS Code-matching markdown. | ~~Low~~ ✅ |
+
+---
+
+## 6. Files Cleanup
 
 After creating this document:
 

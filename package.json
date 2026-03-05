@@ -39,7 +39,9 @@
     "dompurify": "^3.3.1",
     "fuzzysort": "^3.1.0",
     "ghostty-web": "github:contextmirror/ghostty-web",
-    "marked": "^15.0.0"
+    "highlight.js": "^11.11.1",
+    "marked": "^15.0.0",
+    "marked-highlight": "^2.2.3"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^5.0.0",

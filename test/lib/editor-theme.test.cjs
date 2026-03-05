@@ -138,6 +138,33 @@ describe('editor-theme.js: theme structure', () => {
   });
 });
 
+describe('editor-theme.js: hover tooltip markdown styling', () => {
+  it('styles .lsp-hover-tooltip container', () => {
+    assert.ok(src.includes("'.lsp-hover-tooltip'"), 'Should style .lsp-hover-tooltip');
+  });
+
+  it('sets max-width on hover tooltip', () => {
+    assert.ok(src.includes('maxWidth'), 'Should set maxWidth on hover tooltip');
+  });
+
+  it('styles code blocks inside hover tooltip', () => {
+    assert.ok(
+      src.includes("'.lsp-hover-tooltip pre'") || src.includes("'.lsp-hover-tooltip code'"),
+      'Should style code blocks in hover tooltip'
+    );
+  });
+
+  it('styles paragraphs inside hover tooltip', () => {
+    assert.ok(src.includes("'.lsp-hover-tooltip p'"), 'Should style paragraphs in hover tooltip');
+  });
+
+  it('styles highlight.js tokens', () => {
+    assert.ok(src.includes('.hljs-keyword'), 'Should style hljs-keyword');
+    assert.ok(src.includes('.hljs-string'), 'Should style hljs-string');
+    assert.ok(src.includes('.hljs-type'), 'Should style hljs-type');
+  });
+});
+
 describe('editor-theme.js: minimap styling', () => {
   it('styles .cm-minimap with theme background', () => {
     assert.ok(src.includes("'.cm-minimap'"), 'Should style .cm-minimap');

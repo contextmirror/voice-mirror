@@ -70,10 +70,8 @@ describe('clampToViewport consumers', () => {
     { file: 'src/components/lens/TabContextMenu.svelte', label: 'TabContextMenu' },
     { file: 'src/components/lens/FileContextMenu.svelte', label: 'FileContextMenu' },
     { file: 'src/components/lens/EditorContextMenu.svelte', label: 'EditorContextMenu' },
-    { file: 'src/components/lens/CodeActionsMenu.svelte', label: 'CodeActionsMenu' },
     { file: 'src/components/terminal/TerminalContextMenu.svelte', label: 'TerminalContextMenu' },
     { file: 'src/components/chat/ChatSessionDropdown.svelte', label: 'ChatSessionDropdown' },
-    { file: 'src/components/lens/RenameInput.svelte', label: 'RenameInput' },
   ];
 
   for (const { file, label } of consumers) {

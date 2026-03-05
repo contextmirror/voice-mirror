@@ -57,6 +57,32 @@ pub(crate) fn server_key(lang_id: &str, project_root: &str) -> String {
     format!("{}::{}", lang_id, project_root)
 }
 
+/// Map a file extension (without dot) to the correct LSP `languageId`.
+///
+/// The server key in the manifest (e.g. `"typescript"`) is NOT the same as the
+/// LSP language ID sent in `textDocument/didOpen`. For example, `.js` files
+/// must use `"javascript"`, not `"typescript"`, so tsserver applies
+/// JavaScript-specific inference (JSDoc type expansion, etc.).
+pub(crate) fn lsp_language_id(ext: &str) -> &str {
+    match ext {
+        "js" | "mjs" | "cjs" => "javascript",
+        "jsx" => "javascriptreact",
+        "ts" | "mts" | "cts" => "typescript",
+        "tsx" => "typescriptreact",
+        "css" => "css",
+        "scss" => "scss",
+        "less" => "less",
+        "html" | "htm" => "html",
+        "json" => "json",
+        "jsonc" => "jsonc",
+        "svelte" => "svelte",
+        "rs" => "rust",
+        "md" => "markdown",
+        "py" => "python",
+        _ => ext,
+    }
+}
+
 /// A running LSP server process.
 pub struct LspServer {
     pub language_id: String,
@@ -595,6 +621,27 @@ impl LspManager {
         // Send initialized notification
         client::send_notification(&mut *stdin.lock().await, "initialized", serde_json::json!({})).await?;
 
+        // Send workspace/didChangeConfiguration with settings from the manifest.
+        // vtsls and other servers use this to receive initial configuration.
+        // Settings are structured using VS Code's namespace format (e.g.,
+        // typescript.*, javascript.*, vtsls.*).
+        let settings = manifest::load_manifest()
+            .ok()
+            .and_then(|m| {
+                server_info
+                    .server_id
+                    .as_deref()
+                    .and_then(|id| m.servers.get(id).cloned())
+            })
+            .map(|entry| entry.settings)
+            .unwrap_or(serde_json::json!({}));
+        client::send_notification(
+            &mut *stdin.lock().await,
+            "workspace/didChangeConfiguration",
+            serde_json::json!({ "settings": settings }),
+        )
+        .await?;
+
         info!(
             "LSP server '{}' initialized for language '{}'",
             server_info.binary, lang_id
@@ -689,21 +736,26 @@ impl LspManager {
     }
 
     /// Open a document in the LSP server.
+    ///
+    /// `server_id` is the manifest key (e.g. `"typescript"`) used for the
+    /// HashMap lookup.  The actual LSP `languageId` sent in `textDocument/didOpen`
+    /// is derived from the file extension so that tsserver sees `.js` as
+    /// `"javascript"`, not `"typescript"`.
     pub async fn open_document(
         &mut self,
         uri: &str,
-        lang_id: &str,
+        server_id: &str,
         content: &str,
         project_root: &str,
     ) -> Result<(), String> {
         let server = self
             .servers
-            .get_mut(&server_key(lang_id, project_root))
-            .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
+            .get_mut(&server_key(server_id, project_root))
+            .ok_or_else(|| format!("No LSP server running for '{}'", server_id))?;
 
         // Cancel any pending idle shutdown timer
         if let Some(tx) = server.idle_cancel.take() {
-            info!("Cancelling idle shutdown timer for '{}' — new document opened", lang_id);
+            info!("Cancelling idle shutdown timer for '{}' — new document opened", server_id);
             let _ = tx.send(true);
         }
 
@@ -728,13 +780,23 @@ impl LspManager {
             return Ok(());
         }
 
+        // Resolve the correct LSP languageId from the file extension.
+        // The server_id ("typescript") differs from the LSP languageId
+        // ("javascript" for .js files). Using the wrong ID prevents tsserver
+        // from applying JS-specific inference like JSDoc type expansion.
+        let file_language_id = uri
+            .rsplit('.')
+            .next()
+            .map(|ext| lsp_language_id(ext).to_string())
+            .unwrap_or_else(|| server_id.to_string());
+
         client::send_notification(
             &mut *server.stdin.lock().await,
             "textDocument/didOpen",
             serde_json::json!({
                 "textDocument": {
                     "uri": uri,
-                    "languageId": lang_id,
+                    "languageId": file_language_id,
                     "version": 1,
                     "text": content
                 }
@@ -994,6 +1056,11 @@ impl LspManager {
     }
 
     /// Request hover information at a position.
+    ///
+    /// For TypeScript/JavaScript files served by vtsls, attempts an enhanced hover
+    /// via `workspace/executeCommand` → `typescript.tsserverRequest` → `quickinfo`
+    /// with `verbosityLevel` for expanded type signatures (matching VS Code behavior).
+    /// Falls back to standard `textDocument/hover` if the enhanced path fails.
     pub async fn request_hover(
         &mut self,
         uri: &str,
@@ -1002,10 +1069,22 @@ impl LspManager {
         character: u32,
         project_root: &str,
     ) -> Result<Value, String> {
+        let key = server_key(lang_id, project_root);
+        self.standard_hover(uri, line, character, &key).await
+    }
+
+    /// Standard LSP textDocument/hover request.
+    async fn standard_hover(
+        &mut self,
+        uri: &str,
+        line: u32,
+        character: u32,
+        server_key: &str,
+    ) -> Result<Value, String> {
         let server = self
             .servers
-            .get_mut(&server_key(lang_id, project_root))
-            .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
+            .get_mut(server_key)
+            .ok_or_else(|| format!("No LSP server running for key '{}'", server_key))?;
 
         let params = serde_json::json!({
             "textDocument": { "uri": uri },
@@ -1028,20 +1107,28 @@ impl LspManager {
 
         let result = response.get("result").cloned().unwrap_or(Value::Null);
 
-        // Extract hover contents
-        let contents = if let Some(contents) = result.get("contents") {
+        // Extract hover contents, preserving the kind field
+        let (contents, kind) = if let Some(contents) = result.get("contents") {
             match contents {
-                Value::String(s) => s.clone(),
+                Value::String(s) => (s.clone(), "plaintext".to_string()),
                 Value::Object(obj) => {
                     // MarkupContent: { kind, value }
-                    obj.get("value")
+                    let kind = obj
+                        .get("kind")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("markdown")
+                        .to_string();
+                    let value = obj
+                        .get("value")
                         .and_then(|v| v.as_str())
                         .unwrap_or("")
-                        .to_string()
+                        .to_string();
+                    (value, kind)
                 }
                 Value::Array(arr) => {
                     // MarkedString[]
-                    arr.iter()
+                    let text = arr
+                        .iter()
                         .filter_map(|item| {
                             if let Value::String(s) = item {
                                 Some(s.as_str())
@@ -1050,15 +1137,16 @@ impl LspManager {
                             }
                         })
                         .collect::<Vec<_>>()
-                        .join("\n\n")
+                        .join("\n\n");
+                    (text, "markdown".to_string())
                 }
-                _ => String::new(),
+                _ => (String::new(), "plaintext".to_string()),
             }
         } else {
-            String::new()
+            (String::new(), "plaintext".to_string())
         };
 
-        Ok(serde_json::json!({ "contents": contents }))
+        Ok(serde_json::json!({ "contents": { "kind": kind, "value": contents } }))
     }
 
     /// Request signature help at a position.
@@ -2520,19 +2608,7 @@ impl LspManager {
                 .extension()
                 .map(|e| e.to_string_lossy().to_string())
                 .unwrap_or_default();
-            let file_lang_id = detection::language_id_for_extension(&file_ext)
-                .and_then(|id| {
-                    // Look up the actual languageId from the manifest (e.g. "javascript" vs "typescript")
-                    let m = manifest::load_manifest().ok()?;
-                    let e = m.servers.get(&id)?;
-                    // Find which language corresponds to this extension
-                    for lang in &e.languages {
-                        // Use the first language if the extension matches
-                        return Some(lang.clone());
-                    }
-                    None
-                })
-                .unwrap_or_else(|| lang_id.to_string());
+            let file_lang_id = lsp_language_id(&file_ext).to_string();
 
             // Send didOpen for this background file
             let server = match self.servers.get_mut(&key) {
@@ -2856,4 +2932,307 @@ fn normalize_location(loc: &Value) -> Value {
         "uri": loc.get("uri").cloned().unwrap_or(Value::Null),
         "range": loc.get("range").cloned().unwrap_or(Value::Null),
     })
+}
+
+/// Convert a tsserver `quickinfo` response body to markdown matching VS Code's format.
+///
+/// The response body contains:
+/// - `displayString`: the type signature (wrapped in a TypeScript code block)
+/// - `documentation`: `SymbolDisplayPart[]` (joined as plain text)
+/// - `tags`: `JSDocTagInfo[]` (formatted as `*@name* \`param\` — description`)
+#[allow(dead_code)]
+fn quickinfo_to_markdown(body: &Value) -> String {
+    // VS Code renders hover as separate markdown parts with --- dividers between them.
+    // We replicate that: code block | --- | documentation | --- | tags
+    let mut code_block = String::new();
+    let mut doc_text = String::new();
+    let mut tag_lines: Vec<String> = Vec::new();
+
+    // displayString → ```typescript code block (matches VS Code hover.ts:89-90)
+    if let Some(display) = body.get("displayString").and_then(|v| v.as_str()) {
+        if !display.is_empty() {
+            code_block = format!("```typescript\n{}\n```", display);
+        }
+    }
+
+    // documentation → string or SymbolDisplayPart[] → text
+    if let Some(doc_val) = body.get("documentation") {
+        if let Some(s) = doc_val.as_str() {
+            // Plain string format (some vtsls versions)
+            doc_text = s.trim().to_string();
+        } else if let Some(docs) = doc_val.as_array() {
+            // SymbolDisplayPart[] format
+            let text: String = docs
+                .iter()
+                .filter_map(|p| p.get("text").and_then(|t| t.as_str()))
+                .collect::<Vec<_>>()
+                .join("");
+            doc_text = text.trim().to_string();
+        }
+    }
+
+    // tags → JSDocTagInfo[] → formatted markdown (matches VS Code textRendering.ts)
+    if let Some(tags) = body.get("tags").and_then(|v| v.as_array()) {
+        for tag in tags {
+            let name = tag.get("name").and_then(|v| v.as_str()).unwrap_or("");
+            if name.is_empty() {
+                continue;
+            }
+
+            let tag_text_val = tag.get("text");
+            let label = format!("*@{}*", name);
+
+            // Helper: extract the full text from either a string or SymbolDisplayPart[]
+            let full_text = match tag_text_val {
+                Some(v) if v.is_string() => v.as_str().unwrap_or("").to_string(),
+                Some(v) if v.is_array() => {
+                    v.as_array().unwrap()
+                        .iter()
+                        .filter_map(|p| p.get("text").and_then(|t| t.as_str()))
+                        .collect::<Vec<_>>()
+                        .join("")
+                }
+                _ => String::new(),
+            };
+
+            match name {
+                "param" | "template" => {
+                    // Extract parameter name and description.
+                    // Array format: find parameterName/typeParameterName kind part
+                    // String format: "paramName - description" or "paramName description"
+                    if let Some(arr) = tag_text_val.and_then(|v| v.as_array()) {
+                        let param_name = arr
+                            .iter()
+                            .find(|p| {
+                                p.get("kind").and_then(|k| k.as_str())
+                                    == Some("parameterName")
+                                    || p.get("kind").and_then(|k| k.as_str())
+                                        == Some("typeParameterName")
+                            })
+                            .and_then(|p| p.get("text").and_then(|t| t.as_str()))
+                            .unwrap_or("");
+                        let doc: String = arr
+                            .iter()
+                            .filter(|p| {
+                                p.get("kind").and_then(|k| k.as_str()) == Some("text")
+                            })
+                            .filter_map(|p| p.get("text").and_then(|t| t.as_str()))
+                            .collect::<Vec<_>>()
+                            .join("");
+                        let doc = doc.trim_start_matches(|c: char| c == '-' || c == ' ');
+                        if param_name.is_empty() {
+                            tag_lines.push(label);
+                        } else if doc.is_empty() {
+                            tag_lines.push(format!("{} `{}`", label, param_name));
+                        } else {
+                            tag_lines.push(format!(
+                                "{} `{}` \u{2014} {}",
+                                label, param_name, doc
+                            ));
+                        }
+                    } else if !full_text.is_empty() {
+                        // String format: "paramName - description" or "paramName description"
+                        let (pname, pdesc) = if let Some(dash_idx) = full_text.find(" - ") {
+                            (&full_text[..dash_idx], full_text[dash_idx + 3..].trim())
+                        } else if let Some(space_idx) = full_text.find(' ') {
+                            (&full_text[..space_idx], full_text[space_idx + 1..].trim())
+                        } else {
+                            (full_text.as_str(), "")
+                        };
+                        if pdesc.is_empty() {
+                            tag_lines.push(format!("{} `{}`", label, pname));
+                        } else {
+                            tag_lines.push(format!(
+                                "{} `{}` \u{2014} {}",
+                                label, pname, pdesc
+                            ));
+                        }
+                    } else {
+                        tag_lines.push(label);
+                    }
+                }
+                "example" => {
+                    if full_text.is_empty() {
+                        tag_lines.push(label);
+                    } else {
+                        tag_lines.push(format!("{}\n```tsx\n{}\n```", label, full_text));
+                    }
+                }
+                _ => {
+                    if full_text.is_empty() {
+                        tag_lines.push(label);
+                    } else {
+                        tag_lines.push(format!("{} \u{2014} {}", label, full_text));
+                    }
+                }
+            }
+        }
+    }
+
+    // Assemble with --- separators between sections (matching VS Code's hover rendering)
+    let mut sections: Vec<String> = Vec::new();
+    if !code_block.is_empty() {
+        sections.push(code_block);
+    }
+    if !doc_text.is_empty() {
+        sections.push(doc_text);
+    }
+    if !tag_lines.is_empty() {
+        sections.push(tag_lines.join("\n\n"));
+    }
+    sections.join("\n\n---\n\n")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn quickinfo_display_string_becomes_code_block() {
+        let body = serde_json::json!({
+            "displayString": "(parameter) options: CreateOptions",
+            "documentation": [],
+            "tags": []
+        });
+        let md = quickinfo_to_markdown(&body);
+        assert!(
+            md.contains("```typescript\n(parameter) options: CreateOptions\n```"),
+            "displayString should be wrapped in a typescript code block, got: {}",
+            md
+        );
+    }
+
+    #[test]
+    fn quickinfo_documentation_joined_as_text() {
+        let body = serde_json::json!({
+            "displayString": "(parameter) x: number",
+            "documentation": [
+                { "text": "The x coordinate", "kind": "text" }
+            ],
+            "tags": []
+        });
+        let md = quickinfo_to_markdown(&body);
+        assert!(
+            md.contains("The x coordinate"),
+            "documentation text should appear in output, got: {}",
+            md
+        );
+    }
+
+    #[test]
+    fn quickinfo_multi_part_documentation() {
+        let body = serde_json::json!({
+            "displayString": "function foo(): void",
+            "documentation": [
+                { "text": "Does ", "kind": "text" },
+                { "text": "something", "kind": "text" },
+                { "text": " useful.", "kind": "text" }
+            ],
+            "tags": []
+        });
+        let md = quickinfo_to_markdown(&body);
+        assert!(
+            md.contains("Does something useful."),
+            "multi-part documentation should be joined, got: {}",
+            md
+        );
+    }
+
+    #[test]
+    fn quickinfo_param_tag_formatted() {
+        let body = serde_json::json!({
+            "displayString": "function greet(name: string): void",
+            "documentation": [],
+            "tags": [
+                {
+                    "name": "param",
+                    "text": [
+                        { "text": "name", "kind": "parameterName" },
+                        { "text": " ", "kind": "space" },
+                        { "text": "- The person's name", "kind": "text" }
+                    ]
+                }
+            ]
+        });
+        let md = quickinfo_to_markdown(&body);
+        assert!(
+            md.contains("*@param*") && md.contains("`name`"),
+            "param tag should be formatted with italic label and code param, got: {}",
+            md
+        );
+    }
+
+    #[test]
+    fn quickinfo_returns_tag_formatted() {
+        let body = serde_json::json!({
+            "displayString": "function add(a: number, b: number): number",
+            "documentation": [],
+            "tags": [
+                {
+                    "name": "returns",
+                    "text": [
+                        { "text": "The sum of a and b", "kind": "text" }
+                    ]
+                }
+            ]
+        });
+        let md = quickinfo_to_markdown(&body);
+        assert!(
+            md.contains("*@returns*"),
+            "returns tag should have italic label, got: {}",
+            md
+        );
+        assert!(
+            md.contains("The sum of a and b"),
+            "returns tag body should appear, got: {}",
+            md
+        );
+    }
+
+    #[test]
+    fn quickinfo_empty_body_returns_empty() {
+        let body = serde_json::json!({});
+        let md = quickinfo_to_markdown(&body);
+        assert!(md.is_empty(), "empty body should produce empty string, got: {}", md);
+    }
+
+    #[test]
+    fn quickinfo_display_string_only() {
+        let body = serde_json::json!({
+            "displayString": "const MAX: number"
+        });
+        let md = quickinfo_to_markdown(&body);
+        assert!(
+            md.contains("```typescript\nconst MAX: number\n```"),
+            "should work with just displayString, got: {}",
+            md
+        );
+        // Should not have trailing newlines or separators
+        assert!(
+            !md.ends_with("\n\n"),
+            "should not have trailing double newline"
+        );
+    }
+
+    #[test]
+    fn quickinfo_example_tag_becomes_codeblock() {
+        let body = serde_json::json!({
+            "displayString": "function parse(s: string): Data",
+            "documentation": [],
+            "tags": [
+                {
+                    "name": "example",
+                    "text": [
+                        { "text": "parse('{\"a\":1}')", "kind": "text" }
+                    ]
+                }
+            ]
+        });
+        let md = quickinfo_to_markdown(&body);
+        assert!(
+            md.contains("*@example*"),
+            "example tag should have label, got: {}",
+            md
+        );
+    }
 }

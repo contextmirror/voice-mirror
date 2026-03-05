@@ -428,11 +428,26 @@ fn handle_diagnostics(app_handle: &AppHandle, lang_id: &str, msg: &Value) {
         .unwrap_or("")
         .to_string();
 
+    // VS Code-compatible: suppress semantic diagnostics (code >= 2000) for .js files
+    // when checkJs is false. Neither typescript-language-server nor vtsls filter these
+    // natively — VS Code's client-side extension handles this suppression.
+    let is_js_file = uri.ends_with(".js")
+        || uri.ends_with(".jsx")
+        || uri.ends_with(".mjs")
+        || uri.ends_with(".cjs");
+
     let diagnostics = params
         .get("diagnostics")
         .and_then(|v| v.as_array())
         .map(|arr| {
             arr.iter()
+                .filter(|d| {
+                    if !is_js_file {
+                        return true;
+                    }
+                    let code = d.get("code").and_then(|v| v.as_i64()).unwrap_or(0);
+                    code > 0 && code < 2000
+                })
                 .map(|d| {
                     let range = d.get("range").cloned().unwrap_or(Value::Null);
                     let start = range.get("start").cloned().unwrap_or(Value::Null);
@@ -511,12 +526,20 @@ fn handle_diagnostics(app_handle: &AppHandle, lang_id: &str, msg: &Value) {
         diagnostics,
     };
 
-    info!(
-        "[{}] Publishing {} diagnostics for {}",
-        lang_id,
-        event.diagnostics.len(),
-        event.uri
-    );
+    if event.diagnostics.is_empty() {
+        debug!(
+            "[{}] Publishing 0 diagnostics for {}",
+            lang_id,
+            event.uri
+        );
+    } else {
+        info!(
+            "[{}] Publishing {} diagnostics for {}",
+            lang_id,
+            event.diagnostics.len(),
+            event.uri
+        );
+    }
 
     if let Err(e) = app_handle.emit("lsp-diagnostics", &event) {
         warn!("Failed to emit lsp-diagnostics event: {}", e);

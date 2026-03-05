@@ -98,6 +98,80 @@ const editorTheme = EditorView.theme({
       color: 'var(--cm-foreground)',
     },
   },
+  // ── LSP hover tooltip (markdown) ──
+  '.lsp-hover-tooltip': {
+    maxWidth: '500px',
+    padding: '8px 12px',
+    fontSize: '13px',
+    lineHeight: '1.4',
+    overflow: 'auto',
+    maxHeight: '300px',
+  },
+  '.lsp-hover-tooltip p': {
+    margin: '2px 0',
+  },
+  '.lsp-hover-tooltip p:first-child': {
+    marginTop: '0',
+  },
+  '.lsp-hover-tooltip p:last-child': {
+    marginBottom: '0',
+  },
+  '.lsp-hover-tooltip ul': {
+    margin: '2px 0',
+    paddingLeft: '16px',
+  },
+  '.lsp-hover-tooltip li': {
+    margin: '0',
+  },
+  '.lsp-hover-tooltip pre': {
+    margin: '4px 0',
+    padding: '6px 8px',
+    borderRadius: '4px',
+    backgroundColor: 'rgba(0, 0, 0, 0.25)',
+    overflow: 'auto',
+  },
+  '.lsp-hover-tooltip pre code': {
+    fontSize: '12px',
+    fontFamily: "var(--cm-font-family, 'Consolas', 'Monaco', monospace)",
+    whiteSpace: 'pre',
+  },
+  '.lsp-hover-tooltip code': {
+    fontSize: '12px',
+    fontFamily: "var(--cm-font-family, 'Consolas', 'Monaco', monospace)",
+    padding: '1px 4px',
+    borderRadius: '3px',
+    backgroundColor: 'rgba(0, 0, 0, 0.2)',
+  },
+  '.lsp-hover-tooltip pre code': {
+    padding: '0',
+    backgroundColor: 'transparent',
+  },
+  '.lsp-hover-tooltip hr': {
+    border: 'none',
+    borderTop: '1px solid var(--border)',
+    margin: '6px 0',
+  },
+  // ── highlight.js token colors (mapped to CM CSS vars) ──
+  '.lsp-hover-tooltip .hljs-keyword': { color: 'var(--cm-keyword)' },
+  '.lsp-hover-tooltip .hljs-built_in': { color: 'var(--cm-function)' },
+  '.lsp-hover-tooltip .hljs-type': { color: 'var(--cm-type)' },
+  '.lsp-hover-tooltip .hljs-string': { color: 'var(--cm-string)' },
+  '.lsp-hover-tooltip .hljs-number': { color: 'var(--cm-number)' },
+  '.lsp-hover-tooltip .hljs-literal': { color: 'var(--cm-constant)' },
+  '.lsp-hover-tooltip .hljs-comment': { color: 'var(--cm-comment)', fontStyle: 'italic' },
+  '.lsp-hover-tooltip .hljs-function': { color: 'var(--cm-function)' },
+  '.lsp-hover-tooltip .hljs-title': { color: 'var(--cm-function)' },
+  '.lsp-hover-tooltip .hljs-params': { color: 'var(--cm-foreground)' },
+  '.lsp-hover-tooltip .hljs-variable': { color: 'var(--cm-variable)' },
+  '.lsp-hover-tooltip .hljs-attr': { color: 'var(--cm-attribute)' },
+  '.lsp-hover-tooltip .hljs-property': { color: 'var(--cm-property)' },
+  '.lsp-hover-tooltip .hljs-punctuation': { color: 'var(--cm-punctuation)' },
+  '.lsp-hover-tooltip .hljs-operator': { color: 'var(--cm-operator)' },
+  '.lsp-hover-tooltip .hljs-meta': { color: 'var(--cm-keyword)' },
+  '.lsp-hover-tooltip .hljs-tag': { color: 'var(--cm-tag)' },
+  '.lsp-hover-tooltip .hljs-name': { color: 'var(--cm-tag)' },
+  '.lsp-hover-tooltip .hljs-selector-class': { color: 'var(--cm-type)' },
+  '.lsp-hover-tooltip .hljs-selector-id': { color: 'var(--cm-type)' },
   // ── Minimap ──
   '.cm-minimap': {
     backgroundColor: 'var(--cm-background)',
