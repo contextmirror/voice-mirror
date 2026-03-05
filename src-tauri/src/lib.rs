@@ -504,6 +504,7 @@ pub fn run() {
             lsp_cmds::lsp_prepare_type_hierarchy,
             lsp_cmds::lsp_request_supertypes,
             lsp_cmds::lsp_request_subtypes,
+            lsp_cmds::lsp_request_selection_range,
             lsp_cmds::lsp_apply_workspace_edit,
             lsp_cmds::lsp_scan_project,
             lsp_cmds::lsp_get_server_list,

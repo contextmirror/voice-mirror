@@ -2416,6 +2416,46 @@ impl LspManager {
         Ok(result)
     }
 
+    /// Request selection ranges for given positions in a document.
+    ///
+    /// The `textDocument/selectionRange` request returns a linked list of
+    /// ranges for each position, enabling smart expand/shrink selection
+    /// (word -> expression -> statement -> block -> function -> file).
+    pub async fn request_selection_range(
+        &mut self,
+        uri: &str,
+        lang_id: &str,
+        positions: Vec<serde_json::Value>,
+        project_root: &str,
+    ) -> Result<Value, String> {
+        let server = self
+            .servers
+            .get_mut(&server_key(lang_id, project_root))
+            .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
+
+        let params = serde_json::json!({
+            "textDocument": { "uri": uri },
+            "positions": positions
+        });
+
+        let rx = client::send_request(
+            &mut *server.stdin.lock().await,
+            &server.pending_requests,
+            "textDocument/selectionRange",
+            params,
+            &server.next_id,
+        )
+        .await?;
+
+        let response = tokio::time::timeout(std::time::Duration::from_secs(10), rx)
+            .await
+            .map_err(|_| "Selection range request timed out".to_string())?
+            .map_err(|_| "Selection range response channel closed".to_string())?;
+
+        let result = response.get("result").cloned().unwrap_or(Value::Null);
+        Ok(result)
+    }
+
     /// Scan the project directory for files matching the server's extensions
     /// and send `textDocument/didOpen` for each, enabling project-wide diagnostics.
     ///

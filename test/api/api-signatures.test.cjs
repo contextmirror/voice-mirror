@@ -175,6 +175,7 @@ describe('api.js -- critical Tauri command names', () => {
     'lsp_prepare_type_hierarchy',
     'lsp_request_supertypes',
     'lsp_request_subtypes',
+    'lsp_request_selection_range',
   ];
 
   for (const cmd of criticalCommands) {
@@ -364,6 +365,7 @@ describe('api.js -- exported async functions', () => {
     'lspPrepareTypeHierarchy',
     'lspRequestSupertypes',
     'lspRequestSubtypes',
+    'lspRequestSelectionRange',
     'lspGetServerList',
     'lspInstallServer',
     'lspSetServerEnabled',

@@ -827,6 +827,10 @@ export async function lspRequestSubtypes(item, langId, projectRoot) {
   return invoke('lsp_request_subtypes', { item, langId, projectRoot });
 }
 
+export async function lspRequestSelectionRange(path, positions, projectRoot) {
+  return invoke('lsp_request_selection_range', { path, positions, projectRoot });
+}
+
 export async function lspScanProject(langId, projectRoot) {
   return invoke('lsp_scan_project', { langId, projectRoot });
 }

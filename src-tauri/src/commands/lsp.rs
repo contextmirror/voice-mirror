@@ -1091,6 +1091,44 @@ pub async fn lsp_request_subtypes(
     }
 }
 
+/// Request selection ranges for positions in a document.
+///
+/// Returns a linked list of ranges per position, enabling smart
+/// expand/shrink selection (word -> expression -> statement -> block -> function).
+#[tauri::command]
+pub async fn lsp_request_selection_range(
+    path: String,
+    positions: serde_json::Value,
+    project_root: String,
+    state: State<'_, LspManagerState>,
+) -> Result<IpcResponse, ()> {
+    let ext = match extension_from_path(&path) {
+        Some(e) => e,
+        None => return Ok(IpcResponse::err("Could not determine file extension")),
+    };
+
+    let lang_id = match detection::language_id_for_extension(&ext) {
+        Some(id) => id.to_string(),
+        None => return Ok(IpcResponse::err(format!("No LSP support for .{} files", ext))),
+    };
+
+    let uri = types::file_uri(&path, &project_root);
+
+    let positions_vec = positions
+        .as_array()
+        .map(|a| a.to_vec())
+        .unwrap_or_default();
+
+    let mut manager = state.0.lock().await;
+    match manager
+        .request_selection_range(&uri, &lang_id, positions_vec, &project_root)
+        .await
+    {
+        Ok(result) => Ok(IpcResponse::ok(result)),
+        Err(e) => Ok(IpcResponse::err(e)),
+    }
+}
+
 /// Request diagnostics for a document on demand (pull diagnostics).
 ///
 /// Sends `textDocument/diagnostic` to get fresh diagnostics without waiting
