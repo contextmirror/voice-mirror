@@ -252,6 +252,16 @@ const editorTheme = EditorView.theme({
     display: 'block',
     cursor: 'default',
   },
+  // ── Document colors (inline color swatches) ──
+  '.cm-color-swatch': {
+    display: 'inline-block',
+    width: '0.8em',
+    height: '0.8em',
+    borderRadius: '2px',
+    border: '1px solid rgba(255, 255, 255, 0.3)',
+    marginRight: '4px',
+    verticalAlign: 'middle',
+  },
 }, { dark: true });
 
 // ── Syntax highlighting ──

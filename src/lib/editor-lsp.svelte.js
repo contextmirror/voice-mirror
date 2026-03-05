@@ -5,7 +5,7 @@
  * event listeners, handlers, and CodeMirror extension factories for the file editor.
  */
 
-import { lspOpenFile, lspCloseFile, lspChangeFile, lspSaveFile, lspRequestCompletion, lspRequestHover, lspRequestDefinition, lspRequestTypeDefinition, lspRequestDeclaration, lspRequestImplementation, lspRequestReferences, lspRequestDocumentHighlight, lspRequestInlayHints, lspRequestCodeLens, lspPrepareRename, lspRename, lspApplyWorkspaceEdit, lspRequestCodeActions, lspRequestFormatting, lspRequestRangeFormatting, lspRequestSignatureHelp, lspRequestLinkedEditingRange, lspRequestOnTypeFormatting } from './api.js';
+import { lspOpenFile, lspCloseFile, lspChangeFile, lspSaveFile, lspRequestCompletion, lspRequestHover, lspRequestDefinition, lspRequestTypeDefinition, lspRequestDeclaration, lspRequestImplementation, lspRequestReferences, lspRequestDocumentHighlight, lspRequestInlayHints, lspRequestCodeLens, lspRequestDocumentColors, lspPrepareRename, lspRename, lspApplyWorkspaceEdit, lspRequestCodeActions, lspRequestFormatting, lspRequestRangeFormatting, lspRequestSignatureHelp, lspRequestLinkedEditingRange, lspRequestOnTypeFormatting } from './api.js';
 import { projectStore } from './stores/project.svelte.js';
 import { tabsStore } from './stores/tabs.svelte.js';
 import { basename } from './utils.js';
@@ -801,6 +801,107 @@ export function createEditorLsp() {
     });
   }
 
+  /**
+   * CodeMirror ViewPlugin that renders inline color swatches
+   * via LSP textDocument/documentColor.
+   *
+   * @param {string} currentPath - current file path
+   * @param {typeof import('@codemirror/view')} cmView - CodeMirror view module
+   * @param {typeof import('@codemirror/state')} cmState - CodeMirror state module
+   * @returns {import('@codemirror/state').Extension} CM extension
+   */
+  function documentColorsExtension(currentPath, cmView, cmState) {
+    const { ViewPlugin, Decoration, WidgetType } = cmView;
+    const { RangeSet } = cmState;
+
+    class ColorSwatchWidget extends WidgetType {
+      constructor(r, g, b, a) {
+        super();
+        this.r = r;
+        this.g = g;
+        this.b = b;
+        this.a = a;
+      }
+
+      toDOM() {
+        const span = document.createElement('span');
+        span.className = 'cm-color-swatch';
+        span.style.background = `rgba(${Math.round(this.r * 255)}, ${Math.round(this.g * 255)}, ${Math.round(this.b * 255)}, ${this.a})`;
+        return span;
+      }
+
+      eq(other) {
+        return this.r === other.r && this.g === other.g && this.b === other.b && this.a === other.a;
+      }
+
+      ignoreEvent() { return true; }
+    }
+
+    return ViewPlugin.fromClass(class {
+      constructor(view) {
+        this.decorations = RangeSet.empty;
+        this._timer = null;
+        this._reqId = 0;
+        this._scheduleRequest(view);
+      }
+
+      update(update) {
+        if (!update.docChanged) return;
+        this._scheduleRequest(update.view);
+      }
+
+      _scheduleRequest(view) {
+        clearTimeout(this._timer);
+        if (!hasLsp || !currentPath) return;
+
+        const reqId = ++this._reqId;
+        this._timer = setTimeout(() => {
+          this._requestColors(view, reqId);
+        }, 500);
+      }
+
+      async _requestColors(view, reqId) {
+        try {
+          const root = projectStore.root;
+          const result = await lspRequestDocumentColors(currentPath, root);
+          if (reqId !== this._reqId) return;
+
+          if (!result?.data?.colors?.length) {
+            this.decorations = RangeSet.empty;
+            view.requestMeasure();
+            return;
+          }
+
+          const doc = view.state.doc;
+          const widgets = [];
+          for (const item of result.data.colors) {
+            const pos = lspPositionToOffset(doc, item.range.start);
+            if (pos >= 0 && pos <= doc.length) {
+              const { red, green, blue, alpha } = item.color;
+              widgets.push(
+                Decoration.widget({
+                  widget: new ColorSwatchWidget(red, green, blue, alpha ?? 1),
+                  side: -1, // before the color value
+                }).range(pos)
+              );
+            }
+          }
+          widgets.sort((a, b) => a.from - b.from);
+          this.decorations = RangeSet.of(widgets);
+          view.requestMeasure();
+        } catch {
+          // Silently ignore — document colors are best-effort
+        }
+      }
+
+      destroy() {
+        clearTimeout(this._timer);
+      }
+    }, {
+      decorations: v => v.decorations,
+    });
+  }
+
   function diagnosticListener(currentPath, getView, cmCache) {
     return (event) => {
       const { uri, diagnostics: lspDiags } = event.payload;
@@ -897,6 +998,7 @@ export function createEditorLsp() {
     documentHighlightExtension,
     inlayHintExtension,
     codeLensExtension,
+    documentColorsExtension,
     diagnosticListener,
 
     // Lifecycle
