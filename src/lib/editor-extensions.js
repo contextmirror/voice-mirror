@@ -440,6 +440,8 @@ export function buildEditorExtensions(cm, lsp, options) {
       { key: 'Shift-F12', run: (v) => { lsp.handleFindReferences(v, filePath); return true; } },
       { key: 'Mod-.', run: (v) => { lsp.handleCodeActions(v, filePath); return true; } },
       { key: 'Ctrl-Shift-Space', run: (v) => { lsp.requestSignatureHelp(v, filePath, null); return true; } },
+      { key: 'Ctrl-F12', run: (v) => { lsp.handleGoToImplementation(v, v.state.selection.main.head); return true; } },
+      { key: 'Shift-Alt-F', run: (v) => { lsp.formatSelection(v, filePath); return true; } },
     ]));
     extensions.push(lsp.documentHighlightExtension(filePath, cm, cm));
     extensions.push(lsp.inlayHintExtension(filePath, cm, cm));

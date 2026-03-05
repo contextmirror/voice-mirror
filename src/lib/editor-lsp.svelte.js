@@ -325,6 +325,7 @@ export function createEditorLsp() {
 
   async function formatSelection(view, path, root) {
     if (!hasLsp) return false;
+    root = root || projectStore.root;
     const sel = view.state.selection.main;
     if (sel.from === sel.to) return false; // No selection
     const startLine = view.state.doc.lineAt(sel.from);

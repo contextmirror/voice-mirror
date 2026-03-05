@@ -87,6 +87,27 @@
     onNavigateDefinition();
   }
 
+  function handleGotoTypeDefinition() {
+    close();
+    if (lsp && view) {
+      const pos = view.state.selection.main.head;
+      lsp.handleGoToTypeDefinition(view, pos);
+    }
+  }
+
+  function handleGotoImplementation() {
+    close();
+    if (lsp && view) {
+      const pos = view.state.selection.main.head;
+      lsp.handleGoToImplementation(view, pos);
+    }
+  }
+
+  function handleFormatSelection() {
+    close();
+    if (lsp && view) lsp.formatSelection(view, filePath);
+  }
+
   function handleFindReferences() {
     close();
     if (lsp && view) lsp.handleFindReferences(view, filePath);
@@ -210,6 +231,13 @@
         Go to Definition
         <span class="context-menu-shortcut">Ctrl+Click</span>
       </button>
+      <button class="context-menu-item" onclick={handleGotoTypeDefinition} role="menuitem">
+        Go to Type Definition
+      </button>
+      <button class="context-menu-item" onclick={handleGotoImplementation} role="menuitem">
+        Go to Implementation
+        <span class="context-menu-shortcut">Ctrl+F12</span>
+      </button>
       <button class="context-menu-item" onclick={handleFindReferences} role="menuitem">
         Find References
         <span class="context-menu-shortcut">Shift+F12</span>
@@ -224,6 +252,12 @@
         <button class="context-menu-item" onclick={handleQuickFix} role="menuitem">
           Quick Fix...
           <span class="context-menu-shortcut">Ctrl+.</span>
+        </button>
+      {/if}
+      {#if hasSelection && !tab?.readOnly}
+        <button class="context-menu-item" onclick={handleFormatSelection} role="menuitem">
+          Format Selection
+          <span class="context-menu-shortcut">Shift+Alt+F</span>
         </button>
       {/if}
       <div class="context-menu-divider"></div>
