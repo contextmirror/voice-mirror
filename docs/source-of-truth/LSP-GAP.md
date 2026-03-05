@@ -138,10 +138,10 @@ VS Code remaps 8 "style check" diagnostic codes from Error → Warning. This is 
 
 | Feature | LSP Method | VS Code | Voice Mirror | Impl | Tested |
 |---------|-----------|---------|-------------|:----:|:------:|
-| Document formatting | `textDocument/formatting` | Full | Full (Shift+Alt+F + format-on-save) | ✅ | |
-| Range formatting | `textDocument/rangeFormatting` | Full | Full (Shift+Alt+F + context menu) | ✅ | |
-| On-type formatting | `textDocument/onTypeFormatting` | Full | Full | ✅ | |
-| Linked editing | `textDocument/linkedEditingRange` | Full | Full | ✅ | |
+| Document formatting | `textDocument/formatting` | Full | Full (Shift+Alt+F + format-on-save) | ✅ | ✅ |
+| Range formatting | `textDocument/rangeFormatting` | Full | Full (Shift+Alt+F + context menu) | ✅ | ✅ |
+| On-type formatting | `textDocument/onTypeFormatting` | Full | Full (+ CM ViewPlugin, triggers: `;` `}` `\n`) | ✅ | ✅ |
+| Linked editing | `textDocument/linkedEditingRange` | Full | Full (+ CM transactionFilter) | ✅ | ✅ |
 | Selection range | `textDocument/selectionRange` | Full | Full | ✅ | |
 
 ### Visual Enhancements
@@ -175,10 +175,10 @@ VS Code remaps 8 "style check" diagnostic codes from Error → Warning. This is 
 | Navigation Tier 1 (5) | 5/5 | 5/5 | 5/5 | 5/5 |
 | Navigation Tier 2 (6) | 6/6 | 6/6 | 6/6 | 3/6 ⏭️3 |
 | Inline Assistance (3) | 3/3 | 3/3 | 3/3 | 3/3 |
-| Formatting & Editing (5) | 5/5 | 5/5 | 5/5 | 0/5 |
+| Formatting & Editing (5) | 5/5 | 5/5 | 5/5 | 4/5 |
 | Visual (3) | 3/3 | 3/3 | 3/3 | 0/3 |
 | Infrastructure (10) | 10/10 | 10/10 | 10/10 | 0/10 |
-| **Total** | **37/37** | **37/37** | **37/37** | **16/37** |
+| **Total** | **37/37** | **37/37** | **37/37** | **20/37** |
 
 > All features are implementation-complete including frontend CodeMirror wiring. The "Tested" column will be filled in during manual verification with screenshots.
 

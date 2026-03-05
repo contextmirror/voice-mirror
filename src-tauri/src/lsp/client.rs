@@ -358,6 +358,12 @@ async fn handle_server_request(
 
             send_response(stdin, id, result).await;
         }
+        "client/registerCapability" | "client/unregisterCapability" => {
+            debug!("[{}] Acknowledging {} (id={})", lang_id, method, id);
+            // Respond with empty success — we don't track dynamic registrations
+            // but must acknowledge to avoid the server thinking registration failed.
+            send_response(stdin, id, Value::Null).await;
+        }
         _ => {
             debug!("[{}] Unhandled server request: {} (id={})", lang_id, method, id);
             // Respond with null for unrecognized requests to avoid blocking the server

@@ -339,6 +339,12 @@ const editorTheme = EditorView.theme({
     display: 'block',
     cursor: 'default',
   },
+  // ── Linked editing (tag pair highlight) ──
+  '.cm-linked-editing': {
+    backgroundColor: 'rgba(100, 150, 255, 0.15)',
+    borderRadius: '2px',
+    outline: '1px solid rgba(100, 150, 255, 0.3)',
+  },
   // ── Document colors (inline color swatches) ──
   '.cm-color-swatch': {
     display: 'inline-block',

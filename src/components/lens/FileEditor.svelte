@@ -69,7 +69,7 @@
     if (cmCache) return cmCache;
     const [
       { EditorView, basicSetup },
-      { EditorState, EditorSelection, StateEffect, StateField, RangeSet },
+      { EditorState, EditorSelection, StateEffect, StateField, RangeSet, Annotation },
       { keymap, hoverTooltip, ViewPlugin, Decoration, WidgetType, gutter, GutterMarker },
       { autocompletion },
       { setDiagnostics, lintGutter },
@@ -80,7 +80,7 @@
       import('@codemirror/autocomplete'),
       import('@codemirror/lint'),
     ]);
-    cmCache = { EditorView, basicSetup, EditorState, EditorSelection, StateEffect, StateField, RangeSet, keymap, hoverTooltip, ViewPlugin, Decoration, WidgetType, gutter, GutterMarker, autocompletion, setDiagnostics, lintGutter };
+    cmCache = { EditorView, basicSetup, EditorState, EditorSelection, StateEffect, StateField, RangeSet, Annotation, keymap, hoverTooltip, ViewPlugin, Decoration, WidgetType, gutter, GutterMarker, autocompletion, setDiagnostics, lintGutter };
     return cmCache;
   }
 

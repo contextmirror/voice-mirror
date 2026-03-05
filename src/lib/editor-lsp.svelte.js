@@ -364,6 +364,62 @@ export function createEditorLsp() {
     return false;
   }
 
+  /**
+   * CodeMirror ViewPlugin that triggers LSP on-type formatting
+   * when the user types `;`, `}`, or Enter.
+   */
+  function onTypeFormattingExtension(currentPath, cmView) {
+    const ON_TYPE_TRIGGERS = new Set([';', '}', '\n']);
+
+    return cmView.ViewPlugin.fromClass(class {
+      update(update) {
+        if (!update.docChanged || !hasLsp || !currentPath) return;
+
+        // Detect inserted trigger character from the transaction
+        let triggerChar = null;
+        let triggerPos = null;
+        update.changes.iterChanges((_fromA, _toA, _fromB, toB, inserted) => {
+          if (triggerChar) return; // only first trigger
+          const text = inserted.toString();
+          if (text.length === 1 && ON_TYPE_TRIGGERS.has(text)) {
+            triggerChar = text;
+            triggerPos = toB;
+          } else if (text === '\r\n' || text === '\r') {
+            triggerChar = '\n';
+            triggerPos = toB;
+          }
+        });
+
+        if (!triggerChar || triggerPos == null) return;
+
+        const view = update.view;
+        const lineInfo = view.state.doc.lineAt(triggerPos);
+        const line = lineInfo.number - 1;
+        const character = triggerPos - lineInfo.from;
+        const tabSize = view.state.tabSize || 2;
+        const root = projectStore.root;
+
+        lspRequestOnTypeFormatting(currentPath, line, character, triggerChar, tabSize, true, root)
+          .then(result => {
+            if (!result?.data?.edits?.length) return;
+            const doc = view.state.doc;
+            const sorted = [...result.data.edits].sort((a, b) => {
+              if (a.range.start.line !== b.range.start.line)
+                return b.range.start.line - a.range.start.line;
+              return b.range.start.character - a.range.start.character;
+            });
+            const changes = sorted.map(edit => ({
+              from: lspPositionToOffset(doc, edit.range.start),
+              to: lspPositionToOffset(doc, edit.range.end),
+              insert: edit.newText,
+            }));
+            view.dispatch({ changes });
+          })
+          .catch(() => {});
+      }
+    });
+  }
+
   async function handleCodeActions(view, currentPath, diagnosticsAtCursor) {
     if (!view || !hasLsp || !currentPath) return;
     const sel = view.state.selection.main;
@@ -443,11 +499,210 @@ export function createEditorLsp() {
     } catch {}
   }
 
+  /**
+   * CodeMirror ViewPlugin that synchronizes editing of HTML tag pairs
+   * via LSP textDocument/linkedEditingRange.
+   *
+   * When the cursor is inside a tag name, it fetches linked ranges from LSP
+   * and highlights them. Edits to one range are mirrored to the other.
+   */
+  function linkedEditingExtension(currentPath, cmView, cmState) {
+    const { ViewPlugin, Decoration } = cmView;
+    const { StateEffect, StateField, RangeSet, Annotation, EditorState, EditorSelection } = cmState;
+
+    const setLinkedRanges = StateEffect.define();
+    // Annotation to tag transactions from our mirrored edits
+    const linkedEditTag = Annotation.define();
+
+    const linkedMark = Decoration.mark({ class: 'cm-linked-editing' });
+
+    function buildDecos(ranges) {
+      if (!ranges) return Decoration.none;
+      const marks = ranges
+        .slice()
+        .sort((a, b) => a.from - b.from)
+        .map(r => linkedMark.range(r.from, r.to));
+      return RangeSet.of(marks);
+    }
+
+    const linkedField = StateField.define({
+      create() { return { ranges: null, decos: Decoration.none }; },
+      update(val, tr) {
+        for (const e of tr.effects) {
+          if (e.is(setLinkedRanges)) return e.value;
+        }
+        if (tr.docChanged && val.ranges) {
+          // If this is our own mirrored edit, map ranges through changes
+          if (tr.annotation(linkedEditTag)) {
+            const newRanges = val.ranges.map(r => ({
+              from: tr.changes.mapPos(r.from, -1),
+              to: tr.changes.mapPos(r.to, 1),
+            }));
+            // Validate ranges are still sane
+            const doc = tr.state.doc;
+            if (newRanges.every(r => r.from >= 0 && r.to <= doc.length && r.from < r.to)) {
+              return { ranges: newRanges, decos: buildDecos(newRanges) };
+            }
+          }
+          // External edit — invalidate, fetcher will re-query
+          return { ranges: null, decos: Decoration.none };
+        }
+        return val;
+      },
+    });
+
+    const linkedFetcher = ViewPlugin.fromClass(class {
+      constructor(view) {
+        this._timer = null;
+        this._reqId = 0;
+        this._lastPos = -1;
+        this._scheduleCheck(view);
+      }
+
+      update(update) {
+        if (!update.selectionSet && !update.docChanged) return;
+        this._scheduleCheck(update.view);
+      }
+
+      _scheduleCheck(view) {
+        clearTimeout(this._timer);
+        if (!hasLsp || !currentPath) return;
+
+        const pos = view.state.selection.main.head;
+        if (pos === this._lastPos && !view.state.field(linkedField).ranges) return;
+        this._lastPos = pos;
+
+        const reqId = ++this._reqId;
+        this._timer = setTimeout(() => {
+          this._fetchRanges(view, reqId);
+        }, 150);
+      }
+
+      async _fetchRanges(view, reqId) {
+        try {
+          const pos = view.state.selection.main.head;
+          const lineInfo = view.state.doc.lineAt(pos);
+          const line = lineInfo.number - 1;
+          const character = pos - lineInfo.from;
+          const root = projectStore.root;
+
+          const result = await lspRequestLinkedEditingRange(currentPath, line, character, root);
+          if (reqId !== this._reqId) return;
+
+          if (!result?.data?.ranges?.length || result.data.ranges.length < 2) {
+            const current = view.state.field(linkedField);
+            if (current.ranges) {
+              view.dispatch({ effects: setLinkedRanges.of({ ranges: null, decos: Decoration.none }) });
+            }
+            return;
+          }
+
+          const doc = view.state.doc;
+          const ranges = result.data.ranges.map(r => ({
+            from: lspPositionToOffset(doc, r.start),
+            to: lspPositionToOffset(doc, r.end),
+          })).filter(r => r.from >= 0 && r.to <= doc.length && r.from < r.to);
+
+          if (ranges.length < 2) return;
+
+          view.dispatch({
+            effects: setLinkedRanges.of({ ranges, decos: buildDecos(ranges) }),
+          });
+        } catch {
+          // Silently ignore
+        }
+      }
+
+      destroy() {
+        clearTimeout(this._timer);
+      }
+    });
+
+    // Transaction filter: mirror ALL edits (typing + backspace/delete) within linked ranges
+    const linkedMirrorFilter = EditorState.transactionFilter.of(tr => {
+      if (tr.annotation(linkedEditTag)) return tr;
+      if (!tr.docChanged) return tr;
+
+      const field = tr.startState.field(linkedField);
+      if (!field.ranges || field.ranges.length < 2) return tr;
+
+      // Collect individual changes from the transaction
+      const editChanges = [];
+      tr.changes.iterChanges((fromA, toA, fromB, toB, inserted) => {
+        editChanges.push({ from: fromA, to: toA, insert: inserted.toString() });
+      });
+
+      // Only mirror single-change transactions (normal typing/deletion)
+      if (editChanges.length !== 1) return tr;
+      const change = editChanges[0];
+
+      // Find which linked range contains this edit
+      const editRange = field.ranges.find(r => change.from >= r.from && change.to <= r.to);
+      if (!editRange) return tr;
+
+      const offsetInRange = change.from - editRange.from;
+      const deleteLen = change.to - change.from;
+      const allChanges = [change];
+
+      for (const r of field.ranges) {
+        if (r === editRange) continue;
+        const mirrorFrom = r.from + offsetInRange;
+        const mirrorTo = mirrorFrom + deleteLen;
+        if (mirrorFrom >= r.from && mirrorTo <= r.to) {
+          allChanges.push({ from: mirrorFrom, to: mirrorTo, insert: change.insert });
+        }
+      }
+
+      if (allChanges.length <= 1) return tr;
+
+      // Sort in document order (required by ChangeSet)
+      allChanges.sort((a, b) => a.from - b.from);
+
+      // Compute cursor position: account for mirror changes before the user's edit
+      let shift = 0;
+      for (const c of allChanges) {
+        if (c.from >= change.from) break;
+        shift += c.insert.length - (c.to - c.from);
+      }
+      const cursorPos = change.from + change.insert.length + shift;
+
+      return {
+        changes: allChanges,
+        selection: EditorSelection.cursor(cursorPos),
+        annotations: linkedEditTag.of(true),
+        scrollIntoView: true,
+      };
+    });
+
+    // Provide decorations from the StateField
+    const linkedDecorations = cmView.EditorView.decorations.compute([linkedField], state => {
+      return state.field(linkedField).decos;
+    });
+
+    return [linkedField, linkedFetcher, linkedMirrorFilter, linkedDecorations];
+  }
+
   // ── CodeMirror extension factories ──
+
+  const COMPLETION_TRIGGERS = new Set(['.', ':', '<', '"', '/', '@', '#', '(']);
 
   function completionSource(currentPath) {
     return async function lspCompletionSource(context) {
       if (!hasLsp || !currentPath) return null;
+
+      // Only activate on explicit invocation (Ctrl+Space), trigger characters,
+      // or when typing an identifier. Avoids completions on }, ), ;, etc.
+      if (!context.explicit) {
+        const word = context.matchBefore(/\w+/);
+        if (!word) {
+          // Check if the character before the cursor is a trigger character
+          const before = context.pos > 0
+            ? context.state.sliceDoc(context.pos - 1, context.pos)
+            : '';
+          if (!COMPLETION_TRIGGERS.has(before)) return null;
+        }
+      }
+
       const pos = context.state.doc.lineAt(context.pos);
       const line = pos.number - 1;
       const character = context.pos - pos.from;
@@ -1215,6 +1470,8 @@ export function createEditorLsp() {
     documentColorsExtension,
     foldingRangeExtension,
     semanticTokensExtension,
+    onTypeFormattingExtension,
+    linkedEditingExtension,
     diagnosticListener,
 
     // Lifecycle

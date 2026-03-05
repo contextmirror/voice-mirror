@@ -548,7 +548,7 @@ impl LspManager {
                         "dynamicRegistration": false
                     },
                     "linkedEditingRange": {
-                        "dynamicRegistration": false
+                        "dynamicRegistration": true
                     },
                     "onTypeFormatting": {
                         "dynamicRegistration": false
@@ -634,6 +634,18 @@ impl LspManager {
                 info!("LSP serverInfo: {} v{}", name, ver);
             } else {
                 info!("LSP serverInfo: {} (no version)", name);
+            }
+        }
+
+        // Log linked editing support for debugging
+        let raw_caps = response
+            .get("result")
+            .and_then(|r| r.get("capabilities"));
+        if let Some(caps) = raw_caps {
+            if let Some(le) = caps.get("linkedEditingRangeProvider") {
+                info!("[{}] linkedEditingRangeProvider: {}", lang_id, le);
+            } else {
+                info!("[{}] linkedEditingRangeProvider: NOT advertised", lang_id);
             }
         }
 
@@ -1967,6 +1979,8 @@ impl LspManager {
             .servers
             .get_mut(&server_key(lang_id, project_root))
             .ok_or_else(|| format!("No LSP server running for '{}'", lang_id))?;
+
+        debug!("[{}] linkedEditingRange uri={} line={} char={}", lang_id, uri, line, character);
 
         let params = serde_json::json!({
             "textDocument": { "uri": uri },
