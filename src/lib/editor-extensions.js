@@ -466,6 +466,24 @@ export function buildEditorExtensions(cm, lsp, options) {
   // Context menu + optional Ctrl+Click go-to-definition
   const domHandlers = {
     contextmenu: onContextMenu,
+    // Reject drops from our internal drag system (tab reorder, file tree)
+    // so CodeMirror doesn't try to insert drag data as text
+    drop: (e) => {
+      if (e.dataTransfer.types.includes('application/x-voice-mirror-tab') ||
+          e.dataTransfer.types.includes('application/x-voice-mirror-file')) {
+        e.preventDefault();
+        return true;
+      }
+      return false;
+    },
+    dragover: (e) => {
+      if (e.dataTransfer.types.includes('application/x-voice-mirror-tab') ||
+          e.dataTransfer.types.includes('application/x-voice-mirror-file')) {
+        // Don't show CM's drop cursor for our internal drags
+        return true;
+      }
+      return false;
+    },
   };
 
   if (lsp.hasLsp && onClick) {

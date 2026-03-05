@@ -44,8 +44,10 @@
   let showBrowser = $state(false);
   let firstGroupId = $derived(editorGroupsStore.allGroupIds[0]);
 
-  // Track file-tree drag state to suppress stop-sign cursor across the workspace
+  // Track drag state to suppress stop-sign cursor across the workspace
   let fileTreeDragging = $state(false);
+  let tabDragging = $state(false);
+  let anyDragging = $derived(fileTreeDragging || tabDragging);
   // Workspace-level ancestor drop zone (full-width top/bottom overlays)
   let ancestorDropZone = $state(null);
 
@@ -60,12 +62,23 @@
     };
   });
 
+  $effect(() => {
+    const onStart = () => { tabDragging = true; };
+    const onEnd = () => { tabDragging = false; ancestorDropZone = null; };
+    window.addEventListener('tab-drag-start', onStart);
+    window.addEventListener('tab-drag-end', onEnd);
+    return () => {
+      window.removeEventListener('tab-drag-start', onStart);
+      window.removeEventListener('tab-drag-end', onEnd);
+    };
+  });
+
   /** Handle seam dragover — detect top/bottom half and show ancestor overlay */
   function handleSeamDragOver(e, seamDirection) {
-    if (!fileTreeDragging) return;
+    if (!anyDragging) return;
     e.preventDefault();
     e.stopPropagation();
-    e.dataTransfer.dropEffect = 'copy';
+    e.dataTransfer.dropEffect = tabDragging ? 'move' : 'copy';
 
     // For a horizontal seam (between left/right panes), detect top vs bottom half
     if (seamDirection === 'horizontal') {
@@ -90,31 +103,37 @@
     e.preventDefault();
     e.stopPropagation();
 
+    const zone = ancestorDropZone;
+    ancestorDropZone = null;
+    if (!zone) return;
+
+    // Try tab data first
+    const tabRaw = e.dataTransfer.getData('application/x-voice-mirror-tab');
+    if (tabRaw) {
+      let tabData;
+      try { tabData = JSON.parse(tabRaw); } catch { return; }
+      if (!tabData?.tabId) return;
+
+      const dir = (zone === 'top' || zone === 'bottom') ? 'vertical' : 'horizontal';
+      const before = (zone === 'top' || zone === 'left') ? 'before' : undefined;
+      const newId = editorGroupsStore.splitAncestor(editorGroupsStore.focusedGroupId, dir, before);
+      tabsStore.moveTab(tabData.tabId, newId);
+      window.dispatchEvent(new CustomEvent('tab-drag-end'));
+      return;
+    }
+
+    // Fall through to file-tree data
     let raw = e.dataTransfer.getData('application/x-voice-mirror-file');
-    if (!raw) raw = e.dataTransfer.getData('text/plain');
     if (!raw) return;
 
     let data;
     try { data = JSON.parse(raw); } catch { return; }
     if (data?.type !== 'file-tree' || !data.entry?.path) return;
 
-    const zone = ancestorDropZone;
-    ancestorDropZone = null;
-
-    if (zone === 'bottom') {
-      const newId = editorGroupsStore.splitAncestor(editorGroupsStore.focusedGroupId, 'vertical');
-      tabsStore.openFile(data.entry, newId);
-    } else if (zone === 'top') {
-      const newId = editorGroupsStore.splitAncestor(editorGroupsStore.focusedGroupId, 'vertical', 'before');
-      tabsStore.openFile(data.entry, newId);
-    } else if (zone === 'right') {
-      const newId = editorGroupsStore.splitAncestor(editorGroupsStore.focusedGroupId, 'horizontal');
-      tabsStore.openFile(data.entry, newId);
-    } else if (zone === 'left') {
-      const newId = editorGroupsStore.splitAncestor(editorGroupsStore.focusedGroupId, 'horizontal', 'before');
-      tabsStore.openFile(data.entry, newId);
-    }
-
+    const dir = (zone === 'top' || zone === 'bottom') ? 'vertical' : 'horizontal';
+    const before = (zone === 'top' || zone === 'left') ? 'before' : undefined;
+    const newId = editorGroupsStore.splitAncestor(editorGroupsStore.focusedGroupId, dir, before);
+    tabsStore.openFile(data.entry, newId);
     window.dispatchEvent(new CustomEvent('file-tree-drag-end'));
   }
 
@@ -261,7 +280,7 @@
         {/snippet}
       </SplitPanel>
       <!-- Seam drop zone: invisible overlay on the divider, active during file-tree drags -->
-      {#if fileTreeDragging}
+      {#if anyDragging}
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div
           class="seam-drop-zone"
@@ -281,7 +300,7 @@
 
 
 
-<div class="lens-workspace" ondragover={(e) => { if (fileTreeDragging) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; } }}>
+<div class="lens-workspace" ondragover={(e) => { if (anyDragging) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; } }}>
   <div class="workspace-content">
     <!-- Horizontal split: left-column (chat) | center+right -->
     <SplitPanel direction="horizontal" bind:ratio={chatRatio} minA={180} minB={400} collapseA={!layoutStore.showChat}>

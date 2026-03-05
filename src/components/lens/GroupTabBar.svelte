@@ -156,7 +156,6 @@
   function handleDragStart(e, tab) {
     e.dataTransfer.effectAllowed = 'move';
     const data = JSON.stringify({ tabId: tab.id, sourceGroupId: groupId });
-    e.dataTransfer.setData('text/plain', data);
     e.dataTransfer.setData('application/x-voice-mirror-tab', data);
     window.dispatchEvent(new CustomEvent('tab-drag-start'));
   }
@@ -180,7 +179,10 @@
     dragOverIndex = -1;
 
     try {
-      const raw = e.dataTransfer.getData('text/plain');
+      // Try custom MIME types first, then fall back to text/plain
+      let raw = e.dataTransfer.getData('application/x-voice-mirror-tab');
+      if (!raw) raw = e.dataTransfer.getData('application/x-voice-mirror-file');
+      if (!raw) raw = e.dataTransfer.getData('text/plain');
       const data = JSON.parse(raw);
 
       // File dropped from file tree → open in this group
