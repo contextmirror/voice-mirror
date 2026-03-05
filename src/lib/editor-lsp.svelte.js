@@ -89,6 +89,7 @@ export function createEditorLsp() {
   let showSignatureHelp = $state(false);
   let signatureHelpData = $state(null);
   let signatureHelpPos = $state(0);
+  let signatureHelpCoords = $state({ x: 0, y: 0 });
 
   let lspDebounceTimer = null;
 
@@ -406,6 +407,9 @@ export function createEditorLsp() {
         signatureHelpData = result.data;
         signatureHelpPos = pos;
         showSignatureHelp = true;
+        // Update cursor coordinates for tooltip positioning
+        const coords = view.coordsAtPos(pos);
+        if (coords) signatureHelpCoords = { x: coords.left, y: coords.top };
       } else {
         showSignatureHelp = false;
         signatureHelpData = null;
@@ -1158,6 +1162,7 @@ export function createEditorLsp() {
     get showSignatureHelp() { return showSignatureHelp; },
     get signatureHelpData() { return signatureHelpData; },
     get signatureHelpPos() { return signatureHelpPos; },
+    get signatureHelpCoords() { return signatureHelpCoords; },
 
     // Setters
     setHasLsp(val) { hasLsp = val; },

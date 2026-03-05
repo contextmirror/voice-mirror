@@ -85,8 +85,17 @@
         {/if}
       {/each}
     </div>
+    {#if activeSignature.documentation}
+      <div class="param-doc">
+        {typeof activeSignature.documentation === 'string'
+          ? activeSignature.documentation
+          : activeSignature.documentation?.value ?? ''}
+      </div>
+    {/if}
     {#if activeParam?.documentation}
       <div class="param-doc">
+        <span class="param-name">{typeof activeParam.label === 'string' ? activeParam.label : activeSignature.label.slice(...activeParam.label)}</span>
+        {' \u2014 '}
         {typeof activeParam.documentation === 'string'
           ? activeParam.documentation
           : activeParam.documentation?.value ?? ''}
@@ -135,6 +144,12 @@
     color: var(--muted);
     font-family: var(--font-family);
     font-size: 11px;
+  }
+
+  .param-name {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    color: var(--accent);
   }
 
   .signature-count {

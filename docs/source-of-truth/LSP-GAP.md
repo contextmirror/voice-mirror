@@ -119,18 +119,18 @@ VS Code remaps 8 "style check" diagnostic codes from Error → Warning. This is 
 
 | Feature | LSP Method | VS Code | Voice Mirror | Impl | Tested |
 |---------|-----------|---------|-------------|:----:|:------:|
-| Type definition | `textDocument/typeDefinition` | Full | Full (+ context menu) | ✅ | ❌ |
-| Go-to-declaration | `textDocument/declaration` | Full | Full | ✅ | |
-| Go-to-implementation | `textDocument/implementation` | Full | Full (+ Ctrl-F12 + context menu) | ✅ | |
-| Workspace symbols | `workspace/symbol` | Full | Full | ✅ | |
-| Call hierarchy | `callHierarchy/incomingCalls` | Full | Full | ✅ | |
-| Type hierarchy | `typeHierarchy/subtypes` | Full | Full | ✅ | |
+| Type definition | `textDocument/typeDefinition` | Full | Full (+ context menu) | ✅ | ✅ |
+| Go-to-declaration | `textDocument/declaration` | Full | Full (backend only — no menu for JS/TS, matching VS Code) | ✅ | ✅ |
+| Go-to-implementation | `textDocument/implementation` | Full | Full (+ Ctrl-F12 + context menu) | ✅ | ✅ |
+| Workspace symbols | `workspace/symbol` | Full | Full (backend + API, no UI yet) | ✅ | ⏭️ |
+| Call hierarchy | `callHierarchy/incomingCalls` | Full | Full (backend + API, no UI yet) | ✅ | ⏭️ |
+| Type hierarchy | `typeHierarchy/subtypes` | Full | Full (backend + API, no UI yet) | ✅ | ⏭️ |
 
 ### Inline Assistance
 
 | Feature | LSP Method | VS Code | Voice Mirror | Impl | Tested |
 |---------|-----------|---------|-------------|:----:|:------:|
-| Signature help | `textDocument/signatureHelp` | Full (auto on `(`) | Full (auto on `(` `,` + Ctrl+Shift+Space) | ✅ | |
+| Signature help | `textDocument/signatureHelp` | Full (auto on `(`) | Full (auto on `(` `,` + Ctrl+Shift+Space) | ✅ | ✅ |
 | Inlay hints | `textDocument/inlayHint` | Full (resolve on hover) | Full (+ CM extension) | ✅ | |
 | Code lens | `textDocument/codeLens` | Full (resolve + refresh) | Full (+ CM extension) | ✅ | |
 
@@ -173,12 +173,12 @@ VS Code remaps 8 "style check" diagnostic codes from Error → Warning. This is 
 |----------|---------|-------------|:----:|:------:|
 | Core (5) | 5/5 | 5/5 | 5/5 | 5/5 |
 | Navigation Tier 1 (5) | 5/5 | 5/5 | 5/5 | 5/5 |
-| Navigation Tier 2 (6) | 6/6 | 6/6 | 6/6 | 0/6 |
-| Inline Assistance (3) | 3/3 | 3/3 | 3/3 | 0/3 |
+| Navigation Tier 2 (6) | 6/6 | 6/6 | 6/6 | 3/6 ⏭️3 |
+| Inline Assistance (3) | 3/3 | 3/3 | 3/3 | 1/3 |
 | Formatting & Editing (5) | 5/5 | 5/5 | 5/5 | 0/5 |
 | Visual (3) | 3/3 | 3/3 | 3/3 | 0/3 |
 | Infrastructure (10) | 10/10 | 10/10 | 10/10 | 0/10 |
-| **Total** | **37/37** | **37/37** | **37/37** | **10/37** |
+| **Total** | **37/37** | **37/37** | **37/37** | **14/37** |
 
 > All features are implementation-complete including frontend CodeMirror wiring. The "Tested" column will be filled in during manual verification with screenshots.
 
@@ -290,7 +290,7 @@ VS Code remaps 8 "style check" diagnostic codes from Error → Warning. This is 
 | Issue | Detail | Priority |
 |-------|--------|----------|
 | Quick Fix keybinding (Ctrl+.) not working | Ctrl+. doesn't trigger code actions from keyboard — only works via right-click context menu → "Quick Fix..." | Medium |
-| Go to Type Definition not working | Right-click → "Go to Type Definition" does nothing. VS Code shows type definition correctly. | High |
+| ~~Go to Type Definition not working~~ | ~~Right-click → "Go to Type Definition" does nothing.~~ Works correctly — navigates to `.d.ts` type definitions. Was likely fixed by the languageId bug fix. | ~~High~~ ✅ |
 | ~~Hover tooltip positioned below cursor~~ | ~~Tooltip appeared below the line, blocking code.~~ Fixed: added `above: true` to tooltip config. | ~~Medium~~ ✅ |
 | ~~Missing `implicitProjectConfiguration` in workspace/configuration~~ | ~~False "Property does not exist" errors in JS files.~~ Fixed: added `workspace/didChangeConfiguration` notification + client-side diagnostic filtering (`code > 0 && code < 2000` for JS files, matching VS Code's checkJs=false behavior). | ~~High~~ ✅ |
 | ~~Smart tooltip positioning (VS Code parity)~~ | ~~Tooltips used fixed positioning.~~ Fixed: `applySmartPosition()` utility with VS Code-matching margins (30px top, 24px bottom), dynamic flip. Hover=above, rename/code actions=below. | ~~Medium~~ ✅ |
