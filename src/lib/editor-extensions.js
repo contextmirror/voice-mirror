@@ -445,6 +445,7 @@ export function buildEditorExtensions(cm, lsp, options) {
     ]));
     extensions.push(lsp.documentHighlightExtension(filePath, cm, cm));
     extensions.push(lsp.inlayHintExtension(filePath, cm, cm));
+    extensions.push(lsp.codeLensExtension(filePath, cm, cm));
   }
 
   // Ctrl+hover definition underline hint

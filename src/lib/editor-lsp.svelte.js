@@ -5,7 +5,7 @@
  * event listeners, handlers, and CodeMirror extension factories for the file editor.
  */
 
-import { lspOpenFile, lspCloseFile, lspChangeFile, lspSaveFile, lspRequestCompletion, lspRequestHover, lspRequestDefinition, lspRequestTypeDefinition, lspRequestDeclaration, lspRequestImplementation, lspRequestReferences, lspRequestDocumentHighlight, lspRequestInlayHints, lspPrepareRename, lspRename, lspApplyWorkspaceEdit, lspRequestCodeActions, lspRequestFormatting, lspRequestRangeFormatting, lspRequestSignatureHelp, lspRequestLinkedEditingRange, lspRequestOnTypeFormatting } from './api.js';
+import { lspOpenFile, lspCloseFile, lspChangeFile, lspSaveFile, lspRequestCompletion, lspRequestHover, lspRequestDefinition, lspRequestTypeDefinition, lspRequestDeclaration, lspRequestImplementation, lspRequestReferences, lspRequestDocumentHighlight, lspRequestInlayHints, lspRequestCodeLens, lspPrepareRename, lspRename, lspApplyWorkspaceEdit, lspRequestCodeActions, lspRequestFormatting, lspRequestRangeFormatting, lspRequestSignatureHelp, lspRequestLinkedEditingRange, lspRequestOnTypeFormatting } from './api.js';
 import { projectStore } from './stores/project.svelte.js';
 import { tabsStore } from './stores/tabs.svelte.js';
 import { basename } from './utils.js';
@@ -701,6 +701,106 @@ export function createEditorLsp() {
     });
   }
 
+  /**
+   * CodeMirror ViewPlugin that renders code lenses (reference counts, test links)
+   * via LSP textDocument/codeLens.
+   *
+   * @param {string} currentPath - current file path
+   * @param {typeof import('@codemirror/view')} cmView - CodeMirror view module
+   * @param {typeof import('@codemirror/state')} cmState - CodeMirror state module
+   * @returns {import('@codemirror/state').Extension} CM extension
+   */
+  function codeLensExtension(currentPath, cmView, cmState) {
+    const { ViewPlugin, Decoration, WidgetType } = cmView;
+    const { RangeSet } = cmState;
+
+    class CodeLensWidget extends WidgetType {
+      constructor(title) {
+        super();
+        this.title = title;
+      }
+
+      toDOM() {
+        const span = document.createElement('span');
+        span.className = 'cm-code-lens';
+        span.textContent = this.title;
+        return span;
+      }
+
+      eq(other) {
+        return this.title === other.title;
+      }
+
+      ignoreEvent() { return true; }
+    }
+
+    return ViewPlugin.fromClass(class {
+      constructor(view) {
+        this.decorations = RangeSet.empty;
+        this._timer = null;
+        this._reqId = 0;
+        this._scheduleRequest(view);
+      }
+
+      update(update) {
+        if (!update.docChanged) return;
+        this._scheduleRequest(update.view);
+      }
+
+      _scheduleRequest(view) {
+        clearTimeout(this._timer);
+        if (!hasLsp || !currentPath) return;
+
+        const reqId = ++this._reqId;
+        this._timer = setTimeout(() => {
+          this._requestLenses(view, reqId);
+        }, 1000);
+      }
+
+      async _requestLenses(view, reqId) {
+        try {
+          const root = projectStore.root;
+          const result = await lspRequestCodeLens(currentPath, root);
+          if (reqId !== this._reqId) return;
+
+          if (!result?.data?.lenses?.length) {
+            this.decorations = RangeSet.empty;
+            view.requestMeasure();
+            return;
+          }
+
+          const doc = view.state.doc;
+          const widgets = [];
+          for (const lens of result.data.lenses) {
+            // Skip lenses without a command (they need codeLens/resolve)
+            if (!lens.command?.title) continue;
+            const pos = lspPositionToOffset(doc, lens.range.start);
+            if (pos >= 0 && pos <= doc.length) {
+              widgets.push(
+                Decoration.widget({
+                  widget: new CodeLensWidget(lens.command.title),
+                  side: -1, // before the line content
+                  block: true,
+                }).range(pos)
+              );
+            }
+          }
+          widgets.sort((a, b) => a.from - b.from);
+          this.decorations = RangeSet.of(widgets);
+          view.requestMeasure();
+        } catch {
+          // Silently ignore — code lenses are best-effort
+        }
+      }
+
+      destroy() {
+        clearTimeout(this._timer);
+      }
+    }, {
+      decorations: v => v.decorations,
+    });
+  }
+
   function diagnosticListener(currentPath, getView, cmCache) {
     return (event) => {
       const { uri, diagnostics: lspDiags } = event.payload;
@@ -796,6 +896,7 @@ export function createEditorLsp() {
     hoverTooltipExtension,
     documentHighlightExtension,
     inlayHintExtension,
+    codeLensExtension,
     diagnosticListener,
 
     // Lifecycle

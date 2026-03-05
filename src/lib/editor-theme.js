@@ -243,6 +243,15 @@ const editorTheme = EditorView.theme({
   '.cm-inlay-hint-parameter': {
     opacity: '0.8',
   },
+  // ── Code lens (reference counts, test actions) ──
+  '.cm-code-lens': {
+    color: '#969696',
+    fontSize: '0.85em',
+    fontFamily: 'inherit',
+    padding: '2px 0',
+    display: 'block',
+    cursor: 'default',
+  },
 }, { dark: true });
 
 // ── Syntax highlighting ──
