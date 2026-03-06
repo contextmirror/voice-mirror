@@ -273,10 +273,10 @@ describe('voice: message deduplication', () => {
     );
   });
 
-  it('bounds the set size to prevent memory leaks', () => {
+  it('resets dedup set on mcp-session-start', () => {
     assert.ok(
-      src.includes('seenMessageIds.size > 100') || src.includes('seenMessageIds.size >='),
-      'Should bound the dedup set size'
+      src.includes('seenMessageIds.clear()'),
+      'Should clear seenMessageIds when a new session starts'
     );
   });
 });

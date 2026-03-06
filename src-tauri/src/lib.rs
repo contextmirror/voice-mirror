@@ -664,6 +664,10 @@ pub fn run() {
                 }
             }
 
+            // Clear stale inbox messages from previous sessions before starting the watcher.
+            // Prevents old AI responses from leaking into new sessions as phantom TTS.
+            services::inbox_watcher::clear_inbox();
+
             // Start inbox watcher for MCP message bridge (file-based fallback)
             match services::inbox_watcher::start_inbox_watcher(app.handle().clone()) {
                 Ok(handle) => {

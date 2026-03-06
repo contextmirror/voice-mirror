@@ -77,14 +77,6 @@ impl WatcherState {
         for msg in messages {
             self.seen_ids.insert(msg.id.clone());
         }
-        // Cap at 200 entries
-        if self.seen_ids.len() > 200 {
-            let excess = self.seen_ids.len() - 200;
-            let to_remove: Vec<String> = self.seen_ids.iter().take(excess).cloned().collect();
-            for id in to_remove {
-                self.seen_ids.remove(&id);
-            }
-        }
     }
 
     /// Check if we've already seen this message ID.
@@ -95,12 +87,6 @@ impl WatcherState {
     /// Mark a message ID as seen.
     fn mark_seen(&mut self, id: String) {
         self.seen_ids.insert(id);
-        // Keep bounded
-        if self.seen_ids.len() > 200 {
-            if let Some(first) = self.seen_ids.iter().next().cloned() {
-                self.seen_ids.remove(&first);
-            }
-        }
     }
 }
 
@@ -123,6 +109,20 @@ pub fn get_mcp_data_dir() -> PathBuf {
 /// Get the path to the MCP inbox file.
 pub fn get_inbox_path() -> PathBuf {
     get_mcp_data_dir().join("inbox.json")
+}
+
+/// Clear the inbox file, resetting it to an empty message list.
+///
+/// Called on app startup and when a new MCP session begins (pipe Ready)
+/// to prevent stale messages from leaking across sessions.
+pub fn clear_inbox() {
+    let inbox_path = get_inbox_path();
+    if inbox_path.exists() {
+        match std::fs::write(&inbox_path, r#"{"messages":[]}"#) {
+            Ok(()) => info!("Cleared inbox.json for new session"),
+            Err(e) => warn!("Failed to clear inbox.json: {}", e),
+        }
+    }
 }
 
 /// Read and parse the inbox file.

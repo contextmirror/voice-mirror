@@ -219,6 +219,11 @@ fn dispatch_message(msg: McpToApp, app_handle: &AppHandle) {
         }
         McpToApp::Ready => {
             info!("[PipeServer] MCP binary ready (pipe handshake complete)");
+            // New Claude session — clear stale inbox messages and notify frontend
+            crate::services::inbox_watcher::clear_inbox();
+            if let Err(e) = app_handle.emit("mcp-session-start", ()) {
+                warn!("[PipeServer] Failed to emit mcp-session-start: {}", e);
+            }
         }
         McpToApp::BrowserRequest { request_id, action, args } => {
             info!(
