@@ -10,6 +10,8 @@
   import { toastStore } from '../../lib/stores/toast.svelte.js';
   import { switchProvider } from '../../lib/stores/ai-status.svelte.js';
   import { navigationStore } from '../../lib/stores/navigation.svelte.js';
+  import { projectStore } from '../../lib/stores/project.svelte.js';
+  import { open as openDialog } from '@tauri-apps/plugin-dialog';
   import { scanProviders as apiScanProviders, listModels as apiListModels } from '../../lib/api.js';
   import { unwrapResult } from '../../lib/utils.js';
   import {
@@ -58,6 +60,7 @@
   let scanning = $state(false);
   let saving = $state(false);
   let hasScanned = $state(false);
+  let selectedWorkspace = $state('');
 
   // Provider dropdown state
   let providerDropdownOpen = $state(false);
@@ -110,6 +113,9 @@
     // Use cfgProvider (not local `provider`) to avoid circular dependency
     const ep = cfg.ai?.endpoints || {};
     endpoint = ep[cfgProvider] || DEFAULT_ENDPOINTS[cfgProvider] || '';
+
+    // Restore last-used workspace for CLI providers (default to active project)
+    selectedWorkspace = cfg.ai?.lastWorkspace ?? projectStore.activeProject?.path ?? '';
   });
 
   // ---- Click-outside handler for provider dropdown ----
@@ -244,6 +250,13 @@
     }
   }
 
+  // ---- Workspace picker (CLI providers) ----
+
+  async function browseWorkspace() {
+    const selected = await openDialog({ directory: true });
+    if (selected) selectedWorkspace = selected;
+  }
+
   // ---- Save ----
 
   async function saveAISettings() {
@@ -262,6 +275,11 @@
       // Include endpoint for local providers
       if (isLocal && endpoint) {
         patch.ai.endpoints = { [provider]: endpoint };
+      }
+
+      // Persist last-used workspace for CLI providers
+      if (isCLI && selectedWorkspace) {
+        patch.ai.lastWorkspace = selectedWorkspace;
       }
 
       // Only include non-empty API keys
@@ -283,6 +301,7 @@
         apiKey: filteredKeys[provider] || undefined,
         contextLength: Number(contextLength),
         systemPrompt: systemPrompt || undefined,
+        cwd: (isCLI && selectedWorkspace) ? selectedWorkspace : undefined,
       });
 
       // 3. Auto-switch view: Terminal for CLI, Chat for API, stay for dictation
@@ -383,6 +402,32 @@
           CLI providers use their own terminal process. Model selection and
           configuration happen inside the CLI tool, not here.
         </div>
+
+        <!-- Workspace picker for CLI providers -->
+        <div class="workspace-select-row">
+          <!-- svelte-ignore a11y_label_has_associated_control -->
+          <label class="setting-label">Workspace</label>
+          <div class="workspace-select-wrapper">
+            <select
+              class="workspace-select"
+              value={selectedWorkspace}
+              onchange={(e) => (selectedWorkspace = /** @type {HTMLSelectElement} */ (e.target).value)}
+            >
+              <option value="">Voice Mirror (default)</option>
+              {#each projectStore.entries as project}
+                <option value={project.path}>{project.name}</option>
+              {/each}
+            </select>
+            <button class="workspace-browse-btn" type="button" onclick={browseWorkspace} title="Browse for folder...">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+        {#if selectedWorkspace}
+          <div class="workspace-path-hint">{selectedWorkspace}</div>
+        {/if}
       {/if}
 
       {#if isDictation}
@@ -717,6 +762,75 @@
     font-size: 11px;
     color: var(--muted);
     pointer-events: none;
+  }
+
+  /* ---- Workspace picker (CLI providers) ---- */
+
+  .workspace-select-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px;
+    gap: 16px;
+  }
+
+  .workspace-select-wrapper {
+    min-width: 220px;
+    display: flex;
+    gap: 6px;
+  }
+
+  .workspace-select {
+    flex: 1;
+    padding: 10px 32px 10px 14px;
+    background: var(--bg-hover);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-strong);
+    font-size: 14px;
+    font-family: var(--font-family);
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2' xmlns='http://www.w3.org/2000/svg'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    background-size: 16px;
+    transition: border-color 0.15s ease;
+  }
+
+  .workspace-select:hover {
+    border-color: var(--border-strong);
+  }
+
+  .workspace-select:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px var(--accent-glow);
+  }
+
+  .workspace-browse-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px;
+    background: var(--bg-hover);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--muted);
+    cursor: pointer;
+    transition: border-color 0.15s ease, color 0.15s ease;
+  }
+
+  .workspace-browse-btn:hover {
+    border-color: var(--border-strong);
+    color: var(--text);
+  }
+
+  .workspace-path-hint {
+    padding: 2px 12px 8px;
+    font-size: 11px;
+    color: var(--muted);
+    word-break: break-all;
   }
 
   .settings-actions {
