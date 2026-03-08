@@ -38,7 +38,7 @@ url = "2"
 regex = "1"
 
 # Voice engine dependencies
-cpal = "0.15"
+cpal = "0.17"
 rodio = "0.19"
 
 # STT: whisper-rs (C++ FFI to whisper.cpp)
