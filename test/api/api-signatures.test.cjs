@@ -117,6 +117,11 @@ describe('api.js -- critical Tauri command names', () => {
     'lens_find_next',
     'lens_find_previous',
     'lens_close_find',
+    // Browser History
+    'lens_add_history_entry',
+    'lens_get_history',
+    'lens_clear_history',
+    'lens_delete_history_entry',
     // GPU / Model Management
     'detect_gpu',
     'list_stt_models',
@@ -390,6 +395,11 @@ describe('api.js -- exported async functions', () => {
     'listProjectChannels',
     'getOutputLogs',
     'logFrontendError',
+    // Browser History
+    'lensAddHistoryEntry',
+    'lensGetHistory',
+    'lensClearHistory',
+    'lensDeleteHistoryEntry',
   ];
 
   for (const fn of expectedExports) {
@@ -413,7 +423,7 @@ describe('api.js -- exported async functions', () => {
 });
 
 describe('api.js -- section organization', () => {
-  const sections = ['Config', 'Window', 'Voice', 'AI', 'Inbox', 'Chat', 'Screenshot', 'Tools', 'Shortcuts', 'Performance Stats', 'Config Migration', 'Design Overlay', 'Lens', 'Browser Tabs', 'Dev Server', 'GPU / Model Management', 'Files', 'Terminal', 'LSP', 'Project Output Channels', 'Output / Diagnostics'];
+  const sections = ['Config', 'Window', 'Voice', 'AI', 'Inbox', 'Chat', 'Screenshot', 'Tools', 'Shortcuts', 'Performance Stats', 'Config Migration', 'Design Overlay', 'Lens', 'Browser Tabs', 'Browser History', 'Dev Server', 'GPU / Model Management', 'Files', 'Terminal', 'LSP', 'Project Output Channels', 'Output / Diagnostics'];
 
   for (const section of sections) {
     it(`has "${section}" section comment`, () => {

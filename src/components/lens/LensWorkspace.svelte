@@ -4,6 +4,7 @@
   import LensToolbar from './LensToolbar.svelte';
   import DesignToolbar from './DesignToolbar.svelte';
   import FindBar from './FindBar.svelte';
+  import HistoryPanel from './HistoryPanel.svelte';
   import LensPreview from './LensPreview.svelte';
   import BrowserTabBar from './BrowserTabBar.svelte';
   import FileTree from './FileTree.svelte';
@@ -20,6 +21,7 @@
   import { layoutStore } from '../../lib/stores/layout.svelte.js';
   import { lensStore } from '../../lib/stores/lens.svelte.js';
   import { browserTabsStore } from '../../lib/stores/browser-tabs.svelte.js';
+  import { browserHistoryStore } from '../../lib/stores/browser-history.svelte.js';
   import { lensSetVisible, startFileWatching, stopFileWatching, lensCapturePreview, lspShutdown, lensSetZoom, lensGetZoom } from '../../lib/api.js';
   import { attachmentsStore } from '../../lib/stores/attachments.svelte.js';
   import { projectStore } from '../../lib/stores/project.svelte.js';
@@ -99,6 +101,17 @@
 
   // ── Find on Page ──
   let findBarVisible = $state(false);
+
+  // ── History Panel ──
+  let showHistory = $state(false);
+
+  // Init browser history store when browser is shown; destroy on cleanup
+  $effect(() => {
+    browserHistoryStore.init();
+    return () => {
+      browserHistoryStore.destroy();
+    };
+  });
 
   function toggleFind() {
     findBarVisible = !findBarVisible;
@@ -420,6 +433,7 @@
                             onZoomOut={handleZoomOut}
                             onZoomReset={handleZoomReset}
                             onFind={toggleFind}
+                            onHistory={() => showHistory = true}
                           />
                           {#if lensStore.designMode}
                             <DesignToolbar
@@ -430,6 +444,9 @@
                           {/if}
                           <FindBar visible={findBarVisible} onClose={() => { findBarVisible = false; }} />
                           <LensPreview bind:this={lensPreviewRef} />
+                          {#if showHistory}
+                            <HistoryPanel onClose={() => showHistory = false} />
+                          {/if}
                         </div>
                       </div>
                     {/snippet}

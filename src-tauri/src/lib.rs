@@ -376,6 +376,11 @@ pub fn run() {
             lens_cmds::lens_find_next,
             lens_cmds::lens_find_previous,
             lens_cmds::lens_close_find,
+            // Browser History
+            lens_cmds::lens_add_history_entry,
+            lens_cmds::lens_get_history,
+            lens_cmds::lens_clear_history,
+            lens_cmds::lens_delete_history_entry,
             // File tree
             files_cmds::list_directory,
             files_cmds::get_git_changes,

@@ -421,6 +421,24 @@ export async function lensCloseFind(tabId) {
   return invoke('lens_close_find', { tabId });
 }
 
+// ============ Browser History ============
+
+export async function lensAddHistoryEntry(url, title) {
+  return invoke('lens_add_history_entry', { url, title });
+}
+
+export async function lensGetHistory() {
+  return invoke('lens_get_history', {});
+}
+
+export async function lensClearHistory() {
+  return invoke('lens_clear_history', {});
+}
+
+export async function lensDeleteHistoryEntry(timestamp) {
+  return invoke('lens_delete_history_entry', { timestamp });
+}
+
 // ============ Device Preview ============
 
 export async function lensCreateDeviceWebview({ presetId, url, width, height, x, y }) {
