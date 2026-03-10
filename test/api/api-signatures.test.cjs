@@ -269,6 +269,8 @@ describe('api.js -- exported async functions', () => {
     'lensCloseTab',
     'lensSwitchTab',
     'lensCloseAllTabs',
+    'lensSetZoom',
+    'lensGetZoom',
     // Device Preview
     'lensCreateDeviceWebview',
     'lensCloseDeviceWebview',

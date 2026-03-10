@@ -19,7 +19,7 @@
   import { layoutStore } from '../../lib/stores/layout.svelte.js';
   import { lensStore } from '../../lib/stores/lens.svelte.js';
   import { browserTabsStore } from '../../lib/stores/browser-tabs.svelte.js';
-  import { lensSetVisible, startFileWatching, stopFileWatching, lensCapturePreview, lspShutdown } from '../../lib/api.js';
+  import { lensSetVisible, startFileWatching, stopFileWatching, lensCapturePreview, lspShutdown, lensSetZoom, lensGetZoom } from '../../lib/api.js';
   import { attachmentsStore } from '../../lib/stores/attachments.svelte.js';
   import { projectStore } from '../../lib/stores/project.svelte.js';
   import { lspDiagnosticsStore } from '../../lib/stores/lsp-diagnostics.svelte.js';
@@ -43,6 +43,64 @@
   // Browser is a fixed UI element, not a tab — follows the first (leftmost) group
   let showBrowser = $state(false);
   let firstGroupId = $derived(editorGroupsStore.allGroupIds[0]);
+
+  // ── Zoom ──
+  const ZOOM_LEVELS = [25, 33, 50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200];
+  let zoomLevel = $state(100);
+
+  function getNextZoom(direction) {
+    const current = zoomLevel;
+    if (direction === 'in') {
+      return ZOOM_LEVELS.find(z => z > current) ?? ZOOM_LEVELS[ZOOM_LEVELS.length - 1];
+    } else {
+      return [...ZOOM_LEVELS].reverse().find(z => z < current) ?? ZOOM_LEVELS[0];
+    }
+  }
+
+  async function setZoom(factor) {
+    const tabId = browserTabsStore.activeTabId;
+    if (!tabId) return;
+    try {
+      const resp = await lensSetZoom(tabId, factor / 100);
+      if (resp?.data?.zoomFactor) {
+        zoomLevel = Math.round(resp.data.zoomFactor * 100);
+      }
+    } catch (err) {
+      console.warn('[LensWorkspace] setZoom failed:', err);
+    }
+  }
+
+  function handleZoomIn() { setZoom(getNextZoom('in')); }
+  function handleZoomOut() { setZoom(getNextZoom('out')); }
+  function handleZoomReset() { setZoom(100); }
+
+  async function refreshZoomForTab(tabId) {
+    if (!tabId) { zoomLevel = 100; return; }
+    try {
+      const resp = await lensGetZoom(tabId);
+      zoomLevel = resp?.data?.zoomFactor ? Math.round(resp.data.zoomFactor * 100) : 100;
+    } catch {
+      zoomLevel = 100;
+    }
+  }
+
+  // Listen for lens-zoom CustomEvent dispatched from App.svelte
+  $effect(() => {
+    function onLensZoom(e) {
+      const dir = e.detail;
+      if (dir === 'in') handleZoomIn();
+      else if (dir === 'out') handleZoomOut();
+      else if (dir === 'reset') handleZoomReset();
+    }
+    window.addEventListener('lens-zoom', onLensZoom);
+    return () => window.removeEventListener('lens-zoom', onLensZoom);
+  });
+
+  // Refresh zoom level when active tab changes
+  $effect(() => {
+    const tabId = browserTabsStore.activeTabId;
+    refreshZoomForTab(tabId);
+  });
 
   // Track drag state to suppress stop-sign cursor across the workspace
   let fileTreeDragging = $state(false);
@@ -339,7 +397,12 @@
                         <!-- Browser layer: overlays editor content when visible (tab bar stays above) -->
                         <div class="preview-layer" class:visible={showBrowser}>
                           <BrowserTabBar onNewTab={() => lensPreviewRef?.createNewTab()} />
-                          <LensToolbar />
+                          <LensToolbar
+                            {zoomLevel}
+                            onZoomIn={handleZoomIn}
+                            onZoomOut={handleZoomOut}
+                            onZoomReset={handleZoomReset}
+                          />
                           {#if lensStore.designMode}
                             <DesignToolbar
                               onSend={handleDesignSend}

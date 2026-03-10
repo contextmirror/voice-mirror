@@ -400,6 +400,14 @@ export async function lensCloseAllTabs() {
   return invoke('lens_close_all_tabs');
 }
 
+export async function lensSetZoom(tabId, factor) {
+  return invoke('lens_set_zoom', { tabId, factor });
+}
+
+export async function lensGetZoom(tabId) {
+  return invoke('lens_get_zoom', { tabId });
+}
+
 // ============ Device Preview ============
 
 export async function lensCreateDeviceWebview({ presetId, url, width, height, x, y }) {
