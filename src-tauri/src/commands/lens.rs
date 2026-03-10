@@ -14,6 +14,7 @@ const MAX_DEVICE_WEBVIEWS: usize = 3;
 /// A single browser tab backed by a native WebView2 instance.
 pub struct BrowserTab {
     pub webview_label: String,
+    pub zoom_factor: f64,
 }
 
 /// A device-preview webview tied to a responsive-design preset.
@@ -411,7 +412,7 @@ pub async fn lens_create_tab(
     {
         let mut tabs = state.tabs.lock()
             .map_err(|e| format!("Lock error: {}", e))?;
-        tabs.insert(tab_id.clone(), BrowserTab { webview_label: label.clone() });
+        tabs.insert(tab_id.clone(), BrowserTab { webview_label: label.clone(), zoom_factor: 1.0 });
     }
     {
         let mut active = state.active_tab_id.lock()
@@ -643,7 +644,7 @@ pub async fn lens_create_webview(
     {
         let mut tabs = state.tabs.lock()
             .map_err(|e| format!("Lock error: {}", e))?;
-        tabs.insert(tab_id.clone(), BrowserTab { webview_label: label.clone() });
+        tabs.insert(tab_id.clone(), BrowserTab { webview_label: label.clone(), zoom_factor: 1.0 });
     }
     {
         let mut active = state.active_tab_id.lock()
@@ -1213,5 +1214,61 @@ pub async fn lens_eval_device_js(
         Ok("ok".to_string())
     } else {
         Err(format!("Webview '{}' not found in app", label))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Zoom
+// ---------------------------------------------------------------------------
+
+/// Set the zoom level of a browser tab's WebView2 instance.
+/// Uses `ICoreWebView2Controller::SetZoomFactor` (synchronous COM call).
+/// The factor is clamped to [0.25, 2.0].
+#[tauri::command]
+pub fn lens_set_zoom(
+    app: AppHandle,
+    tab_id: String,
+    factor: f64,
+    state: tauri::State<'_, LensState>,
+) -> IpcResponse {
+    let tabs = state.tabs.lock().unwrap();
+    let tab = match tabs.get(&tab_id) {
+        Some(t) => t,
+        None => return IpcResponse::err("Tab not found"),
+    };
+    let label = tab.webview_label.clone();
+    drop(tabs);
+
+    let factor_clamped = factor.clamp(0.25, 2.0);
+
+    if let Some(webview) = app.get_webview(&label) {
+        let _ = webview.with_webview(move |platform_webview| {
+            #[cfg(windows)]
+            unsafe {
+                let controller = platform_webview.controller();
+                let _ = controller.SetZoomFactor(factor_clamped);
+            }
+        });
+
+        let mut tabs = state.tabs.lock().unwrap();
+        if let Some(tab) = tabs.get_mut(&tab_id) {
+            tab.zoom_factor = factor_clamped;
+        }
+        IpcResponse::ok(serde_json::json!({ "zoomFactor": factor_clamped }))
+    } else {
+        IpcResponse::err("Webview not found")
+    }
+}
+
+/// Get the current zoom factor for a browser tab.
+#[tauri::command]
+pub fn lens_get_zoom(
+    tab_id: String,
+    state: tauri::State<'_, LensState>,
+) -> IpcResponse {
+    let tabs = state.tabs.lock().unwrap();
+    match tabs.get(&tab_id) {
+        Some(tab) => IpcResponse::ok(serde_json::json!({ "zoomFactor": tab.zoom_factor })),
+        None => IpcResponse::err("Tab not found"),
     }
 }
