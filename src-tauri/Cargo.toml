@@ -85,6 +85,9 @@ tauri-plugin-decorum = "1.1.1"
 # Cross-platform trash/recycle bin support
 trash = "5"
 
+# Open files/folders with the OS default handler
+opener = "0.7"
+
 # Direct WebView2 COM access for JS eval + screenshot capture (Windows only)
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.38"

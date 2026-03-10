@@ -264,6 +264,7 @@ pub fn run() {
             active_tab_id: std::sync::Mutex::new(None),
             bounds: std::sync::Mutex::new(None),
             device_webviews: std::sync::Mutex::new(Vec::new()),
+            downloads: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
         })
         .manage(services::file_watcher::FileWatcherState {
             handle: std::sync::Mutex::new(None),
@@ -381,6 +382,11 @@ pub fn run() {
             lens_cmds::lens_get_history,
             lens_cmds::lens_clear_history,
             lens_cmds::lens_delete_history_entry,
+            // Downloads
+            lens_cmds::lens_get_downloads,
+            lens_cmds::lens_clear_downloads,
+            lens_cmds::lens_open_download,
+            lens_cmds::lens_open_download_folder,
             // File tree
             files_cmds::list_directory,
             files_cmds::get_git_changes,

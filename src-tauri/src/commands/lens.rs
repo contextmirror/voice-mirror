@@ -2,8 +2,23 @@ use super::IpcResponse;
 use tauri::{AppHandle, Emitter, Manager};
 use tauri::{LogicalPosition, LogicalSize, Position, Size, WebviewBuilder};
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 use tracing::{info, warn};
+
+static DOWNLOAD_COUNTER: AtomicU64 = AtomicU64::new(1);
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct DownloadEntry {
+    pub id: String,
+    pub filename: String,
+    pub url: String,
+    pub total_bytes: i64,
+    pub received_bytes: i64,
+    pub state: String, // "downloading", "completed", "interrupted"
+    pub path: String,
+    pub timestamp: u128,
+}
 
 /// Maximum number of browser tabs allowed.
 const MAX_TABS: usize = 8;
@@ -31,6 +46,8 @@ pub struct LensState {
     pub bounds: Mutex<Option<(f64, f64, f64, f64)>>,
     /// Device-preview webviews for responsive design mode.
     pub device_webviews: Mutex<Vec<DeviceWebview>>,
+    /// In-memory download tracker. Arc allows cloning into COM handler closures.
+    pub downloads: Arc<Mutex<Vec<DownloadEntry>>>,
 }
 
 /// Get the active lens webview from state, or return an IpcResponse error.
@@ -287,6 +304,258 @@ const CONSOLE_HOOK_SCRIPT: &str = r#"
 })();
 "#;
 
+/// Hook the WebView2 `DownloadStarting` event so file downloads are tracked
+/// and progress is emitted to the frontend.  Called once per newly-created
+/// child webview.
+///
+/// `SetHandled(false)` lets WebView2 use its built-in Save-As dialog while we
+/// still receive state-change and progress callbacks.
+fn register_download_handler(
+    app: &AppHandle,
+    webview: &tauri::Webview,
+    downloads: Arc<Mutex<Vec<DownloadEntry>>>,
+) {
+    let app_handle = app.clone();
+    let _ = webview.with_webview(move |platform_webview| {
+        #[cfg(windows)]
+        {
+            use webview2_com::{
+                DownloadStartingEventHandler,
+                StateChangedEventHandler,
+                BytesReceivedChangedEventHandler,
+                take_pwstr,
+            };
+            use webview2_com::Microsoft::Web::WebView2::Win32::*;
+            use windows_core::Interface;
+
+            unsafe {
+                let controller = platform_webview.controller();
+                let core_webview = match controller.CoreWebView2() {
+                    Ok(wv) => wv,
+                    Err(e) => {
+                        warn!("[lens] Failed to get CoreWebView2 for download handler: {:?}", e);
+                        return;
+                    }
+                };
+
+                let wv4: ICoreWebView2_4 = match core_webview.cast() {
+                    Ok(v) => v,
+                    Err(e) => {
+                        warn!("[lens] Failed to cast to ICoreWebView2_4: {:?}", e);
+                        return;
+                    }
+                };
+
+                let downloads_for_handler = downloads.clone();
+                let app_for_handler = app_handle.clone();
+
+                let handler = DownloadStartingEventHandler::create(Box::new(
+                    move |_sender, args| {
+                        let args = match args {
+                            Some(a) => a,
+                            None => return Ok(()),
+                        };
+
+                        // Get download operation
+                        let download_op = args.DownloadOperation()?;
+
+                        // Get result file path from args (where WebView2 will save)
+                        let mut result_path_pwstr = windows_core::PWSTR::null();
+                        args.ResultFilePath(&mut result_path_pwstr)?;
+                        let result_path = take_pwstr(result_path_pwstr);
+
+                        // Extract filename from the path
+                        let filename = std::path::Path::new(&result_path)
+                            .file_name()
+                            .map(|n| n.to_string_lossy().to_string())
+                            .unwrap_or_else(|| "download".to_string());
+
+                        // Get URI from download operation
+                        let mut uri_pwstr = windows_core::PWSTR::null();
+                        download_op.Uri(&mut uri_pwstr)?;
+                        let uri = take_pwstr(uri_pwstr);
+
+                        // Get total bytes
+                        let mut total_bytes: i64 = -1;
+                        let _ = download_op.TotalBytesToReceive(&mut total_bytes);
+
+                        // Generate unique download ID
+                        let dl_id = format!("dl-{}", DOWNLOAD_COUNTER.fetch_add(1, Ordering::Relaxed));
+
+                        let timestamp = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_millis();
+
+                        let entry = DownloadEntry {
+                            id: dl_id.clone(),
+                            filename: filename.clone(),
+                            url: uri.clone(),
+                            total_bytes,
+                            received_bytes: 0,
+                            state: "downloading".to_string(),
+                            path: result_path.clone(),
+                            timestamp,
+                        };
+
+                        // Store entry
+                        if let Ok(mut guard) = downloads_for_handler.lock() {
+                            guard.push(entry.clone());
+                        }
+
+                        // Emit start event
+                        let _ = app_for_handler.emit(
+                            "lens-download-started",
+                            serde_json::json!({
+                                "id": dl_id,
+                                "filename": filename,
+                                "url": uri,
+                                "totalBytes": total_bytes,
+                                "path": result_path,
+                                "timestamp": timestamp,
+                            }),
+                        );
+
+                        info!("[lens] Download started: {} -> {}", filename, result_path);
+
+                        // Let WebView2 use its default Save-As dialog
+                        args.SetHandled(false)?;
+
+                        // Register BytesReceivedChanged handler for progress updates
+                        {
+                            let dl_id_progress = dl_id.clone();
+                            let app_progress = app_for_handler.clone();
+                            let downloads_progress = downloads_for_handler.clone();
+
+                            let progress_handler = BytesReceivedChangedEventHandler::create(
+                                Box::new(move |sender, _args| {
+                                    let op = match sender {
+                                        Some(ref op) => op,
+                                        None => return Ok(()),
+                                    };
+
+                                    let mut received: i64 = 0;
+                                    let _ = op.BytesReceived(&mut received);
+                                    let mut total: i64 = -1;
+                                    let _ = op.TotalBytesToReceive(&mut total);
+
+                                    // Update in-memory entry
+                                    if let Ok(mut guard) = downloads_progress.lock() {
+                                        if let Some(entry) = guard.iter_mut().find(|e| e.id == dl_id_progress) {
+                                            entry.received_bytes = received;
+                                            if total > 0 {
+                                                entry.total_bytes = total;
+                                            }
+                                        }
+                                    }
+
+                                    let _ = app_progress.emit(
+                                        "lens-download-progress",
+                                        serde_json::json!({
+                                            "id": dl_id_progress,
+                                            "receivedBytes": received,
+                                            "totalBytes": total,
+                                        }),
+                                    );
+
+                                    Ok(())
+                                }),
+                            );
+
+                            let mut progress_token: i64 = 0;
+                            let _ = download_op.add_BytesReceivedChanged(
+                                &progress_handler,
+                                &mut progress_token,
+                            );
+                        }
+
+                        // Register StateChanged handler for completion/interruption
+                        {
+                            let dl_id_state = dl_id.clone();
+                            let app_state = app_for_handler.clone();
+                            let downloads_state = downloads_for_handler.clone();
+
+                            let state_handler = StateChangedEventHandler::create(Box::new(
+                                move |sender, _args| {
+                                    let op = match sender {
+                                        Some(ref op) => op,
+                                        None => return Ok(()),
+                                    };
+
+                                    let mut download_state = COREWEBVIEW2_DOWNLOAD_STATE_IN_PROGRESS;
+                                    op.State(&mut download_state)?;
+
+                                    let mut received: i64 = 0;
+                                    let _ = op.BytesReceived(&mut received);
+                                    let mut total: i64 = -1;
+                                    let _ = op.TotalBytesToReceive(&mut total);
+
+                                    // Get the final result file path (may differ from initial)
+                                    let mut final_path_pwstr = windows_core::PWSTR::null();
+                                    let _ = op.ResultFilePath(&mut final_path_pwstr);
+                                    let final_path = take_pwstr(final_path_pwstr);
+
+                                    let state_str = match download_state {
+                                        COREWEBVIEW2_DOWNLOAD_STATE_COMPLETED => "completed",
+                                        COREWEBVIEW2_DOWNLOAD_STATE_INTERRUPTED => "interrupted",
+                                        _ => "downloading",
+                                    };
+
+                                    // Update in-memory entry
+                                    if let Ok(mut guard) = downloads_state.lock() {
+                                        if let Some(entry) = guard.iter_mut().find(|e| e.id == dl_id_state) {
+                                            entry.state = state_str.to_string();
+                                            entry.received_bytes = received;
+                                            if total > 0 {
+                                                entry.total_bytes = total;
+                                            }
+                                            if !final_path.is_empty() {
+                                                entry.path = final_path.clone();
+                                            }
+                                        }
+                                    }
+
+                                    let _ = app_state.emit(
+                                        "lens-download-progress",
+                                        serde_json::json!({
+                                            "id": dl_id_state,
+                                            "receivedBytes": received,
+                                            "totalBytes": total,
+                                            "state": state_str,
+                                            "path": final_path,
+                                        }),
+                                    );
+
+                                    if state_str != "downloading" {
+                                        info!("[lens] Download {}: {} ({})", state_str, dl_id_state, final_path);
+                                    }
+
+                                    Ok(())
+                                },
+                            ));
+
+                            let mut state_token: i64 = 0;
+                            let _ = download_op.add_StateChanged(
+                                &state_handler,
+                                &mut state_token,
+                            );
+                        }
+
+                        Ok(())
+                    },
+                ));
+
+                let mut token: i64 = 0;
+                if let Err(e) = wv4.add_DownloadStarting(&handler, &mut token) {
+                    warn!("[lens] Failed to register download handler: {:?}", e);
+                } else {
+                    info!("[lens] Download handler registered (token={})", token);
+                }
+            }
+        }
+    });
+}
+
 /// Internal helper: create a WebView2 child webview for a browser tab.
 /// Returns the webview label on success.
 async fn create_tab_webview(
@@ -297,6 +566,7 @@ async fn create_tab_webview(
     y: f64,
     width: f64,
     height: f64,
+    downloads: Arc<Mutex<Vec<DownloadEntry>>>,
 ) -> Result<String, String> {
     let parsed_url = url.parse::<tauri::Url>()
         .map_err(|e| format!("Invalid URL: {}", e))?;
@@ -308,6 +578,7 @@ async fn create_tab_webview(
     let label = format!("lens-{}", timestamp);
 
     let app_clone = app.clone();
+    let app_for_download = app.clone();
     let label_clone = label.clone();
     let tab_id_clone = tab_id.to_string();
     let shortcut_script = build_shortcut_script();
@@ -351,8 +622,9 @@ async fn create_tab_webview(
             Position::Logical(LogicalPosition::new(x, y)),
             Size::Logical(LogicalSize::new(width, height)),
         ) {
-            Ok(_webview) => {
+            Ok(webview_ref) => {
                 info!("[lens] Webview created successfully: {} (tab {})", label_clone, tab_id_clone);
+                register_download_handler(&app_for_download, &webview_ref, downloads);
                 Ok(label_clone)
             }
             Err(e) => {
@@ -410,7 +682,8 @@ pub async fn lens_create_tab(
     }
 
     // Create the WebView2 instance
-    let label = create_tab_webview(&app, &tab_id, &url, x, y, width, height).await?;
+    let downloads_arc = state.downloads.clone();
+    let label = create_tab_webview(&app, &tab_id, &url, x, y, width, height, downloads_arc).await?;
 
     // Store the tab and set as active
     {
@@ -642,7 +915,8 @@ pub async fn lens_create_webview(
         .unwrap_or_default()
         .as_millis());
 
-    let label = create_tab_webview(&app, &tab_id, &url, x, y, width, height).await?;
+    let downloads_arc = state.downloads.clone();
+    let label = create_tab_webview(&app, &tab_id, &url, x, y, width, height, downloads_arc).await?;
 
     // Store the tab and set as active
     {
@@ -957,7 +1231,8 @@ pub async fn lens_create_device_webview(
     let webview_label = format!("device-{}", preset_id);
 
     // Create the WebView2 instance using the shared helper
-    let label = create_tab_webview(&app, &webview_label, &url, x, y, width, height).await?;
+    let downloads_arc = state.downloads.clone();
+    let label = create_tab_webview(&app, &webview_label, &url, x, y, width, height, downloads_arc).await?;
 
     // Store in device_webviews vec
     {
@@ -1567,5 +1842,49 @@ pub fn lens_delete_history_entry(timestamp: u128) -> IpcResponse {
             != Some(timestamp)
     });
     write_history(&entries);
+    IpcResponse::ok_empty()
+}
+
+// ─── Download Manager ────────────────────────────────────────────────────────
+
+/// Return all tracked downloads.
+#[tauri::command]
+pub fn lens_get_downloads(
+    state: tauri::State<'_, LensState>,
+) -> IpcResponse {
+    let downloads = state.downloads.lock().unwrap();
+    IpcResponse::ok(serde_json::json!({ "downloads": downloads.clone() }))
+}
+
+/// Clear completed and interrupted downloads from the list.
+/// In-progress downloads are kept.
+#[tauri::command]
+pub fn lens_clear_downloads(
+    state: tauri::State<'_, LensState>,
+) -> IpcResponse {
+    let mut downloads = state.downloads.lock().unwrap();
+    downloads.retain(|d| d.state == "downloading");
+    IpcResponse::ok_empty()
+}
+
+/// Open a downloaded file with the OS default handler.
+#[tauri::command]
+pub fn lens_open_download(path: String) -> IpcResponse {
+    if let Err(e) = opener::open(&path) {
+        return IpcResponse::err(format!("Failed to open: {}", e));
+    }
+    IpcResponse::ok_empty()
+}
+
+/// Open the folder containing a downloaded file.
+#[tauri::command]
+pub fn lens_open_download_folder(path: String) -> IpcResponse {
+    let parent = std::path::Path::new(&path)
+        .parent()
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_default();
+    if let Err(e) = opener::open(&parent) {
+        return IpcResponse::err(format!("Failed to open folder: {}", e));
+    }
     IpcResponse::ok_empty()
 }
