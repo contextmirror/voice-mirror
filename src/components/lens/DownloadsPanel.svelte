@@ -21,8 +21,8 @@
    * @returns {number|null}
    */
   function getProgress(entry) {
-    if (!entry.total_bytes || entry.total_bytes <= 0) return null;
-    return Math.min(100, Math.round((entry.received_bytes / entry.total_bytes) * 100));
+    if (!entry.totalBytes || entry.totalBytes <= 0) return null;
+    return Math.min(100, Math.round((entry.receivedBytes / entry.totalBytes) * 100));
   }
 
   function handleKeydown(e) {
@@ -42,7 +42,7 @@
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
     </button>
     <span class="downloads-title">Downloads</span>
-    {#if downloadsStore.downloads.some(d => d.state !== 'in_progress')}
+    {#if downloadsStore.downloads.some(d => d.state !== 'downloading')}
       <button class="clear-btn" onclick={() => downloadsStore.clearCompleted()} title="Clear completed">
         Clear completed
       </button>
@@ -76,10 +76,10 @@
       <div class="entry-content">
         <span class="entry-filename" title={entry.filename}>{entry.filename}</span>
         <span class="entry-size">
-          {#if entry.state === 'in_progress'}
-            {formatBytes(entry.received_bytes)}{entry.total_bytes > 0 ? ` / ${formatBytes(entry.total_bytes)}` : ''}
+          {#if entry.state === 'downloading'}
+            {formatBytes(entry.receivedBytes)}{entry.totalBytes > 0 ? ` / ${formatBytes(entry.totalBytes)}` : ''}
           {:else if entry.state === 'completed'}
-            {formatBytes(entry.total_bytes || entry.received_bytes)}
+            {formatBytes(entry.totalBytes || entry.receivedBytes)}
           {:else if entry.state === 'failed'}
             Failed
           {:else if entry.state === 'interrupted'}
@@ -104,7 +104,7 @@
       {/if}
     </div>
 
-    {#if entry.state === 'in_progress'}
+    {#if entry.state === 'downloading'}
       {@const pct = getProgress(entry)}
       <div class="progress-bar-track">
         {#if pct !== null}

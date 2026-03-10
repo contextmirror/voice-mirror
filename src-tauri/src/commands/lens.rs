@@ -9,6 +9,7 @@ use tracing::{info, warn};
 static DOWNLOAD_COUNTER: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DownloadEntry {
     pub id: String,
     pub filename: String,
@@ -411,6 +412,8 @@ fn register_download_handler(
                                 "filename": filename,
                                 "url": uri,
                                 "totalBytes": total_bytes,
+                                "receivedBytes": 0,
+                                "state": "downloading",
                                 "path": result_path,
                                 "timestamp": timestamp,
                             }),

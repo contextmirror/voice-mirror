@@ -8,7 +8,7 @@
 
   // Filtered or all entries depending on search
   let filtered = $derived(browserHistoryStore.filter(searchQuery));
-  let grouped = $derived(() => {
+  let grouped = $derived.by(() => {
     if (searchQuery) {
       return { today: filtered, yesterday: [], older: [] };
     }
@@ -88,7 +88,7 @@
         {@render historyEntry(entry)}
       {/each}
     {:else}
-      {@const grp = grouped()}
+      {@const grp = grouped}
       {#if grp.today.length > 0}
         <div class="group-header">Today</div>
         {#each grp.today as entry (entry.timestamp)}

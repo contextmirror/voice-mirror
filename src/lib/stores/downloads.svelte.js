@@ -20,9 +20,9 @@ import { toastStore } from './toast.svelte.js';
  * @property {string} filename - File name (basename)
  * @property {string} path - Full file path on disk
  * @property {string} url - Source URL
- * @property {number} received_bytes - Bytes downloaded so far
- * @property {number} total_bytes - Total bytes (0 if unknown)
- * @property {string} state - 'in_progress' | 'completed' | 'failed' | 'interrupted'
+ * @property {number} receivedBytes - Bytes downloaded so far
+ * @property {number} totalBytes - Total bytes (0 if unknown)
+ * @property {string} state - 'downloading' | 'completed' | 'failed' | 'interrupted'
  * @property {number} started_at - epoch millis
  */
 
@@ -70,15 +70,15 @@ function createDownloadsStore() {
 
     // Listen for progress updates
     const progressFn = await listen('lens-download-progress', (event) => {
-      const { id, received, total, state, path } = event.payload ?? {};
+      const { id, receivedBytes, totalBytes, state, path } = event.payload ?? {};
       if (!id) return;
 
       downloads = downloads.map(d => {
         if (d.id !== id) return d;
         const updated = {
           ...d,
-          received_bytes: received ?? d.received_bytes,
-          total_bytes: total ?? d.total_bytes,
+          receivedBytes: receivedBytes ?? d.receivedBytes,
+          totalBytes: totalBytes ?? d.totalBytes,
           state: state ?? d.state,
           path: path ?? d.path,
         };
@@ -121,7 +121,7 @@ function createDownloadsStore() {
   async function clearCompleted() {
     try {
       await lensClearDownloads();
-      downloads = downloads.filter(d => d.state === 'in_progress');
+      downloads = downloads.filter(d => d.state === 'downloading');
     } catch (err) {
       console.warn('[downloads] Failed to clear downloads:', err);
     }
@@ -153,7 +153,7 @@ function createDownloadsStore() {
 
   return {
     get downloads() { return downloads; },
-    get activeCount() { return downloads.filter(d => d.state === 'in_progress').length; },
+    get activeCount() { return downloads.filter(d => d.state === 'downloading').length; },
     init,
     destroy,
     clearCompleted,
