@@ -4,6 +4,18 @@
   import { lensStore } from '../../lib/stores/lens.svelte.js';
   import { browserTabsStore } from '../../lib/stores/browser-tabs.svelte.js';
   import { lensHardRefresh } from '../../lib/api.js';
+  import BrowserMenu from './BrowserMenu.svelte';
+
+  let {
+    zoomLevel = 100,
+    onZoomIn,
+    onZoomOut,
+    onZoomReset,
+    onFind,
+    onDownloads,
+    onHistory,
+    onDownloadSettings,
+  } = $props();
 
   let urlInput = $state('');
 
@@ -72,6 +84,17 @@
       autocomplete="off"
     />
   </form>
+
+  <BrowserMenu
+    {zoomLevel}
+    {onZoomIn}
+    {onZoomOut}
+    {onZoomReset}
+    {onFind}
+    {onDownloads}
+    {onHistory}
+    {onDownloadSettings}
+  />
 
 </div>
 
