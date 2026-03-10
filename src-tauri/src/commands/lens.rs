@@ -98,9 +98,33 @@ fn build_shortcut_script() -> String {
                 try {{
                     (new Image()).src = '{}' + lower + '?t=' + Date.now();
                 }} catch(err) {{}}
+            }} else if ((e.ctrlKey || e.metaKey) && lower === 'f') {{
+                e.preventDefault();
+                e.stopPropagation();
+                try {{
+                    (new Image()).src = '{}' + 'find' + '?t=' + Date.now();
+                }} catch(err) {{}}
+            }} else if ((e.ctrlKey || e.metaKey) && (key === '+' || key === '=')) {{
+                e.preventDefault();
+                e.stopPropagation();
+                try {{
+                    (new Image()).src = '{}' + 'zoom-in' + '?t=' + Date.now();
+                }} catch(err) {{}}
+            }} else if ((e.ctrlKey || e.metaKey) && key === '-') {{
+                e.preventDefault();
+                e.stopPropagation();
+                try {{
+                    (new Image()).src = '{}' + 'zoom-out' + '?t=' + Date.now();
+                }} catch(err) {{}}
+            }} else if ((e.ctrlKey || e.metaKey) && key === '0') {{
+                e.preventDefault();
+                e.stopPropagation();
+                try {{
+                    (new Image()).src = '{}' + 'zoom-reset' + '?t=' + Date.now();
+                }} catch(err) {{}}
             }}
         }}, true);"#,
-        shortcut_base, shortcut_base, shortcut_base
+        shortcut_base, shortcut_base, shortcut_base, shortcut_base, shortcut_base, shortcut_base, shortcut_base
     )
 }
 

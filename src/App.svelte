@@ -245,6 +245,18 @@
       const key = event.payload?.key;
       if (key === 'F1') { commandPaletteMode = 'commands'; commandPaletteVisible = true; }
       else if (key === ',') { navigationStore.setView('settings'); }
+      else if (key === 'find') {
+        window.dispatchEvent(new CustomEvent('lens-find-toggle'));
+      }
+      else if (key === 'zoom-in') {
+        window.dispatchEvent(new CustomEvent('lens-zoom', { detail: 'in' }));
+      }
+      else if (key === 'zoom-out') {
+        window.dispatchEvent(new CustomEvent('lens-zoom', { detail: 'out' }));
+      }
+      else if (key === 'zoom-reset') {
+        window.dispatchEvent(new CustomEvent('lens-zoom', { detail: 'reset' }));
+      }
     }).then(fn => { unlistenFn = fn; });
     return () => { unlistenFn?.(); };
   });
