@@ -95,6 +95,10 @@ const DEFAULT_CONFIG = {
     syncEnabled: true,
     orientation: 'portrait',
   },
+  browser: {
+    downloadAskLocation: false,
+    downloadPath: '',
+  },
   workspace: {
     showChat: false,
     showTerminal: false,

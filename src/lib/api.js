@@ -439,6 +439,24 @@ export async function lensDeleteHistoryEntry(timestamp) {
   return invoke('lens_delete_history_entry', { timestamp });
 }
 
+// ============ Downloads ============
+
+export async function lensGetDownloads() {
+  return invoke('lens_get_downloads', {});
+}
+
+export async function lensClearDownloads() {
+  return invoke('lens_clear_downloads', {});
+}
+
+export async function lensOpenDownload(path) {
+  return invoke('lens_open_download', { path });
+}
+
+export async function lensOpenDownloadFolder(path) {
+  return invoke('lens_open_download_folder', { path });
+}
+
 // ============ Device Preview ============
 
 export async function lensCreateDeviceWebview({ presetId, url, width, height, x, y }) {

@@ -5,6 +5,7 @@
   import DesignToolbar from './DesignToolbar.svelte';
   import FindBar from './FindBar.svelte';
   import HistoryPanel from './HistoryPanel.svelte';
+  import DownloadsPanel from './DownloadsPanel.svelte';
   import LensPreview from './LensPreview.svelte';
   import BrowserTabBar from './BrowserTabBar.svelte';
   import FileTree from './FileTree.svelte';
@@ -22,7 +23,9 @@
   import { lensStore } from '../../lib/stores/lens.svelte.js';
   import { browserTabsStore } from '../../lib/stores/browser-tabs.svelte.js';
   import { browserHistoryStore } from '../../lib/stores/browser-history.svelte.js';
+  import { downloadsStore } from '../../lib/stores/downloads.svelte.js';
   import { lensSetVisible, startFileWatching, stopFileWatching, lensCapturePreview, lspShutdown, lensSetZoom, lensGetZoom } from '../../lib/api.js';
+  import { navigationStore } from '../../lib/stores/navigation.svelte.js';
   import { attachmentsStore } from '../../lib/stores/attachments.svelte.js';
   import { projectStore } from '../../lib/stores/project.svelte.js';
   import { lspDiagnosticsStore } from '../../lib/stores/lsp-diagnostics.svelte.js';
@@ -105,11 +108,20 @@
   // ── History Panel ──
   let showHistory = $state(false);
 
-  // Init browser history store when browser is shown; destroy on cleanup
+  // ── Downloads Panel ──
+  let showDownloads = $state(false);
+
+  function handleDownloadSettings() {
+    navigationStore.setView('settings');
+  }
+
+  // Init browser history and downloads stores; destroy on cleanup
   $effect(() => {
     browserHistoryStore.init();
+    downloadsStore.init();
     return () => {
       browserHistoryStore.destroy();
+      downloadsStore.destroy();
     };
   });
 
@@ -434,6 +446,8 @@
                             onZoomReset={handleZoomReset}
                             onFind={toggleFind}
                             onHistory={() => showHistory = true}
+                            onDownloads={() => showDownloads = true}
+                            onDownloadSettings={handleDownloadSettings}
                           />
                           {#if lensStore.designMode}
                             <DesignToolbar
@@ -446,6 +460,9 @@
                           <LensPreview bind:this={lensPreviewRef} />
                           {#if showHistory}
                             <HistoryPanel onClose={() => showHistory = false} />
+                          {/if}
+                          {#if showDownloads}
+                            <DownloadsPanel onClose={() => showDownloads = false} />
                           {/if}
                         </div>
                       </div>

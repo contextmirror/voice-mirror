@@ -415,3 +415,33 @@ This prevents browser response waits from blocking user message delivery.
 
 Request IDs use a timestamp + atomic counter format (`br-<millis>-<N>`) to
 guarantee uniqueness even under concurrent requests.
+
+---
+
+## 10. Known Gaps
+
+### Download Manager (RESOLVED)
+
+WebView2 downloads are now fully handled. The `ICoreWebView2_4::add_DownloadStarting`
+COM event is hooked in the browser bridge. Downloads proceed to the system Downloads
+folder by default (`SetHandled(false)`), with progress tracked via
+`ICoreWebView2DownloadOperation` events.
+
+**Implemented:**
+- `lens-download-started` Tauri event emitted when a download begins (DownloadEntry with id, filename, path, url, state)
+- `lens-download-progress` Tauri event emitted on progress updates (received, total, state, path)
+- `lens_get_downloads`, `lens_clear_downloads`, `lens_open_download`, `lens_open_download_folder` Tauri commands
+- Frontend downloads store (`src/lib/stores/downloads.svelte.js`) with toast notification on completion
+- Downloads panel (`src/components/lens/DownloadsPanel.svelte`) — hamburger menu overlay with progress bars
+- `browser.downloadAskLocation` and `browser.downloadPath` config keys (Rust-side integration deferred)
+
+**Browser hamburger menu features (all wired):**
+- Zoom In / Out / Reset (with live percentage display)
+- Find on Page (Ctrl+F)
+- History panel (browser navigation history)
+- Downloads panel (in-progress and completed downloads)
+- Download Settings (navigates to app Settings)
+
+### File Open Dialog (Plus Button Enhancement)
+
+Future feature: allow opening local files (spreadsheets, documents) in the browser panel via localhost rendering. The "+" button could offer a file picker that opens the selected file in the Lens browser using Office Online, Google Docs URL, or a local viewer.
