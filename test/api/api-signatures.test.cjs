@@ -112,6 +112,11 @@ describe('api.js -- critical Tauri command names', () => {
     'lens_close_tab',
     'lens_switch_tab',
     'lens_close_all_tabs',
+    // Find on Page
+    'lens_find_on_page',
+    'lens_find_next',
+    'lens_find_previous',
+    'lens_close_find',
     // GPU / Model Management
     'detect_gpu',
     'list_stt_models',
@@ -271,6 +276,10 @@ describe('api.js -- exported async functions', () => {
     'lensCloseAllTabs',
     'lensSetZoom',
     'lensGetZoom',
+    'lensFindOnPage',
+    'lensFindNext',
+    'lensFindPrevious',
+    'lensCloseFind',
     // Device Preview
     'lensCreateDeviceWebview',
     'lensCloseDeviceWebview',

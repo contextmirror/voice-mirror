@@ -408,6 +408,19 @@ export async function lensGetZoom(tabId) {
   return invoke('lens_get_zoom', { tabId });
 }
 
+export async function lensFindOnPage(tabId, query) {
+  return invoke('lens_find_on_page', { tabId, query });
+}
+export async function lensFindNext(tabId, query) {
+  return invoke('lens_find_next', { tabId, query });
+}
+export async function lensFindPrevious(tabId, query) {
+  return invoke('lens_find_previous', { tabId, query });
+}
+export async function lensCloseFind(tabId) {
+  return invoke('lens_close_find', { tabId });
+}
+
 // ============ Device Preview ============
 
 export async function lensCreateDeviceWebview({ presetId, url, width, height, x, y }) {

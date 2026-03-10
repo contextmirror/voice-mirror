@@ -371,6 +371,11 @@ pub fn run() {
             // Zoom
             lens_cmds::lens_set_zoom,
             lens_cmds::lens_get_zoom,
+            // Find on Page
+            lens_cmds::lens_find_on_page,
+            lens_cmds::lens_find_next,
+            lens_cmds::lens_find_previous,
+            lens_cmds::lens_close_find,
             // File tree
             files_cmds::list_directory,
             files_cmds::get_git_changes,

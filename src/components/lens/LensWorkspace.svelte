@@ -3,6 +3,7 @@
   import { listen } from '@tauri-apps/api/event';
   import LensToolbar from './LensToolbar.svelte';
   import DesignToolbar from './DesignToolbar.svelte';
+  import FindBar from './FindBar.svelte';
   import LensPreview from './LensPreview.svelte';
   import BrowserTabBar from './BrowserTabBar.svelte';
   import FileTree from './FileTree.svelte';
@@ -94,6 +95,22 @@
     }
     window.addEventListener('lens-zoom', onLensZoom);
     return () => window.removeEventListener('lens-zoom', onLensZoom);
+  });
+
+  // ── Find on Page ──
+  let findBarVisible = $state(false);
+
+  function toggleFind() {
+    findBarVisible = !findBarVisible;
+  }
+
+  // Listen for lens-find-toggle CustomEvent dispatched from App.svelte (Ctrl+F in WebView2)
+  $effect(() => {
+    function onFindToggle() {
+      findBarVisible = !findBarVisible;
+    }
+    window.addEventListener('lens-find-toggle', onFindToggle);
+    return () => window.removeEventListener('lens-find-toggle', onFindToggle);
   });
 
   // Refresh zoom level when active tab changes
@@ -402,6 +419,7 @@
                             onZoomIn={handleZoomIn}
                             onZoomOut={handleZoomOut}
                             onZoomReset={handleZoomReset}
+                            onFind={toggleFind}
                           />
                           {#if lensStore.designMode}
                             <DesignToolbar
@@ -410,6 +428,7 @@
                               onClose={() => lensStore.setDesignMode(false)}
                             />
                           {/if}
+                          <FindBar visible={findBarVisible} onClose={() => { findBarVisible = false; }} />
                           <LensPreview bind:this={lensPreviewRef} />
                         </div>
                       </div>
