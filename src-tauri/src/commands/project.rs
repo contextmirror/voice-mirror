@@ -3,8 +3,6 @@
 use super::IpcResponse;
 use base64::Engine as _;
 use serde::Deserialize;
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 
 /// Get the project-icons directory under %APPDATA%/voice-mirror/.
@@ -14,11 +12,18 @@ fn icons_dir() -> Result<PathBuf, String> {
     Ok(app_data.join("voice-mirror").join("project-icons"))
 }
 
-/// Hash a string to a hex filename for uniqueness.
+/// Stable FNV-1a hash of a string to a hex filename.
+/// Unlike `DefaultHasher`, this is deterministic across Rust versions and platforms,
+/// so icon filenames stored in config.json remain valid after app upgrades.
 fn hash_filename(source: &str) -> String {
-    let mut hasher = DefaultHasher::new();
-    source.hash(&mut hasher);
-    format!("{:x}", hasher.finish())
+    const FNV_OFFSET: u64 = 0xcbf29ce484222325;
+    const FNV_PRIME: u64 = 0x100000001b3;
+    let mut hash = FNV_OFFSET;
+    for byte in source.as_bytes() {
+        hash ^= *byte as u64;
+        hash = hash.wrapping_mul(FNV_PRIME);
+    }
+    format!("{:x}", hash)
 }
 
 // ── save_project_icon ──
