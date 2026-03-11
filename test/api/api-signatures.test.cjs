@@ -209,10 +209,14 @@ describe('api.js -- exported async functions', () => {
     'getConfig',
     'setConfig',
     'resetConfig',
+    'getPlatformInfo',
     // Window
     'getWindowPosition',
     'setWindowPosition',
     'minimizeWindow',
+    'maximizeWindow',
+    'saveWindowBounds',
+    'quitApp',
     'setWindowSize',
     'setAlwaysOnTop',
     'setResizable',
@@ -226,6 +230,7 @@ describe('api.js -- exported async functions', () => {
     'setVoiceMode',
     'listAudioDevices',
     'speakText',
+    'stopSpeaking',
     'pttPress',
     'pttRelease',
     'configurePttKey',
@@ -234,6 +239,8 @@ describe('api.js -- exported async functions', () => {
     // AI
     'startAI',
     'stopAI',
+    'interruptAI',
+    'getProvider',
     'getAIStatus',
     'aiPtyInput',
     'aiRawInput',
@@ -252,22 +259,27 @@ describe('api.js -- exported async functions', () => {
     'chatRename',
     'exportChatToFile',
     // Screenshot
+    'takeScreenshot',
     'listMonitors',
     'listWindows',
     'captureMonitor',
     'captureWindow',
     'lensCapturePreview',
     // Tools
+    'scanCliTools',
     'checkNpmVersions',
     'updateNpmPackage',
     // Shortcuts
     'registerShortcut',
     'unregisterShortcut',
     'unregisterAllShortcuts',
+    'listShortcuts',
     // Performance Stats
     'getProcessStats',
     // Migration
     // Lens
+    'lensCreateWebview',
+    'lensCloseWebview',
     'lensNavigate',
     'lensGoBack',
     'lensGoForward',
@@ -307,6 +319,7 @@ describe('api.js -- exported async functions', () => {
     'probePort',
     'killPortProcess',
     // Files
+    'getProjectRoot',
     'listDirectory',
     'getGitChanges',
     'readFile',
@@ -348,6 +361,7 @@ describe('api.js -- exported async functions', () => {
     'terminalResize',
     'terminalKill',
     'terminalDetectProfiles',
+    'terminalList',
     // LSP
     'lspOpenFile',
     'lspCloseFile',
@@ -411,6 +425,10 @@ describe('api.js -- exported async functions', () => {
     'lensClearDownloads',
     'lensOpenDownload',
     'lensOpenDownloadFolder',
+    // Project icon management
+    'saveProjectIcon',
+    'removeProjectIcon',
+    'loadProjectIcons',
   ];
 
   for (const fn of expectedExports) {
