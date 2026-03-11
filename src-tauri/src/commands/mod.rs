@@ -13,6 +13,7 @@ pub mod terminal;
 pub mod lsp;
 pub mod design;
 pub mod output;
+pub mod project;
 
 use serde_json::Value;
 

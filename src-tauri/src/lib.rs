@@ -24,6 +24,7 @@ use commands::dev_server as dev_server_cmds;
 use commands::lsp as lsp_cmds;
 use commands::design as design_cmds;
 use commands::output as output_cmds;
+use commands::project as project_cmds;
 
 use providers::manager::AiManager;
 use providers::ProviderEvent;
@@ -492,6 +493,10 @@ pub fn run() {
             output_cmds::unregister_project_channel,
             output_cmds::push_project_log,
             output_cmds::list_project_channels,
+            // Project icon management
+            project_cmds::save_project_icon,
+            project_cmds::remove_project_icon,
+            project_cmds::load_project_icons,
         ])
         .setup(|app| {
             // Set app handle on OutputStore for live event emission
@@ -609,8 +614,9 @@ pub fn run() {
 
                     tauri::async_runtime::spawn(async move {
                         while let Some(event) = rx.recv().await {
-                            if app_handle_terminal.emit("terminal-output", &event).is_err() {
-                                warn!("Failed to emit terminal-output event, stopping loop");
+                            let event_name = format!("terminal-output-{}", event.id);
+                            if app_handle_terminal.emit(&event_name, &event).is_err() {
+                                warn!("Failed to emit {} event, stopping loop", event_name);
                                 break;
                             }
                         }
