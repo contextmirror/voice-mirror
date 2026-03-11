@@ -211,3 +211,35 @@ describe('editor-groups.svelte.js: group locking', () => {
     assert.ok(src.includes('locked: !group.locked'), 'Should spread with toggled locked');
   });
 });
+
+// ============ Workspace state persistence ============
+
+describe('editor-groups.svelte.js — workspace state persistence', () => {
+  it('exports editorGroupsStore', () => {
+    assert.ok(src.includes('export const editorGroupsStore'), 'Should export editorGroupsStore');
+  });
+
+  it('has serialize() method', () => {
+    assert.ok(src.includes('serialize()'), 'Should have serialize method');
+  });
+
+  it('has restore() method', () => {
+    assert.ok(src.includes('restore(data)'), 'Should have restore method');
+  });
+
+  it('serialize returns root, groupMeta, focusedGroupId, maximizedGroupId, nextGroupId', () => {
+    assert.ok(src.includes('root,'), 'serialize should return root');
+    assert.ok(src.includes('groupMeta,'), 'serialize should return groupMeta');
+    assert.ok(src.includes('focusedGroupId,'), 'serialize should return focusedGroupId');
+    assert.ok(src.includes('maximizedGroupId,'), 'serialize should return maximizedGroupId');
+    assert.ok(src.includes('nextGroupId,'), 'serialize should return nextGroupId');
+  });
+
+  it('restore handles missing data gracefully', () => {
+    assert.ok(src.includes('if (!data || !data.root) return'), 'Should guard against missing data');
+  });
+
+  it('restore ensures at least group 1 exists', () => {
+    assert.ok(src.includes('groups.size === 0'), 'Should check for empty groups');
+  });
+});
