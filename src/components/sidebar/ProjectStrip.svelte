@@ -14,8 +14,8 @@
   let editingIndex = $state(-1);
   let showEditModal = $derived(editingIndex >= 0);
 
-  function handleSelect(i) {
-    projectStore.setActive(i);
+  async function handleSelect(i) {
+    await projectStore.setActive(i);
   }
 
   async function handleAdd() {

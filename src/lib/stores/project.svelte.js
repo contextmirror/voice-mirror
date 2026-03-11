@@ -8,6 +8,7 @@
 import { updateConfig } from './config.svelte.js';
 import { chatList, loadProjectIcons } from '../api.js';
 import { unwrapResult } from '../utils.js';
+import { saveCurrentState, restoreState, startAutoSave, stopAutoSave } from './workspace-state.svelte.js';
 
 /** 8-color palette for project badges, picked by hashing the folder name */
 const COLOR_PALETTE = [
@@ -117,11 +118,23 @@ function createProjectStore() {
      * Switch to a different project by index.
      * @param {number} index
      */
-    setActive(index) {
+    async setActive(index) {
       if (index < 0 || index >= entries.length) return;
+      // Save current project's state before switching
+      const oldProject = entries[activeIndex];
+      if (oldProject) {
+        stopAutoSave();
+        await saveCurrentState(oldProject.path);
+      }
       activeIndex = index;
       this._persist();
       this.loadSessions();
+      // Restore new project's state
+      const newProject = entries[activeIndex];
+      if (newProject) {
+        await restoreState(newProject.path);
+        startAutoSave(newProject.path);
+      }
     },
 
     /**
