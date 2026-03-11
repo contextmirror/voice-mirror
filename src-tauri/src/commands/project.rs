@@ -45,7 +45,7 @@ pub fn save_project_icon(params: SaveIconParams) -> IpcResponse {
         .map(|e| e.to_lowercase())
         .unwrap_or_default();
 
-    let allowed = ["png", "jpg", "jpeg", "webp", "svg"];
+    let allowed = ["png", "jpg", "jpeg", "webp", "svg", "ico", "gif", "bmp", "tif", "tiff"];
     if !allowed.contains(&ext.as_str()) {
         return IpcResponse::err(format!("Unsupported image format: {ext}"));
     }

@@ -63,7 +63,7 @@
       onclick={() => handleSelect(i)}
       oncontextmenu={(e) => handleContextMenu(e, i)}
       aria-label={entry.name}
-      style="background: {entry.color};"
+      style="background: {entry.icon && iconCache[entry.icon] ? 'transparent' : entry.color};"
     >
       {#if entry.icon && iconCache[entry.icon]}
         <img src={iconCache[entry.icon]} alt={entry.name} class="avatar-icon" />
@@ -115,11 +115,11 @@
   @import '../../styles/context-menu.css';
 
   .project-strip {
-    width: 48px;
+    width: 54px;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
     padding: 8px 0;
     border-right: 1px solid var(--border);
     flex-shrink: 0;
@@ -128,12 +128,12 @@
   }
 
   .project-avatar {
-    width: 36px;
-    height: 36px;
+    width: 40px;
+    height: 40px;
     border-radius: 10px;
-    border: none;
+    border: 2px solid transparent;
     color: #fff;
-    font-size: 15px;
+    font-size: 18px;
     font-weight: 700;
     font-family: var(--font-family);
     cursor: pointer;
@@ -143,7 +143,6 @@
     flex-shrink: 0;
     transition: all var(--duration-fast) var(--ease-out);
     position: relative;
-    margin-left: 2px;
     padding: 0;
     overflow: hidden;
   }
@@ -152,44 +151,21 @@
     width: 100%;
     height: 100%;
     object-fit: cover;
-    border-radius: 10px;
-  }
-
-  /* Active indicator pill — left edge of the strip */
-  .project-avatar::before {
-    content: '';
-    position: absolute;
-    left: -5px;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 3px;
-    height: 0;
-    border-radius: 0 2px 2px 0;
-    background: var(--accent);
-    transition: height var(--duration-fast) var(--ease-out);
+    border-radius: 8px;
   }
 
   .project-avatar:hover {
-    opacity: 0.85;
-    transform: scale(1.05);
-  }
-
-  .project-avatar:hover::before {
-    height: 12px;
+    border-color: var(--border);
+    background-color: var(--bg-hover);
   }
 
   .project-avatar.active {
-    border-radius: 10px;
-  }
-
-  .project-avatar.active::before {
-    height: 22px;
+    border-color: var(--text);
   }
 
   .project-add {
-    width: 36px;
-    height: 36px;
-    margin-left: 2px;
+    width: 40px;
+    height: 40px;
     border-radius: 10px;
     border: 1px dashed var(--muted);
     background: transparent;

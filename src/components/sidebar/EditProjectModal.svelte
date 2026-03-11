@@ -15,6 +15,7 @@
   let iconPreview = $state(entry?.icon ? (projectStore.iconCache[entry.icon] || null) : null);
   let uploadedFilename = $state(null);
   let sizeWarning = $state(false);
+  let saving = $state(false);
 
   const originalIcon = entry?.icon || null;
 
@@ -29,7 +30,7 @@
 
   async function handlePickImage() {
     const selected = await open({
-      filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp', 'svg'] }],
+      filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp', 'svg', 'ico', 'gif', 'bmp', 'tif', 'tiff'] }],
     });
     if (!selected) return;
 
@@ -60,7 +61,8 @@
 
   async function handleSave() {
     const trimmed = name.trim();
-    if (!trimmed) return;
+    if (!trimmed || saving) return;
+    saving = true;
 
     if (trimmed !== entry.name) {
       projectStore.updateProjectField(projectIndex, 'name', trimmed);
@@ -127,34 +129,33 @@
         <button class="remove-icon-btn" onclick={handleRemoveIcon}>Remove icon</button>
       {/if}
     </div>
+    <div class="icon-hint">Recommended: 128×128px</div>
     {#if sizeWarning}
       <div class="size-warning">Image was over 1 MB but has been resized.</div>
     {/if}
 
-    <!-- Color -->
-    <div class="field-label">Color</div>
-    <div class="color-swatches">
-      {#each COLORS as c}
-        <button
-          class="swatch"
-          class:selected={color === c}
-          style="background: {c};"
-          onclick={() => { color = c; }}
-          aria-label="Color {c}"
-        >
-          {#if iconPreview}
-            <img src={iconPreview} alt="" class="swatch-icon" />
-          {:else}
+    <!-- Color (hidden when custom icon is set) -->
+    {#if !iconFilename}
+      <div class="field-label">Color</div>
+      <div class="color-swatches">
+        {#each COLORS as c}
+          <button
+            class="swatch"
+            class:selected={color === c}
+            style="background: {c};"
+            onclick={() => { color = c; }}
+            aria-label="Color {c}"
+          >
             {(name.charAt(0) || '?').toUpperCase()}
-          {/if}
-        </button>
-      {/each}
-    </div>
+          </button>
+        {/each}
+      </div>
+    {/if}
 
     <!-- Actions -->
     <div class="modal-actions">
       <button class="btn-cancel" onclick={handleCancel}>Cancel</button>
-      <button class="btn-save" onclick={handleSave} disabled={!name.trim()}>Save</button>
+      <button class="btn-save" onclick={handleSave} disabled={!name.trim() || saving}>{saving ? 'Saving...' : 'Save'}</button>
     </div>
   </div>
 </div>
@@ -175,7 +176,7 @@
     border: 1px solid var(--border-strong);
     border-radius: var(--radius-lg);
     padding: 20px;
-    width: 340px;
+    width: 400px;
     max-width: 90vw;
   }
 
@@ -218,8 +219,8 @@
   }
 
   .icon-preview {
-    width: 48px;
-    height: 48px;
+    width: 64px;
+    height: 64px;
     border-radius: 10px;
     border: 2px dashed var(--border);
     background: transparent;
@@ -266,6 +267,12 @@
 
   .remove-icon-btn:hover {
     text-decoration: underline;
+  }
+
+  .icon-hint {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 4px;
   }
 
   .size-warning {
