@@ -150,6 +150,7 @@ pub fn remove_project_icon(params: RemoveIconParams) -> IpcResponse {
 // ── load_project_icons ──
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct LoadIconsParams {
     pub filenames: Vec<String>,
 }
@@ -164,6 +165,12 @@ pub fn load_project_icons(params: LoadIconsParams) -> IpcResponse {
     let mut icons = serde_json::Map::new();
 
     for filename in &params.filenames {
+        // Path traversal defense: same validation as remove_project_icon
+        let valid = filename.chars().all(|c| c.is_alphanumeric() || c == '.' || c == '-')
+            && !filename.contains("..");
+        if !valid {
+            continue;
+        }
         let path = dir.join(filename);
         if let Ok(bytes) = std::fs::read(&path) {
             let mime = if filename.ends_with(".svg") {
@@ -271,6 +278,18 @@ mod tests {
 
         // Cleanup
         let _ = fs::remove_file(&test_file);
+    }
+
+    #[test]
+    fn test_load_project_icons_rejects_path_traversal() {
+        let result = load_project_icons(LoadIconsParams {
+            filenames: vec!["../../../etc/passwd".to_string()],
+        });
+
+        assert!(result.success);
+        let data = result.data.unwrap();
+        let icons = data["icons"].as_object().unwrap();
+        assert!(icons.is_empty(), "Should skip path traversal filenames");
     }
 
     #[test]
