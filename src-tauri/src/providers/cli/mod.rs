@@ -263,7 +263,8 @@ impl Provider for CliProvider {
 
             // Write MCP config files for all supported providers
             if let Some(ref root) = project_root {
-                if let Err(e) = mcp_config::write_mcp_config(root, &enabled_groups) {
+                let cwd_override = work_dir.as_ref().filter(|w| w.as_path() != root.as_path());
+                if let Err(e) = mcp_config::write_mcp_config(root, &enabled_groups, cwd_override) {
                     warn!("Failed to write MCP config: {}", e);
                 }
                 // Claude-only: configure status line (claude-pulse)

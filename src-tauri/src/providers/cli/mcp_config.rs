@@ -15,8 +15,12 @@ use tracing::{info, warn};
 /// For **OpenCode**: merges into `~/.config/opencode/opencode.json` using
 /// OpenCode's `mcp` config format (type: "local", command array, environment).
 ///
+/// If `cwd_override` is provided (and differs from `project_root`), also writes
+/// `.mcp.json` to that directory so Claude Code finds MCP tools when starting
+/// in a non-Voice-Mirror project.
+///
 /// The `enabled_groups` parameter comes from the user's configured tool profile.
-pub fn write_mcp_config(project_root: &std::path::Path, enabled_groups: &str) -> Result<(), String> {
+pub fn write_mcp_config(project_root: &std::path::Path, enabled_groups: &str, cwd_override: Option<&PathBuf>) -> Result<(), String> {
     // Resolve the Rust MCP binary
     let mcp_binary = resolve_mcp_binary(project_root)?;
     let binary_path_str = mcp_binary.to_string_lossy().replace('\\', "/");
@@ -91,7 +95,25 @@ pub fn write_mcp_config(project_root: &std::path::Path, enabled_groups: &str) ->
         Err(e) => warn!("Failed to serialize .mcp.json: {}", e),
     }
 
-    // --- 3. Merge into OpenCode config (~/.config/opencode/opencode.json) ---
+    // --- 3. Write .mcp.json to CWD if it differs from project root ---
+    //
+    // When Claude Code starts in a non-Voice-Mirror directory, it won't find
+    // the project-level .mcp.json. Writing one to the CWD ensures MCP tools
+    // are always available regardless of working directory.
+    if let Some(cwd) = cwd_override {
+        if cwd.exists() {
+            let cwd_mcp_path = cwd.join(".mcp.json");
+            match serde_json::to_string_pretty(&project_mcp) {
+                Ok(s) => match std::fs::write(&cwd_mcp_path, &s) {
+                    Ok(()) => info!("Wrote CWD MCP config to {}", cwd_mcp_path.display()),
+                    Err(e) => warn!("Failed to write CWD .mcp.json {}: {}", cwd_mcp_path.display(), e),
+                },
+                Err(e) => warn!("Failed to serialize CWD .mcp.json: {}", e),
+            }
+        }
+    }
+
+    // --- 4. Merge into OpenCode config (~/.config/opencode/opencode.json) ---
     //
     // OpenCode (anomalyco/opencode) uses xdg-basedir which resolves to
     // `$HOME/.config/opencode/` on ALL platforms (including Windows).

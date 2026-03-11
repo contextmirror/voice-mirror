@@ -2,8 +2,24 @@ use super::IpcResponse;
 use tauri::{AppHandle, Emitter, Manager};
 use tauri::{LogicalPosition, LogicalSize, Position, Size, WebviewBuilder};
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 use tracing::{info, warn};
+
+static DOWNLOAD_COUNTER: AtomicU64 = AtomicU64::new(1);
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DownloadEntry {
+    pub id: String,
+    pub filename: String,
+    pub url: String,
+    pub total_bytes: i64,
+    pub received_bytes: i64,
+    pub state: String, // "downloading", "completed", "interrupted"
+    pub path: String,
+    pub timestamp: u128,
+}
 
 /// Maximum number of browser tabs allowed.
 const MAX_TABS: usize = 8;
@@ -14,6 +30,7 @@ const MAX_DEVICE_WEBVIEWS: usize = 3;
 /// A single browser tab backed by a native WebView2 instance.
 pub struct BrowserTab {
     pub webview_label: String,
+    pub zoom_factor: f64,
 }
 
 /// A device-preview webview tied to a responsive-design preset.
@@ -30,6 +47,8 @@ pub struct LensState {
     pub bounds: Mutex<Option<(f64, f64, f64, f64)>>,
     /// Device-preview webviews for responsive design mode.
     pub device_webviews: Mutex<Vec<DeviceWebview>>,
+    /// In-memory download tracker. Arc allows cloning into COM handler closures.
+    pub downloads: Arc<Mutex<Vec<DownloadEntry>>>,
 }
 
 /// Get the active lens webview from state, or return an IpcResponse error.
@@ -98,9 +117,33 @@ fn build_shortcut_script() -> String {
                 try {{
                     (new Image()).src = '{}' + lower + '?t=' + Date.now();
                 }} catch(err) {{}}
+            }} else if ((e.ctrlKey || e.metaKey) && lower === 'f') {{
+                e.preventDefault();
+                e.stopPropagation();
+                try {{
+                    (new Image()).src = '{}' + 'find' + '?t=' + Date.now();
+                }} catch(err) {{}}
+            }} else if ((e.ctrlKey || e.metaKey) && (key === '+' || key === '=')) {{
+                e.preventDefault();
+                e.stopPropagation();
+                try {{
+                    (new Image()).src = '{}' + 'zoom-in' + '?t=' + Date.now();
+                }} catch(err) {{}}
+            }} else if ((e.ctrlKey || e.metaKey) && key === '-') {{
+                e.preventDefault();
+                e.stopPropagation();
+                try {{
+                    (new Image()).src = '{}' + 'zoom-out' + '?t=' + Date.now();
+                }} catch(err) {{}}
+            }} else if ((e.ctrlKey || e.metaKey) && key === '0') {{
+                e.preventDefault();
+                e.stopPropagation();
+                try {{
+                    (new Image()).src = '{}' + 'zoom-reset' + '?t=' + Date.now();
+                }} catch(err) {{}}
             }}
         }}, true);"#,
-        shortcut_base, shortcut_base, shortcut_base
+        shortcut_base, shortcut_base, shortcut_base, shortcut_base, shortcut_base, shortcut_base, shortcut_base
     )
 }
 
@@ -262,6 +305,417 @@ const CONSOLE_HOOK_SCRIPT: &str = r#"
 })();
 "#;
 
+/// Register `WebResourceRequested` filters on a child WebView2 so that
+/// `lens-shortcut` and `lens-console` custom URI scheme requests are intercepted
+/// at the COM level.  `register_uri_scheme_protocol` on the Tauri Builder only
+/// intercepts requests from the **main app webview**, not from child webviews.
+///
+/// For each matching request we emit the corresponding Tauri event (same logic
+/// as lib.rs) and return a 1×1 transparent GIF so the `new Image().src` load
+/// succeeds silently.
+fn register_custom_scheme_handler(app: &AppHandle, webview: &tauri::Webview) {
+    let app_handle = app.clone();
+    let _ = webview.with_webview(move |platform_webview| {
+        #[cfg(windows)]
+        {
+            use webview2_com::WebResourceRequestedEventHandler;
+            use webview2_com::Microsoft::Web::WebView2::Win32::*;
+            use windows_core::{HSTRING, Interface};
+
+            unsafe {
+                let controller = platform_webview.controller();
+                let core_webview = match controller.CoreWebView2() {
+                    Ok(wv) => wv,
+                    Err(e) => {
+                        warn!("[lens] Failed to get CoreWebView2 for scheme handler: {:?}", e);
+                        return;
+                    }
+                };
+
+                // Filter for both custom schemes
+                let _ = core_webview.AddWebResourceRequestedFilter(
+                    &HSTRING::from("https://lens-shortcut.localhost/*"),
+                    COREWEBVIEW2_WEB_RESOURCE_CONTEXT_IMAGE,
+                );
+                let _ = core_webview.AddWebResourceRequestedFilter(
+                    &HSTRING::from("https://lens-console.localhost/*"),
+                    COREWEBVIEW2_WEB_RESOURCE_CONTEXT_IMAGE,
+                );
+
+                // Get ICoreWebView2_2 for Environment() access
+                let core_wv2: ICoreWebView2_2 = match core_webview.cast() {
+                    Ok(v) => v,
+                    Err(e) => {
+                        warn!("[lens] Failed to cast to ICoreWebView2_2: {:?}", e);
+                        return;
+                    }
+                };
+                let env = match core_wv2.Environment() {
+                    Ok(e) => e,
+                    Err(e) => {
+                        warn!("[lens] Failed to get environment: {:?}", e);
+                        return;
+                    }
+                };
+
+                let app_for_events = app_handle.clone();
+                let handler = WebResourceRequestedEventHandler::create(Box::new(
+                    move |_sender, args| {
+                        let args = match args {
+                            Some(a) => a,
+                            None => return Ok(()),
+                        };
+
+                        let request = args.Request()?;
+                        let mut uri_pwstr = windows_core::PWSTR::null();
+                        request.Uri(&mut uri_pwstr)?;
+                        let uri = if uri_pwstr.is_null() {
+                            String::new()
+                        } else {
+                            uri_pwstr.to_string().unwrap_or_default()
+                        };
+
+                        // Parse the URI — same logic as lib.rs handlers
+                        let path = uri
+                            .split("localhost")
+                            .nth(1)
+                            .unwrap_or("")
+                            .trim_start_matches('/')
+                            .trim_start_matches(':');
+
+                        if uri.contains("lens-shortcut") {
+                            let key = path
+                                .split('?')
+                                .next()
+                                .unwrap_or("")
+                                .trim_matches('/');
+
+                            if key == "hard-refresh" {
+                                let _ = app_for_events.emit("lens-hard-refresh", serde_json::json!({}));
+                            } else if key == "url-changed" {
+                                let query = path.split('?').nth(1).unwrap_or("");
+                                let url_param = query
+                                    .split('&')
+                                    .find_map(|pair| pair.strip_prefix("url="))
+                                    .unwrap_or("");
+                                let decoded_url = percent_encoding::percent_decode_str(url_param)
+                                    .decode_utf8_lossy()
+                                    .to_string();
+                                let _ = app_for_events.emit(
+                                    "lens-url-changed",
+                                    serde_json::json!({ "url": decoded_url }),
+                                );
+                            } else if !key.is_empty() {
+                                info!("[lens-shortcut] Child webview forwarding: {}", key);
+                                let _ = app_for_events.emit("lens-shortcut", serde_json::json!({ "key": key }));
+                            }
+                        } else if uri.contains("lens-console") {
+                            let level_part = path
+                                .split('?')
+                                .next()
+                                .unwrap_or("")
+                                .trim_matches('/');
+                            let query = path.split('?').nth(1).unwrap_or("");
+                            let encoded_msg = query
+                                .split('&')
+                                .find_map(|pair| pair.strip_prefix("m="))
+                                .unwrap_or("");
+                            let message = percent_encoding::percent_decode_str(encoded_msg)
+                                .decode_utf8_lossy()
+                                .to_string();
+                            if !message.is_empty() {
+                                let log_level = match level_part {
+                                    "error" => "ERROR",
+                                    "warn" => "WARN",
+                                    "debug" => "DEBUG",
+                                    "info" => "INFO",
+                                    _ => "INFO",
+                                };
+                                let _ = app_for_events.emit(
+                                    "lens-console-message",
+                                    serde_json::json!({ "level": log_level, "message": message }),
+                                );
+                            }
+                        }
+
+                        // Return empty 200 response so the Image() load doesn't error
+                        let response = env.CreateWebResourceResponse(
+                            None,
+                            200,
+                            &HSTRING::from("OK"),
+                            &HSTRING::from("Access-Control-Allow-Origin: *"),
+                        )?;
+                        args.SetResponse(&response)?;
+
+                        Ok(())
+                    },
+                ));
+
+                let mut token: i64 = 0;
+                if let Err(e) = core_webview.add_WebResourceRequested(&handler, &mut token) {
+                    warn!("[lens] Failed to register WebResourceRequested: {:?}", e);
+                } else {
+                    info!("[lens] Registered custom scheme handler for child webview");
+                }
+            }
+        }
+    });
+}
+
+/// Hook the WebView2 `DownloadStarting` event so file downloads are tracked
+/// and progress is emitted to the frontend.  Called once per newly-created
+/// child webview.
+///
+/// `SetHandled(false)` lets WebView2 use its built-in Save-As dialog while we
+/// still receive state-change and progress callbacks.
+fn register_download_handler(
+    app: &AppHandle,
+    webview: &tauri::Webview,
+    downloads: Arc<Mutex<Vec<DownloadEntry>>>,
+) {
+    let app_handle = app.clone();
+    let _ = webview.with_webview(move |platform_webview| {
+        #[cfg(windows)]
+        {
+            use webview2_com::{
+                DownloadStartingEventHandler,
+                StateChangedEventHandler,
+                BytesReceivedChangedEventHandler,
+                take_pwstr,
+            };
+            use webview2_com::Microsoft::Web::WebView2::Win32::*;
+            use windows_core::Interface;
+
+            unsafe {
+                let controller = platform_webview.controller();
+                let core_webview = match controller.CoreWebView2() {
+                    Ok(wv) => wv,
+                    Err(e) => {
+                        warn!("[lens] Failed to get CoreWebView2 for download handler: {:?}", e);
+                        return;
+                    }
+                };
+
+                let wv4: ICoreWebView2_4 = match core_webview.cast() {
+                    Ok(v) => v,
+                    Err(e) => {
+                        warn!("[lens] Failed to cast to ICoreWebView2_4: {:?}", e);
+                        return;
+                    }
+                };
+
+                let downloads_for_handler = downloads.clone();
+                let app_for_handler = app_handle.clone();
+
+                let handler = DownloadStartingEventHandler::create(Box::new(
+                    move |_sender, args| {
+                        let args = match args {
+                            Some(a) => a,
+                            None => return Ok(()),
+                        };
+
+                        // Get download operation
+                        let download_op = args.DownloadOperation()?;
+
+                        // Get result file path from args (where WebView2 will save)
+                        let mut result_path_pwstr = windows_core::PWSTR::null();
+                        args.ResultFilePath(&mut result_path_pwstr)?;
+                        let result_path = take_pwstr(result_path_pwstr);
+
+                        // Extract filename from the path
+                        let filename = std::path::Path::new(&result_path)
+                            .file_name()
+                            .map(|n| n.to_string_lossy().to_string())
+                            .unwrap_or_else(|| "download".to_string());
+
+                        // Get URI from download operation
+                        let mut uri_pwstr = windows_core::PWSTR::null();
+                        download_op.Uri(&mut uri_pwstr)?;
+                        let uri = take_pwstr(uri_pwstr);
+
+                        // Get total bytes
+                        let mut total_bytes: i64 = -1;
+                        let _ = download_op.TotalBytesToReceive(&mut total_bytes);
+
+                        // Generate unique download ID
+                        let dl_id = format!("dl-{}", DOWNLOAD_COUNTER.fetch_add(1, Ordering::Relaxed));
+
+                        let timestamp = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_millis();
+
+                        let entry = DownloadEntry {
+                            id: dl_id.clone(),
+                            filename: filename.clone(),
+                            url: uri.clone(),
+                            total_bytes,
+                            received_bytes: 0,
+                            state: "downloading".to_string(),
+                            path: result_path.clone(),
+                            timestamp,
+                        };
+
+                        // Store entry
+                        if let Ok(mut guard) = downloads_for_handler.lock() {
+                            guard.push(entry.clone());
+                        }
+
+                        // Emit start event
+                        let _ = app_for_handler.emit(
+                            "lens-download-started",
+                            serde_json::json!({
+                                "id": dl_id,
+                                "filename": filename,
+                                "url": uri,
+                                "totalBytes": total_bytes,
+                                "receivedBytes": 0,
+                                "state": "downloading",
+                                "path": result_path,
+                                "timestamp": timestamp,
+                            }),
+                        );
+
+                        info!("[lens] Download started: {} -> {}", filename, result_path);
+
+                        // Let WebView2 use its default Save-As dialog
+                        args.SetHandled(false)?;
+
+                        // Register BytesReceivedChanged handler for progress updates
+                        {
+                            let dl_id_progress = dl_id.clone();
+                            let app_progress = app_for_handler.clone();
+                            let downloads_progress = downloads_for_handler.clone();
+
+                            let progress_handler = BytesReceivedChangedEventHandler::create(
+                                Box::new(move |sender, _args| {
+                                    let op = match sender {
+                                        Some(ref op) => op,
+                                        None => return Ok(()),
+                                    };
+
+                                    let mut received: i64 = 0;
+                                    let _ = op.BytesReceived(&mut received);
+                                    let mut total: i64 = -1;
+                                    let _ = op.TotalBytesToReceive(&mut total);
+
+                                    // Update in-memory entry
+                                    if let Ok(mut guard) = downloads_progress.lock() {
+                                        if let Some(entry) = guard.iter_mut().find(|e| e.id == dl_id_progress) {
+                                            entry.received_bytes = received;
+                                            if total > 0 {
+                                                entry.total_bytes = total;
+                                            }
+                                        }
+                                    }
+
+                                    let _ = app_progress.emit(
+                                        "lens-download-progress",
+                                        serde_json::json!({
+                                            "id": dl_id_progress,
+                                            "receivedBytes": received,
+                                            "totalBytes": total,
+                                        }),
+                                    );
+
+                                    Ok(())
+                                }),
+                            );
+
+                            let mut progress_token: i64 = 0;
+                            let _ = download_op.add_BytesReceivedChanged(
+                                &progress_handler,
+                                &mut progress_token,
+                            );
+                        }
+
+                        // Register StateChanged handler for completion/interruption
+                        {
+                            let dl_id_state = dl_id.clone();
+                            let app_state = app_for_handler.clone();
+                            let downloads_state = downloads_for_handler.clone();
+
+                            let state_handler = StateChangedEventHandler::create(Box::new(
+                                move |sender, _args| {
+                                    let op = match sender {
+                                        Some(ref op) => op,
+                                        None => return Ok(()),
+                                    };
+
+                                    let mut download_state = COREWEBVIEW2_DOWNLOAD_STATE_IN_PROGRESS;
+                                    op.State(&mut download_state)?;
+
+                                    let mut received: i64 = 0;
+                                    let _ = op.BytesReceived(&mut received);
+                                    let mut total: i64 = -1;
+                                    let _ = op.TotalBytesToReceive(&mut total);
+
+                                    // Get the final result file path (may differ from initial)
+                                    let mut final_path_pwstr = windows_core::PWSTR::null();
+                                    let _ = op.ResultFilePath(&mut final_path_pwstr);
+                                    let final_path = take_pwstr(final_path_pwstr);
+
+                                    let state_str = match download_state {
+                                        COREWEBVIEW2_DOWNLOAD_STATE_COMPLETED => "completed",
+                                        COREWEBVIEW2_DOWNLOAD_STATE_INTERRUPTED => "interrupted",
+                                        _ => "downloading",
+                                    };
+
+                                    // Update in-memory entry
+                                    if let Ok(mut guard) = downloads_state.lock() {
+                                        if let Some(entry) = guard.iter_mut().find(|e| e.id == dl_id_state) {
+                                            entry.state = state_str.to_string();
+                                            entry.received_bytes = received;
+                                            if total > 0 {
+                                                entry.total_bytes = total;
+                                            }
+                                            if !final_path.is_empty() {
+                                                entry.path = final_path.clone();
+                                            }
+                                        }
+                                    }
+
+                                    let _ = app_state.emit(
+                                        "lens-download-progress",
+                                        serde_json::json!({
+                                            "id": dl_id_state,
+                                            "receivedBytes": received,
+                                            "totalBytes": total,
+                                            "state": state_str,
+                                            "path": final_path,
+                                        }),
+                                    );
+
+                                    if state_str != "downloading" {
+                                        info!("[lens] Download {}: {} ({})", state_str, dl_id_state, final_path);
+                                    }
+
+                                    Ok(())
+                                },
+                            ));
+
+                            let mut state_token: i64 = 0;
+                            let _ = download_op.add_StateChanged(
+                                &state_handler,
+                                &mut state_token,
+                            );
+                        }
+
+                        Ok(())
+                    },
+                ));
+
+                let mut token: i64 = 0;
+                if let Err(e) = wv4.add_DownloadStarting(&handler, &mut token) {
+                    warn!("[lens] Failed to register download handler: {:?}", e);
+                } else {
+                    info!("[lens] Download handler registered (token={})", token);
+                }
+            }
+        }
+    });
+}
+
 /// Internal helper: create a WebView2 child webview for a browser tab.
 /// Returns the webview label on success.
 async fn create_tab_webview(
@@ -272,6 +726,7 @@ async fn create_tab_webview(
     y: f64,
     width: f64,
     height: f64,
+    downloads: Arc<Mutex<Vec<DownloadEntry>>>,
 ) -> Result<String, String> {
     let parsed_url = url.parse::<tauri::Url>()
         .map_err(|e| format!("Invalid URL: {}", e))?;
@@ -283,6 +738,7 @@ async fn create_tab_webview(
     let label = format!("lens-{}", timestamp);
 
     let app_clone = app.clone();
+    let app_for_download = app.clone();
     let label_clone = label.clone();
     let tab_id_clone = tab_id.to_string();
     let shortcut_script = build_shortcut_script();
@@ -310,6 +766,10 @@ async fn create_tab_webview(
                             "lens-url-changed",
                             serde_json::json!({ "url": url_str, "tabId": tab_id_for_handler }),
                         );
+                        let _ = app_for_handler.emit(
+                            "lens-history-entry",
+                            serde_json::json!({ "url": url_str, "tabId": tab_id_for_handler }),
+                        );
                         // Extract page title via COM API and emit lens-title-changed event
                         report_page_title(&app_for_handler, &webview, tab_id_for_handler.clone());
                     }
@@ -322,8 +782,10 @@ async fn create_tab_webview(
             Position::Logical(LogicalPosition::new(x, y)),
             Size::Logical(LogicalSize::new(width, height)),
         ) {
-            Ok(_webview) => {
+            Ok(webview_ref) => {
                 info!("[lens] Webview created successfully: {} (tab {})", label_clone, tab_id_clone);
+                register_custom_scheme_handler(&app_for_download, &webview_ref);
+                register_download_handler(&app_for_download, &webview_ref, downloads);
                 Ok(label_clone)
             }
             Err(e) => {
@@ -381,13 +843,14 @@ pub async fn lens_create_tab(
     }
 
     // Create the WebView2 instance
-    let label = create_tab_webview(&app, &tab_id, &url, x, y, width, height).await?;
+    let downloads_arc = state.downloads.clone();
+    let label = create_tab_webview(&app, &tab_id, &url, x, y, width, height, downloads_arc).await?;
 
     // Store the tab and set as active
     {
         let mut tabs = state.tabs.lock()
             .map_err(|e| format!("Lock error: {}", e))?;
-        tabs.insert(tab_id.clone(), BrowserTab { webview_label: label.clone() });
+        tabs.insert(tab_id.clone(), BrowserTab { webview_label: label.clone(), zoom_factor: 1.0 });
     }
     {
         let mut active = state.active_tab_id.lock()
@@ -613,13 +1076,14 @@ pub async fn lens_create_webview(
         .unwrap_or_default()
         .as_millis());
 
-    let label = create_tab_webview(&app, &tab_id, &url, x, y, width, height).await?;
+    let downloads_arc = state.downloads.clone();
+    let label = create_tab_webview(&app, &tab_id, &url, x, y, width, height, downloads_arc).await?;
 
     // Store the tab and set as active
     {
         let mut tabs = state.tabs.lock()
             .map_err(|e| format!("Lock error: {}", e))?;
-        tabs.insert(tab_id.clone(), BrowserTab { webview_label: label.clone() });
+        tabs.insert(tab_id.clone(), BrowserTab { webview_label: label.clone(), zoom_factor: 1.0 });
     }
     {
         let mut active = state.active_tab_id.lock()
@@ -928,7 +1392,8 @@ pub async fn lens_create_device_webview(
     let webview_label = format!("device-{}", preset_id);
 
     // Create the WebView2 instance using the shared helper
-    let label = create_tab_webview(&app, &webview_label, &url, x, y, width, height).await?;
+    let downloads_arc = state.downloads.clone();
+    let label = create_tab_webview(&app, &webview_label, &url, x, y, width, height, downloads_arc).await?;
 
     // Store in device_webviews vec
     {
@@ -1190,4 +1655,423 @@ pub async fn lens_eval_device_js(
     } else {
         Err(format!("Webview '{}' not found in app", label))
     }
+}
+
+// ---------------------------------------------------------------------------
+// Zoom
+// ---------------------------------------------------------------------------
+
+/// Set the zoom level of a browser tab's WebView2 instance.
+/// Uses `ICoreWebView2Controller::SetZoomFactor` (synchronous COM call).
+/// The factor is clamped to [0.25, 2.0].
+#[tauri::command]
+pub fn lens_set_zoom(
+    app: AppHandle,
+    tab_id: String,
+    factor: f64,
+    state: tauri::State<'_, LensState>,
+) -> IpcResponse {
+    let tabs = state.tabs.lock().unwrap();
+    let tab = match tabs.get(&tab_id) {
+        Some(t) => t,
+        None => return IpcResponse::err("Tab not found"),
+    };
+    let label = tab.webview_label.clone();
+    drop(tabs);
+
+    let factor_clamped = factor.clamp(0.25, 2.0);
+
+    if let Some(webview) = app.get_webview(&label) {
+        let _ = webview.with_webview(move |platform_webview| {
+            #[cfg(windows)]
+            unsafe {
+                let controller = platform_webview.controller();
+                let _ = controller.SetZoomFactor(factor_clamped);
+            }
+        });
+
+        let mut tabs = state.tabs.lock().unwrap();
+        if let Some(tab) = tabs.get_mut(&tab_id) {
+            tab.zoom_factor = factor_clamped;
+        }
+        IpcResponse::ok(serde_json::json!({ "zoomFactor": factor_clamped }))
+    } else {
+        IpcResponse::err("Webview not found")
+    }
+}
+
+/// Get the current zoom factor for a browser tab.
+#[tauri::command]
+pub fn lens_get_zoom(
+    tab_id: String,
+    state: tauri::State<'_, LensState>,
+) -> IpcResponse {
+    let tabs = state.tabs.lock().unwrap();
+    match tabs.get(&tab_id) {
+        Some(tab) => IpcResponse::ok(serde_json::json!({ "zoomFactor": tab.zoom_factor })),
+        None => IpcResponse::err("Tab not found"),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Find on Page
+// ---------------------------------------------------------------------------
+
+/// Find text on the current page using `window.find()` (Chromium non-standard API).
+/// Highlights the first match and returns `{ found: true/false }`.
+/// Wraps around (`wrapAround=true`) and searches inside frames (`searchInFrames=true`).
+#[tauri::command]
+pub fn lens_find_on_page(
+    app: AppHandle,
+    tab_id: String,
+    query: String,
+    state: tauri::State<'_, LensState>,
+) -> IpcResponse {
+    let tabs = state.tabs.lock().unwrap();
+    let tab = match tabs.get(&tab_id) {
+        Some(t) => t,
+        None => return IpcResponse::err("Tab not found"),
+    };
+    let label = tab.webview_label.clone();
+    drop(tabs);
+
+    if let Some(webview) = app.get_webview(&label) {
+        // window.find(query, caseSensitive, backwards, wrapAround, wholeWord, searchInFrames, showDialog)
+        let js = format!(
+            "window.find({}, false, false, true, false, true, false)",
+            serde_json::to_string(&query).unwrap_or_default()
+        );
+        let (tx, rx) = std::sync::mpsc::channel();
+
+        let _ = webview.with_webview(move |platform_webview| {
+            #[cfg(windows)]
+            {
+                use webview2_com::ExecuteScriptCompletedHandler;
+                use windows_core::HSTRING;
+                unsafe {
+                    let controller = platform_webview.controller();
+                    let core_webview = match controller.CoreWebView2() {
+                        Ok(wv) => wv,
+                        Err(e) => { let _ = tx.send(Err(format!("{:?}", e))); return; }
+                    };
+                    let handler = ExecuteScriptCompletedHandler::create(Box::new(move |hr, result| {
+                        if hr.is_ok() {
+                            let _ = tx.send(Ok(result));
+                        } else {
+                            let _ = tx.send(Err(format!("HRESULT {:?}", hr)));
+                        }
+                        Ok(())
+                    }));
+                    let _ = core_webview.ExecuteScript(&HSTRING::from(js.as_str()), &handler);
+                }
+            }
+        });
+
+        match rx.recv_timeout(std::time::Duration::from_secs(3)) {
+            Ok(Ok(result)) => IpcResponse::ok(serde_json::json!({ "found": result == "true" })),
+            Ok(Err(e)) => IpcResponse::err(&e),
+            Err(_) => IpcResponse::err("Find timed out"),
+        }
+    } else {
+        IpcResponse::err("Webview not found")
+    }
+}
+
+/// Execute JavaScript in a browser tab's child WebView2 (fire-and-forget).
+#[tauri::command]
+pub fn lens_eval_tab_js(
+    app: AppHandle,
+    tab_id: String,
+    js: String,
+    state: tauri::State<'_, LensState>,
+) -> IpcResponse {
+    let tabs = state.tabs.lock().unwrap();
+    let tab = match tabs.get(&tab_id) {
+        Some(t) => t,
+        None => return IpcResponse::err("Tab not found"),
+    };
+    let label = tab.webview_label.clone();
+    drop(tabs);
+
+    if let Some(webview) = app.get_webview(&label) {
+        match webview.eval(&js) {
+            Ok(()) => IpcResponse::ok_empty(),
+            Err(e) => IpcResponse::err(&format!("{:?}", e)),
+        }
+    } else {
+        IpcResponse::err("Webview not found")
+    }
+}
+
+/// Find the next occurrence of the last searched query (forward).
+#[tauri::command]
+pub fn lens_find_next(
+    app: AppHandle,
+    tab_id: String,
+    query: String,
+    state: tauri::State<'_, LensState>,
+) -> IpcResponse {
+    let tabs = state.tabs.lock().unwrap();
+    let tab = match tabs.get(&tab_id) {
+        Some(t) => t,
+        None => return IpcResponse::err("Tab not found"),
+    };
+    let label = tab.webview_label.clone();
+    drop(tabs);
+
+    if let Some(webview) = app.get_webview(&label) {
+        let js = format!(
+            "window.find({}, false, false, true, false, true, false)",
+            serde_json::to_string(&query).unwrap_or_default()
+        );
+        let (tx, rx) = std::sync::mpsc::channel();
+
+        let _ = webview.with_webview(move |platform_webview| {
+            #[cfg(windows)]
+            {
+                use webview2_com::ExecuteScriptCompletedHandler;
+                use windows_core::HSTRING;
+                unsafe {
+                    let controller = platform_webview.controller();
+                    let core_webview = match controller.CoreWebView2() {
+                        Ok(wv) => wv,
+                        Err(e) => { let _ = tx.send(Err(format!("{:?}", e))); return; }
+                    };
+                    let handler = ExecuteScriptCompletedHandler::create(Box::new(move |hr, result| {
+                        if hr.is_ok() {
+                            let _ = tx.send(Ok(result));
+                        } else {
+                            let _ = tx.send(Err(format!("HRESULT {:?}", hr)));
+                        }
+                        Ok(())
+                    }));
+                    let _ = core_webview.ExecuteScript(&HSTRING::from(js.as_str()), &handler);
+                }
+            }
+        });
+
+        match rx.recv_timeout(std::time::Duration::from_secs(3)) {
+            Ok(Ok(result)) => IpcResponse::ok(serde_json::json!({ "found": result == "true" })),
+            Ok(Err(e)) => IpcResponse::err(&e),
+            Err(_) => IpcResponse::err("Find timed out"),
+        }
+    } else {
+        IpcResponse::err("Webview not found")
+    }
+}
+
+/// Find the previous occurrence (backwards=true).
+#[tauri::command]
+pub fn lens_find_previous(
+    app: AppHandle,
+    tab_id: String,
+    query: String,
+    state: tauri::State<'_, LensState>,
+) -> IpcResponse {
+    let tabs = state.tabs.lock().unwrap();
+    let tab = match tabs.get(&tab_id) {
+        Some(t) => t,
+        None => return IpcResponse::err("Tab not found"),
+    };
+    let label = tab.webview_label.clone();
+    drop(tabs);
+
+    if let Some(webview) = app.get_webview(&label) {
+        // backwards=true (3rd param)
+        let js = format!(
+            "window.find({}, false, true, true, false, true, false)",
+            serde_json::to_string(&query).unwrap_or_default()
+        );
+        let (tx, rx) = std::sync::mpsc::channel();
+
+        let _ = webview.with_webview(move |platform_webview| {
+            #[cfg(windows)]
+            {
+                use webview2_com::ExecuteScriptCompletedHandler;
+                use windows_core::HSTRING;
+                unsafe {
+                    let controller = platform_webview.controller();
+                    let core_webview = match controller.CoreWebView2() {
+                        Ok(wv) => wv,
+                        Err(e) => { let _ = tx.send(Err(format!("{:?}", e))); return; }
+                    };
+                    let handler = ExecuteScriptCompletedHandler::create(Box::new(move |hr, result| {
+                        if hr.is_ok() {
+                            let _ = tx.send(Ok(result));
+                        } else {
+                            let _ = tx.send(Err(format!("HRESULT {:?}", hr)));
+                        }
+                        Ok(())
+                    }));
+                    let _ = core_webview.ExecuteScript(&HSTRING::from(js.as_str()), &handler);
+                }
+            }
+        });
+
+        match rx.recv_timeout(std::time::Duration::from_secs(3)) {
+            Ok(Ok(result)) => IpcResponse::ok(serde_json::json!({ "found": result == "true" })),
+            Ok(Err(e)) => IpcResponse::err(&e),
+            Err(_) => IpcResponse::err("Find timed out"),
+        }
+    } else {
+        IpcResponse::err("Webview not found")
+    }
+}
+
+/// Clear the find selection (remove all highlighted matches).
+#[tauri::command]
+pub fn lens_close_find(
+    app: AppHandle,
+    tab_id: String,
+    state: tauri::State<'_, LensState>,
+) -> IpcResponse {
+    let tabs = state.tabs.lock().unwrap();
+    let tab = match tabs.get(&tab_id) {
+        Some(t) => t,
+        None => return IpcResponse::err("Tab not found"),
+    };
+    let label = tab.webview_label.clone();
+    drop(tabs);
+
+    if let Some(webview) = app.get_webview(&label) {
+        let _ = webview.eval("window.getSelection().removeAllRanges()");
+        IpcResponse::ok_empty()
+    } else {
+        IpcResponse::err("Webview not found")
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Browser History
+// ---------------------------------------------------------------------------
+
+/// Maximum number of history entries retained in browser-history.json.
+const MAX_HISTORY_ENTRIES: usize = 200;
+
+fn history_path() -> std::path::PathBuf {
+    crate::services::platform::get_data_dir().join("browser-history.json")
+}
+
+fn read_history() -> Vec<serde_json::Value> {
+    let path = history_path();
+    if let Ok(data) = std::fs::read_to_string(&path) {
+        serde_json::from_str(&data).unwrap_or_default()
+    } else {
+        Vec::new()
+    }
+}
+
+fn write_history(entries: &[serde_json::Value]) {
+    let path = history_path();
+    if let Ok(json) = serde_json::to_string_pretty(entries) {
+        let _ = std::fs::write(path, json);
+    }
+}
+
+/// Add a history entry (newest-first, deduplicated against the last entry).
+/// Skips empty URLs and "about:blank".
+#[tauri::command]
+pub fn lens_add_history_entry(url: String, title: String) -> IpcResponse {
+    if url.is_empty() || url == "about:blank" {
+        return IpcResponse::ok_empty();
+    }
+
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+
+    let mut entries = read_history();
+
+    // Dedup: skip if the last entry has the same URL
+    if let Some(last) = entries.first() {
+        if last.get("url").and_then(|v| v.as_str()) == Some(&url) {
+            return IpcResponse::ok_empty();
+        }
+    }
+
+    // Prepend new entry (newest first)
+    entries.insert(0, serde_json::json!({
+        "url": url,
+        "title": title,
+        "timestamp": timestamp,
+    }));
+
+    // Truncate to max
+    entries.truncate(MAX_HISTORY_ENTRIES);
+
+    write_history(&entries);
+    IpcResponse::ok_empty()
+}
+
+/// Return all history entries (newest first).
+#[tauri::command]
+pub fn lens_get_history() -> IpcResponse {
+    let entries = read_history();
+    IpcResponse::ok(serde_json::json!({ "entries": entries }))
+}
+
+/// Clear all browser history.
+#[tauri::command]
+pub fn lens_clear_history() -> IpcResponse {
+    write_history(&[]);
+    IpcResponse::ok_empty()
+}
+
+/// Delete a single history entry by its timestamp.
+#[tauri::command]
+pub fn lens_delete_history_entry(timestamp: u128) -> IpcResponse {
+    let mut entries = read_history();
+    entries.retain(|e| {
+        e.get("timestamp")
+            .and_then(|v| v.as_u64())
+            .map(|t| t as u128)
+            != Some(timestamp)
+    });
+    write_history(&entries);
+    IpcResponse::ok_empty()
+}
+
+// ─── Download Manager ────────────────────────────────────────────────────────
+
+/// Return all tracked downloads.
+#[tauri::command]
+pub fn lens_get_downloads(
+    state: tauri::State<'_, LensState>,
+) -> IpcResponse {
+    let downloads = state.downloads.lock().unwrap();
+    IpcResponse::ok(serde_json::json!({ "downloads": downloads.clone() }))
+}
+
+/// Clear completed and interrupted downloads from the list.
+/// In-progress downloads are kept.
+#[tauri::command]
+pub fn lens_clear_downloads(
+    state: tauri::State<'_, LensState>,
+) -> IpcResponse {
+    let mut downloads = state.downloads.lock().unwrap();
+    downloads.retain(|d| d.state == "downloading");
+    IpcResponse::ok_empty()
+}
+
+/// Open a downloaded file with the OS default handler.
+#[tauri::command]
+pub fn lens_open_download(path: String) -> IpcResponse {
+    if let Err(e) = opener::open(&path) {
+        return IpcResponse::err(format!("Failed to open: {}", e));
+    }
+    IpcResponse::ok_empty()
+}
+
+/// Open the folder containing a downloaded file.
+#[tauri::command]
+pub fn lens_open_download_folder(path: String) -> IpcResponse {
+    let parent = std::path::Path::new(&path)
+        .parent()
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_default();
+    if let Err(e) = opener::open(&parent) {
+        return IpcResponse::err(format!("Failed to open folder: {}", e));
+    }
+    IpcResponse::ok_empty()
 }

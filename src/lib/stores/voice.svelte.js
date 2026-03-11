@@ -206,6 +206,13 @@ export async function initVoiceListeners() {
   // Messages arrive via both named pipe (fast) and inbox watcher (slow fallback).
   // Deduplicate by message ID to prevent double cards/TTS.
   const seenMessageIds = new Set();
+
+  // When a new Claude session starts, reset dedup tracking.
+  // The backend clears inbox.json on session start, so old IDs are irrelevant.
+  await listen('mcp-session-start', () => {
+    seenMessageIds.clear();
+  });
+
   await listen('mcp-inbox-message', (event) => {
     const payload = event.payload;
     if (!payload || !payload.text) return;
@@ -214,11 +221,6 @@ export async function initVoiceListeners() {
     if (payload.id && seenMessageIds.has(payload.id)) return;
     if (payload.id) {
       seenMessageIds.add(payload.id);
-      // Keep bounded (last 100 IDs)
-      if (seenMessageIds.size > 100) {
-        const first = seenMessageIds.values().next().value;
-        seenMessageIds.delete(first);
-      }
     }
 
     if (payload.kind === 'ai_message') {

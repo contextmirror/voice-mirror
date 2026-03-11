@@ -20,7 +20,8 @@
   import { aiStatusStore, switchProvider, stopProvider } from '../../lib/stores/ai-status.svelte.js';
   import { configStore, updateConfig } from '../../lib/stores/config.svelte.js';
   import { toastStore } from '../../lib/stores/toast.svelte.js';
-  import { PROVIDER_GROUPS, PROVIDER_ICONS, PROVIDER_NAMES } from '../../lib/providers.js';
+  import { PROVIDER_GROUPS, PROVIDER_ICONS, PROVIDER_NAMES, CLI_PROVIDERS } from '../../lib/providers.js';
+  import { open as openDialog } from '@tauri-apps/plugin-dialog';
   import { setActionHandler } from '../../lib/stores/shortcuts.svelte.js';
   import TerminalActionBar from './TerminalActionBar.svelte';
   import OutputPanel from '../lens/OutputPanel.svelte';
@@ -121,18 +122,18 @@
 
   // ---- Right-click context menu (Voice Agent tab) ----
 
-  let contextMenu = $state({ visible: false, x: 0, y: 0, tabId: null });
+  let contextMenu = $state({ visible: false, x: 0, y: 0, tabId: null, step: 'providers', pendingProvider: null });
 
   function showContextMenu(e, tabId) {
     e.preventDefault();
     const estimatedHeight = tabId === 'ai' ? 380 : 140;
     const maxY = window.innerHeight - estimatedHeight;
     const y = Math.min(e.clientY, Math.max(0, maxY));
-    contextMenu = { visible: true, x: e.clientX, y, tabId };
+    contextMenu = { visible: true, x: e.clientX, y, tabId, step: 'providers', pendingProvider: null };
   }
 
   function closeContextMenu() {
-    contextMenu = { ...contextMenu, visible: false };
+    contextMenu = { ...contextMenu, visible: false, step: 'providers', pendingProvider: null };
   }
 
   function contextClear() {
@@ -141,13 +142,40 @@
   }
 
   async function contextSwitchProvider(providerId) {
-    if (providerId === aiStatusStore.providerType) {
+    if (providerId === aiStatusStore.providerType && !CLI_PROVIDERS.includes(providerId)) {
       closeContextMenu();
       return;
     }
+
+    // CLI providers: show workspace picker step
+    if (CLI_PROVIDERS.includes(providerId)) {
+      contextMenu = { ...contextMenu, step: 'workspaces', pendingProvider: providerId };
+      return;
+    }
+
     closeContextMenu();
+    await doContextSwitch(providerId);
+  }
+
+  async function contextSwitchWithWorkspace(cwd) {
+    const providerId = contextMenu.pendingProvider;
+    closeContextMenu();
+    await doContextSwitch(providerId, cwd || undefined);
+  }
+
+  async function contextBrowseWorkspace() {
+    const selected = await openDialog({ directory: true });
+    if (selected) {
+      await contextSwitchWithWorkspace(selected);
+    }
+  }
+
+  async function doContextSwitch(providerId, cwd) {
     try {
-      await updateConfig({ ai: { provider: providerId } });
+      const patch = { ai: { provider: providerId } };
+      if (cwd) patch.ai.lastWorkspace = cwd;
+      await updateConfig(patch);
+
       const cfg = configStore.value;
       const endpoints = cfg?.ai?.endpoints || {};
       const apiKeys = cfg?.ai?.apiKeys || {};
@@ -156,6 +184,7 @@
         baseUrl: endpoints[providerId] || undefined,
         apiKey: apiKeys[providerId] || undefined,
         contextLength: cfg?.ai?.contextLength || undefined,
+        cwd,
       });
       toastStore.addToast({
         message: `Switched to ${PROVIDER_NAMES[providerId] || providerId}`,
@@ -679,53 +708,96 @@
       class:wide={contextMenu.tabId === 'ai'}
       style="left: {contextMenu.x}px; top: {contextMenu.y}px;"
     >
-      <button class="context-menu-item" onclick={contextClear}>
-        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/>
-          <line x1="18" y1="9" x2="12" y2="15"/><line x1="12" y1="9" x2="18" y2="15"/>
-        </svg>
-        Clear
-      </button>
-
-      {#if contextMenu.tabId === 'ai'}
+      {#if contextMenu.step === 'workspaces'}
+        <!-- Workspace picker (drill-down from CLI provider) -->
+        <button class="context-menu-item" onclick={() => contextMenu = { ...contextMenu, step: 'providers', pendingProvider: null }}>
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="15 18 9 12 15 6"/>
+          </svg>
+          Back
+        </button>
         <div class="context-menu-divider"></div>
-        {#each PROVIDER_GROUPS as group}
-          <div class="context-menu-group-label">{group.label}</div>
-          {#each group.providers as opt}
-            <button
-              class="context-menu-item provider-item"
-              class:current={aiStatusStore.providerType === opt.value}
-              onclick={() => contextSwitchProvider(opt.value)}
-            >
-              {#if PROVIDER_ICONS[opt.value]?.type === 'cover'}
-                <span class="ctx-provider-icon" style="background: url({PROVIDER_ICONS[opt.value].src}) center/cover no-repeat; border-radius: 3px;"></span>
-              {:else if PROVIDER_ICONS[opt.value]}
-                <span class="ctx-provider-icon" style="background: {PROVIDER_ICONS[opt.value].bg};">
-                  <img src={PROVIDER_ICONS[opt.value].src} alt="" class="ctx-provider-icon-inner" />
-                </span>
-              {/if}
-              <span class="ctx-provider-label">{opt.label}</span>
-              {#if aiStatusStore.providerType === opt.value}
-                {#if aiStatusStore.starting}
-                  <span class="ctx-provider-status">Starting...</span>
-                {:else}
-                  <svg class="ctx-check" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5">
-                    <polyline points="20 6 9 17 4 12"/>
+        <div class="context-menu-group-label">Workspace for {PROVIDER_NAMES[contextMenu.pendingProvider] || contextMenu.pendingProvider}</div>
+        <button
+          class="context-menu-item"
+          onclick={() => contextSwitchWithWorkspace('')}
+        >
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
+          </svg>
+          <span class="ctx-provider-label">Voice Mirror (default)</span>
+        </button>
+        {#each projectStore.entries as project}
+          <button
+            class="context-menu-item"
+            onclick={() => contextSwitchWithWorkspace(project.path)}
+          >
+            <span class="ctx-workspace-dot" style="background: {project.color};"></span>
+            <span class="ctx-provider-label">{project.name}</span>
+          </button>
+        {/each}
+        <div class="context-menu-divider"></div>
+        <button class="context-menu-item" onclick={contextBrowseWorkspace}>
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
+            <line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/>
+          </svg>
+          Open folder...
+        </button>
+      {:else}
+        <button class="context-menu-item" onclick={contextClear}>
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/>
+            <line x1="18" y1="9" x2="12" y2="15"/><line x1="12" y1="9" x2="18" y2="15"/>
+          </svg>
+          Clear
+        </button>
+
+        {#if contextMenu.tabId === 'ai'}
+          <div class="context-menu-divider"></div>
+          {#each PROVIDER_GROUPS as group}
+            <div class="context-menu-group-label">{group.label}</div>
+            {#each group.providers as opt}
+              <button
+                class="context-menu-item provider-item"
+                class:current={aiStatusStore.providerType === opt.value}
+                onclick={() => contextSwitchProvider(opt.value)}
+              >
+                {#if PROVIDER_ICONS[opt.value]?.type === 'cover'}
+                  <span class="ctx-provider-icon" style="background: url({PROVIDER_ICONS[opt.value].src}) center/cover no-repeat; border-radius: 3px;"></span>
+                {:else if PROVIDER_ICONS[opt.value]}
+                  <span class="ctx-provider-icon" style="background: {PROVIDER_ICONS[opt.value].bg};">
+                    <img src={PROVIDER_ICONS[opt.value].src} alt="" class="ctx-provider-icon-inner" />
+                  </span>
+                {/if}
+                <span class="ctx-provider-label">{opt.label}</span>
+                {#if CLI_PROVIDERS.includes(opt.value)}
+                  <svg class="ctx-submenu-arrow" viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="9 6 15 12 9 18"/>
                   </svg>
                 {/if}
-              {/if}
-            </button>
+                {#if aiStatusStore.providerType === opt.value}
+                  {#if aiStatusStore.starting}
+                    <span class="ctx-provider-status">Starting...</span>
+                  {:else}
+                    <svg class="ctx-check" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5">
+                      <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                  {/if}
+                {/if}
+              </button>
+            {/each}
           {/each}
-        {/each}
 
-        {#if aiStatusStore.running || aiStatusStore.starting}
-          <div class="context-menu-divider"></div>
-          <button class="context-menu-item danger" onclick={contextStopProvider}>
-            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="3" y="3" width="18" height="18" rx="2"/>
-            </svg>
-            Stop Provider
-          </button>
+          {#if aiStatusStore.running || aiStatusStore.starting}
+            <div class="context-menu-divider"></div>
+            <button class="context-menu-item danger" onclick={contextStopProvider}>
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="18" height="18" rx="2"/>
+              </svg>
+              Stop Provider
+            </button>
+          {/if}
         {/if}
       {/if}
     </div>
@@ -1090,6 +1162,19 @@
     font-size: 10px;
     color: var(--muted);
     font-style: italic;
+    flex-shrink: 0;
+  }
+
+  .ctx-submenu-arrow {
+    flex-shrink: 0;
+    opacity: 0.4;
+    margin-left: auto;
+  }
+
+  .ctx-workspace-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
     flex-shrink: 0;
   }
 

@@ -3,6 +3,9 @@
   import { listen } from '@tauri-apps/api/event';
   import LensToolbar from './LensToolbar.svelte';
   import DesignToolbar from './DesignToolbar.svelte';
+  import FindBar from './FindBar.svelte';
+  import HistoryPanel from './HistoryPanel.svelte';
+  import DownloadsPanel from './DownloadsPanel.svelte';
   import LensPreview from './LensPreview.svelte';
   import BrowserTabBar from './BrowserTabBar.svelte';
   import FileTree from './FileTree.svelte';
@@ -19,7 +22,10 @@
   import { layoutStore } from '../../lib/stores/layout.svelte.js';
   import { lensStore } from '../../lib/stores/lens.svelte.js';
   import { browserTabsStore } from '../../lib/stores/browser-tabs.svelte.js';
-  import { lensSetVisible, startFileWatching, stopFileWatching, lensCapturePreview, lspShutdown } from '../../lib/api.js';
+  import { browserHistoryStore } from '../../lib/stores/browser-history.svelte.js';
+  import { downloadsStore } from '../../lib/stores/downloads.svelte.js';
+  import { lensSetVisible, startFileWatching, stopFileWatching, lensCapturePreview, lspShutdown, lensSetZoom, lensGetZoom } from '../../lib/api.js';
+  import { navigationStore } from '../../lib/stores/navigation.svelte.js';
   import { attachmentsStore } from '../../lib/stores/attachments.svelte.js';
   import { projectStore } from '../../lib/stores/project.svelte.js';
   import { lspDiagnosticsStore } from '../../lib/stores/lsp-diagnostics.svelte.js';
@@ -43,6 +49,109 @@
   // Browser is a fixed UI element, not a tab — follows the first (leftmost) group
   let showBrowser = $state(false);
   let firstGroupId = $derived(editorGroupsStore.allGroupIds[0]);
+
+  // ── Zoom ──
+  const ZOOM_LEVELS = [25, 33, 50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200];
+  let zoomLevel = $state(100);
+
+  function getNextZoom(direction) {
+    const current = zoomLevel;
+    if (direction === 'in') {
+      return ZOOM_LEVELS.find(z => z > current) ?? ZOOM_LEVELS[ZOOM_LEVELS.length - 1];
+    } else {
+      return [...ZOOM_LEVELS].reverse().find(z => z < current) ?? ZOOM_LEVELS[0];
+    }
+  }
+
+  async function setZoom(factor) {
+    const tabId = browserTabsStore.activeTabId;
+    if (!tabId) return;
+    try {
+      const resp = await lensSetZoom(tabId, factor / 100);
+      if (resp?.data?.zoomFactor) {
+        zoomLevel = Math.round(resp.data.zoomFactor * 100);
+      }
+    } catch (err) {
+      console.warn('[LensWorkspace] setZoom failed:', err);
+    }
+  }
+
+  function handleZoomIn() { setZoom(getNextZoom('in')); }
+  function handleZoomOut() { setZoom(getNextZoom('out')); }
+  function handleZoomReset() { setZoom(100); }
+
+  async function refreshZoomForTab(tabId) {
+    if (!tabId) { zoomLevel = 100; return; }
+    try {
+      const resp = await lensGetZoom(tabId);
+      zoomLevel = resp?.data?.zoomFactor ? Math.round(resp.data.zoomFactor * 100) : 100;
+    } catch {
+      zoomLevel = 100;
+    }
+  }
+
+  // Listen for lens-zoom CustomEvent dispatched from App.svelte
+  $effect(() => {
+    function onLensZoom(e) {
+      const dir = e.detail;
+      if (dir === 'in') handleZoomIn();
+      else if (dir === 'out') handleZoomOut();
+      else if (dir === 'reset') handleZoomReset();
+    }
+    window.addEventListener('lens-zoom', onLensZoom);
+    return () => window.removeEventListener('lens-zoom', onLensZoom);
+  });
+
+  // ── Find on Page ──
+  let findBarVisible = $state(false);
+
+  // ── History Panel ──
+  let showHistory = $state(false);
+
+  // ── Downloads Panel ──
+  let showDownloads = $state(false);
+
+  // Freeze WebView2 when History or Downloads panels are open (airspace problem)
+  $effect(() => {
+    if (showHistory || showDownloads) {
+      lensStore.freeze();
+    } else {
+      lensStore.unfreeze();
+    }
+  });
+
+  function handleDownloadSettings() {
+    navigationStore.setView('settings');
+  }
+
+  // Init browser history and downloads stores; destroy on cleanup
+  $effect(() => {
+    browserHistoryStore.init();
+    downloadsStore.init();
+    return () => {
+      browserHistoryStore.destroy();
+      downloadsStore.destroy();
+    };
+  });
+
+  function toggleFind() {
+    findBarVisible = !findBarVisible;
+  }
+
+  // Listen for lens-find-toggle CustomEvent dispatched from App.svelte (Ctrl+F in WebView2)
+  $effect(() => {
+    function onFindToggle() {
+      findBarVisible = !findBarVisible;
+    }
+    window.addEventListener('lens-find-toggle', onFindToggle);
+    return () => window.removeEventListener('lens-find-toggle', onFindToggle);
+  });
+
+  // Refresh zoom level when active tab changes
+  $effect(() => {
+    const tabId = browserTabsStore.activeTabId;
+    refreshZoomForTab(tabId);
+  });
 
   // Track drag state to suppress stop-sign cursor across the workspace
   let fileTreeDragging = $state(false);
@@ -339,7 +448,15 @@
                         <!-- Browser layer: overlays editor content when visible (tab bar stays above) -->
                         <div class="preview-layer" class:visible={showBrowser}>
                           <BrowserTabBar onNewTab={() => lensPreviewRef?.createNewTab()} />
-                          <LensToolbar />
+                          <LensToolbar
+                            {zoomLevel}
+                            onZoomIn={handleZoomIn}
+                            onZoomOut={handleZoomOut}
+                            onZoomReset={handleZoomReset}
+                            onHistory={() => showHistory = true}
+                            onDownloads={() => showDownloads = true}
+                            onDownloadSettings={handleDownloadSettings}
+                          />
                           {#if lensStore.designMode}
                             <DesignToolbar
                               onSend={handleDesignSend}
@@ -347,7 +464,14 @@
                               onClose={() => lensStore.setDesignMode(false)}
                             />
                           {/if}
+                          <FindBar visible={findBarVisible} onClose={() => { findBarVisible = false; }} />
                           <LensPreview bind:this={lensPreviewRef} />
+                          {#if showHistory}
+                            <HistoryPanel onClose={() => showHistory = false} />
+                          {/if}
+                          {#if showDownloads}
+                            <DownloadsPanel onClose={() => showDownloads = false} />
+                          {/if}
                         </div>
                       </div>
                     {/snippet}

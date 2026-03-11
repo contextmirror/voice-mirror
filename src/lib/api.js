@@ -400,6 +400,67 @@ export async function lensCloseAllTabs() {
   return invoke('lens_close_all_tabs');
 }
 
+export async function lensSetZoom(tabId, factor) {
+  return invoke('lens_set_zoom', { tabId, factor });
+}
+
+export async function lensGetZoom(tabId) {
+  return invoke('lens_get_zoom', { tabId });
+}
+
+export async function lensEvalTabJs(tabId, js) {
+  return invoke('lens_eval_tab_js', { tabId, js });
+}
+
+export async function lensFindOnPage(tabId, query) {
+  return invoke('lens_find_on_page', { tabId, query });
+}
+export async function lensFindNext(tabId, query) {
+  return invoke('lens_find_next', { tabId, query });
+}
+export async function lensFindPrevious(tabId, query) {
+  return invoke('lens_find_previous', { tabId, query });
+}
+export async function lensCloseFind(tabId) {
+  return invoke('lens_close_find', { tabId });
+}
+
+// ============ Browser History ============
+
+export async function lensAddHistoryEntry(url, title) {
+  return invoke('lens_add_history_entry', { url, title });
+}
+
+export async function lensGetHistory() {
+  return invoke('lens_get_history', {});
+}
+
+export async function lensClearHistory() {
+  return invoke('lens_clear_history', {});
+}
+
+export async function lensDeleteHistoryEntry(timestamp) {
+  return invoke('lens_delete_history_entry', { timestamp });
+}
+
+// ============ Downloads ============
+
+export async function lensGetDownloads() {
+  return invoke('lens_get_downloads', {});
+}
+
+export async function lensClearDownloads() {
+  return invoke('lens_clear_downloads', {});
+}
+
+export async function lensOpenDownload(path) {
+  return invoke('lens_open_download', { path });
+}
+
+export async function lensOpenDownloadFolder(path) {
+  return invoke('lens_open_download_folder', { path });
+}
+
 // ============ Device Preview ============
 
 export async function lensCreateDeviceWebview({ presetId, url, width, height, x, y }) {

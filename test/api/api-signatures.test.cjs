@@ -112,6 +112,21 @@ describe('api.js -- critical Tauri command names', () => {
     'lens_close_tab',
     'lens_switch_tab',
     'lens_close_all_tabs',
+    // Find on Page
+    'lens_find_on_page',
+    'lens_find_next',
+    'lens_find_previous',
+    'lens_close_find',
+    // Browser History
+    'lens_add_history_entry',
+    'lens_get_history',
+    'lens_clear_history',
+    'lens_delete_history_entry',
+    // Downloads
+    'lens_get_downloads',
+    'lens_clear_downloads',
+    'lens_open_download',
+    'lens_open_download_folder',
     // GPU / Model Management
     'detect_gpu',
     'list_stt_models',
@@ -269,6 +284,13 @@ describe('api.js -- exported async functions', () => {
     'lensCloseTab',
     'lensSwitchTab',
     'lensCloseAllTabs',
+    'lensSetZoom',
+    'lensGetZoom',
+    'lensEvalTabJs',
+    'lensFindOnPage',
+    'lensFindNext',
+    'lensFindPrevious',
+    'lensCloseFind',
     // Device Preview
     'lensCreateDeviceWebview',
     'lensCloseDeviceWebview',
@@ -379,6 +401,16 @@ describe('api.js -- exported async functions', () => {
     'listProjectChannels',
     'getOutputLogs',
     'logFrontendError',
+    // Browser History
+    'lensAddHistoryEntry',
+    'lensGetHistory',
+    'lensClearHistory',
+    'lensDeleteHistoryEntry',
+    // Downloads
+    'lensGetDownloads',
+    'lensClearDownloads',
+    'lensOpenDownload',
+    'lensOpenDownloadFolder',
   ];
 
   for (const fn of expectedExports) {
@@ -402,7 +434,7 @@ describe('api.js -- exported async functions', () => {
 });
 
 describe('api.js -- section organization', () => {
-  const sections = ['Config', 'Window', 'Voice', 'AI', 'Inbox', 'Chat', 'Screenshot', 'Tools', 'Shortcuts', 'Performance Stats', 'Config Migration', 'Design Overlay', 'Lens', 'Browser Tabs', 'Dev Server', 'GPU / Model Management', 'Files', 'Terminal', 'LSP', 'Project Output Channels', 'Output / Diagnostics'];
+  const sections = ['Config', 'Window', 'Voice', 'AI', 'Inbox', 'Chat', 'Screenshot', 'Tools', 'Shortcuts', 'Performance Stats', 'Config Migration', 'Design Overlay', 'Lens', 'Browser Tabs', 'Browser History', 'Downloads', 'Dev Server', 'GPU / Model Management', 'Files', 'Terminal', 'LSP', 'Project Output Channels', 'Output / Diagnostics'];
 
   for (const section of sections) {
     it(`has "${section}" section comment`, () => {

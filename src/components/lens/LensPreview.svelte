@@ -256,6 +256,7 @@
     }
   });
 
+
   // Enable/disable the design canvas overlay when design mode changes
   $effect(() => {
     const isDesignMode = lensStore.designMode;
