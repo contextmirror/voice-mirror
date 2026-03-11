@@ -1,4 +1,4 @@
-// Voice Mirror — Design Overlay (Flameshot-style drawing toolkit)
+// Voice Mirror — Design Overlay (screenshot annotation drawing toolkit)
 // Self-contained IIFE providing canvas drawing tools for screenshot annotation.
 (function () {
     'use strict';
@@ -108,7 +108,7 @@
         var angle = Math.atan2(dy, dx);
         var len = Math.sqrt(dx * dx + dy * dy);
 
-        // Arrowhead geometry (inspired by Flameshot's getArrowHead)
+        // Arrowhead geometry (atan2 triangle calculation)
         var headLen = Math.min(12 + stroke.size * 2, len * 0.4);
 
         // Shorten the shaft so it doesn't poke through the arrowhead
@@ -319,7 +319,7 @@
     }
 
     // =========================================================================
-    // Text input overlay (Flameshot-style: click to place, auto-resize,
+    // Text input overlay (click to place, auto-resize,
     // draggable, font size = currentSize * 4 + 8)
     // =========================================================================
 

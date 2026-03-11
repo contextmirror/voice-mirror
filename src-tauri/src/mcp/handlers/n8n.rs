@@ -422,10 +422,13 @@ pub async fn handle_n8n_list_workflows(args: &Value, _data_dir: &Path) -> McpToo
 
 pub async fn handle_n8n_get_workflow(args: &Value, _data_dir: &Path) -> McpToolResult {
     let args_val = args.clone();
-    let workflow_id = match args_val.get("workflow_id").and_then(|v| v.as_str().or_else(|| v.as_u64().map(|_| ""))) {
-        Some(_) => args_val.get("workflow_id").unwrap().to_string().trim_matches('"').to_string(),
+    let workflow_id = match args_val.get("workflow_id") {
+        Some(v) => v.to_string().trim_matches('"').to_string(),
         None => return err_result("workflow_id required"),
     };
+    if workflow_id.is_empty() {
+        return err_result("workflow_id required");
+    }
 
     match api_request(&format!("/workflows/{}", workflow_id), "GET", None).await {
         Ok(result) => {
@@ -641,26 +644,33 @@ pub async fn handle_n8n_update_workflow(args: &Value, _data_dir: &Path) -> McpTo
                 let from_index = op.get("fromIndex").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
                 let to_index = op.get("toIndex").and_then(|v| v.as_u64()).unwrap_or(0);
 
-                let conn_map = connections.as_object_mut().unwrap();
+                let conn_map = match connections.as_object_mut() {
+                    Some(m) => m,
+                    None => {
+                        warn!("connections is not an object, skipping addConnection");
+                        continue;
+                    }
+                };
                 if !conn_map.contains_key(from_node) {
                     conn_map.insert(from_node.to_string(), json!({ "main": [[]] }));
                 }
 
-                let main = conn_map
+                if let Some(main) = conn_map
                     .get_mut(from_node)
-                    .unwrap()
-                    .get_mut("main")
+                    .and_then(|v| v.get_mut("main"))
                     .and_then(|m| m.as_array_mut())
-                    .unwrap();
+                {
+                    while main.len() <= from_index {
+                        main.push(json!([]));
+                    }
 
-                while main.len() <= from_index {
-                    main.push(json!([]));
+                    if let Some(arr) = main[from_index].as_array_mut() {
+                        arr.push(json!({ "node": to_node, "type": "main", "index": to_index }));
+                    }
+                    modified = true;
+                } else {
+                    warn!("Could not access main connections array for node {}", from_node);
                 }
-
-                if let Some(arr) = main[from_index].as_array_mut() {
-                    arr.push(json!({ "node": to_node, "type": "main", "index": to_index }));
-                }
-                modified = true;
             }
             "removeConnection" => {
                 let from_node = op.get("fromNode").and_then(|v| v.as_str()).unwrap_or("");
@@ -824,7 +834,10 @@ pub async fn handle_n8n_trigger_workflow(args: &Value, _data_dir: &Path) -> McpT
 
     // If no webhook_path, try to find it from the workflow
     if webhook_path.is_none() {
-        let wf_id = workflow_id.as_ref().unwrap();
+        let wf_id = match workflow_id.as_ref() {
+            Some(id) => id,
+            None => return err_result("workflow_id required when webhook_path is not provided"),
+        };
         match api_request(&format!("/workflows/{}", wf_id), "GET", None).await {
             Ok(result) => {
                 let nodes = result.get("nodes").and_then(|n| n.as_array()).cloned().unwrap_or_default();
@@ -856,7 +869,11 @@ pub async fn handle_n8n_trigger_workflow(args: &Value, _data_dir: &Path) -> McpT
         }
     }
 
-    let url = format!("{}/webhook/{}", N8N_API_URL, webhook_path.unwrap());
+    let resolved_path = match webhook_path {
+        Some(p) => p,
+        None => return err_result("No webhook path resolved"),
+    };
+    let url = format!("{}/webhook/{}", N8N_API_URL, resolved_path);
 
     match raw_request(&url, "POST", Some(data), 60).await {
         Ok(result) => ok_result(json!({ "success": true, "response": result })),

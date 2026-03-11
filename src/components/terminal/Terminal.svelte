@@ -2,8 +2,9 @@
   /**
    * Terminal.svelte -- ghostty-web terminal for user shell PTY sessions.
    *
-   * Each instance is tied to a shellId and filters terminal-output events
-   * by that ID. Used for user-created terminals and dev-server tabs.
+   * Each instance listens to scoped `terminal-output-{shellId}` events so it
+   * only receives output for its own session. Used for user-created terminals
+   * and dev-server tabs.
    */
   import { init, Terminal, FitAddon } from 'ghostty-web';
   import { listen } from '@tauri-apps/api/event';
@@ -282,12 +283,12 @@
 
   /**
    * Process a single terminal-output event payload.
-   * Filters by shellId and handles stdout/exit events.
+   * Events are already scoped to this shellId via the event name, so no
+   * filtering is needed here.
    * @param {{ id: string, event_type?: string, type?: string, text?: string, code?: number }} data
    */
   function handleShellOutput(data) {
     if (!term) return;
-    if (data.id !== shellId) return; // Filter by our session ID
 
     switch (data.event_type || data.type) {
       case 'stdout':
@@ -387,8 +388,10 @@
         });
       });
 
-      // Listen for shell output events from Tauri backend
-      const unlisten = await listen('terminal-output', (event) => {
+      // Listen for shell output events scoped to this terminal session.
+      // Each terminal emits to `terminal-output-{shellId}` so we only receive
+      // events for our own session — no O(n) fan-out filtering needed.
+      const unlisten = await listen(`terminal-output-${shellId}`, (event) => {
         if (!term) return;
         if (!initialized) {
           // Buffer events until terminal is fully initialized

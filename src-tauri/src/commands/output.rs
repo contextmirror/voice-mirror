@@ -5,6 +5,7 @@ use std::sync::Arc;
 use serde::Deserialize;
 use tauri::State;
 
+use super::IpcResponse;
 use crate::services::output::{Channel, OutputStore};
 
 #[derive(Debug, Deserialize)]
@@ -49,7 +50,7 @@ pub struct GetLogsParams {
 pub fn get_output_logs(
     params: GetLogsParams,
     output_store: State<'_, Arc<OutputStore>>,
-) -> Result<serde_json::Value, String> {
+) -> IpcResponse {
     match &params.channel {
         Some(ch_str) => {
             // Try system channel first
@@ -60,7 +61,7 @@ pub fn get_output_logs(
                     params.last,
                     params.search.as_deref(),
                 );
-                return Ok(serde_json::json!({
+                return IpcResponse::ok(serde_json::json!({
                     "channel": ch_str,
                     "entries": entries,
                     "total": total,
@@ -81,7 +82,7 @@ pub fn get_output_logs(
                     .iter()
                     .any(|c| c.label == *ch_str)
             {
-                Ok(serde_json::json!({
+                IpcResponse::ok(serde_json::json!({
                     "channel": ch_str,
                     "entries": entries,
                     "total": total,
@@ -89,14 +90,14 @@ pub fn get_output_logs(
                     "type": "project",
                 }))
             } else {
-                Err(format!("Unknown channel: {}", ch_str))
+                IpcResponse::err(format!("Unknown channel: {}", ch_str))
             }
         }
         None => {
             // Summary mode — include both system and project channels
             let system_summaries = output_store.summary();
             let project_summaries = output_store.project_summary();
-            Ok(serde_json::json!({
+            IpcResponse::ok(serde_json::json!({
                 "channels": system_summaries,
                 "projectChannels": project_summaries,
             }))
@@ -164,7 +165,7 @@ pub fn push_project_log(
 #[tauri::command]
 pub fn list_project_channels(
     output_store: State<'_, Arc<OutputStore>>,
-) -> Result<serde_json::Value, String> {
+) -> IpcResponse {
     let channels = output_store.list_project_channels();
-    Ok(serde_json::json!({ "channels": channels }))
+    IpcResponse::ok(serde_json::json!({ "channels": channels }))
 }

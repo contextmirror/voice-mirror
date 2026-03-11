@@ -221,6 +221,11 @@ export async function initVoiceListeners() {
     if (payload.id && seenMessageIds.has(payload.id)) return;
     if (payload.id) {
       seenMessageIds.add(payload.id);
+      if (seenMessageIds.size > 1000) {
+        const arr = [...seenMessageIds];
+        seenMessageIds.clear();
+        for (const item of arr.slice(-500)) seenMessageIds.add(item);
+      }
     }
 
     if (payload.kind === 'ai_message') {

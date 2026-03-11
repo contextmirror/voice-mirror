@@ -49,6 +49,13 @@ pub fn start_ai(
     let cols = cols.unwrap_or(120);
     let rows = rows.unwrap_or(30);
 
+    if let Some(ref dir) = cwd {
+        let path = std::path::Path::new(dir);
+        if !path.is_dir() {
+            return IpcResponse::err(format!("cwd path does not exist or is not a directory: {}", dir));
+        }
+    }
+
     let config = ProviderConfig {
         model,
         base_url,
@@ -334,6 +341,13 @@ pub fn set_provider(
 
     let cols = cols.unwrap_or(120);
     let rows = rows.unwrap_or(30);
+
+    if let Some(ref dir) = cwd {
+        let path = std::path::Path::new(dir);
+        if !path.is_dir() {
+            return IpcResponse::err(format!("cwd path does not exist or is not a directory: {}", dir));
+        }
+    }
 
     let config = ProviderConfig {
         model,

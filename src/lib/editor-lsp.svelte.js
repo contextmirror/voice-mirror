@@ -10,7 +10,17 @@ import { foldService } from '@codemirror/language';
 import { projectStore } from './stores/project.svelte.js';
 import { tabsStore } from './stores/tabs.svelte.js';
 import { basename } from './utils.js';
-import { renderHoverMarkdown } from './hover-markdown.js';
+/** @type {((text: string) => string) | null} */
+let _renderHoverMarkdown = null;
+
+/** Lazily load hover-markdown.js on first use (avoids loading highlight.js/dompurify upfront) */
+async function getRenderHoverMarkdown() {
+  if (!_renderHoverMarkdown) {
+    const mod = await import('./hover-markdown.js');
+    _renderHoverMarkdown = mod.renderHoverMarkdown;
+  }
+  return _renderHoverMarkdown;
+}
 
 /** Set of file extensions that have LSP support */
 export const LSP_EXTENSIONS = new Set([
@@ -746,6 +756,7 @@ export function createEditorLsp() {
         const result = await lspRequestHover(currentPath, line, character, root);
         if (!result?.data?.contents) return null;
 
+        const renderFn = await getRenderHoverMarkdown();
         return {
           pos,
           above: true,
@@ -755,7 +766,7 @@ export function createEditorLsp() {
             const raw = typeof result.data.contents === 'string'
               ? result.data.contents
               : result.data.contents.value || '';
-            dom.innerHTML = renderHoverMarkdown(raw);
+            dom.innerHTML = renderFn(raw);
             return { dom };
           },
         };

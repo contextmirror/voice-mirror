@@ -42,6 +42,13 @@ pub fn terminal_spawn(
     let cols = cols.unwrap_or(80);
     let rows = rows.unwrap_or(24);
 
+    if let Some(ref dir) = cwd {
+        let path = std::path::Path::new(dir);
+        if !path.is_dir() {
+            return IpcResponse::err(format!("cwd path does not exist or is not a directory: {}", dir));
+        }
+    }
+
     let store = if output_channel.is_some() {
         Some(output_state.inner().clone())
     } else {

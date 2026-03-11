@@ -209,6 +209,7 @@
       rows="1"
       {disabled}
       class="chat-textarea"
+      aria-label="Message input"
     ></textarea>
 
     <button

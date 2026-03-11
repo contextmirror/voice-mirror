@@ -66,6 +66,7 @@
       oninput={(e) => searchStore.setQuery(/** @type {HTMLInputElement} */(e.target).value)}
       onkeydown={handleKeydown}
       bind:this={inputEl}
+      aria-label="Search files"
     />
     <div class="search-toggles">
       <button

@@ -146,13 +146,18 @@ mod win32 {
             }
         }
 
-        let img = image::ImageBuffer::<Rgba<u8>, _>::from_raw(width, height, rgba)
-            .expect("ImageBuffer::from_raw failed");
+        let img = match image::ImageBuffer::<Rgba<u8>, _>::from_raw(width, height, rgba) {
+            Some(i) => i,
+            None => return Vec::new(),
+        };
         let mut buf = Vec::new();
         let encoder = PngEncoder::new(&mut buf);
-        encoder
+        if encoder
             .write_image(img.as_raw(), width, height, image::ExtendedColorType::Rgba8)
-            .expect("PNG encode failed");
+            .is_err()
+        {
+            return Vec::new();
+        }
         buf
     }
 
@@ -172,14 +177,17 @@ mod win32 {
             img.resize_exact(max_width, new_height, image::imageops::FilterType::Triangle);
         let mut buf = Vec::new();
         let encoder = PngEncoder::new(&mut buf);
-        encoder
+        if encoder
             .write_image(
                 resized.as_bytes(),
                 resized.width(),
                 resized.height(),
                 image::ExtendedColorType::Rgba8,
             )
-            .expect("PNG encode failed");
+            .is_err()
+        {
+            return png_bytes.to_vec();
+        }
         buf
     }
 
@@ -1145,20 +1153,28 @@ pub async fn lens_capture_browser(
             tracing::warn!("[screenshot] No active browser tab");
             return Ok(IpcResponse::err("No active browser tab"));
         }
-        let active_id_str = active_id.clone().unwrap();
+        let active_id_str = match active_id.clone() {
+            Some(id) => id,
+            None => {
+                tracing::warn!("[screenshot] No active browser tab (unexpected)");
+                return Ok(IpcResponse::err("No active browser tab"));
+            }
+        };
 
         let tabs = state
             .tabs
             .lock()
             .map_err(|e| format!("Lock error: {}", e))?;
-        let tab = tabs.get(&active_id_str);
-        if tab.is_none() {
-            tracing::warn!("[screenshot] Active tab not found in tabs map");
-            return Ok(IpcResponse::err("Active tab not found"));
-        }
+        let tab = match tabs.get(&active_id_str) {
+            Some(t) => t,
+            None => {
+                tracing::warn!("[screenshot] Active tab not found in tabs map");
+                return Ok(IpcResponse::err("Active tab not found"));
+            }
+        };
         tracing::info!(
             "[screenshot] Lens webview label: {}",
-            tab.unwrap().webview_label
+            tab.webview_label
         );
 
         let bounds_guard = state

@@ -94,7 +94,9 @@
   $effect(() => {
     // Track server state to trigger re-sync
     devServerManager.servers;
-    statusBarStore.updateDevServer();
+    const project = projectStore.activeProject;
+    const serverState = project?.path ? devServerManager.getServerStatus(project.path) : null;
+    statusBarStore.updateDevServer(serverState);
   });
 
   // -- Polling lifecycle --

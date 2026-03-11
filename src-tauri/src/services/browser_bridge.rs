@@ -383,7 +383,7 @@ fn resolve_element_target(args: &Value) -> Result<String, String> {
     if let Some(selector) = args.get("selector").and_then(|v| v.as_str()) {
         return Ok(format!(
             "document.querySelector('{}')",
-            selector.replace('\'', "\\'")
+            escape_js(selector)
         ));
     }
     Err("Either 'ref' (@e1) or 'selector' (CSS) is required to target an element".into())

@@ -117,9 +117,32 @@
     }
   }
 
+  let modalEl = $state(null);
+
   function handleKeydown(e) {
     if (e.key === 'Escape') onClose();
     if (e.key === 'Enter' && canShare) handleShare();
+    // Focus trap: wrap Tab/Shift+Tab within the modal
+    if (e.key === 'Tab' && modalEl) {
+      const focusable = modalEl.querySelectorAll(
+        'input, button:not(:disabled), [tabindex]:not([tabindex="-1"]), select, textarea, a[href]'
+      );
+      if (focusable.length > 0) {
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (e.shiftKey) {
+          if (document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+          }
+        } else {
+          if (document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+          }
+        }
+      }
+    }
   }
 
   function handleOverlayClick(e) {
@@ -137,6 +160,16 @@
     if (activeTab === 'screen') loadMonitors();
     else if (activeTab === 'browser') loading = false;
   });
+
+  // Auto-focus the first focusable element in the modal on mount
+  $effect(() => {
+    if (modalEl) {
+      requestAnimationFrame(() => {
+        const first = modalEl.querySelector('button:not(:disabled), [tabindex]:not([tabindex="-1"])');
+        if (first) first.focus();
+      });
+    }
+  });
 </script>
 
 <svelte:document onkeydown={handleKeydown} />
@@ -144,7 +177,7 @@
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="picker-overlay" transition:fade={{ duration: 150 }} onclick={handleOverlayClick}>
-  <div class="picker-modal" transition:fly={{ y: 20, duration: 200 }}>
+  <div class="picker-modal" transition:fly={{ y: 20, duration: 200 }} bind:this={modalEl} role="dialog" aria-modal="true" aria-label="Screenshot picker">
     <!-- Header -->
     <div class="picker-header">
       <div>

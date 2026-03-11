@@ -1671,7 +1671,10 @@ pub fn lens_set_zoom(
     factor: f64,
     state: tauri::State<'_, LensState>,
 ) -> IpcResponse {
-    let tabs = state.tabs.lock().unwrap();
+    let tabs = match state.tabs.lock() {
+        Ok(g) => g,
+        Err(e) => return IpcResponse::err(format!("tabs mutex poisoned: {e}")),
+    };
     let tab = match tabs.get(&tab_id) {
         Some(t) => t,
         None => return IpcResponse::err("Tab not found"),
@@ -1690,7 +1693,10 @@ pub fn lens_set_zoom(
             }
         });
 
-        let mut tabs = state.tabs.lock().unwrap();
+        let mut tabs = match state.tabs.lock() {
+            Ok(g) => g,
+            Err(e) => return IpcResponse::err(format!("tabs mutex poisoned: {e}")),
+        };
         if let Some(tab) = tabs.get_mut(&tab_id) {
             tab.zoom_factor = factor_clamped;
         }
@@ -1706,7 +1712,10 @@ pub fn lens_get_zoom(
     tab_id: String,
     state: tauri::State<'_, LensState>,
 ) -> IpcResponse {
-    let tabs = state.tabs.lock().unwrap();
+    let tabs = match state.tabs.lock() {
+        Ok(g) => g,
+        Err(e) => return IpcResponse::err(format!("tabs mutex poisoned: {e}")),
+    };
     match tabs.get(&tab_id) {
         Some(tab) => IpcResponse::ok(serde_json::json!({ "zoomFactor": tab.zoom_factor })),
         None => IpcResponse::err("Tab not found"),
@@ -1727,7 +1736,10 @@ pub fn lens_find_on_page(
     query: String,
     state: tauri::State<'_, LensState>,
 ) -> IpcResponse {
-    let tabs = state.tabs.lock().unwrap();
+    let tabs = match state.tabs.lock() {
+        Ok(g) => g,
+        Err(e) => return IpcResponse::err(format!("tabs mutex poisoned: {e}")),
+    };
     let tab = match tabs.get(&tab_id) {
         Some(t) => t,
         None => return IpcResponse::err("Tab not found"),
@@ -1785,7 +1797,10 @@ pub fn lens_eval_tab_js(
     js: String,
     state: tauri::State<'_, LensState>,
 ) -> IpcResponse {
-    let tabs = state.tabs.lock().unwrap();
+    let tabs = match state.tabs.lock() {
+        Ok(g) => g,
+        Err(e) => return IpcResponse::err(format!("tabs mutex poisoned: {e}")),
+    };
     let tab = match tabs.get(&tab_id) {
         Some(t) => t,
         None => return IpcResponse::err("Tab not found"),
@@ -1811,7 +1826,10 @@ pub fn lens_find_next(
     query: String,
     state: tauri::State<'_, LensState>,
 ) -> IpcResponse {
-    let tabs = state.tabs.lock().unwrap();
+    let tabs = match state.tabs.lock() {
+        Ok(g) => g,
+        Err(e) => return IpcResponse::err(format!("tabs mutex poisoned: {e}")),
+    };
     let tab = match tabs.get(&tab_id) {
         Some(t) => t,
         None => return IpcResponse::err("Tab not found"),
@@ -1868,7 +1886,10 @@ pub fn lens_find_previous(
     query: String,
     state: tauri::State<'_, LensState>,
 ) -> IpcResponse {
-    let tabs = state.tabs.lock().unwrap();
+    let tabs = match state.tabs.lock() {
+        Ok(g) => g,
+        Err(e) => return IpcResponse::err(format!("tabs mutex poisoned: {e}")),
+    };
     let tab = match tabs.get(&tab_id) {
         Some(t) => t,
         None => return IpcResponse::err("Tab not found"),
@@ -1925,7 +1946,10 @@ pub fn lens_close_find(
     tab_id: String,
     state: tauri::State<'_, LensState>,
 ) -> IpcResponse {
-    let tabs = state.tabs.lock().unwrap();
+    let tabs = match state.tabs.lock() {
+        Ok(g) => g,
+        Err(e) => return IpcResponse::err(format!("tabs mutex poisoned: {e}")),
+    };
     let tab = match tabs.get(&tab_id) {
         Some(t) => t,
         None => return IpcResponse::err("Tab not found"),
@@ -2039,7 +2063,10 @@ pub fn lens_delete_history_entry(timestamp: u128) -> IpcResponse {
 pub fn lens_get_downloads(
     state: tauri::State<'_, LensState>,
 ) -> IpcResponse {
-    let downloads = state.downloads.lock().unwrap();
+    let downloads = match state.downloads.lock() {
+        Ok(g) => g,
+        Err(e) => return IpcResponse::err(format!("downloads mutex poisoned: {e}")),
+    };
     IpcResponse::ok(serde_json::json!({ "downloads": downloads.clone() }))
 }
 
@@ -2049,14 +2076,31 @@ pub fn lens_get_downloads(
 pub fn lens_clear_downloads(
     state: tauri::State<'_, LensState>,
 ) -> IpcResponse {
-    let mut downloads = state.downloads.lock().unwrap();
+    let mut downloads = match state.downloads.lock() {
+        Ok(g) => g,
+        Err(e) => return IpcResponse::err(format!("downloads mutex poisoned: {e}")),
+    };
     downloads.retain(|d| d.state == "downloading");
     IpcResponse::ok_empty()
 }
 
 /// Open a downloaded file with the OS default handler.
+/// Validates that the path exists in the tracked downloads list to prevent
+/// arbitrary file execution.
 #[tauri::command]
-pub fn lens_open_download(path: String) -> IpcResponse {
+pub fn lens_open_download(
+    path: String,
+    state: tauri::State<'_, LensState>,
+) -> IpcResponse {
+    let downloads = match state.downloads.lock() {
+        Ok(g) => g,
+        Err(e) => return IpcResponse::err(format!("downloads mutex poisoned: {e}")),
+    };
+    let found = downloads.iter().any(|d| d.path == path);
+    if !found {
+        return IpcResponse::err("Path not found in downloads list".to_string());
+    }
+    drop(downloads);
     if let Err(e) = opener::open(&path) {
         return IpcResponse::err(format!("Failed to open: {}", e));
     }
@@ -2064,12 +2108,16 @@ pub fn lens_open_download(path: String) -> IpcResponse {
 }
 
 /// Open the folder containing a downloaded file.
+/// Validates that the resolved parent directory exists on disk.
 #[tauri::command]
 pub fn lens_open_download_folder(path: String) -> IpcResponse {
     let parent = std::path::Path::new(&path)
         .parent()
         .map(|p| p.to_string_lossy().to_string())
         .unwrap_or_default();
+    if parent.is_empty() || !std::path::Path::new(&parent).is_dir() {
+        return IpcResponse::err("Directory does not exist".to_string());
+    }
     if let Err(e) = opener::open(&parent) {
         return IpcResponse::err(format!("Failed to open folder: {}", e));
     }
