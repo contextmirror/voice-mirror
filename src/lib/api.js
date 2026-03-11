@@ -1021,3 +1021,13 @@ export async function removeProjectIcon(filename) {
 export async function loadProjectIcons(filenames) {
   return invoke('load_project_icons', { params: { filenames } });
 }
+
+// ============ Workspace State ============
+
+export async function saveWorkspaceState(projectPath, state) {
+  return invoke('save_workspace_state', { params: { projectPath, state } });
+}
+
+export async function loadWorkspaceState(projectPath) {
+  return invoke('load_workspace_state', { params: { projectPath } });
+}

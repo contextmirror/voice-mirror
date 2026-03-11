@@ -191,6 +191,9 @@ describe('api.js -- critical Tauri command names', () => {
     'lsp_request_supertypes',
     'lsp_request_subtypes',
     'lsp_request_selection_range',
+    // Workspace State
+    'save_workspace_state',
+    'load_workspace_state',
   ];
 
   for (const cmd of criticalCommands) {
@@ -429,6 +432,9 @@ describe('api.js -- exported async functions', () => {
     'saveProjectIcon',
     'removeProjectIcon',
     'loadProjectIcons',
+    // Workspace State
+    'saveWorkspaceState',
+    'loadWorkspaceState',
   ];
 
   for (const fn of expectedExports) {
@@ -452,7 +458,7 @@ describe('api.js -- exported async functions', () => {
 });
 
 describe('api.js -- section organization', () => {
-  const sections = ['Config', 'Window', 'Voice', 'AI', 'Inbox', 'Chat', 'Screenshot', 'Tools', 'Shortcuts', 'Performance Stats', 'Config Migration', 'Design Overlay', 'Lens', 'Browser Tabs', 'Browser History', 'Downloads', 'Dev Server', 'GPU / Model Management', 'Files', 'Terminal', 'LSP', 'Project Output Channels', 'Output / Diagnostics'];
+  const sections = ['Config', 'Window', 'Voice', 'AI', 'Inbox', 'Chat', 'Screenshot', 'Tools', 'Shortcuts', 'Performance Stats', 'Config Migration', 'Design Overlay', 'Lens', 'Browser Tabs', 'Browser History', 'Downloads', 'Dev Server', 'GPU / Model Management', 'Files', 'Terminal', 'LSP', 'Project Output Channels', 'Output / Diagnostics', 'Workspace State'];
 
   for (const section of sections) {
     it(`has "${section}" section comment`, () => {
