@@ -40,6 +40,8 @@ pub struct AppConfig {
     #[serde(default)]
     pub device_preview: DevicePreviewConfig,
     #[serde(default)]
+    pub browser: BrowserConfig,
+    #[serde(default)]
     pub terminal_layout: Option<serde_json::Value>,
 }
 
@@ -85,6 +87,8 @@ pub struct VoiceConfig {
     pub tts_endpoint: Option<String>,
     #[serde(default)]
     pub tts_model_path: Option<String>,
+    #[serde(default)]
+    pub stt_model: Option<String>,
     #[serde(default = "default_stt_adapter")]
     pub stt_adapter: String,
     #[serde(default = "default_stt_model_size")]
@@ -118,6 +122,7 @@ impl Default for VoiceConfig {
             tts_api_key: None,
             tts_endpoint: None,
             tts_model_path: None,
+            stt_model: None,
             stt_adapter: "whisper-local".into(),
             stt_model_size: "base".into(),
             stt_api_key: None,
@@ -427,17 +432,28 @@ pub struct ToolProfile {
 }
 
 /// Device preview settings (custom presets, last-used devices).
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DevicePreviewConfig {
     #[serde(default)]
     pub custom_devices: Vec<serde_json::Value>,
     #[serde(default)]
     pub last_devices: Vec<String>,
-    #[serde(default)]
-    pub sync_enabled: Option<bool>,
+    #[serde(default = "default_true")]
+    pub sync_enabled: bool,
     #[serde(default)]
     pub orientation: Option<String>,
+}
+
+impl Default for DevicePreviewConfig {
+    fn default() -> Self {
+        Self {
+            custom_devices: Vec::new(),
+            last_devices: Vec::new(),
+            sync_enabled: true,
+            orientation: None,
+        }
+    }
 }
 
 /// Editor settings (formatting, preview).
@@ -448,6 +464,10 @@ pub struct EditorConfig {
     pub markdown_preview: bool,
     #[serde(default)]
     pub format_on_save: bool,
+    #[serde(default = "default_editor_font_size")]
+    pub font_size: u32,
+    #[serde(default = "default_true")]
+    pub indent_guides: bool,
 }
 
 impl Default for EditorConfig {
@@ -455,6 +475,8 @@ impl Default for EditorConfig {
         Self {
             markdown_preview: true,
             format_on_save: false,
+            font_size: 14,
+            indent_guides: true,
         }
     }
 }
@@ -476,6 +498,27 @@ pub struct ProjectEntry {
     pub path: String,
     pub name: String,
     pub color: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
+}
+
+/// Browser settings (download behavior).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BrowserConfig {
+    #[serde(default)]
+    pub download_ask_location: bool,
+    #[serde(default)]
+    pub download_path: Option<String>,
+}
+
+impl Default for BrowserConfig {
+    fn default() -> Self {
+        Self {
+            download_ask_location: false,
+            download_path: None,
+        }
+    }
 }
 
 // ============ Default value functions ============
@@ -493,8 +536,9 @@ fn default_orb_size() -> u32 { 80 }
 fn default_theme() -> String { "colorblind".into() }
 fn default_panel_width() -> u32 { 500 }
 fn default_panel_height() -> u32 { 700 }
+fn default_editor_font_size() -> u32 { 14 }
 fn default_hotkey() -> String { "CommandOrControl+Shift+V".into() }
-fn default_activation_mode() -> String { "hybrid".into() }
+fn default_activation_mode() -> String { "wakeWord".into() }
 fn default_ptt_key() -> String { "MouseButton4".into() }
 fn default_dictation_key() -> String { "MouseButton5".into() }
 fn default_stats_hotkey() -> String { "CommandOrControl+Shift+M".into() }
