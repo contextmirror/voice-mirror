@@ -96,8 +96,9 @@ function createProjectStore() {
      * Remove a project by index.
      * @param {number} index
      */
-    removeProject(index) {
+    async removeProject(index) {
       if (index < 0 || index >= entries.length) return;
+      const wasActive = index === activeIndex;
       entries = entries.filter((_, i) => i !== index);
       // Adjust activeIndex if needed
       if (entries.length === 0) {
@@ -110,8 +111,20 @@ function createProjectStore() {
       this._persist();
       if (entries.length > 0) {
         this.loadSessions();
+        // If the removed project was active, clear stale tabs and restore new active project
+        if (wasActive) {
+          stopAutoSave();
+          tabsStore.closeAll();
+          const newProject = entries[activeIndex];
+          if (newProject) {
+            await restoreState(newProject.path);
+            startAutoSave(newProject.path);
+          }
+        }
       } else {
         sessions = [];
+        stopAutoSave();
+        tabsStore.closeAll();
       }
     },
 
