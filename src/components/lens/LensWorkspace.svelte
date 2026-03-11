@@ -52,9 +52,8 @@
   $effect(() => { layoutStore.setPreviewRatio(previewRatio); });
   $effect(() => { layoutStore.setDevicePreviewRatio(devicePreviewRatio); });
 
-  // Initialize ratios from layout store (restored workspace state)
-  $effect(() => {
-    // Only run once on mount — read from store if values differ from defaults
+  // Initialize ratios from layout store on mount (restored workspace state)
+  onMount(() => {
     if (layoutStore.chatRatio !== 0.18) chatRatio = layoutStore.chatRatio;
     if (layoutStore.centerRatio !== 0.75) centerRatio = layoutStore.centerRatio;
     if (layoutStore.previewRatio !== 0.78) previewRatio = layoutStore.previewRatio;

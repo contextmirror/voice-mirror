@@ -18,7 +18,8 @@
   import { devServerManager } from './lib/stores/dev-server-manager.svelte.js';
   import { diagnosticsStore } from './lib/stores/diagnostics.svelte.js';
   import { registerAllContracts } from './lib/health-contracts.js';
-  import { restoreState, startAutoSave, saveCurrentState, stopAutoSave } from './lib/stores/workspace-state.svelte.js';
+  import { restoreState, startAutoSave, saveCurrentState, stopAutoSave, notifyChange } from './lib/stores/workspace-state.svelte.js';
+  import { editorGroupsStore } from './lib/stores/editor-groups.svelte.js';
   import { getCurrentWindow } from '@tauri-apps/api/window';
 
   import TitleBar from './components/shared/TitleBar.svelte';
@@ -310,6 +311,18 @@
       }
     }).then(fn => { unlisten = fn; });
     return () => { if (unlisten) unlisten(); };
+  });
+
+  // Notify workspace-state auto-save when tabs/groups/layout change
+  $effect(() => {
+    // Touch reactive values to track them — any change triggers notifyChange()
+    void tabsStore.tabs.length;
+    void tabsStore.activeTabId;
+    void editorGroupsStore.gridRoot;
+    void layoutStore.showChat;
+    void layoutStore.showTerminal;
+    void layoutStore.showFileTree;
+    notifyChange();
   });
 
   // Configure PTT/dictation key bindings in the native input hook.
