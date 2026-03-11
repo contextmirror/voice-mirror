@@ -46,6 +46,21 @@
   let previewRatio = $state(0.78);          // center column vs file tree
   let devicePreviewRatio = $state(0.5);    // editor vs device preview
 
+  // Sync local ratios → layout store (for workspace state persistence)
+  $effect(() => { layoutStore.setChatRatio(chatRatio); });
+  $effect(() => { layoutStore.setCenterRatio(centerRatio); });
+  $effect(() => { layoutStore.setPreviewRatio(previewRatio); });
+  $effect(() => { layoutStore.setDevicePreviewRatio(devicePreviewRatio); });
+
+  // Initialize ratios from layout store (restored workspace state)
+  $effect(() => {
+    // Only run once on mount — read from store if values differ from defaults
+    if (layoutStore.chatRatio !== 0.18) chatRatio = layoutStore.chatRatio;
+    if (layoutStore.centerRatio !== 0.75) centerRatio = layoutStore.centerRatio;
+    if (layoutStore.previewRatio !== 0.78) previewRatio = layoutStore.previewRatio;
+    if (layoutStore.devicePreviewRatio !== 0.5) devicePreviewRatio = layoutStore.devicePreviewRatio;
+  });
+
   // Browser is a fixed UI element, not a tab — follows the first (leftmost) group
   let showBrowser = $state(false);
   let firstGroupId = $derived(editorGroupsStore.allGroupIds[0]);

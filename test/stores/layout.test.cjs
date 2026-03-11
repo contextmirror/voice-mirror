@@ -50,3 +50,40 @@ describe('layout.svelte.js', () => {
     assert.ok(src.includes('showFileTree = $state(true)'), 'FileTree defaults to true');
   });
 });
+
+describe('layout.svelte.js — workspace state persistence', () => {
+  it('has serialize() method', () => {
+    assert.ok(src.includes('serialize()'), 'Should have serialize method');
+  });
+
+  it('has restore() method', () => {
+    assert.ok(src.includes('restore(data)'), 'Should have restore method');
+  });
+
+  it('serialize includes panel visibility and ratios', () => {
+    assert.ok(src.includes('showChat,'), 'Should include showChat');
+    assert.ok(src.includes('chatRatio,'), 'Should include chatRatio');
+    assert.ok(src.includes('centerRatio,'), 'Should include centerRatio');
+    assert.ok(src.includes('previewRatio,'), 'Should include previewRatio');
+    assert.ok(src.includes('devicePreviewRatio,'), 'Should include devicePreviewRatio');
+  });
+
+  it('restore validates types before setting', () => {
+    assert.ok(src.includes("typeof data.showChat === 'boolean'"), 'Should validate boolean');
+    assert.ok(src.includes("typeof data.chatRatio === 'number'"), 'Should validate number');
+  });
+
+  it('exports ratio getters', () => {
+    assert.ok(src.includes('get chatRatio()'), 'Should export chatRatio getter');
+    assert.ok(src.includes('get centerRatio()'), 'Should export centerRatio getter');
+    assert.ok(src.includes('get previewRatio()'), 'Should export previewRatio getter');
+    assert.ok(src.includes('get devicePreviewRatio()'), 'Should export devicePreviewRatio getter');
+  });
+
+  it('exports ratio setters', () => {
+    assert.ok(src.includes('setChatRatio('), 'Should export setChatRatio');
+    assert.ok(src.includes('setCenterRatio('), 'Should export setCenterRatio');
+    assert.ok(src.includes('setPreviewRatio('), 'Should export setPreviewRatio');
+    assert.ok(src.includes('setDevicePreviewRatio('), 'Should export setDevicePreviewRatio');
+  });
+});
