@@ -25,6 +25,7 @@ use commands::lsp as lsp_cmds;
 use commands::design as design_cmds;
 use commands::output as output_cmds;
 use commands::project as project_cmds;
+use commands::workspace_state as ws_state_cmds;
 
 use providers::manager::AiManager;
 use providers::ProviderEvent;
@@ -497,6 +498,9 @@ pub fn run() {
             project_cmds::save_project_icon,
             project_cmds::remove_project_icon,
             project_cmds::load_project_icons,
+            // Workspace State
+            ws_state_cmds::save_workspace_state,
+            ws_state_cmds::load_workspace_state,
         ])
         .setup(|app| {
             // Set app handle on OutputStore for live event emission

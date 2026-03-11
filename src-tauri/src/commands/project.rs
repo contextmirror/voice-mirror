@@ -12,20 +12,6 @@ fn icons_dir() -> Result<PathBuf, String> {
     Ok(app_data.join("voice-mirror").join("project-icons"))
 }
 
-/// Stable FNV-1a hash of a string to a hex filename.
-/// Unlike `DefaultHasher`, this is deterministic across Rust versions and platforms,
-/// so icon filenames stored in config.json remain valid after app upgrades.
-fn hash_filename(source: &str) -> String {
-    const FNV_OFFSET: u64 = 0xcbf29ce484222325;
-    const FNV_PRIME: u64 = 0x100000001b3;
-    let mut hash = FNV_OFFSET;
-    for byte in source.as_bytes() {
-        hash ^= *byte as u64;
-        hash = hash.wrapping_mul(FNV_PRIME);
-    }
-    format!("{:x}", hash)
-}
-
 // ── save_project_icon ──
 
 #[derive(Debug, Deserialize)]
@@ -64,7 +50,7 @@ pub fn save_project_icon(params: SaveIconParams) -> IpcResponse {
         .map(|m| m.len() > 1_048_576)
         .unwrap_or(false);
 
-    let hash = hash_filename(&params.file_path);
+    let hash = super::hash_filename(&params.file_path);
 
     // SVG: copy as-is (vector format, no resize)
     if ext == "svg" {
