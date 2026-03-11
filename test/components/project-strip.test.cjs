@@ -97,4 +97,22 @@ describe('ProjectStrip.svelte', () => {
   it('has scoped style block', () => {
     assert.ok(src.includes('<style>'), 'Should have scoped styles');
   });
+
+  // ── Edit Project Modal integration ──
+
+  it('imports EditProjectModal', () => {
+    assert.ok(src.includes('EditProjectModal'), 'Should import EditProjectModal');
+  });
+
+  it('has Edit option in context menu', () => {
+    assert.ok(src.includes('handleEdit') || src.includes('Edit'), 'Should have Edit context menu action');
+  });
+
+  it('has avatar-icon class for custom project icons', () => {
+    assert.ok(src.includes('avatar-icon'), 'Should have avatar-icon class for custom images');
+  });
+
+  it('checks iconCache for custom icons', () => {
+    assert.ok(src.includes('iconCache'), 'Should reference iconCache from projectStore');
+  });
 });
