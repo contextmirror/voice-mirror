@@ -9,6 +9,7 @@ import { updateConfig } from './config.svelte.js';
 import { chatList, loadProjectIcons } from '../api.js';
 import { unwrapResult } from '../utils.js';
 import { saveCurrentState, restoreState, startAutoSave, stopAutoSave } from './workspace-state.svelte.js';
+import { tabsStore } from './tabs.svelte.js';
 
 /** 8-color palette for project badges, picked by hashing the folder name */
 const COLOR_PALETTE = [
@@ -126,6 +127,8 @@ function createProjectStore() {
         stopAutoSave();
         await saveCurrentState(oldProject.path);
       }
+      // Clear old tabs immediately to prevent flash of stale content
+      tabsStore.closeAll();
       activeIndex = index;
       this._persist();
       this.loadSessions();

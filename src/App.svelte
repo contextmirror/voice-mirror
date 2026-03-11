@@ -63,14 +63,6 @@
         projectStore.init(projects);
       }
 
-      // Restore workspace state for the active project
-      const activeProject = projectStore.activeProject;
-      if (activeProject) {
-        restoreState(activeProject.path).then(() => {
-          startAutoSave(activeProject.path);
-        });
-      }
-
       // Restore overlay (orb) mode if user was in compact mode last session.
       // After restore, show the window (it starts hidden to prevent flash).
       if (!overlayRestored) {
@@ -107,6 +99,20 @@
     if (configStore.loaded && !voiceStarted) {
       voiceStarted = true;
       startVoiceEngine();
+    }
+  });
+
+  // Restore workspace state once on startup (one-shot — not reactive to project changes)
+  let workspaceRestored = $state(false);
+  $effect(() => {
+    if (configStore.loaded && !workspaceRestored) {
+      workspaceRestored = true;
+      const activeProject = projectStore.activeProject;
+      if (activeProject) {
+        restoreState(activeProject.path).then(() => {
+          startAutoSave(activeProject.path);
+        });
+      }
     }
   });
 
