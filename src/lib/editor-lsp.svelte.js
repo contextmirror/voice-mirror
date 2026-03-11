@@ -1092,7 +1092,8 @@ export function createEditorLsp() {
 
   /**
    * CodeMirror ViewPlugin that renders inline color swatches
-   * via LSP textDocument/documentColor.
+   * via LSP textDocument/documentColor. Includes an inline color picker
+   * (SV gradient + hue bar + alpha bar) that opens on swatch click.
    *
    * @param {string} currentPath - current file path
    * @param {typeof import('@codemirror/view')} cmView - CodeMirror view module
@@ -1103,19 +1104,367 @@ export function createEditorLsp() {
     const { ViewPlugin, Decoration, WidgetType } = cmView;
     const { RangeSet } = cmState;
 
+    let currentView = null;
+    let activePicker = null;
+    let pickerIsEditing = false;
+
+    // ── Color conversion utilities ──
+
+    function rgbToHsv(r, g, b) {
+      const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+      const s = max === 0 ? 0 : d / max, v = max;
+      let h = 0;
+      if (d) {
+        if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
+        else if (max === g) h = ((b - r) / d + 2) / 6;
+        else h = ((r - g) / d + 4) / 6;
+      }
+      return { h, s, v };
+    }
+
+    function hsvToRgb(h, s, v) {
+      const i = Math.floor(h * 6), f = h * 6 - i;
+      const p = v * (1 - s), q = v * (1 - f * s), t = v * (1 - (1 - f) * s);
+      const m = [[v,t,p],[q,v,p],[p,v,t],[p,q,v],[t,p,v],[v,p,q]];
+      const [r, g, b] = m[i % 6];
+      return { r, g, b };
+    }
+
+    function rgbToHsl(r, g, b) {
+      const max = Math.max(r, g, b), min = Math.min(r, g, b);
+      let h = 0, s = 0;
+      const l = (max + min) / 2;
+      if (max !== min) {
+        const d = max - min;
+        s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+        if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
+        else if (max === g) h = ((b - r) / d + 2) / 6;
+        else h = ((r - g) / d + 4) / 6;
+      }
+      return { h, s, l };
+    }
+
+    function detectColorFormat(text) {
+      const t = text.trim().toLowerCase();
+      if (t.startsWith('#')) return t.length > 7 ? 'hexa' : 'hex';
+      if (t.startsWith('rgba')) return 'rgba';
+      if (t.startsWith('rgb')) return 'rgb';
+      if (t.startsWith('hsla')) return 'hsla';
+      if (t.startsWith('hsl')) return 'hsl';
+      return 'hex';
+    }
+
+    function formatColor(r, g, b, a, fmt) {
+      const R = Math.round(r * 255), G = Math.round(g * 255), B = Math.round(b * 255);
+      const hex2 = (n) => n.toString(16).padStart(2, '0');
+      const alphaStr = parseFloat(a.toFixed(2));
+      switch (fmt) {
+        case 'hex': return `#${hex2(R)}${hex2(G)}${hex2(B)}`;
+        case 'hexa': return `#${hex2(R)}${hex2(G)}${hex2(B)}${hex2(Math.round(a * 255))}`;
+        case 'rgb': return `rgb(${R}, ${G}, ${B})`;
+        case 'rgba': return `rgba(${R}, ${G}, ${B}, ${alphaStr})`;
+        case 'hsl': { const { h, s, l } = rgbToHsl(r, g, b); return `hsl(${Math.round(h * 360)}, ${Math.round(s * 100)}%, ${Math.round(l * 100)}%)`; }
+        case 'hsla': { const { h, s, l } = rgbToHsl(r, g, b); return `hsla(${Math.round(h * 360)}, ${Math.round(s * 100)}%, ${Math.round(l * 100)}%, ${alphaStr})`; }
+        default: return `#${hex2(R)}${hex2(G)}${hex2(B)}`;
+      }
+    }
+
+    // ── Color picker ──
+
+    function closeColorPicker() {
+      if (activePicker) {
+        activePicker.el.remove();
+        if (activePicker.highlight) activePicker.highlight.remove();
+        activePicker.cleanup();
+        activePicker = null;
+      }
+    }
+
+    function openColorPicker(view, r, g, b, a, from, to, anchor) {
+      closeColorPicker();
+
+      const originalText = view.state.doc.sliceString(from, to);
+      const hasAlpha = a < 1;
+      // Format cycle order: RGB → HSL → HEX (matching VS Code)
+      const formats = hasAlpha ? ['rgba', 'hsla', 'hexa'] : ['rgb', 'hsl', 'hex'];
+      let formatIndex = Math.max(0, formats.indexOf(detectColorFormat(originalText)));
+      let format = formats[formatIndex];
+      const hsv = rgbToHsv(r, g, b);
+      let alpha = a;
+
+      const SVW = 180, SVH = 150, BAR = 14, GAP = 6, PAD = 8;
+
+      // Create picker DOM with inline styles (lives on document.body, outside CM)
+      const picker = document.createElement('div');
+      Object.assign(picker.style, {
+        position: 'fixed', zIndex: '10000',
+        background: '#1e1e2e', border: '1px solid #444',
+        borderRadius: '6px', padding: `${PAD}px`,
+        boxShadow: '0 4px 16px rgba(0,0,0,0.5)',
+        display: 'flex', flexDirection: 'column', gap: `${GAP}px`,
+        fontFamily: 'var(--font-mono, monospace)', fontSize: '12px',
+        userSelect: 'none',
+      });
+
+      // Top row: SV gradient | Hue bar | Alpha bar (VS Code layout)
+      const topRow = document.createElement('div');
+      Object.assign(topRow.style, { display: 'flex', gap: `${GAP}px` });
+
+      const svCanvas = document.createElement('canvas');
+      svCanvas.width = SVW; svCanvas.height = SVH;
+      Object.assign(svCanvas.style, { borderRadius: '3px', cursor: 'crosshair', display: 'block' });
+      topRow.appendChild(svCanvas);
+
+      const hueCanvas = document.createElement('canvas');
+      hueCanvas.width = BAR; hueCanvas.height = SVH;
+      Object.assign(hueCanvas.style, { borderRadius: '3px', cursor: 'pointer', display: 'block' });
+      topRow.appendChild(hueCanvas);
+
+      const alphaCanvas = document.createElement('canvas');
+      alphaCanvas.width = BAR; alphaCanvas.height = SVH;
+      Object.assign(alphaCanvas.style, { borderRadius: '3px', cursor: 'pointer', display: 'block' });
+      topRow.appendChild(alphaCanvas);
+
+      picker.appendChild(topRow);
+
+      const valueRow = document.createElement('div');
+      Object.assign(valueRow.style, { display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' });
+      const preview = document.createElement('span');
+      Object.assign(preview.style, {
+        width: '20px', height: '20px', borderRadius: '3px',
+        border: '1px solid rgba(255,255,255,0.3)', flexShrink: '0',
+      });
+      const valueText = document.createElement('span');
+      Object.assign(valueText.style, {
+        color: '#cdd6f4', overflow: 'hidden', textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap', cursor: 'pointer', padding: '2px 4px',
+        borderRadius: '3px',
+      });
+      // Click value text to cycle format (RGB → HSL → HEX), matching VS Code
+      valueText.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        formatIndex = (formatIndex + 1) % formats.length;
+        format = formats[formatIndex];
+        redraw();
+        applyColor();
+        updateHighlight();
+      });
+      valueText.addEventListener('mouseenter', () => { valueText.style.background = 'rgba(255,255,255,0.1)'; });
+      valueText.addEventListener('mouseleave', () => { valueText.style.background = 'transparent'; });
+      valueRow.appendChild(preview);
+      valueRow.appendChild(valueText);
+      // Value row on top, matching VS Code layout
+      picker.insertBefore(valueRow, topRow);
+
+      // ── Text range highlight overlay ──
+      let highlightEl = null;
+      function updateHighlight() {
+        if (highlightEl) highlightEl.remove();
+        const fromCoords = view.coordsAtPos(from);
+        const toCoords = view.coordsAtPos(to);
+        if (!fromCoords || !toCoords) return;
+        highlightEl = document.createElement('div');
+        Object.assign(highlightEl.style, {
+          position: 'fixed', pointerEvents: 'none', zIndex: '9999',
+          left: `${fromCoords.left}px`, top: `${fromCoords.top}px`,
+          width: `${toCoords.right - fromCoords.left}px`,
+          height: `${fromCoords.bottom - fromCoords.top}px`,
+          background: 'rgba(100, 150, 255, 0.15)',
+          border: '1px solid rgba(100, 150, 255, 0.3)',
+          borderRadius: '2px',
+        });
+        document.body.appendChild(highlightEl);
+        if (activePicker) activePicker.highlight = highlightEl;
+      }
+      updateHighlight();
+
+      // ── Drawing ──
+
+      function drawSV() {
+        const ctx = svCanvas.getContext('2d');
+        const { r: hr, g: hg, b: hb } = hsvToRgb(hsv.h, 1, 1);
+        ctx.fillStyle = `rgb(${Math.round(hr*255)},${Math.round(hg*255)},${Math.round(hb*255)})`;
+        ctx.fillRect(0, 0, SVW, SVH);
+        const wg = ctx.createLinearGradient(0, 0, SVW, 0);
+        wg.addColorStop(0, 'rgba(255,255,255,1)');
+        wg.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = wg;
+        ctx.fillRect(0, 0, SVW, SVH);
+        const bg = ctx.createLinearGradient(0, 0, 0, SVH);
+        bg.addColorStop(0, 'rgba(0,0,0,0)');
+        bg.addColorStop(1, 'rgba(0,0,0,1)');
+        ctx.fillStyle = bg;
+        ctx.fillRect(0, 0, SVW, SVH);
+        // Handle
+        const x = hsv.s * SVW, y = (1 - hsv.v) * SVH;
+        ctx.beginPath();
+        ctx.arc(x, y, 5, 0, Math.PI * 2);
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+
+      function drawHue() {
+        const ctx = hueCanvas.getContext('2d');
+        // Vertical hue gradient (top to bottom)
+        const grad = ctx.createLinearGradient(0, 0, 0, SVH);
+        for (let i = 0; i <= 6; i++) {
+          const { r: cr, g: cg, b: cb } = hsvToRgb(i / 6, 1, 1);
+          grad.addColorStop(i / 6, `rgb(${Math.round(cr*255)},${Math.round(cg*255)},${Math.round(cb*255)})`);
+        }
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, BAR, SVH);
+        // Horizontal handle
+        const y = hsv.h * SVH;
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, y - 2, BAR, 4);
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(0, y - 2, BAR, 4);
+      }
+
+      function drawAlpha() {
+        const ctx = alphaCanvas.getContext('2d');
+        // Checkerboard
+        ctx.clearRect(0, 0, BAR, SVH);
+        for (let cx = 0; cx < BAR; cx += 5) {
+          for (let cy = 0; cy < SVH; cy += 5) {
+            ctx.fillStyle = ((Math.floor(cx / 5) + Math.floor(cy / 5)) % 2 === 0) ? '#ccc' : '#fff';
+            ctx.fillRect(cx, cy, 5, 5);
+          }
+        }
+        // Vertical alpha gradient (top=transparent, bottom=solid)
+        const { r: cr, g: cg, b: cb } = hsvToRgb(hsv.h, hsv.s, hsv.v);
+        const grad = ctx.createLinearGradient(0, 0, 0, SVH);
+        grad.addColorStop(0, `rgba(${Math.round(cr*255)},${Math.round(cg*255)},${Math.round(cb*255)},0)`);
+        grad.addColorStop(1, `rgba(${Math.round(cr*255)},${Math.round(cg*255)},${Math.round(cb*255)},1)`);
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, BAR, SVH);
+        // Horizontal handle
+        const y = alpha * SVH;
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, y - 2, BAR, 4);
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(0, y - 2, BAR, 4);
+      }
+
+      function updateDisplay() {
+        const { r: cr, g: cg, b: cb } = hsvToRgb(hsv.h, hsv.s, hsv.v);
+        const text = formatColor(cr, cg, cb, alpha, format);
+        valueText.textContent = text;
+        preview.style.background = `rgba(${Math.round(cr*255)},${Math.round(cg*255)},${Math.round(cb*255)},${alpha})`;
+      }
+
+      function applyColor() {
+        const { r: cr, g: cg, b: cb } = hsvToRgb(hsv.h, hsv.s, hsv.v);
+        const text = formatColor(cr, cg, cb, alpha, format);
+        const currentText = view.state.doc.sliceString(from, to);
+        if (text !== currentText) {
+          pickerIsEditing = true;
+          view.dispatch({ changes: { from, to, insert: text } });
+          to = from + text.length;
+          pickerIsEditing = false;
+          updateHighlight();
+        }
+      }
+
+      function redraw() { drawSV(); drawHue(); drawAlpha(); updateDisplay(); }
+
+      // ── Drag interaction ──
+
+      function makeDrag(canvas, onDrag) {
+        const handler = (e) => {
+          const rect = canvas.getBoundingClientRect();
+          const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+          const y = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
+          onDrag(x, y);
+          redraw();
+          applyColor();
+        };
+        canvas.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          handler(e);
+          const move = (e2) => { e2.preventDefault(); handler(e2); };
+          const up = () => { document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up); };
+          document.addEventListener('mousemove', move);
+          document.addEventListener('mouseup', up);
+        });
+      }
+
+      makeDrag(svCanvas, (x, y) => { hsv.s = x; hsv.v = 1 - y; });
+      makeDrag(hueCanvas, (_x, y) => { hsv.h = y; });
+      makeDrag(alphaCanvas, (_x, y) => { alpha = y; });
+
+      redraw();
+
+      // ── Position above swatch ──
+      const rect = anchor.getBoundingClientRect();
+      const totalH = SVH + GAP + 24 + PAD * 2;
+      picker.style.left = `${rect.left}px`;
+      picker.style.top = `${rect.top - totalH - 4}px`;
+      document.body.appendChild(picker);
+
+      // Flip below if no room above
+      const pickerRect = picker.getBoundingClientRect();
+      if (pickerRect.top < 0) {
+        picker.style.top = `${rect.bottom + 4}px`;
+      }
+      // Clamp to right edge
+      if (pickerRect.right > window.innerWidth) {
+        picker.style.left = `${window.innerWidth - pickerRect.width - 8}px`;
+      }
+
+      // ── Close handlers ──
+      const onOutside = (e) => {
+        if (!picker.contains(e.target) && e.target !== anchor) closeColorPicker();
+      };
+      const onKey = (e) => {
+        if (e.key === 'Escape') closeColorPicker();
+      };
+      setTimeout(() => {
+        document.addEventListener('mousedown', onOutside);
+        document.addEventListener('keydown', onKey);
+      }, 0);
+
+      activePicker = {
+        el: picker,
+        highlight: highlightEl,
+        cleanup: () => {
+          if (highlightEl) highlightEl.remove();
+          document.removeEventListener('mousedown', onOutside);
+          document.removeEventListener('keydown', onKey);
+        },
+      };
+    }
+
+    // ── Widget ──
+
     class ColorSwatchWidget extends WidgetType {
-      constructor(r, g, b, a) {
+      constructor(r, g, b, a, rangeFrom, rangeTo) {
         super();
-        this.r = r;
-        this.g = g;
-        this.b = b;
-        this.a = a;
+        this.r = r; this.g = g; this.b = b; this.a = a;
+        this.rangeFrom = rangeFrom;
+        this.rangeTo = rangeTo;
       }
 
       toDOM() {
         const span = document.createElement('span');
         span.className = 'cm-color-swatch';
         span.style.background = `rgba(${Math.round(this.r * 255)}, ${Math.round(this.g * 255)}, ${Math.round(this.b * 255)}, ${this.a})`;
+        const self = this;
+        span.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (currentView) {
+            openColorPicker(currentView, self.r, self.g, self.b, self.a, self.rangeFrom, self.rangeTo, span);
+          }
+        });
         return span;
       }
 
@@ -1126,8 +1475,11 @@ export function createEditorLsp() {
       ignoreEvent() { return true; }
     }
 
+    // ── ViewPlugin ──
+
     return ViewPlugin.fromClass(class {
       constructor(view) {
+        currentView = view;
         this.decorations = RangeSet.empty;
         this._timer = null;
         this._reqId = 0;
@@ -1135,7 +1487,12 @@ export function createEditorLsp() {
       }
 
       update(update) {
+        currentView = update.view;
         if (!update.docChanged) return;
+        // Don't re-fetch while the picker is applying edits
+        if (pickerIsEditing) return;
+        // Close picker if document changed externally
+        if (activePicker) closeColorPicker();
         this._scheduleRequest(update.view);
       }
 
@@ -1165,12 +1522,13 @@ export function createEditorLsp() {
           const widgets = [];
           for (const item of result.data.colors) {
             const pos = lspPositionToOffset(doc, item.range.start);
-            if (pos >= 0 && pos <= doc.length) {
+            const endPos = lspPositionToOffset(doc, item.range.end);
+            if (pos >= 0 && pos <= doc.length && endPos > pos) {
               const { red, green, blue, alpha } = item.color;
               widgets.push(
                 Decoration.widget({
-                  widget: new ColorSwatchWidget(red, green, blue, alpha ?? 1),
-                  side: -1, // before the color value
+                  widget: new ColorSwatchWidget(red, green, blue, alpha ?? 1, pos, endPos),
+                  side: -1,
                 }).range(pos)
               );
             }
@@ -1185,6 +1543,7 @@ export function createEditorLsp() {
 
       destroy() {
         clearTimeout(this._timer);
+        closeColorPicker();
       }
     }, {
       decorations: v => v.decorations,
