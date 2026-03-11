@@ -111,6 +111,15 @@
   // ── Downloads Panel ──
   let showDownloads = $state(false);
 
+  // Freeze WebView2 when History or Downloads panels are open (airspace problem)
+  $effect(() => {
+    if (showHistory || showDownloads) {
+      lensStore.freeze();
+    } else {
+      lensStore.unfreeze();
+    }
+  });
+
   function handleDownloadSettings() {
     navigationStore.setView('settings');
   }
@@ -444,7 +453,6 @@
                             onZoomIn={handleZoomIn}
                             onZoomOut={handleZoomOut}
                             onZoomReset={handleZoomReset}
-                            onFind={toggleFind}
                             onHistory={() => showHistory = true}
                             onDownloads={() => showDownloads = true}
                             onDownloadSettings={handleDownloadSettings}

@@ -1,12 +1,14 @@
 <script>
-  import { setupClickOutside } from '$lib/popup-utils.js';
+  import { lensEvalTabJs } from '../../lib/api.js';
+  import { browserTabsStore } from '../../lib/stores/browser-tabs.svelte.js';
+
+  const SHORTCUT_BASE = 'https://lens-shortcut.localhost/';
 
   let {
     zoomLevel = 100,
     onZoomIn,
     onZoomOut,
     onZoomReset,
-    onFind,
     onDownloads,
     onHistory,
     onDownloadSettings,
@@ -14,32 +16,87 @@
 
   let open = $state(false);
   let triggerEl = $state(null);
-  let menuEl = $state(null);
-  let focusedIndex = $state(-1);
 
-  // All focusable items in order — zoom buttons are indices 0,1,(2 if reset shown)
-  // We track them via data-index attributes to simplify keyboard nav
-  function getMenuItems() {
-    if (!menuEl) return [];
-    return Array.from(menuEl.querySelectorAll('[data-menuitem]'));
+  // Map of shortcut actions → callbacks
+  const actionMap = {
+    'menu-zoom-in': () => { onZoomIn?.(); },
+    'menu-zoom-out': () => { onZoomOut?.(); },
+    'menu-zoom-reset': () => { onZoomReset?.(); },
+    'menu-downloads': () => { closeMenu(); onDownloads?.(); },
+    'menu-history': () => { closeMenu(); onHistory?.(); },
+    'menu-download-settings': () => { closeMenu(); onDownloadSettings?.(); },
+    'menu-close': () => { closeMenu(); },
+  };
+
+  function buildInjectScript(pct) {
+    const ab = pct !== 100 ? '#007acc' : '#3c3c3c';
+    const ac = pct !== 100 ? '#007acc' : '#ccc';
+    const rc = pct !== 100 ? 'pointer' : 'default';
+    const resetAttr = pct !== 100 ? ' data-action="menu-zoom-reset"' : '';
+
+    // Uses data-action attributes + addEventListener (no inline onclick) to avoid CSP
+    return `(function(){
+var old=document.getElementById('vm-browser-menu-root');if(old)old.remove();
+var r=document.createElement('div');r.id='vm-browser-menu-root';
+r.innerHTML='<div id="vm-menu-backdrop" style="position:fixed;inset:0;z-index:999998;"></div>'
++'<div id="vm-browser-menu" style="position:fixed;top:8px;right:8px;z-index:999999;min-width:220px;background:#1e1e1e;border:1px solid #3c3c3c;border-radius:6px;box-shadow:0 6px 20px rgba(0,0,0,0.5);padding:4px 0;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;color:#ccc;font-size:13px;">'
++'<div style="display:flex;align-items:center;padding:4px 12px;gap:8px;"><span style="flex:1;">Zoom</span>'
++'<div style="display:flex;align-items:center;gap:2px;">'
++'<button data-action="menu-zoom-out" style="display:flex;align-items:center;justify-content:center;width:28px;height:28px;border:1px solid #3c3c3c;border-radius:4px;background:transparent;color:#ccc;cursor:pointer;" title="Zoom out">\\u2212</button>'
++'<button${resetAttr} style="min-width:48px;height:28px;padding:0 6px;border:1px solid ${ab};border-radius:4px;background:transparent;color:${ac};font-size:12px;font-family:monospace;text-align:center;cursor:${rc};">${pct}%</button>'
++'<button data-action="menu-zoom-in" style="display:flex;align-items:center;justify-content:center;width:28px;height:28px;border:1px solid #3c3c3c;border-radius:4px;background:transparent;color:#ccc;cursor:pointer;" title="Zoom in">+</button>'
++'</div></div>'
++'<div style="height:1px;background:#3c3c3c;margin:4px 0;"></div>'
++'<button data-action="menu-downloads" class="vmi" style="display:flex;align-items:center;width:100%;padding:7px 12px;border:none;background:transparent;color:#ccc;font-size:13px;cursor:pointer;text-align:left;font-family:inherit;">Downloads</button>'
++'<button data-action="menu-history" class="vmi" style="display:flex;align-items:center;width:100%;padding:7px 12px;border:none;background:transparent;color:#ccc;font-size:13px;cursor:pointer;text-align:left;font-family:inherit;">History</button>'
++'<div style="height:1px;background:#3c3c3c;margin:4px 0;"></div>'
++'<button data-action="menu-download-settings" class="vmi" style="display:flex;align-items:center;width:100%;padding:7px 12px;border:none;background:transparent;color:#ccc;font-size:13px;cursor:pointer;text-align:left;font-family:inherit;">Download settings</button>'
++'</div>'
++'<style>.vmi:hover{background:#2a2d2e!important;}button[data-action]:hover{background:#2a2d2e!important;}</style>';
+document.body.appendChild(r);
+r.addEventListener('click',function(e){var btn=e.target.closest('[data-action]');if(btn){new Image().src='${SHORTCUT_BASE}'+btn.getAttribute('data-action');return;}if(e.target.id==='vm-menu-backdrop'){new Image().src='${SHORTCUT_BASE}menu-close';}});
+document.addEventListener('keydown',function vmEsc(e){if(e.key==='Escape'){e.preventDefault();new Image().src='${SHORTCUT_BASE}menu-close';document.removeEventListener('keydown',vmEsc,true);}},true);
+})();`;
   }
 
-  function openMenu() {
+  function buildRemoveScript() {
+    return `(function(){var el=document.getElementById('vm-browser-menu-root');if(el)el.remove();})();`;
+  }
+
+  async function openMenu() {
+    const tabId = browserTabsStore.activeTabId;
+    if (!tabId) return;
     open = true;
-    focusedIndex = -1;
+    try {
+      await lensEvalTabJs(tabId, buildInjectScript(zoomLevel));
+    } catch (e) {
+      console.warn('[BrowserMenu] Failed to inject menu:', e);
+      open = false;
+    }
   }
 
-  function closeMenu() {
+  async function closeMenu() {
+    if (!open) return;
     open = false;
-    focusedIndex = -1;
+    const tabId = browserTabsStore.activeTabId;
+    if (!tabId) return;
+    try {
+      await lensEvalTabJs(tabId, buildRemoveScript());
+    } catch (e) { /* best effort */ }
   }
+
+  // Re-inject menu when zoomLevel changes (after zoom in/out) to update the displayed %
+  $effect(() => {
+    const pct = zoomLevel;
+    if (!open) return;
+    const tabId = browserTabsStore.activeTabId;
+    if (!tabId) return;
+    lensEvalTabJs(tabId, buildInjectScript(pct)).catch(() => {});
+  });
 
   function handleTriggerClick() {
-    if (open) {
-      closeMenu();
-    } else {
-      openMenu();
-    }
+    if (open) closeMenu();
+    else openMenu();
   }
 
   function handleTriggerKeydown(e) {
@@ -49,43 +106,26 @@
     }
   }
 
-  function handleMenuKeydown(e) {
-    const items = getMenuItems();
-    if (!items.length) return;
-
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      focusedIndex = (focusedIndex + 1) % items.length;
-      items[focusedIndex]?.focus();
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      focusedIndex = (focusedIndex - 1 + items.length) % items.length;
-      items[focusedIndex]?.focus();
-    } else if (e.key === 'Tab') {
-      closeMenu();
-    }
-  }
-
-  // keepOpen: zoom buttons pass keepOpen=true so menu stays open
-  function handleItem(callback, keepOpen = false) {
-    if (callback) callback();
-    if (!keepOpen) closeMenu();
-  }
-
+  // Listen for menu actions from the child webview via lens-shortcut
   $effect(() => {
-    if (open && menuEl) {
-      return setupClickOutside(menuEl, closeMenu);
+    if (!open) return;
+    function handleShortcut(e) {
+      const action = e.detail?.key;
+      if (action && actionMap[action]) {
+        actionMap[action]();
+      }
     }
+    window.addEventListener('lens-shortcut', handleShortcut);
+    return () => window.removeEventListener('lens-shortcut', handleShortcut);
   });
 
-  // Also close on Escape even if trigger has focus
+  // Escape from parent side too
   $effect(() => {
     if (!open) return;
     function handleEsc(e) {
       if (e.key === 'Escape') {
         e.preventDefault();
         closeMenu();
-        triggerEl?.focus();
       }
     }
     document.addEventListener('keydown', handleEsc, true);
@@ -94,7 +134,6 @@
 </script>
 
 <div class="browser-menu-wrapper">
-  <!-- Three-dot trigger button -->
   <button
     bind:this={triggerEl}
     class="nav-btn trigger-btn"
@@ -112,106 +151,6 @@
       <circle cx="8" cy="13" r="1.5"/>
     </svg>
   </button>
-
-  {#if open}
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div
-      bind:this={menuEl}
-      class="browser-menu"
-      role="menu"
-      onkeydown={handleMenuKeydown}
-    >
-      <!-- Zoom row -->
-      <div class="menu-zoom-row" role="none">
-        <span class="zoom-label">Zoom</span>
-        <div class="zoom-controls">
-          <button
-            class="zoom-btn"
-            role="menuitem"
-            data-menuitem
-            onclick={() => handleItem(onZoomOut, true)}
-            aria-label="Zoom out"
-            title="Zoom out"
-          >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-              <line x1="3" y1="7" x2="11" y2="7"/>
-            </svg>
-          </button>
-          <button
-            class="zoom-pct"
-            role="menuitem"
-            data-menuitem
-            onclick={() => handleItem(zoomLevel !== 100 ? onZoomReset : undefined, true)}
-            aria-label={zoomLevel !== 100 ? `Reset zoom (currently ${zoomLevel}%)` : `${zoomLevel}%`}
-            title={zoomLevel !== 100 ? 'Reset zoom' : ''}
-            class:resettable={zoomLevel !== 100}
-          >
-            {zoomLevel}%
-          </button>
-          <button
-            class="zoom-btn"
-            role="menuitem"
-            data-menuitem
-            onclick={() => handleItem(onZoomIn, true)}
-            aria-label="Zoom in"
-            title="Zoom in"
-          >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-              <line x1="7" y1="3" x2="7" y2="11"/>
-              <line x1="3" y1="7" x2="11" y2="7"/>
-            </svg>
-          </button>
-        </div>
-      </div>
-
-      <div class="menu-separator" role="separator"></div>
-
-      <!-- Find on page -->
-      <button
-        class="menu-item"
-        role="menuitem"
-        data-menuitem
-        onclick={() => handleItem(onFind)}
-      >
-        <span class="menu-item-label">Find on page</span>
-        <span class="menu-item-shortcut">Ctrl+F</span>
-      </button>
-
-      <div class="menu-separator" role="separator"></div>
-
-      <!-- Downloads -->
-      <button
-        class="menu-item"
-        role="menuitem"
-        data-menuitem
-        onclick={() => handleItem(onDownloads)}
-      >
-        <span class="menu-item-label">Downloads</span>
-      </button>
-
-      <!-- History -->
-      <button
-        class="menu-item"
-        role="menuitem"
-        data-menuitem
-        onclick={() => handleItem(onHistory)}
-      >
-        <span class="menu-item-label">History</span>
-      </button>
-
-      <div class="menu-separator" role="separator"></div>
-
-      <!-- Download settings -->
-      <button
-        class="menu-item"
-        role="menuitem"
-        data-menuitem
-        onclick={() => handleItem(onDownloadSettings)}
-      >
-        <span class="menu-item-label">Download settings</span>
-      </button>
-    </div>
-  {/if}
 </div>
 
 <style>
@@ -222,7 +161,6 @@
     flex-shrink: 0;
   }
 
-  /* Matches LensToolbar's .nav-btn */
   .nav-btn {
     display: flex;
     align-items: center;
@@ -244,131 +182,5 @@
 
   .nav-btn.active {
     background: var(--bg);
-  }
-
-  /* Dropdown panel */
-  .browser-menu {
-    position: absolute;
-    top: calc(100% + 4px);
-    right: 0;
-    min-width: 220px;
-    background: var(--bg-elevated);
-    border: 1px solid var(--border-color, var(--border));
-    border-radius: 6px;
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
-    padding: 4px 0;
-    z-index: 10010;
-    -webkit-app-region: no-drag;
-    font-family: var(--font-family);
-    outline: none;
-  }
-
-  /* Separator */
-  .menu-separator {
-    height: 1px;
-    background: var(--border-color, var(--border));
-    margin: 4px 0;
-  }
-
-  /* Regular menu items */
-  .menu-item {
-    display: flex;
-    align-items: center;
-    width: 100%;
-    padding: 7px 12px;
-    border: none;
-    background: transparent;
-    color: var(--text-primary, var(--text));
-    font-size: 13px;
-    cursor: pointer;
-    text-align: left;
-    font-family: inherit;
-    -webkit-app-region: no-drag;
-    gap: 8px;
-  }
-
-  .menu-item:hover,
-  .menu-item:focus-visible {
-    background: var(--bg-hover, var(--bg));
-    outline: none;
-  }
-
-  .menu-item-label {
-    flex: 1;
-  }
-
-  .menu-item-shortcut {
-    font-size: 11px;
-    color: var(--text-secondary, var(--muted));
-    flex-shrink: 0;
-  }
-
-  /* Zoom row */
-  .menu-zoom-row {
-    display: flex;
-    align-items: center;
-    padding: 4px 12px;
-    gap: 8px;
-  }
-
-  .zoom-label {
-    flex: 1;
-    font-size: 13px;
-    color: var(--text-primary, var(--text));
-  }
-
-  .zoom-controls {
-    display: flex;
-    align-items: center;
-    gap: 2px;
-  }
-
-  .zoom-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    border: 1px solid var(--border-color, var(--border));
-    border-radius: 4px;
-    background: transparent;
-    color: var(--text-primary, var(--text));
-    cursor: pointer;
-    transition: background var(--duration-fast, 100ms) var(--ease-out, ease-out);
-    flex-shrink: 0;
-  }
-
-  .zoom-btn:hover,
-  .zoom-btn:focus-visible {
-    background: var(--bg-hover, var(--bg));
-    outline: none;
-  }
-
-  .zoom-pct {
-    min-width: 48px;
-    height: 28px;
-    padding: 0 6px;
-    border: 1px solid var(--border-color, var(--border));
-    border-radius: 4px;
-    background: transparent;
-    color: var(--text-primary, var(--text));
-    font-size: 12px;
-    font-family: var(--font-mono);
-    cursor: default;
-    text-align: center;
-    transition: background var(--duration-fast, 100ms) var(--ease-out, ease-out),
-                border-color var(--duration-fast, 100ms) var(--ease-out, ease-out);
-  }
-
-  .zoom-pct.resettable {
-    cursor: pointer;
-    border-color: var(--accent);
-    color: var(--accent);
-  }
-
-  .zoom-pct.resettable:hover,
-  .zoom-pct.resettable:focus-visible {
-    background: color-mix(in srgb, var(--accent) 12%, transparent);
-    outline: none;
   }
 </style>

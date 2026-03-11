@@ -408,6 +408,10 @@ export async function lensGetZoom(tabId) {
   return invoke('lens_get_zoom', { tabId });
 }
 
+export async function lensEvalTabJs(tabId, js) {
+  return invoke('lens_eval_tab_js', { tabId, js });
+}
+
 export async function lensFindOnPage(tabId, query) {
   return invoke('lens_find_on_page', { tabId, query });
 }

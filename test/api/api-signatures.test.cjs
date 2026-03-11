@@ -286,6 +286,7 @@ describe('api.js -- exported async functions', () => {
     'lensCloseAllTabs',
     'lensSetZoom',
     'lensGetZoom',
+    'lensEvalTabJs',
     'lensFindOnPage',
     'lensFindNext',
     'lensFindPrevious',

@@ -257,6 +257,9 @@
       else if (key === 'zoom-reset') {
         window.dispatchEvent(new CustomEvent('lens-zoom', { detail: 'reset' }));
       }
+      else if (key?.startsWith('menu-')) {
+        window.dispatchEvent(new CustomEvent('lens-shortcut', { detail: { key } }));
+      }
     }).then(fn => { unlistenFn = fn; });
     return () => { unlistenFn?.(); };
   });

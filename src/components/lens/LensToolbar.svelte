@@ -11,7 +11,6 @@
     onZoomIn,
     onZoomOut,
     onZoomReset,
-    onFind,
     onDownloads,
     onHistory,
     onDownloadSettings,
@@ -90,7 +89,6 @@
     {onZoomIn}
     {onZoomOut}
     {onZoomReset}
-    {onFind}
     {onDownloads}
     {onHistory}
     {onDownloadSettings}

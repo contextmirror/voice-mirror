@@ -372,6 +372,8 @@ pub fn run() {
             // Zoom
             lens_cmds::lens_set_zoom,
             lens_cmds::lens_get_zoom,
+            // JS eval in child webview
+            lens_cmds::lens_eval_tab_js,
             // Find on Page
             lens_cmds::lens_find_on_page,
             lens_cmds::lens_find_next,

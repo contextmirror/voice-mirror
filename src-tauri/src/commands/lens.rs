@@ -305,6 +305,163 @@ const CONSOLE_HOOK_SCRIPT: &str = r#"
 })();
 "#;
 
+/// Register `WebResourceRequested` filters on a child WebView2 so that
+/// `lens-shortcut` and `lens-console` custom URI scheme requests are intercepted
+/// at the COM level.  `register_uri_scheme_protocol` on the Tauri Builder only
+/// intercepts requests from the **main app webview**, not from child webviews.
+///
+/// For each matching request we emit the corresponding Tauri event (same logic
+/// as lib.rs) and return a 1×1 transparent GIF so the `new Image().src` load
+/// succeeds silently.
+fn register_custom_scheme_handler(app: &AppHandle, webview: &tauri::Webview) {
+    let app_handle = app.clone();
+    let _ = webview.with_webview(move |platform_webview| {
+        #[cfg(windows)]
+        {
+            use webview2_com::WebResourceRequestedEventHandler;
+            use webview2_com::Microsoft::Web::WebView2::Win32::*;
+            use windows_core::{HSTRING, Interface};
+
+            unsafe {
+                let controller = platform_webview.controller();
+                let core_webview = match controller.CoreWebView2() {
+                    Ok(wv) => wv,
+                    Err(e) => {
+                        warn!("[lens] Failed to get CoreWebView2 for scheme handler: {:?}", e);
+                        return;
+                    }
+                };
+
+                // Filter for both custom schemes
+                let _ = core_webview.AddWebResourceRequestedFilter(
+                    &HSTRING::from("https://lens-shortcut.localhost/*"),
+                    COREWEBVIEW2_WEB_RESOURCE_CONTEXT_IMAGE,
+                );
+                let _ = core_webview.AddWebResourceRequestedFilter(
+                    &HSTRING::from("https://lens-console.localhost/*"),
+                    COREWEBVIEW2_WEB_RESOURCE_CONTEXT_IMAGE,
+                );
+
+                // Get ICoreWebView2_2 for Environment() access
+                let core_wv2: ICoreWebView2_2 = match core_webview.cast() {
+                    Ok(v) => v,
+                    Err(e) => {
+                        warn!("[lens] Failed to cast to ICoreWebView2_2: {:?}", e);
+                        return;
+                    }
+                };
+                let env = match core_wv2.Environment() {
+                    Ok(e) => e,
+                    Err(e) => {
+                        warn!("[lens] Failed to get environment: {:?}", e);
+                        return;
+                    }
+                };
+
+                let app_for_events = app_handle.clone();
+                let handler = WebResourceRequestedEventHandler::create(Box::new(
+                    move |_sender, args| {
+                        let args = match args {
+                            Some(a) => a,
+                            None => return Ok(()),
+                        };
+
+                        let request = args.Request()?;
+                        let mut uri_pwstr = windows_core::PWSTR::null();
+                        request.Uri(&mut uri_pwstr)?;
+                        let uri = if uri_pwstr.is_null() {
+                            String::new()
+                        } else {
+                            uri_pwstr.to_string().unwrap_or_default()
+                        };
+
+                        // Parse the URI — same logic as lib.rs handlers
+                        let path = uri
+                            .split("localhost")
+                            .nth(1)
+                            .unwrap_or("")
+                            .trim_start_matches('/')
+                            .trim_start_matches(':');
+
+                        if uri.contains("lens-shortcut") {
+                            let key = path
+                                .split('?')
+                                .next()
+                                .unwrap_or("")
+                                .trim_matches('/');
+
+                            if key == "hard-refresh" {
+                                let _ = app_for_events.emit("lens-hard-refresh", serde_json::json!({}));
+                            } else if key == "url-changed" {
+                                let query = path.split('?').nth(1).unwrap_or("");
+                                let url_param = query
+                                    .split('&')
+                                    .find_map(|pair| pair.strip_prefix("url="))
+                                    .unwrap_or("");
+                                let decoded_url = percent_encoding::percent_decode_str(url_param)
+                                    .decode_utf8_lossy()
+                                    .to_string();
+                                let _ = app_for_events.emit(
+                                    "lens-url-changed",
+                                    serde_json::json!({ "url": decoded_url }),
+                                );
+                            } else if !key.is_empty() {
+                                info!("[lens-shortcut] Child webview forwarding: {}", key);
+                                let _ = app_for_events.emit("lens-shortcut", serde_json::json!({ "key": key }));
+                            }
+                        } else if uri.contains("lens-console") {
+                            let level_part = path
+                                .split('?')
+                                .next()
+                                .unwrap_or("")
+                                .trim_matches('/');
+                            let query = path.split('?').nth(1).unwrap_or("");
+                            let encoded_msg = query
+                                .split('&')
+                                .find_map(|pair| pair.strip_prefix("m="))
+                                .unwrap_or("");
+                            let message = percent_encoding::percent_decode_str(encoded_msg)
+                                .decode_utf8_lossy()
+                                .to_string();
+                            if !message.is_empty() {
+                                let log_level = match level_part {
+                                    "error" => "ERROR",
+                                    "warn" => "WARN",
+                                    "debug" => "DEBUG",
+                                    "info" => "INFO",
+                                    _ => "INFO",
+                                };
+                                let _ = app_for_events.emit(
+                                    "lens-console-message",
+                                    serde_json::json!({ "level": log_level, "message": message }),
+                                );
+                            }
+                        }
+
+                        // Return empty 200 response so the Image() load doesn't error
+                        let response = env.CreateWebResourceResponse(
+                            None,
+                            200,
+                            &HSTRING::from("OK"),
+                            &HSTRING::from("Access-Control-Allow-Origin: *"),
+                        )?;
+                        args.SetResponse(&response)?;
+
+                        Ok(())
+                    },
+                ));
+
+                let mut token: i64 = 0;
+                if let Err(e) = core_webview.add_WebResourceRequested(&handler, &mut token) {
+                    warn!("[lens] Failed to register WebResourceRequested: {:?}", e);
+                } else {
+                    info!("[lens] Registered custom scheme handler for child webview");
+                }
+            }
+        }
+    });
+}
+
 /// Hook the WebView2 `DownloadStarting` event so file downloads are tracked
 /// and progress is emitted to the frontend.  Called once per newly-created
 /// child webview.
@@ -627,6 +784,7 @@ async fn create_tab_webview(
         ) {
             Ok(webview_ref) => {
                 info!("[lens] Webview created successfully: {} (tab {})", label_clone, tab_id_clone);
+                register_custom_scheme_handler(&app_for_download, &webview_ref);
                 register_download_handler(&app_for_download, &webview_ref, downloads);
                 Ok(label_clone)
             }
@@ -1613,6 +1771,32 @@ pub fn lens_find_on_page(
             Ok(Ok(result)) => IpcResponse::ok(serde_json::json!({ "found": result == "true" })),
             Ok(Err(e)) => IpcResponse::err(&e),
             Err(_) => IpcResponse::err("Find timed out"),
+        }
+    } else {
+        IpcResponse::err("Webview not found")
+    }
+}
+
+/// Execute JavaScript in a browser tab's child WebView2 (fire-and-forget).
+#[tauri::command]
+pub fn lens_eval_tab_js(
+    app: AppHandle,
+    tab_id: String,
+    js: String,
+    state: tauri::State<'_, LensState>,
+) -> IpcResponse {
+    let tabs = state.tabs.lock().unwrap();
+    let tab = match tabs.get(&tab_id) {
+        Some(t) => t,
+        None => return IpcResponse::err("Tab not found"),
+    };
+    let label = tab.webview_label.clone();
+    drop(tabs);
+
+    if let Some(webview) = app.get_webview(&label) {
+        match webview.eval(&js) {
+            Ok(()) => IpcResponse::ok_empty(),
+            Err(e) => IpcResponse::err(&format!("{:?}", e)),
         }
     } else {
         IpcResponse::err("Webview not found")

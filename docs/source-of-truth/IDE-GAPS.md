@@ -563,3 +563,19 @@ The strategy: close the top gaps so Lens is **comfortable enough** for real codi
 **Done:** find/replace ✓, multi-cursor ✓, global search ✓, git stage+commit+push ✓, branch management ✓, dynamic sync ✓, document formatting ✓, signature help ✓, split editor ✓, command palette ✓, file tree git decorations ✓, LSP diagnostics in tree ✓, code minimap ✓, terminal tab close ✓, terminal grid splits (H+V) ✓, terminal find (Ctrl+F) ✓, terminal clickable links (Ctrl+click) ✓, terminal persistence ✓, inline gutter change indicators ✓, closed tab history + Ctrl+Shift+T ✓, mouse wheel scroll on tab bar ✓, back/forward navigation (Alt+Left/Right) ✓, Ctrl+hover definition underline ✓, Ctrl+PageUp/PageDown tab cycling ✓, tab drag to split zones ✓, Problems panel (Ctrl+Shift+M) ✓, code actions lightbulb gutter ✓, font zoom (Ctrl+=/−/0) ✓, LSP server management Phase 1 ✓, LSP crash recovery + health monitoring + idle shutdown (Phase 2) ✓, LSP project scanning + multi-server routing + native binary support (Phase 3) ✓, project output channels (build logs + browser console → MCP) ✓, keyboard tree navigation (arrow keys) ✓, drag-to-move files in tree ✓.
 
 **Next wave:** hunk-level staging (stage individual diff chunks from the gutter). This is the remaining high-impact gap that separates "usable" from "daily driver." The file tree is now feature-compete for navigation (keyboard + drag-to-move). The terminal is feature-compete with VS Code for core workflows. LSP infrastructure is feature-compete — remaining LSP gaps are Tier 2 features (inlay hints, workspace symbols, semantic tokens).
+
+---
+
+### 16. Browser (Lens WebView2)
+
+> WebView2-based browser panel gaps.
+
+| Feature | Chrome/Edge | Voice Mirror | Priority |
+|---------|-------------|-------------|----------|
+| **Download manager** | Full download UI with progress, pause, cancel | ❌ Downloads silently suppressed | **Medium** |
+| **Open local files in browser** | file:// URLs + Office integration | ❌ | Medium |
+| **Multiple tabs** | Full tab system | Single-tab model | Low (by design) |
+| **DevTools** | Full F12 DevTools | ❌ (console output captured via init script) | Low |
+| **Print** | Full print dialog | ❌ | Very low |
+
+**Download manager details:** WebView2 requires explicit `DownloadStarting` event handling via `ICoreWebView2_4::add_DownloadStarting`. Without it, downloads are silently blocked. Need to: hook the event in browser bridge, allow downloads to proceed, show progress bar at bottom of browser panel, save to Downloads folder or prompt with save dialog. Discovered when trying to download OAuth JSON from Google Cloud Console.
