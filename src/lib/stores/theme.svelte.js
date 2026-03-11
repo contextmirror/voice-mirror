@@ -140,18 +140,18 @@ export const PRESETS = {
       fontMono: "'Cascadia Code', 'Fira Code', monospace",
     },
   },
-  slate: {
-    name: 'Slate',
+  vim: {
+    name: 'Vim',
     colors: {
-      bg: '#0f1114', bgElevated: '#1e2028',
-      text: '#cbd5e1', textStrong: '#f1f5f9', muted: '#94a3b8',
-      accent: '#6366f1',
-      ok: '#4ade80', warn: '#fbbf24', danger: '#ef4444',
-      orbCore: '#1e1b4b',
+      bg: '#282828', bgElevated: '#3c3836',
+      text: '#ebdbb2', textStrong: '#fbf1c7', muted: '#a89984',
+      accent: '#fe8019',
+      ok: '#b8bb26', warn: '#fabd2f', danger: '#fb4934',
+      orbCore: '#fe8019',
     },
     fonts: {
-      fontFamily: "'Segoe UI', system-ui, -apple-system, sans-serif",
-      fontMono: "'Cascadia Code', 'Fira Code', monospace",
+      fontFamily: "'Hack', 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace",
+      fontMono: "'Hack', 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace",
     },
   },
   black: {

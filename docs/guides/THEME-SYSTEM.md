@@ -35,7 +35,7 @@ built-in presets and supports custom themes.
 |---------|--------|
 | **Source file** | `src/lib/stores/theme.svelte.js` |
 | **CSS tokens** | `src/styles/tokens.css` |
-| **Built-in presets** | 8 (colorblind, light, midnight, emerald, rose, slate, black, gray) |
+| **Built-in presets** | 8 (colorblind, light, midnight, emerald, rose, vim, black, gray) |
 | **Custom themes** | Persisted in config under `appearance.colors` / `appearance.fonts` |
 | **Base inputs** | 10 hex colors + 2 font-family strings |
 | **Derived outputs** | 50+ CSS custom properties (including CodeMirror syntax vars), orb RGB arrays, terminal palette |
@@ -128,20 +128,20 @@ conventions for accessibility.
 | `danger` | `#ef4444` |
 | `orbCore` | `#4a0e2b` |
 
-### Slate
+### Vim
 
 | Key | Hex |
 |-----|-----|
-| `bg` | `#0f1114` |
-| `bgElevated` | `#1e2028` |
-| `text` | `#cbd5e1` |
-| `textStrong` | `#f1f5f9` |
-| `muted` | `#94a3b8` |
-| `accent` | `#6366f1` |
-| `ok` | `#4ade80` |
-| `warn` | `#fbbf24` |
-| `danger` | `#ef4444` |
-| `orbCore` | `#1e1b4b` |
+| `bg` | `#282828` |
+| `bgElevated` | `#3c3836` |
+| `text` | `#ebdbb2` |
+| `textStrong` | `#fbf1c7` |
+| `muted` | `#a89984` |
+| `accent` | `#fe8019` |
+| `ok` | `#b8bb26` |
+| `warn` | `#fabd2f` |
+| `danger` | `#fb4934` |
+| `orbCore` | `#fe8019` |
 
 ### Black
 
