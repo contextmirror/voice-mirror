@@ -126,10 +126,7 @@ const DEFAULT_CONFIG = {
     toolProfile: 'voice-assistant',
     toolProfiles: {
       'voice-assistant': { groups: ['core', 'memory', 'browser'] },
-      'n8n-workflows': { groups: ['core','n8n'] },
-      'web-browser': { groups: ['core', 'browser'] },
       'full-toolbox': { groups: ['core', 'memory', 'browser', 'n8n'] },
-      'minimal': { groups: ['core'] },
     },
     endpoints: {
       ollama: 'http://127.0.0.1:11434',

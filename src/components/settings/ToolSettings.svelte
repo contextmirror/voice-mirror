@@ -52,21 +52,9 @@
       label: 'Voice Assistant',
       groups: ['core', 'memory', 'browser'],
     },
-    'n8n-workflows': {
-      label: 'n8n Workflows',
-      groups: ['core','n8n'],
-    },
-    'web-browser': {
-      label: 'Web Browser',
-      groups: ['core', 'browser'],
-    },
     'full-toolbox': {
       label: 'Full Toolbox',
       groups: ['core', 'memory', 'browser', 'n8n'],
-    },
-    'minimal': {
-      label: 'Minimal',
-      groups: ['core'],
     },
   };
 

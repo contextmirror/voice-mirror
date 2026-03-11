@@ -853,7 +853,6 @@ describe('ToolSettings.svelte', () => {
     assert.ok(src.includes('const DEFAULT_PROFILES'), 'Should define DEFAULT_PROFILES');
     assert.ok(src.includes("'voice-assistant'"), 'Should have voice-assistant profile');
     assert.ok(src.includes("'full-toolbox'"), 'Should have full-toolbox profile');
-    assert.ok(src.includes("'minimal'"), 'Should have minimal profile');
   });
 
   it('has Active Profile selector', () => {

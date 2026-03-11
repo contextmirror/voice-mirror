@@ -507,17 +507,8 @@ fn default_tool_profiles() -> HashMap<String, ToolProfile> {
     m.insert("voice-assistant".into(), ToolProfile {
         groups: vec!["core".into(), "memory".into(), "browser".into()],
     });
-    m.insert("n8n-workflows".into(), ToolProfile {
-        groups: vec!["core".into(),"n8n".into()],
-    });
-    m.insert("web-browser".into(), ToolProfile {
-        groups: vec!["core".into(), "browser".into()],
-    });
     m.insert("full-toolbox".into(), ToolProfile {
         groups: vec!["core".into(), "memory".into(), "browser".into(), "n8n".into()],
-    });
-    m.insert("minimal".into(), ToolProfile {
-        groups: vec!["core".into()],
     });
     m
 }
