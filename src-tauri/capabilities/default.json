@@ -6,8 +6,8 @@
   "permissions": [
     "core:default",
     "shell:allow-open",
-    "shell:allow-execute",
     "core:window:allow-close",
+    "core:window:allow-destroy",
     "core:window:allow-minimize",
     "core:window:allow-maximize",
     "core:window:allow-unmaximize",
@@ -30,6 +30,7 @@
     "core:webview:allow-webview-close",
     "core:webview:allow-set-webview-size",
     "core:webview:allow-set-webview-position",
-    "core:webview:allow-set-webview-focus"
+    "core:webview:allow-set-webview-focus",
+    "core:webview:deny-internal-toggle-devtools"
   ]
 }
