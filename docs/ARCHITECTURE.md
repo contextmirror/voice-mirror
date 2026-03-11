@@ -424,7 +424,7 @@ Handles migration from the old Electron config format (`voice-mirror-electron/`)
 | Midnight | `midnight` | Deep navy with blue accent |
 | Emerald | `emerald` | Dark green with emerald accent |
 | Rose | `rose` | Dark pink/magenta theme |
-| Slate | `slate` | Cool gray with indigo accent |
+| Vim | `vim` | Gruvbox-inspired warm dark, orange accent |
 | Black | `black` | Pure OLED black with neutral accent |
 | Claude Gray | `gray` | Warm gray with orange accent |
 | Light | `light` | Light theme with indigo accent |

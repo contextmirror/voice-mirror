@@ -31,7 +31,7 @@ stacks.
 | **Source file** | `electron/renderer/theme-engine.js` |
 | **UI** | `electron/renderer/settings-appearance.js` |
 | **CSS tokens** | `electron/renderer/styles/tokens.css` |
-| **Built-in presets** | 8 (colorblind, light, midnight, emerald, rose, slate, black, gray) |
+| **Built-in presets** | 8 (colorblind, light, midnight, emerald, rose, vim, black, gray) |
 | **Custom themes** | Unlimited; persisted in `config.json` under `appearance.customThemes` |
 | **Base inputs** | 10 hex colors + 2 font-family strings |
 | **Derived outputs** | 35+ CSS custom properties, 5 orb RGB arrays, 16-color terminal palette |
@@ -130,20 +130,20 @@ conventions for accessibility.
 | `danger` | `#ef4444` |
 | `orbCore` | `#4a0e2b` |
 
-### Slate
+### Vim
 
 | Key | Hex |
 |-----|-----|
-| `bg` | `#0f1114` |
-| `bgElevated` | `#1e2028` |
-| `text` | `#cbd5e1` |
-| `textStrong` | `#f1f5f9` |
-| `muted` | `#94a3b8` |
-| `accent` | `#6366f1` |
-| `ok` | `#4ade80` |
-| `warn` | `#fbbf24` |
-| `danger` | `#ef4444` |
-| `orbCore` | `#1e1b4b` |
+| `bg` | `#282828` |
+| `bgElevated` | `#3c3836` |
+| `text` | `#ebdbb2` |
+| `textStrong` | `#fbf1c7` |
+| `muted` | `#a89984` |
+| `accent` | `#fe8019` |
+| `ok` | `#b8bb26` |
+| `warn` | `#fabd2f` |
+| `danger` | `#fb4934` |
+| `orbCore` | `#fe8019` |
 
 ### Black
 
@@ -650,7 +650,7 @@ to an object with 10 hex color values means "override the preset palette."
 From `electron/ipc/validators.js`, the `set-config` validator enforces:
 
 - `appearance.theme` must be one of: `colorblind`, `midnight`, `emerald`,
-  `rose`, `slate`, `black`, `gray`, `light`, `custom`, or a string starting
+  `rose`, `vim`, `black`, `gray`, `light`, `custom`, or a string starting
   with `custom-`.
 - `appearance.colors` must be `null` or an object where every key is one of
   the 10 valid color keys and every value matches `#RRGGBB`.
@@ -703,7 +703,7 @@ array inside the `set-config` validator:
 
 ```js
 const VALID_THEMES = [
-    'colorblind', 'midnight', 'emerald', 'rose', 'slate',
+    'colorblind', 'midnight', 'emerald', 'rose', 'vim',
     'black', 'gray', 'light', 'custom',
     'ocean'  // <-- add here
 ];

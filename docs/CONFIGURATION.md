@@ -165,7 +165,7 @@ The default theme is `"colorblind"`. Available built-in themes:
 | `midnight` | Midnight | Deep blue-black, blue accent |
 | `emerald` | Emerald | Dark green tones, green accent |
 | `rose` | Rose | Dark pink tones, pink accent |
-| `slate` | Slate | Neutral dark gray, indigo accent |
+| `vim` | Vim | Gruvbox-inspired warm dark theme, orange accent |
 | `black` | Black | Pure black background, monochrome accent |
 | `gray` | Claude Gray | Warm dark gray, orange accent |
 | `light` | Light | Light background, indigo accent |
