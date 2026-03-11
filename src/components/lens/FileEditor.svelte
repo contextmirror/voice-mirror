@@ -556,6 +556,20 @@
 
         // Apply pending cursor if Problems panel or similar set one before file loaded
         applyPendingCursor();
+
+        // Restore cursor/scroll from workspace state if available
+        if (tab.cursor && view) {
+          try {
+            const line = view.state.doc.line(tab.cursor.line);
+            const pos = line.from + (tab.cursor.col || 0);
+            view.dispatch({ selection: { anchor: Math.min(pos, view.state.doc.length) } });
+          } catch { /* line may not exist */ }
+        }
+        if (tab.scroll && view) {
+          requestAnimationFrame(() => {
+            view.scrollDOM.scrollTop = tab.scroll.top;
+          });
+        }
       }
 
       // Open file in LSP (fire and forget)
@@ -806,6 +820,21 @@
       window.removeEventListener('status-bar-indent-convert', handleIndentConvert);
       window.removeEventListener('status-bar-indent-detect', handleIndentDetect);
     };
+  });
+
+  // Workspace state capture — write cursor/scroll to tab on demand
+  $effect(() => {
+    const handleCapture = () => {
+      if (!view || !tab) return;
+      const offset = view.state.selection.main.head;
+      const line = view.state.doc.lineAt(offset);
+      tabsStore.updateTabMeta(tab.id, {
+        cursor: { line: line.number, col: offset - line.from },
+        scroll: { top: view.scrollDOM.scrollTop },
+      });
+    };
+    window.addEventListener('workspace-state:capture', handleCapture);
+    return () => window.removeEventListener('workspace-state:capture', handleCapture);
   });
 
   onDestroy(() => {
