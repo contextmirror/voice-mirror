@@ -6,7 +6,7 @@
  */
 
 import { updateConfig } from './config.svelte.js';
-import { chatList } from '../api.js';
+import { chatList, loadProjectIcons } from '../api.js';
 import { unwrapResult } from '../utils.js';
 
 /** 8-color palette for project badges, picked by hashing the folder name */
@@ -32,11 +32,14 @@ function createProjectStore() {
   let entries = $state([]);
   let activeIndex = $state(0);
   let sessions = $state([]);
+  let iconCache = $state({});
 
   return {
     get entries() { return entries; },
     get activeIndex() { return activeIndex; },
     get sessions() { return sessions; },
+    /** Map of icon filename → base64 data URL */
+    get iconCache() { return iconCache; },
 
     /** The currently active project entry, or null if none */
     get activeProject() {
@@ -61,6 +64,7 @@ function createProjectStore() {
       // Load sessions for the active project
       if (entries.length > 0) {
         this.loadSessions();
+        this._loadIcons();
       }
     },
 
@@ -175,6 +179,35 @@ function createProjectStore() {
       }).catch((err) => {
         console.error('[project] Failed to persist:', err);
       });
+    },
+
+    /** Load icon data URLs for all entries that have icons. */
+    async _loadIcons() {
+      const filenames = [...new Set(entries
+        .map(e => e.icon)
+        .filter(Boolean))];
+      if (filenames.length === 0) return;
+      try {
+        const result = await loadProjectIcons(filenames);
+        const data = unwrapResult(result);
+        if (data?.icons) {
+          iconCache = { ...iconCache, ...data.icons };
+        }
+      } catch (err) {
+        console.error('[project] Failed to load icons:', err);
+      }
+    },
+
+    /** Cache an icon data URL by filename. */
+    setIconCache(filename, dataUrl) {
+      iconCache = { ...iconCache, [filename]: dataUrl };
+    },
+
+    /** Remove an icon from the cache. */
+    removeIconCache(filename) {
+      const next = { ...iconCache };
+      delete next[filename];
+      iconCache = next;
     },
   };
 }

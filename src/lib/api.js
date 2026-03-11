@@ -24,6 +24,10 @@ export async function resetConfig() {
   return invoke('reset_config');
 }
 
+export async function getPlatformInfo() {
+  return invoke('get_platform_info');
+}
+
 // ============ Window ============
 
 export async function getWindowPosition() {
@@ -36,6 +40,18 @@ export async function setWindowPosition(x, y) {
 
 export async function minimizeWindow() {
   return invoke('minimize_window');
+}
+
+export async function maximizeWindow() {
+  return invoke('maximize_window');
+}
+
+export async function saveWindowBounds() {
+  return invoke('save_window_bounds');
+}
+
+export async function quitApp() {
+  return invoke('quit_app');
 }
 
 export async function setWindowSize(width, height) {
@@ -91,6 +107,10 @@ export async function listAudioDevices() {
 
 export async function speakText(text) {
   return invoke('speak_text', { text });
+}
+
+export async function stopSpeaking() {
+  return invoke('stop_speaking');
 }
 
 export async function pttPress() {
@@ -159,6 +179,14 @@ export async function stopAI() {
   return invoke('stop_ai');
 }
 
+export async function interruptAI() {
+  return invoke('interrupt_ai');
+}
+
+export async function getProvider() {
+  return invoke('get_provider');
+}
+
 export async function getAIStatus() {
   return invoke('get_ai_status');
 }
@@ -224,7 +252,7 @@ export async function setProvider(providerId, options = {}) {
 export async function listModels(providerType, baseUrl) {
   return invoke('list_models', {
     providerType,
-    baseUrl: baseUrl || undefined,
+    baseUrl: baseUrl || null,
   });
 }
 
@@ -273,6 +301,10 @@ export async function exportChatToFile(path, content) {
 
 // ============ Screenshot ============
 
+export async function takeScreenshot() {
+  return invoke('take_screenshot');
+}
+
 export async function listMonitors() {
   return invoke('list_monitors');
 }
@@ -295,6 +327,11 @@ export async function lensCapturePreview() {
 }
 
 // ============ Tools ============
+
+/** Detect available CLI tools (claude, opencode, ollama, cargo). */
+export async function scanCliTools() {
+  return invoke('scan_cli_tools');
+}
 
 /**
  * Check npm package versions (installed vs latest) and system tool status.
@@ -326,6 +363,10 @@ export async function unregisterAllShortcuts() {
   return invoke('unregister_all_shortcuts');
 }
 
+export async function listShortcuts() {
+  return invoke('list_shortcuts');
+}
+
 // ============ Performance Stats ============
 
 export async function getProcessStats() {
@@ -335,6 +376,14 @@ export async function getProcessStats() {
 // ============ Config Migration ============
 
 // ============ Lens ============
+
+export async function lensCreateWebview(url, x, y, width, height) {
+  return invoke('lens_create_webview', { url, x, y, width, height });
+}
+
+export async function lensCloseWebview() {
+  return invoke('lens_close_webview');
+}
 
 export async function lensNavigate(url) {
   return invoke('lens_navigate', { url });
@@ -534,6 +583,10 @@ export async function deleteSttModel(modelSize) {
 }
 
 // ============ Files ============
+
+export async function getProjectRoot() {
+  return invoke('get_project_root');
+}
 
 export async function listDirectory(path, root) {
   return invoke('list_directory', { path: path || null, root: root || null });
@@ -736,6 +789,11 @@ export async function terminalKill(id) {
  */
 export async function terminalDetectProfiles() {
   return invoke('terminal_detect_profiles');
+}
+
+/** List all active terminal sessions. */
+export async function terminalList() {
+  return invoke('terminal_list');
 }
 
 // ============ LSP ============
@@ -948,4 +1006,18 @@ export async function getOutputLogs(params) {
 
 export async function logFrontendError(params) {
   return invoke('log_frontend_error', { params });
+}
+
+// ============ Project Icon Management ============
+
+export async function saveProjectIcon(filePath) {
+  return invoke('save_project_icon', { params: { filePath } });
+}
+
+export async function removeProjectIcon(filename) {
+  return invoke('remove_project_icon', { params: { filename } });
+}
+
+export async function loadProjectIcons(filenames) {
+  return invoke('load_project_icons', { params: { filenames } });
 }
