@@ -209,9 +209,9 @@ describe('Select Element — End-to-End Wiring', () => {
       assert.ok(designOverlaySrc.includes('data-vm-tooltip'));
     });
 
-    it('has action bar with Deselect button', () => {
-      assert.ok(designOverlaySrc.includes('data-vm-actionbar'));
-      assert.ok(designOverlaySrc.includes('Deselect'));
+    it('fires element-selected signal via lens-shortcut on select', () => {
+      assert.ok(designOverlaySrc.includes('element-selected'));
+      assert.ok(designOverlaySrc.includes('new Image'));
     });
 
     it('draws highlight using _drawElementHighlight', () => {

@@ -23,7 +23,6 @@
     var _hoveredEl = null;
     var _selectedElement = null;
     var _selectTooltip = null;
-    var _selectActionBar = null;
 
     // --- DOM tree serialization state ---
     var _treeIdCounter = 0;
@@ -640,65 +639,6 @@
     }
 
     /**
-     * Show floating action bar below the selected element with
-     * "Send to Chat" and "Cancel" buttons.
-     */
-    function _showSelectActionBar(el) {
-        _removeSelectActionBar();
-
-        var rect = el.getBoundingClientRect();
-
-        var bar = document.createElement('div');
-        bar.setAttribute('data-vm-actionbar', '1');
-        bar.style.cssText = [
-            'position:fixed',
-            'z-index:1000001',
-            'display:flex',
-            'gap:6px',
-            'padding:4px 8px',
-            'background:rgba(0,0,0,0.9)',
-            'border-radius:4px',
-            'font-family:sans-serif',
-            'font-size:12px'
-        ].join(';');
-
-        var btnStyle = [
-            'border:none',
-            'border-radius:3px',
-            'padding:4px 12px',
-            'cursor:pointer',
-            'font-size:12px',
-            'font-family:sans-serif'
-        ].join(';');
-
-        var cancelBtn = document.createElement('button');
-        cancelBtn.textContent = 'Deselect';
-        cancelBtn.style.cssText = btnStyle + ';background:#555;color:#fff;';
-        cancelBtn.addEventListener('click', function (e) {
-            e.preventDefault();
-            e.stopPropagation();
-            _cancelSelect();
-        });
-
-        bar.appendChild(cancelBtn);
-
-        // Stop events from reaching canvas
-        bar.addEventListener('mousedown', function (e) { e.stopPropagation(); });
-        bar.addEventListener('mousemove', function (e) { e.stopPropagation(); });
-        bar.addEventListener('mouseup', function (e) { e.stopPropagation(); });
-
-        // Position below element, or above if too close to bottom
-        var barH = 34;
-        var topPos = rect.bottom + 4;
-        if (topPos + barH > window.innerHeight) topPos = rect.top - barH - 4;
-        bar.style.left = Math.max(0, rect.left) + 'px';
-        bar.style.top = topPos + 'px';
-
-        document.body.appendChild(bar);
-        _selectActionBar = bar;
-    }
-
-    /**
      * Walk up to 3 ancestor elements capturing layout-relevant styles.
      * Stops at BODY or HTML (does not include them).
      */
@@ -1138,9 +1078,12 @@
         if (!_hoveredEl) return;
 
         _selectedElement = _serializeElement(_hoveredEl);
+        try {
+            var shortcutBase = location.protocol === 'https:' ? 'https://lens-shortcut.localhost/' : 'lens-shortcut://localhost/';
+            (new Image()).src = shortcutBase + 'element-selected?t=' + Date.now();
+        } catch (err) {}
         _drawElementHighlight(_hoveredEl);
         _removeSelectTooltip();
-        _showSelectActionBar(_hoveredEl);
     }
 
     function _handleSelectKeyDown(e) {
@@ -1163,23 +1106,25 @@
         _selectTooltip = null;
     }
 
-    function _removeSelectActionBar() {
-        if (_selectActionBar && _selectActionBar.parentNode) {
-            _selectActionBar.parentNode.removeChild(_selectActionBar);
-        }
-        _selectActionBar = null;
-    }
-
     function _cancelSelect() {
         _selectedElement = null;
         _hoveredEl = null;
+        try {
+            var shortcutBase = location.protocol === 'https:' ? 'https://lens-shortcut.localhost/' : 'lens-shortcut://localhost/';
+            (new Image()).src = shortcutBase + 'element-deselected?t=' + Date.now();
+        } catch (err) {}
         _removeSelectTooltip();
-        _removeSelectActionBar();
         _redrawAll();
     }
 
     function _exitSelectMode() {
         _selectMode = false;
+        if (_selectedElement) {
+            try {
+                var shortcutBase = location.protocol === 'https:' ? 'https://lens-shortcut.localhost/' : 'lens-shortcut://localhost/';
+                (new Image()).src = shortcutBase + 'element-deselected?t=' + Date.now();
+            } catch (err) {}
+        }
         _cancelSelect();
         if (canvas) canvas.style.cursor = _getCursor(currentTool);
     }
@@ -1389,6 +1334,7 @@
 
         disable: function () {
             _exitSelectMode();
+            _clearTreeIds();
             _removeTextInput();
 
             if (canvas) {

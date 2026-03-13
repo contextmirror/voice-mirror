@@ -89,10 +89,6 @@ describe('design-overlay.js: select mode state variables', () => {
   it('has _selectTooltip', () => {
     assert.ok(src.includes('var _selectTooltip = null'), 'Should have _selectTooltip');
   });
-
-  it('has _selectActionBar', () => {
-    assert.ok(src.includes('var _selectActionBar = null'), 'Should have _selectActionBar');
-  });
 });
 
 // =========================================================================
@@ -257,42 +253,42 @@ describe('design-overlay.js: _showSelectTooltip', () => {
 });
 
 // =========================================================================
-// _showSelectActionBar
+// Element selection signals
 // =========================================================================
 
-describe('design-overlay.js: _showSelectActionBar', () => {
-  it('has _showSelectActionBar function', () => {
-    assert.ok(src.includes('function _showSelectActionBar(el)'), 'Should have _showSelectActionBar');
+describe('design-overlay.js: element selection signals', () => {
+  it('fires lens-shortcut element-selected on click', () => {
+    const fnBody = src.substring(src.indexOf('function _handleSelectMouseDown'));
+    assert.ok(fnBody.includes('element-selected'), 'Must fire element-selected signal');
+    assert.ok(fnBody.includes('new Image'), 'Must use Image().src trick for lens-shortcut');
   });
 
-  it('creates div with data-vm-actionbar attribute', () => {
-    assert.ok(src.includes("data-vm-actionbar"), 'Should set data-vm-actionbar');
+  it('fires lens-shortcut element-deselected on cancel', () => {
+    const fnBody = src.substring(src.indexOf('function _cancelSelect'));
+    assert.ok(fnBody.includes('element-deselected'), 'Must fire element-deselected signal');
   });
 
-  it('has Deselect button', () => {
-    assert.ok(src.includes("'Deselect'"), 'Should have Deselect button');
+  it('fires lens-shortcut element-deselected on exit select mode', () => {
+    const fnBody = src.substring(src.indexOf('function _exitSelectMode'));
+    assert.ok(fnBody.includes('element-deselected'), 'Must fire element-deselected signal on exit');
+  });
+});
+
+describe('design-overlay.js: action bar removal', () => {
+  it('_handleSelectMouseDown does not call _showSelectActionBar', () => {
+    const fnBody = src.substring(
+      src.indexOf('function _handleSelectMouseDown'),
+      src.indexOf('function _handleSelectMouseDown') + 500
+    );
+    assert.ok(!fnBody.includes('_showSelectActionBar'), 'Must not call _showSelectActionBar');
   });
 
-  it('calls _cancelSelect on Deselect', () => {
-    // The deselect button handler calls _cancelSelect
-    const actionBarFn = src.substring(src.indexOf('function _showSelectActionBar'));
-    assert.ok(actionBarFn.includes('_cancelSelect()'), 'Deselect should call _cancelSelect');
+  it('no _showSelectActionBar function exists', () => {
+    assert.ok(!src.includes('function _showSelectActionBar'), 'Function must be removed');
   });
 
-  it('stops mouse events from reaching canvas', () => {
-    // The action bar stops propagation on mouse events
-    const actionBarFn = src.substring(src.indexOf('function _showSelectActionBar'));
-    assert.ok(actionBarFn.includes('e.stopPropagation()'), 'Should stop event propagation');
-  });
-
-  it('positions below element', () => {
-    const actionBarFn = src.substring(src.indexOf('function _showSelectActionBar'));
-    assert.ok(actionBarFn.includes('rect.bottom + 4'), 'Should position below element');
-  });
-
-  it('falls back to above when near bottom', () => {
-    const actionBarFn = src.substring(src.indexOf('function _showSelectActionBar'));
-    assert.ok(actionBarFn.includes('window.innerHeight'), 'Should check viewport bottom');
+  it('no _removeSelectActionBar function exists', () => {
+    assert.ok(!src.includes('function _removeSelectActionBar'), 'Function must be removed');
   });
 });
 
@@ -420,9 +416,9 @@ describe('design-overlay.js: select mode handlers', () => {
     assert.ok(fn.includes('_serializeElement(_hoveredEl)'), 'Should serialize on click');
   });
 
-  it('shows action bar on mousedown', () => {
+  it('fires element-selected signal on mousedown', () => {
     const fn = src.substring(src.indexOf('function _handleSelectMouseDown'));
-    assert.ok(fn.includes('_showSelectActionBar(_hoveredEl)'), 'Should show action bar');
+    assert.ok(fn.includes('element-selected'), 'Should fire element-selected signal on click');
   });
 
   it('handles Escape in select mode', () => {
@@ -455,10 +451,6 @@ describe('design-overlay.js: select mode cleanup', () => {
     assert.ok(src.includes('function _removeSelectTooltip()'), 'Should have _removeSelectTooltip');
   });
 
-  it('has _removeSelectActionBar', () => {
-    assert.ok(src.includes('function _removeSelectActionBar()'), 'Should have _removeSelectActionBar');
-  });
-
   it('has _cancelSelect', () => {
     assert.ok(src.includes('function _cancelSelect()'), 'Should have _cancelSelect');
   });
@@ -472,7 +464,6 @@ describe('design-overlay.js: select mode cleanup', () => {
     assert.ok(fn.includes('_selectedElement = null'), 'Should clear selected element');
     assert.ok(fn.includes('_hoveredEl = null'), 'Should clear hovered element');
     assert.ok(fn.includes('_removeSelectTooltip()'), 'Should remove tooltip');
-    assert.ok(fn.includes('_removeSelectActionBar()'), 'Should remove action bar');
     assert.ok(fn.includes('_redrawAll()'), 'Should redraw canvas');
   });
 
@@ -491,10 +482,6 @@ describe('design-overlay.js: select mode cleanup', () => {
     assert.ok(fn.includes('_selectTooltip.parentNode.removeChild'), 'Should remove tooltip from DOM');
   });
 
-  it('_removeSelectActionBar removes from DOM', () => {
-    const fn = src.substring(src.indexOf('function _removeSelectActionBar()'));
-    assert.ok(fn.includes('_selectActionBar.parentNode.removeChild'), 'Should remove action bar from DOM');
-  });
 });
 
 // =========================================================================
@@ -684,10 +671,9 @@ describe('design-overlay.js: layering', () => {
     assert.ok(src.includes('z-index:999999'), 'Canvas should be at z-index 999999');
   });
 
-  it('tooltip and action bar use z-index 1000001', () => {
-    // Both tooltip and action bar should be above canvas
-    var matches = src.match(/z-index:1000001/g);
-    assert.ok(matches && matches.length >= 2, 'Tooltip and action bar should use z-index 1000001');
+  it('tooltip uses z-index 1000001', () => {
+    // Tooltip should be above canvas
+    assert.ok(src.includes('z-index:1000001'), 'Tooltip should use z-index 1000001');
   });
 });
 
@@ -974,3 +960,4 @@ describe('design-overlay.js: DOM tree serialization', () => {
     assert.ok(returnBlock.includes('domTree:'), 'Return object must include domTree field');
   });
 });
+
