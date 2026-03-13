@@ -339,7 +339,11 @@ function createEditorGroupsStore() {
      */
     reset() {
       gridRoot = { type: 'leaf', groupId: 1 };
-      groups = new SvelteMap([[1, { activeTabId: null, locked: false }]]);
+      // Mutate existing SvelteMap instead of replacing — replacement orphans
+      // the reactive signals that $derived expressions in EditorPane/GroupTabBar
+      // are tracking, causing them to return stale cached values.
+      groups.clear();
+      groups.set(1, { activeTabId: null, locked: false });
       focusedGroupId = 1;
       nextGroupId = 2;
       maximizedGroupId = null;
@@ -417,6 +421,49 @@ function createEditorGroupsStore() {
     },
 
     get maximizedGroupId() { return maximizedGroupId; },
+
+    /**
+     * Serialize the editor group layout for persistence.
+     * @returns {Object} Serializable state
+     */
+    serialize() {
+      // Deep clone the tree to avoid serializing reactive proxies
+      const root = JSON.parse(JSON.stringify(gridRoot));
+      const groupMeta = {};
+      for (const [id, meta] of groups) {
+        groupMeta[id] = { activeTabId: meta.activeTabId, locked: meta.locked };
+      }
+      return {
+        root,
+        groupMeta,
+        focusedGroupId,
+        maximizedGroupId,
+        nextGroupId,
+      };
+    },
+
+    /**
+     * Restore editor group layout from persisted state.
+     * @param {Object} data - Previously serialized state
+     */
+    restore(data) {
+      if (!data || !data.root) return;
+      gridRoot = data.root;
+      // Mutate existing SvelteMap — see reset() comment for why.
+      groups.clear();
+      if (data.groupMeta) {
+        for (const [id, meta] of Object.entries(data.groupMeta)) {
+          groups.set(Number(id), { activeTabId: meta.activeTabId || null, locked: meta.locked || false });
+        }
+      }
+      // Ensure at least group 1 exists
+      if (groups.size === 0) {
+        groups.set(1, { activeTabId: null, locked: false });
+      }
+      focusedGroupId = data.focusedGroupId ?? 1;
+      maximizedGroupId = data.maximizedGroupId ?? null;
+      nextGroupId = data.nextGroupId ?? 2;
+    },
 
     /**
      * Toggle the locked state of an editor group.

@@ -204,32 +204,54 @@
           const autoStart = project.autoStartServer;
           console.log('[lens] Auto-start check:', { autoStart, framework: stoppedServer.framework, port: stoppedServer.port });
           if (autoStart === null || autoStart === undefined) {
-            // Never asked (or "Start once" was used before) — show consent toast
-            toastStore.addToast({
-              message: `${stoppedServer.framework || 'Dev server'} on :${stoppedServer.port} is not running. Start it?`,
-              severity: 'warning',
-              key: 'dev-server-consent-' + project.path,
-              duration: 0, // Don't auto-dismiss — user must choose
-              actions: [
-                {
-                  label: 'Always start',
-                  callback: () => {
-                    projectStore.updateActiveField('autoStartServer', true);
-                    devServerManager.startServer(stoppedServer, project.path, packageManager);
+            if (stoppedServer.needsSetup) {
+              // Missing venv or deps — offer to set up environment
+              toastStore.addToast({
+                message: `${stoppedServer.framework || 'Python'} detected but needs environment setup. Set up & start?`,
+                severity: 'warning',
+                key: 'dev-server-consent-' + project.path,
+                duration: 0,
+                actions: [
+                  {
+                    label: 'Set up & start',
+                    callback: () => {
+                      devServerManager.startServer(stoppedServer, project.path, packageManager);
+                    },
                   },
-                },
-                {
-                  label: 'Start once',
-                  callback: () => {
-                    devServerManager.startServer(stoppedServer, project.path, packageManager);
+                  {
+                    label: 'Not now',
+                    callback: () => {},
                   },
-                },
-                {
-                  label: 'Not now',
-                  callback: () => {},
-                },
-              ],
-            });
+                ],
+              });
+            } else {
+              // Normal flow — venv exists or not a Python project
+              toastStore.addToast({
+                message: `${stoppedServer.framework || 'Dev server'} on :${stoppedServer.port} is not running. Start it?`,
+                severity: 'warning',
+                key: 'dev-server-consent-' + project.path,
+                duration: 0,
+                actions: [
+                  {
+                    label: 'Always start',
+                    callback: () => {
+                      projectStore.updateActiveField('autoStartServer', true);
+                      devServerManager.startServer(stoppedServer, project.path, packageManager);
+                    },
+                  },
+                  {
+                    label: 'Start once',
+                    callback: () => {
+                      devServerManager.startServer(stoppedServer, project.path, packageManager);
+                    },
+                  },
+                  {
+                    label: 'Not now',
+                    callback: () => {},
+                  },
+                ],
+              });
+            }
           } else if (autoStart === true) {
             // User opted in — auto-start silently
             devServerManager.startServer(stoppedServer, project.path, packageManager);

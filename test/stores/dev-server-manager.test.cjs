@@ -499,3 +499,47 @@ describe('dev-server-manager.svelte.js -- startServer race condition fix', () =>
     assert.ok(startingIdx < evictIdx, 'Should set starting BEFORE evictIfNeeded');
   });
 });
+
+// -- startCommand preservation --
+
+describe('dev-server-manager.svelte.js -- startCommand preservation', () => {
+  it('ServerState includes startCommand field in default', () => {
+    assert.ok(src.includes('startCommand: null'), 'getOrCreateState should initialize startCommand: null');
+  });
+
+  it('startServer stores startCommand in state from camelCase field', () => {
+    assert.ok(
+      src.includes('startCommand: server.startCommand'),
+      'startServer should store startCommand from server (camelCase from Rust serde)'
+    );
+  });
+
+  it('restartServer includes startCommand in serverConfig', () => {
+    assert.ok(
+      src.includes('startCommand: state.startCommand'),
+      'restartServer should include startCommand from state'
+    );
+  });
+});
+
+describe('dev-server-manager.svelte.js -- setupCommands chaining', () => {
+  it('checks for setupCommands before sending start command', () => {
+    assert.ok(
+      src.includes('setupCommands') && src.includes('server.setupCommands'),
+      'Should check server.setupCommands'
+    );
+  });
+
+  it('chains setup commands with && for shell sequencing', () => {
+    assert.ok(
+      src.includes(".join(' && ')"),
+      'Should join setupCommands with && for fail-fast shell chaining'
+    );
+  });
+
+  it('includes startCommand in the chained command', () => {
+    // The chain should be: [...setupCommands, startCommand].join(' && ')
+    const chainPattern = src.includes('setupCommands') && src.includes('startCommand');
+    assert.ok(chainPattern, 'Should chain setupCommands with startCommand');
+  });
+});

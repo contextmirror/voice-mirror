@@ -4,6 +4,10 @@
 //! AES-256-GCM. Each profile is a JSON file on disk with the sensitive
 //! fields encrypted; a 256-bit key is stored separately in `.key`.
 //!
+//! The key file is protected with Windows DPAPI (`CryptProtectData`) so
+//! only the current Windows user session can unwrap it. On first load of
+//! an old plaintext key, it is automatically re-saved with DPAPI wrapping.
+//!
 //! The nonce (12 bytes, random per encryption) is prepended to the
 //! ciphertext so that decrypt only needs the key.
 
@@ -62,7 +66,7 @@ struct EncryptedProfile {
 }
 
 // ---------------------------------------------------------------------------
-// Key management
+// Key management (DPAPI-protected on Windows)
 // ---------------------------------------------------------------------------
 
 const KEY_FILENAME: &str = ".key";
@@ -74,25 +78,42 @@ pub fn generate_key() -> [u8; 32] {
     key
 }
 
-/// Save a 256-bit key to `{auth_dir}/.key`.
+/// Save a 256-bit key to `{auth_dir}/.key`, wrapped with DPAPI.
 pub fn save_key(auth_dir: &Path, key: &[u8; 32]) -> Result<(), String> {
     fs::create_dir_all(auth_dir).map_err(|e| format!("Failed to create auth dir: {e}"))?;
+    let protected = dpapi_protect(key)?;
     let path = auth_dir.join(KEY_FILENAME);
-    fs::write(&path, key).map_err(|e| format!("Failed to write key file: {e}"))
+    fs::write(&path, &protected).map_err(|e| format!("Failed to write key file: {e}"))
 }
 
-/// Load the 256-bit key from `{auth_dir}/.key`.
+/// Load the 256-bit key from `{auth_dir}/.key`, unwrapping DPAPI.
+///
+/// If the file is exactly 32 bytes (old plaintext format), it is
+/// automatically migrated to DPAPI-wrapped format.
 pub fn load_key(auth_dir: &Path) -> Result<[u8; 32], String> {
     let path = auth_dir.join(KEY_FILENAME);
     let bytes = fs::read(&path).map_err(|e| format!("Failed to read key file: {e}"))?;
-    if bytes.len() != 32 {
+
+    // Migration: old plaintext key files are exactly 32 bytes.
+    // DPAPI-wrapped output is always larger (header + encrypted blob).
+    if bytes.len() == 32 {
+        tracing::info!("Migrating plaintext auth vault key to DPAPI-protected format");
+        let mut key = [0u8; 32];
+        key.copy_from_slice(&bytes);
+        // Re-save with DPAPI wrapping
+        save_key(auth_dir, &key)?;
+        return Ok(key);
+    }
+
+    let raw = dpapi_unprotect(&bytes)?;
+    if raw.len() != 32 {
         return Err(format!(
-            "Invalid key length: expected 32 bytes, got {}",
-            bytes.len()
+            "Invalid key length after DPAPI unwrap: expected 32 bytes, got {}",
+            raw.len()
         ));
     }
     let mut key = [0u8; 32];
-    key.copy_from_slice(&bytes);
+    key.copy_from_slice(&raw);
     Ok(key)
 }
 
@@ -105,6 +126,90 @@ pub fn ensure_key(auth_dir: &Path) -> Result<[u8; 32], String> {
             save_key(auth_dir, &key)?;
             Ok(key)
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// DPAPI helpers (Windows)
+// ---------------------------------------------------------------------------
+
+/// Protect data with DPAPI (current-user scope). Only the same Windows user
+/// session can unprotect the result.
+fn dpapi_protect(data: &[u8]) -> Result<Vec<u8>, String> {
+    use windows::Win32::Security::Cryptography::{CryptProtectData, CRYPT_INTEGER_BLOB};
+
+    let mut input = CRYPT_INTEGER_BLOB {
+        cbData: data.len() as u32,
+        pbData: data.as_ptr() as *mut u8,
+    };
+    let mut output = CRYPT_INTEGER_BLOB {
+        cbData: 0,
+        pbData: std::ptr::null_mut(),
+    };
+
+    unsafe {
+        CryptProtectData(
+            &mut input,
+            None,                    // description (optional)
+            None,                    // optional entropy
+            None,                    // reserved
+            None,                    // prompt struct
+            0,                       // flags (0 = current-user scope)
+            &mut output,
+        )
+        .map_err(|e| format!("DPAPI CryptProtectData failed: {e}"))?;
+
+        let len = output.cbData as usize;
+        let mut result = Vec::with_capacity(len);
+        std::ptr::copy_nonoverlapping(output.pbData, result.as_mut_ptr(), len);
+        result.set_len(len);
+
+        // Free the buffer allocated by CryptProtectData
+        windows::Win32::Foundation::LocalFree(Some(
+            windows::Win32::Foundation::HLOCAL(output.pbData as _),
+        ));
+
+        Ok(result)
+    }
+}
+
+/// Unprotect DPAPI-wrapped data. Only succeeds for the same Windows user
+/// who called `dpapi_protect`.
+fn dpapi_unprotect(data: &[u8]) -> Result<Vec<u8>, String> {
+    use windows::Win32::Security::Cryptography::{CryptUnprotectData, CRYPT_INTEGER_BLOB};
+
+    let mut input = CRYPT_INTEGER_BLOB {
+        cbData: data.len() as u32,
+        pbData: data.as_ptr() as *mut u8,
+    };
+    let mut output = CRYPT_INTEGER_BLOB {
+        cbData: 0,
+        pbData: std::ptr::null_mut(),
+    };
+
+    unsafe {
+        CryptUnprotectData(
+            &mut input,
+            None,                    // description out
+            None,                    // optional entropy
+            None,                    // reserved
+            None,                    // prompt struct
+            0,                       // flags
+            &mut output,
+        )
+        .map_err(|e| format!("DPAPI CryptUnprotectData failed: {e}"))?;
+
+        let len = output.cbData as usize;
+        let mut result = Vec::with_capacity(len);
+        std::ptr::copy_nonoverlapping(output.pbData, result.as_mut_ptr(), len);
+        result.set_len(len);
+
+        // Free the buffer allocated by CryptUnprotectData
+        windows::Win32::Foundation::LocalFree(Some(
+            windows::Win32::Foundation::HLOCAL(output.pbData as _),
+        ));
+
+        Ok(result)
     }
 }
 
@@ -386,6 +491,44 @@ mod tests {
         save_key(&dir, &key).expect("save key");
         let loaded = load_key(&dir).expect("load key");
         assert_eq!(key, loaded);
+
+        // Verify on-disk file is NOT the raw 32-byte key (DPAPI wrapped)
+        let on_disk = fs::read(dir.join(".key")).expect("read key file");
+        assert_ne!(on_disk.len(), 32, "Key file should be DPAPI-wrapped, not raw bytes");
+        assert_ne!(&on_disk[..], &key[..], "Key file must not contain plaintext key");
+
+        cleanup(&dir);
+    }
+
+    #[test]
+    fn test_dpapi_roundtrip() {
+        let data = b"test-dpapi-roundtrip-data-32byte!";
+        let protected = dpapi_protect(data).expect("dpapi_protect");
+        assert_ne!(&protected[..], &data[..], "Protected data must differ from input");
+        let unprotected = dpapi_unprotect(&protected).expect("dpapi_unprotect");
+        assert_eq!(&unprotected[..], &data[..]);
+    }
+
+    #[test]
+    fn test_plaintext_key_migration() {
+        let dir = test_dir("migrate");
+        let key = generate_key();
+
+        // Write a raw 32-byte key (old format, no DPAPI)
+        fs::create_dir_all(&dir).expect("create dir");
+        fs::write(dir.join(".key"), &key).expect("write raw key");
+
+        // load_key should detect 32-byte file, migrate to DPAPI, and return the key
+        let loaded = load_key(&dir).expect("load migrated key");
+        assert_eq!(key, loaded);
+
+        // After migration, the file should now be DPAPI-wrapped (not 32 bytes)
+        let on_disk = fs::read(dir.join(".key")).expect("read migrated file");
+        assert_ne!(on_disk.len(), 32, "Migrated key should be DPAPI-wrapped");
+
+        // And it should still load correctly
+        let reloaded = load_key(&dir).expect("reload after migration");
+        assert_eq!(key, reloaded);
 
         cleanup(&dir);
     }

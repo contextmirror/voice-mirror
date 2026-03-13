@@ -1,3 +1,10 @@
+/**
+ * lsp-selection-range.test.cjs -- Source-inspection tests for selection range LSP support.
+ *
+ * Verifies that the Rust backend, Tauri command, and API wrapper are all wired up
+ * for textDocument/selectionRange.
+ */
+
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -19,6 +26,11 @@ describe('mod.rs: selection range', () => {
 describe('commands/lsp.rs: selection range', () => {
   it('has lsp_request_selection_range command', () => {
     assert.ok(cmdSrc.includes('lsp_request_selection_range'), 'Should have command');
+  });
+  it('is a tauri::command', () => {
+    const idx = cmdSrc.indexOf('lsp_request_selection_range');
+    const preceding = cmdSrc.substring(Math.max(0, idx - 200), idx);
+    assert.ok(preceding.includes('#[tauri::command]'), 'Should be a tauri::command');
   });
 });
 

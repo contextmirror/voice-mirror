@@ -1,0 +1,49 @@
+Voice Mirror — Third-Party Notices
+
+This file lists third-party code and assets bundled with Voice Mirror.
+
+================================================================================
+
+1. File Icons SVG Sprite
+   Source: OpenCode Desktop (https://github.com/anomalyco/opencode)
+   License: MIT
+   Files: src/assets/icons/file-icons-sprite.svg, src/lib/file-icons.js
+   Full license: src/assets/icons/LICENSE-file-icons
+
+2. ghostty-web (fork: contextmirror/ghostty-web)
+   Source: https://github.com/coder/ghostty-web
+   License: MIT
+   Copyright (c) 2025 Coder
+
+3. CodeMirror 6
+   Source: https://github.com/codemirror
+   License: MIT
+   Copyright (c) 2018-2021 Marijn Haverbeke
+   Packages: @codemirror/*, @lezer/*, codemirror, crelt, style-mod, w3c-keyname
+
+4. CodeMirror Community Extensions
+   Source: https://github.com/replit
+   License: MIT
+   Copyright (c) 2022 Replit
+   Packages: @replit/codemirror-indentation-markers, @replit/codemirror-minimap,
+             @replit/codemirror-vscode-keymap
+
+5. DOMPurify
+   Source: https://github.com/cure53/DOMPurify
+   License: Apache-2.0 (dual-licensed MPL-2.0 OR Apache-2.0; used under Apache-2.0)
+   Copyright 2025 Dr.-Ing. Mario Heiderich, Cure53
+
+6. highlight.js
+   Source: https://github.com/highlightjs/highlight.js
+   License: BSD-3-Clause
+   Copyright (c) 2006, Ivan Sagalaev
+
+7. Tauri
+   Source: https://github.com/tauri-apps/tauri
+   License: MIT OR Apache-2.0
+   Copyright (c) 2017-2025 Tauri Programme within The Commons Conservancy
+
+8. Provider Brand Icons
+   Files: src/assets/icons/providers/*.svg, *.webp
+   Usage: Nominative fair use for identifying AI provider integrations.
+   Trademarks belong to their respective owners (Anthropic, OpenAI, etc.).

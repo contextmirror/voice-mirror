@@ -1,9 +1,12 @@
 //! Named pipe server for the Tauri app.
 //!
 //! Creates a named pipe (Windows) or Unix domain socket (Unix) and listens for
-//! a single MCP binary client. Incoming `McpToApp` messages are dispatched as
-//! Tauri events. Outgoing `AppToMcp` messages (user chat input) are forwarded
-//! to the MCP binary for instant delivery to `voice_listen`.
+//! MCP binary clients. Incoming `McpToApp` messages are dispatched as Tauri
+//! events. Outgoing `AppToMcp` messages (user chat input) are forwarded to the
+//! MCP binary for instant delivery to `voice_listen`.
+//!
+//! The server automatically accepts new connections after a client disconnects,
+//! so browser/capture tools keep working across MCP binary restarts.
 
 use std::sync::Arc;
 
@@ -39,22 +42,41 @@ pub fn generate_pipe_name() -> String {
 // PipeServerState (Tauri managed state)
 // ---------------------------------------------------------------------------
 
+/// Shared sender slot — swapped on each reconnection.
+type TxSlot = Arc<std::sync::Mutex<Option<mpsc::UnboundedSender<AppToMcp>>>>;
+
 /// Tauri-managed state for the pipe server.
+///
+/// The `tx` sender is swapped on each reconnection — wrapped in a std Mutex
+/// so `send()` stays synchronous (unbounded send is non-blocking).
 pub struct PipeServerState {
     /// The pipe name (passed to MCP binary via env var).
     pub pipe_name: String,
-    /// Channel for sending messages to the connected MCP binary.
-    pub tx: mpsc::UnboundedSender<AppToMcp>,
+    /// Channel sender for the current connection (None when disconnected).
+    /// Shared with the server loop via Arc.
+    tx: TxSlot,
     /// Whether a client is currently connected.
     pub connected: Arc<Mutex<bool>>,
 }
 
 impl PipeServerState {
+    /// Create a disconnected dummy state (used when pipe server fails to start).
+    pub fn disconnected() -> Self {
+        Self {
+            pipe_name: String::new(),
+            tx: Arc::new(std::sync::Mutex::new(None)),
+            connected: Arc::new(Mutex::new(false)),
+        }
+    }
+
     /// Send a message to the MCP binary (if connected).
     pub fn send(&self, msg: AppToMcp) -> Result<(), String> {
-        self.tx
-            .send(msg)
-            .map_err(|e| format!("Pipe send failed: {}", e))
+        let guard = self.tx.lock().map_err(|e| format!("Pipe tx lock poisoned: {}", e))?;
+        if let Some(tx) = guard.as_ref() {
+            tx.send(msg).map_err(|e| format!("Pipe send failed: {}", e))
+        } else {
+            Err("Pipe not connected".to_string())
+        }
     }
 
     /// Check if a client is connected.
@@ -71,80 +93,96 @@ impl PipeServerState {
 ///
 /// Spawns a background tokio task that:
 /// 1. Creates the pipe/socket
-/// 2. Accepts one client connection
-/// 3. Runs a read loop dispatching `McpToApp` messages as Tauri events
-/// 4. Runs a write loop forwarding `AppToMcp` messages to the client
+/// 2. Accepts a client connection
+/// 3. Runs read/write loops
+/// 4. On disconnect, loops back to accept a new connection
 pub fn start_pipe_server(
     app_handle: AppHandle,
     pipe_name: &str,
 ) -> Result<PipeServerState, String> {
-    let (tx, rx) = mpsc::unbounded_channel::<AppToMcp>();
     let connected = Arc::new(Mutex::new(false));
+    let tx_slot: TxSlot = Arc::new(std::sync::Mutex::new(None));
+
     let pipe_name_owned = pipe_name.to_string();
     let connected_clone = Arc::clone(&connected);
+    let tx_slot_clone = Arc::clone(&tx_slot);
 
     // Spawn the server task
     tauri::async_runtime::spawn(async move {
-        if let Err(e) =
-            run_pipe_server(app_handle, &pipe_name_owned, rx, connected_clone).await
-        {
-            error!("[PipeServer] Server error: {}", e);
-        }
+        run_pipe_server_loop(app_handle, &pipe_name_owned, tx_slot_clone, connected_clone).await;
     });
 
     Ok(PipeServerState {
         pipe_name: pipe_name.to_string(),
-        tx,
+        tx: tx_slot,
         connected,
     })
 }
 
-/// Internal: run the pipe server loop.
-async fn run_pipe_server(
+/// Internal: run the pipe server loop (reconnects after each disconnect).
+async fn run_pipe_server_loop(
     app_handle: AppHandle,
     pipe_name: &str,
-    rx: mpsc::UnboundedReceiver<AppToMcp>,
+    tx_slot: TxSlot,
     connected: Arc<Mutex<bool>>,
-) -> Result<(), String> {
+) {
     info!("[PipeServer] Starting on: {}", pipe_name);
 
-    // Platform-specific accept
-    let stream = accept_connection(pipe_name)
-        .await
-        .map_err(|e| format!("Accept failed: {}", e))?;
+    loop {
+        // Platform-specific accept (blocks until a client connects)
+        let stream = match accept_connection(pipe_name).await {
+            Ok(s) => s,
+            Err(e) => {
+                error!("[PipeServer] Accept failed: {} — retrying in 2s", e);
+                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                continue;
+            }
+        };
 
-    info!("[PipeServer] Client connected");
-    *connected.lock().await = true;
+        info!("[PipeServer] Client connected");
+        *connected.lock().await = true;
 
-    // Split stream for concurrent read/write
-    let (reader, writer) = tokio::io::split(stream);
-
-    // Spawn write loop
-    let write_handle = tokio::spawn(write_loop(writer, rx));
-
-    // Run read loop (blocking until disconnect)
-    read_loop(reader, &app_handle).await;
-
-    // Client disconnected — clear any listener lock the MCP binary held.
-    // The lock file persists on disk and blocks new AI instances from listening.
-    // Since the MCP binary is gone, its lock is now stale.
-    {
-        let lock_path = crate::services::inbox_watcher::get_mcp_data_dir()
-            .join("listener_lock.json");
-        match tokio::fs::remove_file(&lock_path).await {
-            Ok(()) => info!("[PipeServer] Cleared listener lock (client disconnected)"),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {} // no lock to clear
-            Err(e) => warn!("[PipeServer] Failed to clear listener lock: {}", e),
+        // Create a per-connection channel and install the sender
+        let (tx, rx) = mpsc::unbounded_channel::<AppToMcp>();
+        if let Ok(mut guard) = tx_slot.lock() {
+            *guard = Some(tx);
         }
+
+        // Split stream for concurrent read/write
+        let (reader, writer) = tokio::io::split(stream);
+
+        // Spawn write loop
+        let write_handle = tokio::spawn(write_loop(writer, rx));
+
+        // Run read loop (blocking until disconnect)
+        read_loop(reader, &app_handle).await;
+
+        // Client disconnected — clean up
+        if let Ok(mut guard) = tx_slot.lock() {
+            *guard = None;
+        }
+
+        // Clear any listener lock the MCP binary held.
+        {
+            let lock_path = crate::services::inbox_watcher::get_mcp_data_dir()
+                .join("listener_lock.json");
+            match tokio::fs::remove_file(&lock_path).await {
+                Ok(()) => info!("[PipeServer] Cleared listener lock (client disconnected)"),
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                Err(e) => warn!("[PipeServer] Failed to clear listener lock: {}", e),
+            }
+        }
+
+        *connected.lock().await = false;
+
+        // Abort write loop (the rx will be dropped, which closes the channel)
+        write_handle.abort();
+
+        info!("[PipeServer] Client disconnected — waiting for new connection...");
+
+        // Small delay before re-listening to avoid tight loop on rapid reconnects
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     }
-
-    *connected.lock().await = false;
-    info!("[PipeServer] Client disconnected");
-
-    // Abort write loop
-    write_handle.abort();
-
-    Ok(())
 }
 
 /// Read loop: receive McpToApp messages and dispatch as Tauri events.
@@ -488,8 +526,10 @@ type ServerStream = tokio::net::UnixStream;
 async fn accept_connection(pipe_name: &str) -> Result<ServerStream, std::io::Error> {
     use tokio::net::windows::named_pipe::ServerOptions;
 
+    // Note: NOT using first_pipe_instance(true) because this function is called
+    // in a reconnection loop. The flag prevents creating a new server after the
+    // previous one was dropped. Without it, the OS allows re-creating the pipe.
     let server = ServerOptions::new()
-        .first_pipe_instance(true)
         .create(pipe_name)?;
 
     info!("[PipeServer] Waiting for client connection on {}", pipe_name);

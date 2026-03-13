@@ -63,12 +63,8 @@ describe('Terminal.svelte -- props', () => {
 });
 
 describe('Terminal.svelte -- event handling', () => {
-  it('listens to terminal-output event', () => {
-    assert.ok(src.includes("'terminal-output'"), 'Should listen to terminal-output');
-  });
-
-  it('filters events by shellId', () => {
-    assert.ok(src.includes('data.id !== shellId'), 'Should filter by shellId');
+  it('listens to scoped terminal-output-{shellId} event', () => {
+    assert.ok(src.includes('`terminal-output-${shellId}`'), 'Should listen to scoped terminal-output-{shellId}');
   });
 
   it('calls markExited on exit event', () => {

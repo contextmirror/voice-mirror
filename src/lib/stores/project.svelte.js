@@ -2,12 +2,14 @@
  * project.svelte.js -- Svelte 5 reactive store for project management.
  *
  * Tracks project entries (path, name, color) and the active project index.
- * Persists to config backend via updateConfig().
+ * Persists to config backend via setConfig() directly — bypasses the reactive
+ * configStore to avoid cascading effect re-triggers on project switch.
  */
 
-import { updateConfig } from './config.svelte.js';
-import { chatList } from '../api.js';
+import { setConfig, chatList, loadProjectIcons } from '../api.js';
 import { unwrapResult } from '../utils.js';
+import { saveCurrentState, restoreState, startAutoSave, stopAutoSave } from './workspace-state.svelte.js';
+import { tabsStore } from './tabs.svelte.js';
 
 /** 8-color palette for project badges, picked by hashing the folder name */
 const COLOR_PALETTE = [
@@ -32,11 +34,15 @@ function createProjectStore() {
   let entries = $state([]);
   let activeIndex = $state(0);
   let sessions = $state([]);
+  let iconCache = $state({});
+  let persistTimer = null;
 
   return {
     get entries() { return entries; },
     get activeIndex() { return activeIndex; },
     get sessions() { return sessions; },
+    /** Map of icon filename → base64 data URL */
+    get iconCache() { return iconCache; },
 
     /** The currently active project entry, or null if none */
     get activeProject() {
@@ -61,6 +67,7 @@ function createProjectStore() {
       // Load sessions for the active project
       if (entries.length > 0) {
         this.loadSessions();
+        this._loadIcons();
       }
     },
 
@@ -90,8 +97,9 @@ function createProjectStore() {
      * Remove a project by index.
      * @param {number} index
      */
-    removeProject(index) {
+    async removeProject(index) {
       if (index < 0 || index >= entries.length) return;
+      const wasActive = index === activeIndex;
       entries = entries.filter((_, i) => i !== index);
       // Adjust activeIndex if needed
       if (entries.length === 0) {
@@ -104,8 +112,20 @@ function createProjectStore() {
       this._persist();
       if (entries.length > 0) {
         this.loadSessions();
+        // If the removed project was active, clear stale tabs and restore new active project
+        if (wasActive) {
+          stopAutoSave();
+          tabsStore.closeAll();
+          const newProject = entries[activeIndex];
+          if (newProject) {
+            await restoreState(newProject.path);
+            startAutoSave(newProject.path);
+          }
+        }
       } else {
         sessions = [];
+        stopAutoSave();
+        tabsStore.closeAll();
       }
     },
 
@@ -113,11 +133,25 @@ function createProjectStore() {
      * Switch to a different project by index.
      * @param {number} index
      */
-    setActive(index) {
+    async setActive(index) {
       if (index < 0 || index >= entries.length) return;
+      // Save current project's state before switching
+      const oldProject = entries[activeIndex];
+      if (oldProject) {
+        stopAutoSave();
+        await saveCurrentState(oldProject.path);
+      }
+      // Clear old tabs immediately to prevent flash of stale content
+      tabsStore.closeAll();
       activeIndex = index;
       this._persist();
       this.loadSessions();
+      // Restore new project's state
+      const newProject = entries[activeIndex];
+      if (newProject) {
+        await restoreState(newProject.path);
+        startAutoSave(newProject.path);
+      }
     },
 
     /**
@@ -165,16 +199,54 @@ function createProjectStore() {
       }
     },
 
-    /** Persist current state to config backend */
+    /**
+     * Persist current state to config backend.
+     * Calls setConfig() directly (not updateConfig) to avoid replacing
+     * configStore.value, which would re-trigger every config-dependent
+     * effect (PTT keys, DOM handlers, etc.) on every project switch.
+     * Debounced to batch rapid-fire calls during switch flows.
+     */
     _persist() {
-      updateConfig({
-        projects: {
-          entries,
-          activeIndex,
-        },
-      }).catch((err) => {
-        console.error('[project] Failed to persist:', err);
-      });
+      clearTimeout(persistTimer);
+      persistTimer = setTimeout(() => {
+        setConfig({
+          projects: {
+            entries,
+            activeIndex,
+          },
+        }).catch((err) => {
+          console.error('[project] Failed to persist:', err);
+        });
+      }, 100);
+    },
+
+    /** Load icon data URLs for all entries that have icons. */
+    async _loadIcons() {
+      const filenames = [...new Set(entries
+        .map(e => e.icon)
+        .filter(Boolean))];
+      if (filenames.length === 0) return;
+      try {
+        const result = await loadProjectIcons(filenames);
+        const data = unwrapResult(result);
+        if (data?.icons) {
+          iconCache = { ...iconCache, ...data.icons };
+        }
+      } catch (err) {
+        console.error('[project] Failed to load icons:', err);
+      }
+    },
+
+    /** Cache an icon data URL by filename. */
+    setIconCache(filename, dataUrl) {
+      iconCache = { ...iconCache, [filename]: dataUrl };
+    },
+
+    /** Remove an icon from the cache. */
+    removeIconCache(filename) {
+      const next = { ...iconCache };
+      delete next[filename];
+      iconCache = next;
     },
   };
 }

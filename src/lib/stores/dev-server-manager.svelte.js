@@ -15,6 +15,7 @@ import { outputStore } from './output.svelte.js';
 // -- Constants --
 const POLL_INTERVAL = 500;
 const POLL_TIMEOUT = 30000;
+const SETUP_POLL_TIMEOUT = 300000; // 5 minutes for projects needing pip install
 const IDLE_TIMEOUT = 300000; // 5 minutes
 const MAX_CONCURRENT = 3;
 const CRASH_LOOP_COUNT = 3;
@@ -57,6 +58,7 @@ function createDevServerManager() {
         port: null,
         framework: null,
         url: null,
+        startCommand: null,
         crashCount: 0,
         lastCrashTime: null,
         lastActiveTime: Date.now(),
@@ -117,7 +119,7 @@ function createDevServerManager() {
    * @param {string} projectPath
    * @returns {Promise<boolean>}
    */
-  function pollPort(port, projectPath) {
+  function pollPort(port, projectPath, timeout = POLL_TIMEOUT) {
     return new Promise((resolve, reject) => {
       const startTime = Date.now();
       const interval = setInterval(async () => {
@@ -133,7 +135,7 @@ function createDevServerManager() {
           // Port not ready yet, keep polling
         }
 
-        if (Date.now() - startTime >= POLL_TIMEOUT) {
+        if (Date.now() - startTime >= timeout) {
           clearInterval(interval);
           pollTimers.delete(projectPath);
           resolve(false);
@@ -182,7 +184,7 @@ function createDevServerManager() {
 
   /**
    * Start a dev server for a project.
-   * @param {{ url: string, port: number, framework?: string, start_command?: string }} server
+   * @param {{ url: string, port: number, framework?: string, startCommand?: string }} server
    * @param {string} projectPath
    * @param {string} [packageManager]
    */
@@ -207,6 +209,8 @@ function createDevServerManager() {
       port: server.port,
       framework: server.framework || null,
       url: server.url,
+      startCommand: server.startCommand || null,
+      // setupCommands intentionally not stored — venv persists after first setup, restart doesn't need it
       lastActiveTime: Date.now(),
     });
 
@@ -256,19 +260,30 @@ function createDevServerManager() {
       });
 
       // Build start command with correct package manager prefix
-      let startCommand = server.start_command || 'npm run dev';
+      let startCommand = server.startCommand || 'npm run dev';
       if (packageManager && packageManager !== 'npm' && startCommand.startsWith('npm run ')) {
         const script = startCommand.replace('npm run ', '');
         startCommand = `${packageManager} run ${script}`;
       }
 
-      // Send start command
-      await terminalInput(shellId, startCommand + '\n');
+      // Chain setup commands with && (fail-fast among setup steps),
+      // but use ; before the start command so it always attempts to start
+      // even if pip install partially fails (e.g. one package can't build).
+      // terminalInput() is fire-and-forget — cannot send commands one at a time.
+      if (server.setupCommands && server.setupCommands.length > 0) {
+        const setupChain = server.setupCommands.join(' && ');
+        const fullCommand = setupChain + '; ' + startCommand;
+        await terminalInput(shellId, fullCommand + '\n');
+      } else {
+        await terminalInput(shellId, startCommand + '\n');
+      }
 
       // Poll port (may be cancelled via cancelPoll)
+      // Use longer timeout when setup commands are present (pip install can take minutes)
+      const hasSetup = server.setupCommands && server.setupCommands.length > 0;
       let ready = false;
       try {
-        ready = await pollPort(server.port, projectPath);
+        ready = await pollPort(server.port, projectPath, hasSetup ? SETUP_POLL_TIMEOUT : POLL_TIMEOUT);
       } catch (err) {
         if (err?.message === 'cancelled') return;
         throw err;
@@ -285,8 +300,10 @@ function createDevServerManager() {
         // Timeout -- don't kill, let user check terminal
         updateState(projectPath, { status: 'running', lastActiveTime: Date.now() });
         toastStore.addToast({
-          message: "Server didn't start — check terminal",
-          severity: 'error',
+          message: hasSetup
+            ? "Setup may still be running — check terminal"
+            : "Server didn't start — check terminal",
+          severity: hasSetup ? 'warning' : 'error',
         });
       }
     } catch (err) {
@@ -426,6 +443,7 @@ function createDevServerManager() {
       url: state.url,
       port: state.port,
       framework: state.framework,
+      startCommand: state.startCommand,
     };
 
     await stopServer(projectPath);
@@ -569,6 +587,7 @@ function createDevServerManager() {
     // Exposed for testing
     POLL_INTERVAL,
     POLL_TIMEOUT,
+    SETUP_POLL_TIMEOUT,
     IDLE_TIMEOUT,
     MAX_CONCURRENT,
     CRASH_LOOP_COUNT,
@@ -581,6 +600,7 @@ export const devServerManager = createDevServerManager();
 export {
   POLL_INTERVAL,
   POLL_TIMEOUT,
+  SETUP_POLL_TIMEOUT,
   IDLE_TIMEOUT,
   MAX_CONCURRENT,
   CRASH_LOOP_COUNT,

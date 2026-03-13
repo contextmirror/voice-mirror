@@ -20,7 +20,7 @@ describe('theme.svelte.js -- preset names', () => {
     'midnight',
     'emerald',
     'rose',
-    'slate',
+    'vim',
     'black',
     'gray',
     'light',
@@ -62,7 +62,7 @@ describe('theme.svelte.js -- preset color keys', () => {
   ];
 
   // Extract each preset block and verify all 10 color keys exist
-  const presetNames = ['colorblind', 'midnight', 'emerald', 'rose', 'slate', 'black', 'gray', 'light'];
+  const presetNames = ['colorblind', 'midnight', 'emerald', 'rose', 'vim', 'black', 'gray', 'light'];
 
   for (const preset of presetNames) {
     describe(`"${preset}" preset`, () => {

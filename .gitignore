@@ -3,6 +3,7 @@ node_modules/
 
 # Build output
 dist/
+stats.html
 
 # Rust
 src-tauri/target/
@@ -13,10 +14,16 @@ ghostty-vt.wasm
 # Windows reserved device names (created by tools writing to "nul" literally)
 nul
 
-# Environment
+# Environment & secrets
 .env
-.env.local
-.env*.local
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+*.pfx
+credentials.json
+token_cache.json
 
 # IDE
 .vscode/

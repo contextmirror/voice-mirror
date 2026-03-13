@@ -37,6 +37,9 @@
   // Conflict detection state — shown when file changes on disk while tab is dirty
   let conflictDetected = $state(false);
 
+  // Guard flag: true while dispatching a live-reload so onDocChanged skips setDirty
+  let isLiveReloading = false;
+
   // Markdown preview state
   let isMarkdown = $derived(!!tab?.path?.match(/\.(md|markdown)$/i));
   let markdownPreviewDefault = $derived(configStore.value?.editor?.markdownPreview !== false);
@@ -238,14 +241,17 @@
       if (!data?.content || data.content == null) return;
       const currentContent = view.state.doc.toString();
       if (data.content !== currentContent) {
+        isLiveReloading = true;
         view.dispatch({
           changes: { from: 0, to: currentContent.length, insert: data.content },
         });
+        isLiveReloading = false;
       }
       markdownContent = data.content;
       tabsStore.setDirty(tab.id, false);
       conflictDetected = false;
     } catch (err) {
+      isLiveReloading = false;
       console.warn('[FileEditor] Conflict reload failed:', err);
     }
   }
@@ -342,8 +348,10 @@
         filePath,
         voiceMirrorEditorTheme,
         onDocChanged: (update) => {
-          tabsStore.setDirty(tab.id, true);
-          tabsStore.pinTab(tab.id);
+          if (!isLiveReloading) {
+            tabsStore.setDirty(tab.id, true);
+            tabsStore.pinTab(tab.id);
+          }
           markdownContent = update.state.doc.toString();
           if (lsp.hasLsp) {
             const content = update.state.doc.toString();
@@ -556,6 +564,20 @@
 
         // Apply pending cursor if Problems panel or similar set one before file loaded
         applyPendingCursor();
+
+        // Restore cursor/scroll from workspace state if available
+        if (tab.cursor && view) {
+          try {
+            const line = view.state.doc.line(tab.cursor.line);
+            const pos = line.from + (tab.cursor.col || 0);
+            view.dispatch({ selection: { anchor: Math.min(pos, view.state.doc.length) } });
+          } catch { /* line may not exist */ }
+        }
+        if (tab.scroll && view) {
+          requestAnimationFrame(() => {
+            view.scrollDOM.scrollTop = tab.scroll.top;
+          });
+        }
       }
 
       // Open file in LSP (fire and forget)
@@ -634,10 +656,13 @@
           const currentContent = view.state.doc.toString();
           if (data.content === currentContent) return;
 
+          isLiveReloading = true;
           view.dispatch({
             changes: { from: 0, to: currentContent.length, insert: data.content },
           });
+          isLiveReloading = false;
         } catch (err) {
+          isLiveReloading = false;
           console.warn('[FileEditor] Live reload failed:', err);
         }
       });
@@ -808,6 +833,21 @@
     };
   });
 
+  // Workspace state capture — write cursor/scroll to tab on demand
+  $effect(() => {
+    const handleCapture = () => {
+      if (!view || !tab) return;
+      const offset = view.state.selection.main.head;
+      const line = view.state.doc.lineAt(offset);
+      tabsStore.updateTabMeta(tab.id, {
+        cursor: { line: line.number, col: offset - line.from },
+        scroll: { top: view.scrollDOM.scrollTop },
+      });
+    };
+    window.addEventListener('workspace-state:capture', handleCapture);
+    return () => window.removeEventListener('workspace-state:capture', handleCapture);
+  });
+
   onDestroy(() => {
     if (currentPath && lsp.hasLsp) {
       const root = projectStore.root;
@@ -879,11 +919,13 @@
         open(href);
       }
     }}>
-      {#if markdownContent}
-        {@html renderMarkdown(markdownContent)}
-      {:else}
-        <div class="editor-loading"><span class="loading-text">No content</span></div>
-      {/if}
+      <div class="markdown-preview-content">
+        {#if markdownContent}
+          {@html renderMarkdown(markdownContent)}
+        {:else}
+          <div class="editor-loading"><span class="loading-text">No content</span></div>
+        {/if}
+      </div>
     </div>
   {/if}
   <div class="file-editor" class:hidden={isMarkdown && showPreview} bind:this={editorEl}

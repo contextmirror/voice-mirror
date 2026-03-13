@@ -345,7 +345,7 @@ const editorTheme = EditorView.theme({
     borderRadius: '2px',
     outline: '1px solid rgba(100, 150, 255, 0.3)',
   },
-  // ── Document colors (inline color swatches) ──
+  // ── Document colors (inline color swatches + picker) ──
   '.cm-color-swatch': {
     display: 'inline-block',
     width: '0.8em',
@@ -354,6 +354,7 @@ const editorTheme = EditorView.theme({
     border: '1px solid rgba(255, 255, 255, 0.3)',
     marginRight: '4px',
     verticalAlign: 'middle',
+    cursor: 'pointer',
   },
   // ── Semantic tokens (LSP-provided token coloring) ──
   '.cm-semantic-type': { color: 'var(--cm-type)' },

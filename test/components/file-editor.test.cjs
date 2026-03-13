@@ -722,3 +722,21 @@ describe('FileEditor.svelte: pendingCursorPosition', () => {
     assert.ok(src.includes('scrollIntoView'), 'Should scroll to the cursor position');
   });
 });
+
+describe('FileEditor — workspace state capture', () => {
+  it('listens for workspace-state:capture event', () => {
+    assert.ok(src.includes("'workspace-state:capture'"), 'Should listen for capture event');
+  });
+
+  it('calls tabsStore.updateTabMeta on capture', () => {
+    assert.ok(src.includes('tabsStore.updateTabMeta('), 'Should call updateTabMeta');
+  });
+
+  it('restores cursor from tab.cursor on mount', () => {
+    assert.ok(src.includes('tab.cursor'), 'Should read tab.cursor');
+  });
+
+  it('restores scroll from tab.scroll on mount', () => {
+    assert.ok(src.includes('tab.scroll'), 'Should read tab.scroll');
+  });
+});

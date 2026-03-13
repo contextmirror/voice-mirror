@@ -24,6 +24,8 @@ use commands::dev_server as dev_server_cmds;
 use commands::lsp as lsp_cmds;
 use commands::design as design_cmds;
 use commands::output as output_cmds;
+use commands::project as project_cmds;
+use commands::workspace_state as ws_state_cmds;
 
 use providers::manager::AiManager;
 use providers::ProviderEvent;
@@ -116,6 +118,14 @@ pub fn run() {
     // Initialize structured logging (file + console + output ring buffers)
     let output_store = services::logger::init();
     rotate_log_sessions();
+
+    // Enable Chrome DevTools Protocol remote debugging on the WebView2 browser
+    // process. This allows creating a second WebView2 that loads the DevTools
+    // frontend UI, enabling embedded (Cursor-style) DevTools panels.
+    std::env::set_var(
+        "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
+        "--remote-debugging-port=9222 --remote-allow-origins=*",
+    );
 
     tauri::Builder::default()
         .plugin(tauri_plugin_decorum::init())
@@ -265,6 +275,7 @@ pub fn run() {
             bounds: std::sync::Mutex::new(None),
             device_webviews: std::sync::Mutex::new(Vec::new()),
             downloads: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
+            devtools_label: std::sync::Mutex::new(None),
         })
         .manage(services::file_watcher::FileWatcherState {
             handle: std::sync::Mutex::new(None),
@@ -372,6 +383,12 @@ pub fn run() {
             // Zoom
             lens_cmds::lens_set_zoom,
             lens_cmds::lens_get_zoom,
+            // DevTools (embedded side-panel)
+            lens_cmds::lens_find_devtools_url,
+            lens_cmds::lens_open_devtools,
+            lens_cmds::lens_close_devtools,
+            lens_cmds::lens_resize_devtools,
+            lens_cmds::lens_set_devtools_visible,
             // JS eval in child webview
             lens_cmds::lens_eval_tab_js,
             // Find on Page
@@ -485,6 +502,8 @@ pub fn run() {
             // Design canvas overlay
             design_cmds::design_command,
             design_cmds::design_get_element,
+            design_cmds::design_select_by_tree_id,
+            design_cmds::design_expand_tree_node,
             // Output / diagnostics
             output_cmds::get_output_logs,
             output_cmds::log_frontend_error,
@@ -492,6 +511,13 @@ pub fn run() {
             output_cmds::unregister_project_channel,
             output_cmds::push_project_log,
             output_cmds::list_project_channels,
+            // Project icon management
+            project_cmds::save_project_icon,
+            project_cmds::remove_project_icon,
+            project_cmds::load_project_icons,
+            // Workspace State
+            ws_state_cmds::save_workspace_state,
+            ws_state_cmds::load_workspace_state,
         ])
         .setup(|app| {
             // Set app handle on OutputStore for live event emission
@@ -608,10 +634,93 @@ pub fn run() {
                     info!("Starting terminal event forwarding loop");
 
                     tauri::async_runtime::spawn(async move {
-                        while let Some(event) = rx.recv().await {
-                            if app_handle_terminal.emit("terminal-output", &event).is_err() {
-                                warn!("Failed to emit terminal-output event, stopping loop");
+                        /// How long to drain after receiving the first event in a batch.
+                        const BATCH_DRAIN_MS: u64 = 5;
+
+                        loop {
+                            // Wait for the first event (no latency for sparse output)
+                            let first = match rx.recv().await {
+                                Some(e) => e,
+                                None => break, // channel closed
+                            };
+
+                            // Drain additional ready events for up to BATCH_DRAIN_MS
+                            let mut batch: Vec<terminal::TerminalEvent> = vec![first];
+                            if BATCH_DRAIN_MS > 0 {
+                                let deadline = tokio::time::Instant::now()
+                                    + tokio::time::Duration::from_millis(BATCH_DRAIN_MS);
+                                loop {
+                                    let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+                                    if remaining.is_zero() {
+                                        break;
+                                    }
+                                    match tokio::time::timeout(remaining, rx.recv()).await {
+                                        Ok(Some(event)) => batch.push(event),
+                                        _ => break, // timeout or channel closed
+                                    }
+                                }
+                            }
+
+                            // Group by session ID
+                            let mut grouped: std::collections::HashMap<String, (String, Option<String>, Option<std::sync::Arc<crate::services::output::OutputStore>>)> = std::collections::HashMap::new();
+                            let mut exit_events: Vec<terminal::TerminalEvent> = Vec::new();
+
+                            for event in batch {
+                                if event.event_type == "exit" {
+                                    exit_events.push(event);
+                                    continue;
+                                }
+                                if let Some(text) = &event.text {
+                                    let entry = grouped.entry(event.id.clone()).or_insert_with(|| {
+                                        (String::new(), event.output_channel.clone(), event.output_store.clone())
+                                    });
+                                    entry.0.push_str(text);
+                                }
+                            }
+
+                            // Emit batched stdout events (one per session)
+                            let mut should_break = false;
+                            for (session_id, (text, output_channel, output_store)) in &grouped {
+                                // Project channel logging (moved here from reader thread)
+                                if let (Some(channel), Some(store)) = (output_channel, output_store) {
+                                    for line in text.lines() {
+                                        let trimmed = line.trim();
+                                        if !trimmed.is_empty() {
+                                            let clean = crate::util::strip_ansi_codes(trimmed);
+                                            let clean = clean.trim();
+                                            if !clean.is_empty() {
+                                                let level = terminal::classify_terminal_line(clean);
+                                                store.push_project(channel, level, clean);
+                                            }
+                                        }
+                                    }
+                                }
+
+                                let event_name = format!("terminal-output-{}", session_id);
+                                let batched_event = terminal::TerminalEvent {
+                                    id: session_id.clone(),
+                                    event_type: "stdout".to_string(),
+                                    text: Some(text.clone()),
+                                    code: None,
+                                    output_channel: None,
+                                    output_store: None,
+                                };
+                                if app_handle_terminal.emit(&event_name, &batched_event).is_err() {
+                                    warn!("Failed to emit {} event, stopping loop", event_name);
+                                    should_break = true;
+                                    break;
+                                }
+                            }
+                            if should_break {
                                 break;
+                            }
+
+                            // Emit exit events individually (they're rare and important)
+                            for event in exit_events {
+                                let event_name = format!("terminal-output-{}", event.id);
+                                if app_handle_terminal.emit(&event_name, &event).is_err() {
+                                    warn!("Failed to emit {} exit event", event_name);
+                                }
                             }
                         }
                         info!("Terminal event forwarding loop ended");
@@ -675,13 +784,8 @@ pub fn run() {
                 }
                 Err(e) => {
                     warn!("Failed to start pipe server: {} — falling back to file IPC", e);
-                    // Create a dummy state with a disconnected channel so commands don't panic
-                    let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
-                    app.manage(ipc::pipe_server::PipeServerState {
-                        pipe_name: String::new(),
-                        tx,
-                        connected: std::sync::Arc::new(tokio::sync::Mutex::new(false)),
-                    });
+                    // Create a dummy state with no sender so commands don't panic
+                    app.manage(ipc::pipe_server::PipeServerState::disconnected());
                 }
             }
 

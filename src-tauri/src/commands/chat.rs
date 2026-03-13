@@ -228,21 +228,49 @@ pub fn chat_delete(id: String) -> IpcResponse {
     IpcResponse::ok(serde_json::json!({ "id": id }))
 }
 
+/// Allowed file extensions for chat export.
+const ALLOWED_EXPORT_EXTENSIONS: &[&str] = &["txt", "md", "json", "html"];
+
 /// Export a chat to a user-chosen file path.
 ///
 /// Writes the provided content string to the given path. Used with the
 /// frontend's native Save As dialog (`@tauri-apps/plugin-dialog`).
+///
+/// Validates that the path is absolute, has an allowed extension, and that
+/// the parent directory already exists (we don't create arbitrary directories).
 #[tauri::command]
 pub fn export_chat_to_file(path: String, content: String) -> IpcResponse {
     let file_path = Path::new(&path);
 
-    // Ensure parent directory exists
-    if let Some(parent) = file_path.parent() {
-        if !parent.exists() {
-            if let Err(e) = fs::create_dir_all(parent) {
-                return IpcResponse::err(format!("Failed to create directory: {}", e));
-            }
+    // Path must be absolute — reject relative paths that could resolve unexpectedly
+    if !file_path.is_absolute() {
+        return IpcResponse::err("Export path must be absolute");
+    }
+
+    // Reject path traversal components
+    for component in file_path.components() {
+        if matches!(component, std::path::Component::ParentDir) {
+            return IpcResponse::err("Export path must not contain '..' components");
         }
+    }
+
+    // Extension must be in the allow-list
+    let ext = file_path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("");
+    if !ALLOWED_EXPORT_EXTENSIONS.contains(&ext) {
+        return IpcResponse::err(format!(
+            "Export file extension '.{}' is not allowed. Allowed: {}",
+            ext,
+            ALLOWED_EXPORT_EXTENSIONS.join(", ")
+        ));
+    }
+
+    // Parent directory must already exist — don't create arbitrary directories
+    match file_path.parent() {
+        Some(parent) if parent.exists() => {}
+        _ => return IpcResponse::err("Parent directory does not exist"),
     }
 
     match fs::write(file_path, &content) {
@@ -535,6 +563,75 @@ mod tests {
         assert_eq!(final_chat["name"], "New Name");
         assert!(final_chat["updatedAt"].as_u64().unwrap() > 1000);
 
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    // ---- Export validation ----
+
+    #[test]
+    fn test_export_rejects_relative_path() {
+        let result = export_chat_to_file("relative/path.txt".into(), "content".into());
+        assert!(!result.success);
+        assert!(result.error.as_deref().unwrap().contains("absolute"));
+    }
+
+    #[test]
+    fn test_export_rejects_bad_extension() {
+        let dir = test_chats_dir("export_ext");
+        let path = dir.join("evil.exe");
+        let result = export_chat_to_file(path.to_string_lossy().into(), "content".into());
+        assert!(!result.success);
+        assert!(result.error.as_deref().unwrap().contains("not allowed"));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_export_rejects_no_extension() {
+        let dir = test_chats_dir("export_no_ext");
+        let path = dir.join("noext");
+        let result = export_chat_to_file(path.to_string_lossy().into(), "content".into());
+        assert!(!result.success);
+        assert!(result.error.as_deref().unwrap().contains("not allowed"));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_export_rejects_path_traversal() {
+        let dir = test_chats_dir("export_traversal");
+        let path = dir.join("..").join("..").join("etc").join("passwd.txt");
+        let result = export_chat_to_file(path.to_string_lossy().into(), "content".into());
+        assert!(!result.success);
+        assert!(result.error.as_deref().unwrap().contains(".."));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_export_rejects_nonexistent_parent() {
+        let dir = test_chats_dir("export_no_parent");
+        let path = dir.join("nonexistent").join("subdir").join("chat.txt");
+        let result = export_chat_to_file(path.to_string_lossy().into(), "content".into());
+        assert!(!result.success);
+        assert!(result.error.as_deref().unwrap().contains("Parent directory does not exist"));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_export_accepts_allowed_extensions() {
+        let dir = test_chats_dir("export_allowed");
+        for ext in &["txt", "md", "json", "html"] {
+            let path = dir.join(format!("chat.{}", ext));
+            let result = export_chat_to_file(
+                path.to_string_lossy().into(),
+                "test content".into(),
+            );
+            assert!(
+                result.success,
+                "Extension .{} should be allowed, got error: {:?}",
+                ext,
+                result.error
+            );
+            assert!(path.exists(), "File chat.{} should have been written", ext);
+        }
         let _ = fs::remove_dir_all(&dir);
     }
 

@@ -367,8 +367,8 @@ describe('editor-lsp.svelte.js: signature help', () => {
 });
 
 describe('editor-lsp.svelte.js: hover tooltip markdown rendering', () => {
-  it('imports renderHoverMarkdown from hover-markdown', () => {
-    assert.ok(src.includes("from './hover-markdown"), 'Should import from hover-markdown');
+  it('dynamically imports hover-markdown for lazy loading', () => {
+    assert.ok(src.includes("import('./hover-markdown.js')"), 'Should dynamically import hover-markdown.js');
   });
 
   it('uses innerHTML instead of textContent for hover tooltip', () => {
@@ -381,8 +381,8 @@ describe('editor-lsp.svelte.js: hover tooltip markdown rendering', () => {
     assert.ok(!hoverSection.includes('dom.textContent'), 'Should not use textContent in hover tooltip');
   });
 
-  it('calls renderHoverMarkdown in hover tooltip', () => {
-    assert.ok(src.includes('renderHoverMarkdown('), 'Should call renderHoverMarkdown');
+  it('calls render function in hover tooltip', () => {
+    assert.ok(src.includes('getRenderHoverMarkdown()'), 'Should call getRenderHoverMarkdown');
   });
 });
 

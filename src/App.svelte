@@ -18,6 +18,9 @@
   import { devServerManager } from './lib/stores/dev-server-manager.svelte.js';
   import { diagnosticsStore } from './lib/stores/diagnostics.svelte.js';
   import { registerAllContracts } from './lib/health-contracts.js';
+  import { restoreState, startAutoSave, saveCurrentState, stopAutoSave, notifyChange } from './lib/stores/workspace-state.svelte.js';
+  import { editorGroupsStore } from './lib/stores/editor-groups.svelte.js';
+  import { getCurrentWindow } from '@tauri-apps/api/window';
 
   import TitleBar from './components/shared/TitleBar.svelte';
   import Sidebar from './components/sidebar/Sidebar.svelte';
@@ -43,10 +46,15 @@
     return () => overlayStore.destroyEventListeners();
   });
 
-  // Initialize sidebar state and restore overlay mode from config once loaded
-  let overlayRestored = $state(false);
+  // Initialize sidebar state and restore overlay mode from config once loaded.
+  // One-shot: only runs on first config load. Subsequent configStore.value
+  // changes (from updateConfig calls) must NOT re-initialize projectStore,
+  // because _persist() uses setConfig() directly, leaving configStore.value
+  // stale for projects — re-init would reset activeIndex to the stale value.
+  let configInitialized = $state(false);
   $effect(() => {
-    if (configStore.loaded) {
+    if (configStore.loaded && !configInitialized) {
+      configInitialized = true;
       const collapsed = configStore.value?.sidebar?.collapsed;
       if (collapsed !== undefined) {
         navigationStore.initSidebarState(collapsed);
@@ -62,18 +70,15 @@
 
       // Restore overlay (orb) mode if user was in compact mode last session.
       // After restore, show the window (it starts hidden to prevent flash).
-      if (!overlayRestored) {
-        overlayRestored = true;
-        overlayStore.restoreFromConfig(configStore.value);
-        document.body.classList.add('app-ready');
-        // Window starts hidden (visible:false in tauri.conf.json).
-        // Now that Svelte has mounted and the correct mode is set, show it.
-        showWindow().then(() => {
-          if (configStore.value?.behavior?.startMinimized) {
-            minimizeWindow().catch(() => {});
-          }
-        }).catch(() => {});
-      }
+      overlayStore.restoreFromConfig(configStore.value);
+      document.body.classList.add('app-ready');
+      // Window starts hidden (visible:false in tauri.conf.json).
+      // Now that Svelte has mounted and the correct mode is set, show it.
+      showWindow().then(() => {
+        if (configStore.value?.behavior?.startMinimized) {
+          minimizeWindow().catch(() => {});
+        }
+      }).catch(() => {});
     }
   });
 
@@ -96,6 +101,20 @@
     if (configStore.loaded && !voiceStarted) {
       voiceStarted = true;
       startVoiceEngine();
+    }
+  });
+
+  // Restore workspace state once on startup (one-shot — not reactive to project changes)
+  let workspaceRestored = $state(false);
+  $effect(() => {
+    if (configStore.loaded && !workspaceRestored) {
+      workspaceRestored = true;
+      const activeProject = projectStore.activeProject;
+      if (activeProject) {
+        restoreState(activeProject.path).then(() => {
+          startAutoSave(activeProject.path);
+        });
+      }
     }
   });
 
@@ -198,6 +217,7 @@
   // Initialize global + in-app shortcuts once config is loaded
   let shortcutsInitialized = $state(false);
   $effect(() => {
+    let unlistenPttPress, unlistenPttRelease, unlistenDictation;
     if (configStore.loaded && !shortcutsInitialized) {
       shortcutsInitialized = true;
       shortcutsStore.init(configStore.value?.shortcuts);
@@ -219,12 +239,17 @@
       // Listen for PTT events from the unified input hook.
       // The Rust hook handles matching the configured key and emits
       // ptt-key-pressed/released — no frontend key comparison needed.
-      listen('ptt-key-pressed', () => handleVoicePress());
-      listen('ptt-key-released', () => handleVoiceRelease());
+      listen('ptt-key-pressed', () => handleVoicePress()).then(fn => { unlistenPttPress = fn; });
+      listen('ptt-key-released', () => handleVoiceRelease()).then(fn => { unlistenPttRelease = fn; });
 
       // Dictation: toggle-only (press to start, press again to stop)
-      listen('dictation-key-pressed', () => handleDictationPress());
+      listen('dictation-key-pressed', () => handleDictationPress()).then(fn => { unlistenDictation = fn; });
     }
+    return () => {
+      unlistenPttPress?.();
+      unlistenPttRelease?.();
+      unlistenDictation?.();
+    };
   });
 
   // In-app DOM shortcuts (Ctrl+,, Ctrl+N, Ctrl+T, F1, Escape)
@@ -281,6 +306,31 @@
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  });
+
+  // Save workspace state before window closes (async-capable via Tauri API)
+  $effect(() => {
+    let unlisten;
+    getCurrentWindow().onCloseRequested(async (event) => {
+      const activeProject = projectStore.activeProject;
+      if (activeProject) {
+        stopAutoSave();
+        await saveCurrentState(activeProject.path);
+      }
+    }).then(fn => { unlisten = fn; });
+    return () => { if (unlisten) unlisten(); };
+  });
+
+  // Notify workspace-state auto-save when tabs/groups/layout change
+  $effect(() => {
+    // Touch reactive values to track them — any change triggers notifyChange()
+    void tabsStore.tabs.length;
+    void tabsStore.activeTabId;
+    void editorGroupsStore.gridRoot;
+    void layoutStore.showChat;
+    void layoutStore.showTerminal;
+    void layoutStore.showFileTree;
+    notifyChange();
   });
 
   // Configure PTT/dictation key bindings in the native input hook.
@@ -426,7 +476,7 @@
   <div class="app-shell">
     <TitleBar>
       {#snippet centerContent()}
-        <div class="titlebar-provider-status">
+        <div class="titlebar-provider-status" aria-live="polite">
           <div class="titlebar-provider-icon-wrapper">
             {#if providerIcon?.type === 'cover'}
               <span class="titlebar-provider-icon" style="background: url({providerIcon.src}) center/cover no-repeat; border-radius: 3px;"></span>
@@ -445,8 +495,7 @@
           </span>
         </div>
         <div class="titlebar-search-trigger">
-          <!-- svelte-ignore a11y_no_static_element_interactions -->
-          <div class="titlebar-search-box" onclick={() => { commandPaletteMode = 'files'; commandPaletteVisible = true; }}>
+          <div class="titlebar-search-box" role="button" tabindex="0" onclick={() => { commandPaletteMode = 'files'; commandPaletteVisible = true; }} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); commandPaletteMode = 'files'; commandPaletteVisible = true; } }}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <span>Search Voice Mirror</span>
             <kbd>F1</kbd>

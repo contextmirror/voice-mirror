@@ -505,3 +505,42 @@ describe('tabs.svelte.js: diff tab support', () => {
     );
   });
 });
+
+describe('tabs.svelte.js — workspace state persistence', () => {
+  it('has serialize() method', () => {
+    assert.ok(src.includes('serialize()'), 'Should have serialize method');
+  });
+
+  it('has restore() method', () => {
+    assert.ok(src.includes('restore(tabsData)'), 'Should have restore method');
+  });
+
+  it('has updateTabMeta() method', () => {
+    assert.ok(src.includes('updateTabMeta(tabId, meta)'), 'Should have updateTabMeta method');
+  });
+
+  it('has setActiveQuiet() method', () => {
+    assert.ok(src.includes('setActiveQuiet(id)'), 'Should have setActiveQuiet method');
+  });
+
+  it('has closeAll() method', () => {
+    assert.ok(src.includes('closeAll()'), 'Should have closeAll method');
+  });
+
+  it('serialize filters out diff and untitled tabs', () => {
+    assert.ok(src.includes("t.type === 'file'"), 'Should filter to file type');
+    assert.ok(src.includes("!t.path.startsWith('untitled:')"), 'Should exclude untitled');
+  });
+
+  it('serialize captures cursor and scroll', () => {
+    assert.ok(src.includes('cursor: t.cursor'), 'Should capture cursor');
+    assert.ok(src.includes('scroll: t.scroll'), 'Should capture scroll');
+  });
+
+  it('restore reconstructs tab IDs with group convention', () => {
+    assert.ok(
+      src.includes('`${t.path}:g${groupId}`'),
+      'Should use group-namespaced IDs'
+    );
+  });
+});

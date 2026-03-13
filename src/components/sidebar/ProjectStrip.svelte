@@ -1,15 +1,21 @@
 <script>
   import { projectStore } from '../../lib/stores/project.svelte.js';
   import { open } from '@tauri-apps/plugin-dialog';
+  import EditProjectModal from './EditProjectModal.svelte';
 
   let entries = $derived(projectStore.entries);
   let activeIndex = $derived(projectStore.activeIndex);
+  let iconCache = $derived(projectStore.iconCache);
 
   /** Context menu state */
   let contextMenu = $state({ visible: false, x: 0, y: 0, index: -1 });
 
-  function handleSelect(i) {
-    projectStore.setActive(i);
+  /** Edit modal state */
+  let editingIndex = $state(-1);
+  let showEditModal = $derived(editingIndex >= 0);
+
+  async function handleSelect(i) {
+    await projectStore.setActive(i);
   }
 
   async function handleAdd() {
@@ -24,6 +30,11 @@
 
   function hideContextMenu() {
     contextMenu = { visible: false, x: 0, y: 0, index: -1 };
+  }
+
+  function handleEdit() {
+    editingIndex = contextMenu.index;
+    hideContextMenu();
   }
 
   function handleRemove() {
@@ -52,9 +63,13 @@
       onclick={() => handleSelect(i)}
       oncontextmenu={(e) => handleContextMenu(e, i)}
       aria-label={entry.name}
-      style="background: {entry.color};"
+      style="background: {entry.icon && iconCache[entry.icon] ? 'transparent' : entry.color};"
     >
-      {entry.name.charAt(0).toUpperCase()}
+      {#if entry.icon && iconCache[entry.icon]}
+        <img src={iconCache[entry.icon]} alt={entry.name} class="avatar-icon" />
+      {:else}
+        {entry.name.charAt(0).toUpperCase()}
+      {/if}
     </button>
   {/each}
 
@@ -72,6 +87,13 @@
     style="left: {contextMenu.x}px; top: {contextMenu.y}px;"
     role="menu"
   >
+    <button class="context-menu-item" onclick={handleEdit} role="menuitem">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+      </svg>
+      Edit
+    </button>
     <button class="context-menu-item danger" onclick={handleRemove} role="menuitem">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <polyline points="3 6 5 6 21 6"/>
@@ -82,15 +104,22 @@
   </div>
 {/if}
 
+{#if showEditModal}
+  <EditProjectModal
+    projectIndex={editingIndex}
+    onClose={() => { editingIndex = -1; }}
+  />
+{/if}
+
 <style>
   @import '../../styles/context-menu.css';
 
   .project-strip {
-    width: 48px;
+    width: 54px;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
     padding: 8px 0;
     border-right: 1px solid var(--border);
     flex-shrink: 0;
@@ -99,12 +128,12 @@
   }
 
   .project-avatar {
-    width: 36px;
-    height: 36px;
+    width: 40px;
+    height: 40px;
     border-radius: 10px;
-    border: none;
+    border: 2px solid transparent;
     color: #fff;
-    font-size: 15px;
+    font-size: 18px;
     font-weight: 700;
     font-family: var(--font-family);
     cursor: pointer;
@@ -114,44 +143,29 @@
     flex-shrink: 0;
     transition: all var(--duration-fast) var(--ease-out);
     position: relative;
-    margin-left: 2px;
+    padding: 0;
+    overflow: hidden;
   }
 
-  /* Active indicator pill — left edge of the strip */
-  .project-avatar::before {
-    content: '';
-    position: absolute;
-    left: -5px;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 3px;
-    height: 0;
-    border-radius: 0 2px 2px 0;
-    background: var(--accent);
-    transition: height var(--duration-fast) var(--ease-out);
+  .avatar-icon {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 8px;
   }
 
   .project-avatar:hover {
-    opacity: 0.85;
-    transform: scale(1.05);
-  }
-
-  .project-avatar:hover::before {
-    height: 12px;
+    border-color: var(--border);
+    background-color: var(--bg-hover);
   }
 
   .project-avatar.active {
-    border-radius: 10px;
-  }
-
-  .project-avatar.active::before {
-    height: 22px;
+    border-color: var(--text);
   }
 
   .project-add {
-    width: 36px;
-    height: 36px;
-    margin-left: 2px;
+    width: 40px;
+    height: 40px;
     border-radius: 10px;
     border: 1px dashed var(--muted);
     background: transparent;

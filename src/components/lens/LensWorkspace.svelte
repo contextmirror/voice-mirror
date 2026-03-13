@@ -7,6 +7,7 @@
   import HistoryPanel from './HistoryPanel.svelte';
   import DownloadsPanel from './DownloadsPanel.svelte';
   import LensPreview from './LensPreview.svelte';
+  import ElementInspector from './ElementInspector.svelte';
   import BrowserTabBar from './BrowserTabBar.svelte';
   import FileTree from './FileTree.svelte';
   import GroupTabBar from './GroupTabBar.svelte';
@@ -24,7 +25,7 @@
   import { browserTabsStore } from '../../lib/stores/browser-tabs.svelte.js';
   import { browserHistoryStore } from '../../lib/stores/browser-history.svelte.js';
   import { downloadsStore } from '../../lib/stores/downloads.svelte.js';
-  import { lensSetVisible, startFileWatching, stopFileWatching, lensCapturePreview, lspShutdown, lensSetZoom, lensGetZoom } from '../../lib/api.js';
+  import { lensSetVisible, startFileWatching, stopFileWatching, lensCapturePreview, lspShutdown, lensSetZoom, lensGetZoom, designGetElement, lensOpenDevtools, lensCloseDevtools, lensResizeDevtools, lensSetDevtoolsVisible, findDevtoolsUrl } from '../../lib/api.js';
   import { navigationStore } from '../../lib/stores/navigation.svelte.js';
   import { attachmentsStore } from '../../lib/stores/attachments.svelte.js';
   import { projectStore } from '../../lib/stores/project.svelte.js';
@@ -46,8 +47,23 @@
   let previewRatio = $state(0.78);          // center column vs file tree
   let devicePreviewRatio = $state(0.5);    // editor vs device preview
 
+  // Sync local ratios → layout store (for workspace state persistence)
+  $effect(() => { layoutStore.setChatRatio(chatRatio); });
+  $effect(() => { layoutStore.setCenterRatio(centerRatio); });
+  $effect(() => { layoutStore.setPreviewRatio(previewRatio); });
+  $effect(() => { layoutStore.setDevicePreviewRatio(devicePreviewRatio); });
+
+  // Initialize ratios from layout store on mount (restored workspace state)
+  onMount(() => {
+    if (layoutStore.chatRatio !== 0.18) chatRatio = layoutStore.chatRatio;
+    if (layoutStore.centerRatio !== 0.75) centerRatio = layoutStore.centerRatio;
+    if (layoutStore.previewRatio !== 0.78) previewRatio = layoutStore.previewRatio;
+    if (layoutStore.devicePreviewRatio !== 0.5) devicePreviewRatio = layoutStore.devicePreviewRatio;
+  });
+
   // Browser is a fixed UI element, not a tab — follows the first (leftmost) group
   let showBrowser = $state(false);
+  let inspectorData = $state(null);
   let firstGroupId = $derived(editorGroupsStore.allGroupIds[0]);
 
   // ── Zoom ──
@@ -111,6 +127,76 @@
   // ── Downloads Panel ──
   let showDownloads = $state(false);
 
+  // ── DevTools Panel (native WebView2) ──
+  let showDevtools = $state(false);
+  let devtoolsContainerEl = $state(null);
+  let devtoolsOpen = $state(false); // tracks whether the native WebView2 is created
+
+  async function toggleDevtools() {
+    if (showDevtools) {
+      // Close
+      showDevtools = false;
+      devtoolsOpen = false;
+      await lensCloseDevtools().catch(() => {});
+    } else {
+      // Discover the DevTools URL from the remote debugging port
+      const devtoolsUrl = await findDevtoolsUrl();
+      if (!devtoolsUrl) {
+        console.warn('[LensWorkspace] No DevTools target found on remote debugging port');
+        return;
+      }
+      // Open — show the container first so it gets measured, then create the WebView2
+      showDevtools = true;
+      // Wait for layout to settle
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+      if (devtoolsContainerEl) {
+        const rect = devtoolsContainerEl.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          try {
+            await lensOpenDevtools(devtoolsUrl, rect.left, rect.top, rect.width, rect.height);
+            devtoolsOpen = true;
+          } catch (err) {
+            console.warn('[LensWorkspace] Failed to open DevTools:', err);
+            showDevtools = false;
+          }
+        }
+      }
+    }
+  }
+
+  // Sync DevTools WebView2 position on resize
+  $effect(() => {
+    if (!devtoolsContainerEl || !devtoolsOpen) return;
+    const observer = new ResizeObserver(() => {
+      if (!devtoolsContainerEl || !devtoolsOpen) return;
+      const rect = devtoolsContainerEl.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        lensResizeDevtools(rect.left, rect.top, rect.width, rect.height).catch(() => {});
+      }
+    });
+    observer.observe(devtoolsContainerEl);
+    return () => observer.disconnect();
+  });
+
+  // Hide DevTools WebView2 when browser is hidden, show when visible
+  $effect(() => {
+    if (!devtoolsOpen) return;
+    if (!showBrowser) {
+      lensSetDevtoolsVisible(false).catch(() => {});
+    } else {
+      lensSetDevtoolsVisible(true).catch(() => {});
+    }
+  });
+
+  // Close DevTools when navigating away
+  $effect(() => {
+    if (!showBrowser && devtoolsOpen) {
+      showDevtools = false;
+      devtoolsOpen = false;
+      lensCloseDevtools().catch(() => {});
+    }
+  });
+
   // Freeze WebView2 when History or Downloads panels are open (airspace problem)
   $effect(() => {
     if (showHistory || showDownloads) {
@@ -151,6 +237,42 @@
   $effect(() => {
     const tabId = browserTabsStore.activeTabId;
     refreshZoomForTab(tabId);
+  });
+
+  // ── Element Inspector events ──
+  $effect(() => {
+    let unlistenSelected;
+    let unlistenDeselected;
+    let unlistenUrlChanged;
+
+    (async () => {
+      unlistenSelected = await listen('element-selected', async () => {
+        const result = await designGetElement();
+        if (result?.success && result.data) {
+          inspectorData = result.data;
+        }
+      });
+
+      unlistenDeselected = await listen('element-deselected', () => {
+        inspectorData = null;
+      });
+
+      unlistenUrlChanged = await listen('lens-url-changed', () => {
+        inspectorData = null;
+      });
+    })();
+
+    return () => {
+      unlistenSelected?.();
+      unlistenDeselected?.();
+      unlistenUrlChanged?.();
+    };
+  });
+
+  $effect(() => {
+    if (!lensStore.designMode) {
+      inspectorData = null;
+    }
   });
 
   // Track drag state to suppress stop-sign cursor across the workspace
@@ -246,6 +368,11 @@
     window.dispatchEvent(new CustomEvent('file-tree-drag-end'));
   }
 
+  // Memoized project root path — $derived compares by value (Object.is),
+  // so effects using this only re-trigger when the actual path string changes,
+  // not when unrelated entry fields (lastBrowserUrl, etc.) are mutated.
+  let projectRoot = $derived(projectStore.root);
+
   // Derive active file info for FileTree highlighting
   let focusedGroupId = $derived(editorGroupsStore.focusedGroupId);
   let focusedActiveTabId = $derived(editorGroupsStore.groups.get(focusedGroupId)?.activeTabId);
@@ -260,9 +387,10 @@
     lensSetVisible(showBrowser).catch(() => {});
   });
 
-  // Start/stop file watcher when entering Lens mode or switching projects
+  // Start/stop file watcher when entering Lens mode or switching projects.
+  // Uses memoized projectRoot so unrelated entry mutations don't churn the watcher.
   $effect(() => {
-    const path = projectStore.root;
+    const path = projectRoot;
     if (!path) return;
 
     startFileWatching(path).catch((err) => {
@@ -316,9 +444,10 @@
     });
   }
 
-  // Start/stop LSP diagnostics store listener on project switch
+  // Start/stop LSP diagnostics store listener on project switch.
+  // Uses memoized projectRoot so unrelated entry mutations don't restart LSP.
   $effect(() => {
-    const path = projectStore.root;
+    const path = projectRoot;
     if (!path) return;
 
     // Shut down LSP servers from previous project before starting new ones
@@ -456,6 +585,8 @@
                             onHistory={() => showHistory = true}
                             onDownloads={() => showDownloads = true}
                             onDownloadSettings={handleDownloadSettings}
+                            onDevtools={toggleDevtools}
+                            devtoolsActive={showDevtools}
                           />
                           {#if lensStore.designMode}
                             <DesignToolbar
@@ -465,7 +596,19 @@
                             />
                           {/if}
                           <FindBar visible={findBarVisible} onClose={() => { findBarVisible = false; }} />
-                          <LensPreview bind:this={lensPreviewRef} />
+                          <div class="browser-with-inspector">
+                            <LensPreview bind:this={lensPreviewRef} />
+                            {#if inspectorData}
+                              <ElementInspector
+                                elementData={inspectorData}
+                                onClose={() => { inspectorData = null; }}
+                                onUpdateData={(data) => { inspectorData = data; }}
+                              />
+                            {/if}
+                            {#if showDevtools}
+                              <div class="devtools-container" bind:this={devtoolsContainerEl}></div>
+                            {/if}
+                          </div>
                           {#if showHistory}
                             <HistoryPanel onClose={() => showHistory = false} />
                           {/if}
@@ -655,6 +798,25 @@
     height: 100%;
     overflow: hidden;
     background: var(--bg);
+  }
+
+  .browser-with-inspector {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .browser-with-inspector :global(.lens-preview) {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .devtools-container {
+    width: 45%;
+    min-width: 300px;
+    height: 100%;
+    /* Native WebView2 renders here — this div is just a positioning placeholder */
   }
 
 </style>

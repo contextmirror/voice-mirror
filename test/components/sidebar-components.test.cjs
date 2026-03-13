@@ -1,7 +1,7 @@
 /**
  * sidebar-components.test.js -- Source-inspection tests for tauri/src/components/sidebar/
  *
- * Tests Sidebar.svelte and ChatList.svelte.
+ * Tests Sidebar.svelte.
  */
 
 const { describe, it } = require('node:test');
@@ -126,100 +126,6 @@ describe('Sidebar.svelte', () => {
 
   it('has tooltips for collapsed state', () => {
     assert.ok(src.includes('data-tooltip'), 'Should have tooltip attribute');
-  });
-});
-
-// ---- ChatList.svelte ----
-
-describe('ChatList.svelte', () => {
-  const src = readComponent('ChatList.svelte');
-
-  it('imports chatStore', () => {
-    assert.ok(src.includes("import { chatStore }"), 'Should import chatStore');
-  });
-
-  it('imports chat API functions', () => {
-    assert.ok(src.includes('chatList'), 'Should import chatList');
-    assert.ok(src.includes('chatLoad'), 'Should import chatLoad');
-    assert.ok(src.includes('chatSave'), 'Should import chatSave');
-    assert.ok(src.includes('chatDelete'), 'Should import chatDelete');
-    assert.ok(src.includes('chatRename'), 'Should import chatRename');
-  });
-
-  it('imports uid from utils', () => {
-    assert.ok(src.includes("import { uid") && src.includes("from '../../lib/utils.js'"), 'Should import uid from utils');
-  });
-
-  it('has chat-list-container CSS class', () => {
-    assert.ok(src.includes('.chat-list-container'), 'Should have container CSS');
-  });
-
-  it('has New Chat button', () => {
-    assert.ok(src.includes('handleNewChat'), 'Should have new chat handler');
-    assert.ok(src.includes('aria-label="New chat"'), 'Should have New chat aria-label');
-  });
-
-  it('has chat entries list with role="listbox"', () => {
-    assert.ok(src.includes('role="listbox"'), 'Should have listbox role');
-    assert.ok(src.includes('aria-label="Chat conversations"'), 'Should have list aria-label');
-  });
-
-  it('has chat entry items with role="option"', () => {
-    assert.ok(src.includes('role="option"'), 'Should have option role on entries');
-  });
-
-  it('has aria-selected on chat entries', () => {
-    assert.ok(src.includes('aria-selected='), 'Should have aria-selected');
-  });
-
-  it('has active class on selected chat', () => {
-    assert.ok(src.includes('class:active'), 'Should toggle active class');
-  });
-
-  it('has delete button with aria-label', () => {
-    assert.ok(src.includes('aria-label="Delete chat"'), 'Should have delete aria-label');
-  });
-
-  it('has context menu support', () => {
-    assert.ok(src.includes('contextMenu'), 'Should have context menu state');
-    assert.ok(src.includes('context-menu'), 'Should have context menu CSS');
-    assert.ok(src.includes('handleContextMenu'), 'Should handle right-click');
-  });
-
-  it('has rename support', () => {
-    assert.ok(src.includes('startRename'), 'Should have rename start');
-    assert.ok(src.includes('commitRename'), 'Should have rename commit');
-    assert.ok(src.includes('cancelRename'), 'Should have rename cancel');
-    assert.ok(src.includes('rename-input'), 'Should have rename input');
-  });
-
-  it('has context menu with Rename and Delete options', () => {
-    assert.ok(src.includes('role="menu"'), 'Should have menu role on context menu');
-    assert.ok(src.includes('role="menuitem"'), 'Should have menuitem role on options');
-    // "Rename" and "Delete" appear as text content inside context-menu-item buttons
-    assert.ok(src.includes('startRename') && src.includes('Rename'), 'Should have Rename option');
-    assert.ok(src.includes('handleDeleteChat') && src.includes('Delete'), 'Should have Delete option');
-  });
-
-  it('sorts chats by most recent', () => {
-    assert.ok(src.includes('.sort('), 'Should sort chats');
-  });
-
-  it('has empty state message', () => {
-    assert.ok(src.includes('No chats yet'), 'Should show empty state message');
-  });
-
-  it('shows relative time on chat entries', () => {
-    assert.ok(src.includes('formatRelativeTime'), 'Should format relative time');
-    assert.ok(src.includes('chat-time'), 'Should show time on entries');
-  });
-
-  it('loads chats on mount via $effect', () => {
-    assert.ok(src.includes('loadChats()'), 'Should load chats');
-  });
-
-  it('uses $state for local state', () => {
-    assert.ok(src.includes('$state('), 'Should use $state rune');
   });
 });
 

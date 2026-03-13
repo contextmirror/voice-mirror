@@ -193,9 +193,9 @@
         aria-label={tool.label}
       >
         {#if tool.id === 'select'}
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="3" y="3" width="18" height="18" rx="2"/>
-            <path d="M8 12h.01M12 12h.01M16 12h.01"/>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke-width="1.5">
+            <rect x="2" y="2" width="20" height="20" rx="2" stroke="currentColor" fill="none"/>
+            <path d="M8 7l-1 10 3.5-3.5 3 5 1.5-.9-3-5H16L8 7z" fill="currentColor"/>
           </svg>
         {:else if tool.id === 'circle'}
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">

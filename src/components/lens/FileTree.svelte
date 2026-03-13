@@ -77,11 +77,14 @@
   // Drag-to-move state
   let dragOverPath = $state(null);
 
+  // Memoized root path — prevents re-triggers from unrelated entry field mutations
+  let projectRoot = $derived(projectStore.root);
+
   // Reload when active project changes.
   $effect(() => {
     const _idx = projectStore.activeIndex;
     const _len = projectStore.entries.length;
-    const _path = projectStore.root;
+    const _path = projectRoot;
     expandedDirs = new Set();
     dirChildren = new Map();
     loadRoot();
@@ -111,53 +114,61 @@
     return () => window.removeEventListener('lens-focus-search', handleFocusSearch);
   });
 
-  async function handleTreeChanged(event) {
-    const { root: rootChanged } = event.payload;
-    const currentRoot = projectStore.root;
-    if (!currentRoot) return; // No project open, ignore stale watcher events
+  // Debounce timers for file watcher events — git commits and bulk file
+  // operations fire many events in rapid succession. Without debouncing,
+  // each event triggers concurrent overlapping tree/git reloads, piling up
+  // IPC calls and causing "Not Responding" freezes.
+  let treeRefreshTimer = null;
+  let gitRefreshTimer = null;
+  let treeRefreshRunning = false;
 
-    if (rootChanged) {
+  function handleTreeChanged() {
+    clearTimeout(treeRefreshTimer);
+    treeRefreshTimer = setTimeout(() => doTreeRefresh(), 300);
+  }
+
+  async function doTreeRefresh() {
+    if (treeRefreshRunning) return; // prevent overlapping refreshes
+    treeRefreshRunning = true;
+    try {
+      const currentRoot = projectStore.root;
+      if (!currentRoot) return;
+
       await loadRoot();
-    }
 
-    // Refresh ALL expanded directories on any filesystem change.
-    // The watcher reports which directories changed, but changes can cascade
-    // (e.g. moving files between dirs affects both source and destination).
-    // Refreshing all expanded dirs is cheap (only visible folders) and ensures
-    // the tree never shows stale data.
-    if (expandedDirs.size > 0) {
-      const updated = new Map(dirChildren);
-      let changed = false;
-      for (const dir of expandedDirs) {
-        try {
-          const resp = await listDirectory(dir, currentRoot);
-          if (resp && resp.data) {
-            updated.set(dir, resp.data);
-            changed = true;
-          }
-        } catch (err) {
-          // Directory may have been deleted — remove from cache
-          if (updated.has(dir)) {
-            updated.delete(dir);
-            changed = true;
+      if (expandedDirs.size > 0) {
+        const updated = new Map(dirChildren);
+        let changed = false;
+        for (const dir of expandedDirs) {
+          try {
+            const resp = await listDirectory(dir, currentRoot);
+            if (resp && resp.data) {
+              updated.set(dir, resp.data);
+              changed = true;
+            }
+          } catch (err) {
+            if (updated.has(dir)) {
+              updated.delete(dir);
+              changed = true;
+            }
           }
         }
+        if (changed) {
+          dirChildren = updated;
+        }
       }
-      if (changed) {
-        dirChildren = updated;
-      }
+    } finally {
+      treeRefreshRunning = false;
     }
-
-    // Always refresh root entries too — file/folder additions/deletions at
-    // the project root level need to show up immediately.
-    await loadRoot();
   }
 
   function handleGitChanged() {
-    // Only reload if a project is still open (avoids stale data after project close)
-    if (projectStore.root) {
-      loadGitChanges();
-    }
+    clearTimeout(gitRefreshTimer);
+    gitRefreshTimer = setTimeout(() => {
+      if (projectStore.root) {
+        loadGitChanges();
+      }
+    }, 300);
   }
 
   async function loadRoot() {

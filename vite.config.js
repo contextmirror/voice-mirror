@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
+import { visualizer } from 'rollup-plugin-visualizer';
 import { existsSync, readFileSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -44,8 +45,12 @@ function copyGhosttyWasm() {
 }
 
 // https://vitejs.dev/config/
-export default defineConfig(async () => ({
-  plugins: [svelte(), copyGhosttyWasm()],
+export default defineConfig(async ({ mode }) => ({
+  plugins: [
+    svelte(),
+    copyGhosttyWasm(),
+    mode === 'production' && visualizer({ filename: 'stats.html', gzipSize: true }),
+  ].filter(Boolean),
 
   resolve: {
     alias: {
@@ -63,7 +68,43 @@ export default defineConfig(async () => ({
   assetsInclude: ['**/*.wasm'],
 
   build: {
-    // Default single-page build from index.html
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          codemirror: [
+            'codemirror',
+            '@codemirror/state',
+            '@codemirror/view',
+            '@codemirror/language',
+            '@codemirror/commands',
+            '@codemirror/autocomplete',
+            '@codemirror/lint',
+            '@codemirror/search',
+            '@codemirror/lang-javascript',
+            '@codemirror/lang-json',
+            '@codemirror/lang-css',
+            '@codemirror/lang-html',
+            '@codemirror/lang-markdown',
+            '@codemirror/lang-python',
+            '@codemirror/lang-rust',
+            '@codemirror/theme-one-dark',
+            '@codemirror/merge',
+            '@lezer/common',
+            '@lezer/lr',
+            '@lezer/highlight',
+            '@lezer/javascript',
+            '@lezer/json',
+            '@lezer/css',
+            '@lezer/html',
+            '@lezer/markdown',
+            '@lezer/python',
+            '@lezer/rust',
+          ],
+          ghostty: ['ghostty-web'],
+          markdown: ['highlight.js', 'dompurify', 'marked', 'marked-highlight'],
+        },
+      },
+    },
   },
 
   server: {

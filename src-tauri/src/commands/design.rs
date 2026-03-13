@@ -142,3 +142,124 @@ pub async fn design_get_element(
         Err(e) => Ok(IpcResponse::err(format!("ExecuteScript failed: {}", e))),
     }
 }
+
+#[tauri::command]
+pub async fn design_select_by_tree_id(
+    app: AppHandle,
+    state: tauri::State<'_, super::lens::LensState>,
+    node_id: String,
+) -> Result<IpcResponse, String> {
+    let label = {
+        let active_id = state
+            .active_tab_id
+            .lock()
+            .map_err(|e| format!("Lock error: {}", e))?;
+        let active_id = match active_id.as_ref() {
+            Some(id) => id.clone(),
+            None => return Ok(IpcResponse::err("No active browser tab")),
+        };
+        let tabs = state
+            .tabs
+            .lock()
+            .map_err(|e| format!("Lock error: {}", e))?;
+        match tabs.get(&active_id) {
+            Some(t) => t.webview_label.clone(),
+            None => return Ok(IpcResponse::err("Active tab not found")),
+        }
+    };
+
+    let webview = app
+        .get_webview(&label)
+        .ok_or_else(|| "WebView not found".to_string())?;
+
+    let escaped = node_id.replace('\\', "\\\\").replace('\'', "\\'");
+    let js = format!(
+        "JSON.stringify(window.vmDesign ? window.vmDesign.selectByTreeId('{}') : null)",
+        escaped
+    );
+
+    match crate::services::browser_bridge::evaluate_js_with_result(
+        &app,
+        &webview,
+        &js,
+        std::time::Duration::from_secs(5),
+    )
+    .await
+    {
+        Ok(data) => {
+            if data.is_null() {
+                Ok(IpcResponse::err("Tree node not found"))
+            } else {
+                match data.as_str() {
+                    Some(json_str) => match serde_json::from_str::<Value>(json_str) {
+                        Ok(Value::Null) => Ok(IpcResponse::err("Tree node not found")),
+                        Ok(parsed) => Ok(IpcResponse::ok(parsed)),
+                        Err(_) => Ok(IpcResponse::ok(data)),
+                    },
+                    None => Ok(IpcResponse::ok(data)),
+                }
+            }
+        }
+        Err(e) => Ok(IpcResponse::err(format!("JS eval failed: {}", e))),
+    }
+}
+
+#[tauri::command]
+pub async fn design_expand_tree_node(
+    app: AppHandle,
+    state: tauri::State<'_, super::lens::LensState>,
+    node_id: String,
+) -> Result<IpcResponse, String> {
+    let label = {
+        let active_id = state
+            .active_tab_id
+            .lock()
+            .map_err(|e| format!("Lock error: {}", e))?;
+        let active_id = match active_id.as_ref() {
+            Some(id) => id.clone(),
+            None => return Ok(IpcResponse::err("No active browser tab")),
+        };
+        let tabs = state
+            .tabs
+            .lock()
+            .map_err(|e| format!("Lock error: {}", e))?;
+        match tabs.get(&active_id) {
+            Some(t) => t.webview_label.clone(),
+            None => return Ok(IpcResponse::err("Active tab not found")),
+        }
+    };
+
+    let webview = app
+        .get_webview(&label)
+        .ok_or_else(|| "WebView not found".to_string())?;
+
+    let escaped = node_id.replace('\\', "\\\\").replace('\'', "\\'");
+    let js = format!(
+        "JSON.stringify(window.vmDesign ? window.vmDesign.expandTreeNode('{}') : [])",
+        escaped
+    );
+
+    match crate::services::browser_bridge::evaluate_js_with_result(
+        &app,
+        &webview,
+        &js,
+        std::time::Duration::from_secs(5),
+    )
+    .await
+    {
+        Ok(data) => {
+            if data.is_null() {
+                Ok(IpcResponse::ok(serde_json::json!([])))
+            } else {
+                match data.as_str() {
+                    Some(json_str) => match serde_json::from_str::<Value>(json_str) {
+                        Ok(parsed) => Ok(IpcResponse::ok(parsed)),
+                        Err(_) => Ok(IpcResponse::ok(data)),
+                    },
+                    None => Ok(IpcResponse::ok(data)),
+                }
+            }
+        }
+        Err(e) => Ok(IpcResponse::err(format!("JS eval failed: {}", e))),
+    }
+}

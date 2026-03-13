@@ -52,8 +52,8 @@ describe('status-bar.svelte.js: imports', () => {
     assert.ok(src.includes('lspDiagnosticsStore'), 'Should import lspDiagnosticsStore');
   });
 
-  it('imports devServerManager', () => {
-    assert.ok(src.includes('devServerManager'), 'Should import devServerManager');
+  it('does not import devServerManager (cycle-breaking: data pushed in via updateDevServer param)', () => {
+    assert.ok(!src.includes("from './dev-server-manager"), 'Should not import devServerManager directly');
   });
 });
 
@@ -246,10 +246,11 @@ describe('status-bar.svelte.js: dev server sync', () => {
     assert.ok(src.includes('updateDevServer'), 'Should have updateDevServer');
   });
 
-  it('updateDevServer reads from devServerManager', () => {
-    const idx = src.indexOf('updateDevServer');
+  it('updateDevServer accepts serverState parameter', () => {
+    const idx = src.indexOf('function updateDevServer');
+    assert.ok(idx !== -1, 'Should define updateDevServer function');
     const body = src.slice(idx, idx + 500);
-    assert.ok(body.includes('devServerManager'), 'updateDevServer should read from devServerManager');
+    assert.ok(body.includes('serverState'), 'updateDevServer should accept serverState parameter');
   });
 });
 

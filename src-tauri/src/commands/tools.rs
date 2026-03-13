@@ -184,17 +184,14 @@ fn parse_version(raw: &str) -> String {
 ///
 /// Checks: claude, opencode, ollama, cargo
 #[tauri::command]
-pub fn scan_cli_tools() -> IpcResponse {
-    let tools = vec!["claude", "opencode", "ollama", "cargo"];
-
-    let results: Vec<ToolInfo> = tools
-        .into_iter()
-        .map(detect_tool)
-        .collect();
-
-    IpcResponse::ok(serde_json::json!({
-        "tools": results
-    }))
+pub async fn scan_cli_tools() -> IpcResponse {
+    tokio::task::spawn_blocking(|| {
+        let tools = vec!["claude", "opencode", "ollama", "cargo"];
+        let results: Vec<ToolInfo> = tools.into_iter().map(detect_tool).collect();
+        IpcResponse::ok(serde_json::json!({ "tools": results }))
+    })
+    .await
+    .unwrap_or_else(|e| IpcResponse::err(format!("Tool scan failed: {}", e)))
 }
 
 /// Run an npm command via shell (npm is a .cmd wrapper on Windows).
@@ -234,55 +231,59 @@ fn run_npm(args: &[&str]) -> Result<String, String> {
 ///   - Services: Ollama, ffmpeg
 /// Also checks npm registry for latest versions of updatable packages.
 #[tauri::command]
-pub fn check_npm_versions() -> IpcResponse {
-    // Detect system tools
-    let system_tools = vec![
-        ("claude", "claude"),
-        ("opencode", "opencode"),
-        ("ollama", "ollama"),
-        ("ffmpeg", "ffmpeg"),
-    ];
+pub async fn check_npm_versions() -> IpcResponse {
+    tokio::task::spawn_blocking(|| {
+        // Detect system tools
+        let system_tools = vec![
+            ("claude", "claude"),
+            ("opencode", "opencode"),
+            ("ollama", "ollama"),
+            ("ffmpeg", "ffmpeg"),
+        ];
 
-    let mut system = serde_json::Map::new();
-    for (tool_name, key) in &system_tools {
-        let info = detect_tool(tool_name);
+        let mut system = serde_json::Map::new();
+        for (tool_name, key) in &system_tools {
+            let info = detect_tool(tool_name);
 
-        // For npm-installable tools, also check latest version from registry
-        let (latest, update_available) = match *tool_name {
-            "claude" => {
-                let latest = get_npm_registry_version("@anthropic-ai/claude-code");
-                let update = match (&info.version, &latest) {
-                    (Some(inst), Some(lat)) => inst != lat,
-                    _ => false,
-                };
-                (latest, update)
-            }
-            "opencode" => {
-                let latest = get_npm_registry_version("opencode-ai");
-                let update = match (&info.version, &latest) {
-                    (Some(inst), Some(lat)) => inst != lat,
-                    _ => false,
-                };
-                (latest, update)
-            }
-            _ => (None, false),
-        };
+            // For npm-installable tools, also check latest version from registry
+            let (latest, update_available) = match *tool_name {
+                "claude" => {
+                    let latest = get_npm_registry_version("@anthropic-ai/claude-code");
+                    let update = match (&info.version, &latest) {
+                        (Some(inst), Some(lat)) => inst != lat,
+                        _ => false,
+                    };
+                    (latest, update)
+                }
+                "opencode" => {
+                    let latest = get_npm_registry_version("opencode-ai");
+                    let update = match (&info.version, &latest) {
+                        (Some(inst), Some(lat)) => inst != lat,
+                        _ => false,
+                    };
+                    (latest, update)
+                }
+                _ => (None, false),
+            };
 
-        system.insert(
-            key.to_string(),
-            serde_json::json!({
-                "version": info.version,
-                "installed": info.available,
-                "path": info.path,
-                "latest": latest,
-                "updateAvailable": update_available,
-            }),
-        );
-    }
+            system.insert(
+                key.to_string(),
+                serde_json::json!({
+                    "version": info.version,
+                    "installed": info.available,
+                    "path": info.path,
+                    "latest": latest,
+                    "updateAvailable": update_available,
+                }),
+            );
+        }
 
-    IpcResponse::ok(serde_json::json!({
-        "system": system,
-    }))
+        IpcResponse::ok(serde_json::json!({
+            "system": system,
+        }))
+    })
+    .await
+    .unwrap_or_else(|e| IpcResponse::err(format!("Version check failed: {}", e)))
 }
 
 /// Get the latest version of an npm package from the registry.
@@ -296,27 +297,29 @@ fn get_npm_registry_version(package: &str) -> Option<String> {
 ///
 /// Maps tool keys to their npm package names and runs `npm install -g <pkg>@latest`.
 #[tauri::command]
-pub fn update_npm_package(package: String) -> IpcResponse {
-    // Map tool keys to npm package names
-    let npm_name = match package.as_str() {
-        "claude" | "@anthropic-ai/claude-code" => "@anthropic-ai/claude-code",
-        "opencode" | "opencode-ai" => "opencode-ai",
-        _ => {
-            return IpcResponse::err(format!(
-                "Package '{}' is not updatable via npm",
-                package
-            ));
+pub async fn update_npm_package(package: String) -> IpcResponse {
+    tokio::task::spawn_blocking(move || {
+        let npm_name = match package.as_str() {
+            "claude" | "@anthropic-ai/claude-code" => "@anthropic-ai/claude-code",
+            "opencode" | "opencode-ai" => "opencode-ai",
+            _ => {
+                return IpcResponse::err(format!(
+                    "Package '{}' is not updatable via npm",
+                    package
+                ));
+            }
+        };
+        let install_arg = format!("{}@latest", npm_name);
+        match run_npm(&["install", "-g", &install_arg]) {
+            Ok(_) => IpcResponse::ok(serde_json::json!({
+                "updated": true,
+                "package": npm_name,
+            })),
+            Err(e) => IpcResponse::err(format!("npm install failed: {}", e)),
         }
-    };
-
-    let install_arg = format!("{}@latest", npm_name);
-    match run_npm(&["install", "-g", &install_arg]) {
-        Ok(_) => IpcResponse::ok(serde_json::json!({
-            "updated": true,
-            "package": npm_name,
-        })),
-        Err(e) => IpcResponse::err(format!("npm install failed: {}", e)),
-    }
+    })
+    .await
+    .unwrap_or_else(|e| IpcResponse::err(format!("Update failed: {}", e)))
 }
 
 #[cfg(test)]
@@ -360,9 +363,9 @@ mod tests {
         assert_eq!(info.name, "ollama");
     }
 
-    #[test]
-    fn test_scan_cli_tools_returns_all() {
-        let response = scan_cli_tools();
+    #[tokio::test]
+    async fn test_scan_cli_tools_returns_all() {
+        let response = scan_cli_tools().await;
         assert!(response.success);
         let data = response.data.unwrap();
         let tools = data["tools"].as_array().unwrap();
@@ -378,9 +381,9 @@ mod tests {
         assert!(names.contains(&"cargo"));
     }
 
-    #[test]
-    fn test_check_npm_versions_returns_system() {
-        let response = check_npm_versions();
+    #[tokio::test]
+    async fn test_check_npm_versions_returns_system() {
+        let response = check_npm_versions().await;
         assert!(response.success);
         let data = response.data.unwrap();
         let system = data["system"].as_object().unwrap();

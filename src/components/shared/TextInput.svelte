@@ -76,6 +76,11 @@
     border-color: var(--accent);
   }
 
+  .text-input:focus-visible {
+    outline: 2px solid var(--accent, #007acc);
+    outline-offset: -1px;
+  }
+
   .text-input:disabled {
     opacity: 0.5;
     cursor: not-allowed;

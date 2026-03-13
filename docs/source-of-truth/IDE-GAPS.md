@@ -2,7 +2,7 @@
 
 > Internal doc. Tracks what Voice Mirror's Lens workspace has vs what VS Code / Zed / Cursor offer.
 >
-> Last updated: 2026-03-01
+> Last updated: 2026-03-11
 
 ---
 
@@ -543,7 +543,8 @@ See `docs/archive/TERMINAL-GAP-ANALYSIS.md` for the complete 33-item gap list. T
 | 14 | **Inlay hints** | LSP | Medium | Medium | Inline type annotations for TS/Rust |
 | 15 | **Breadcrumbs** | Editor | Low | Small | File path segments above editor |
 | ~~16~~ | ~~**Code minimap**~~ | ~~Editor~~ | ~~Low~~ | ~~Large~~ | ✅ Done — `@replit/codemirror-minimap` in file editor + `DiffMinimap.svelte` |
-| 17 | **Debug adapter (DAP)** | Editor | Low | Massive | AI terminal handles debugging better |
+| 17 | **Window capture (universal app vision)** | Vision | **Medium-High** | Medium | Capture any window for AI vision — unique differentiator. §17 |
+| 18 | **Debug adapter (DAP)** | Editor | Low | Massive | AI terminal handles debugging better |
 | -- | **Extensions / Plugins** | System | None | Massive | MCP servers are our extension model |
 
 ---
@@ -560,6 +561,8 @@ The gap list above looks daunting, but Voice Mirror doesn't need to close every 
 
 The strategy: close the top gaps so Lens is **comfortable enough** for real coding, then double down on the voice+AI features no one else has.
 
+6. **Universal app vision** (planned) — capture any running window (games, CAD, spreadsheets) so the AI can see it. No other tool does this.
+
 **Done:** find/replace ✓, multi-cursor ✓, global search ✓, git stage+commit+push ✓, branch management ✓, dynamic sync ✓, document formatting ✓, signature help ✓, split editor ✓, command palette ✓, file tree git decorations ✓, LSP diagnostics in tree ✓, code minimap ✓, terminal tab close ✓, terminal grid splits (H+V) ✓, terminal find (Ctrl+F) ✓, terminal clickable links (Ctrl+click) ✓, terminal persistence ✓, inline gutter change indicators ✓, closed tab history + Ctrl+Shift+T ✓, mouse wheel scroll on tab bar ✓, back/forward navigation (Alt+Left/Right) ✓, Ctrl+hover definition underline ✓, Ctrl+PageUp/PageDown tab cycling ✓, tab drag to split zones ✓, Problems panel (Ctrl+Shift+M) ✓, code actions lightbulb gutter ✓, font zoom (Ctrl+=/−/0) ✓, LSP server management Phase 1 ✓, LSP crash recovery + health monitoring + idle shutdown (Phase 2) ✓, LSP project scanning + multi-server routing + native binary support (Phase 3) ✓, project output channels (build logs + browser console → MCP) ✓, keyboard tree navigation (arrow keys) ✓, drag-to-move files in tree ✓.
 
 **Next wave:** hunk-level staging (stage individual diff chunks from the gutter). This is the remaining high-impact gap that separates "usable" from "daily driver." The file tree is now feature-compete for navigation (keyboard + drag-to-move). The terminal is feature-compete with VS Code for core workflows. LSP infrastructure is feature-compete — remaining LSP gaps are Tier 2 features (inlay hints, workspace symbols, semantic tokens).
@@ -570,12 +573,96 @@ The strategy: close the top gaps so Lens is **comfortable enough** for real codi
 
 > WebView2-based browser panel gaps.
 
+#### What We Have
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Multi-tab browsing | ✅ | Tab bar, create/close/switch tabs, context menu |
+| Navigation (back/forward/reload) | ✅ | Toolbar + keyboard shortcuts |
+| URL bar | ✅ | Navigate by URL or search |
+| Download manager | ✅ | `DownloadStarting` hook, progress tracking, toast on complete |
+| Downloads panel | ✅ | List with status, open file/folder actions |
+| Download settings | ✅ | Ask-where-to-save toggle, custom download path (folder picker) |
+| Browser history | ✅ | JSON persistence, search, clear, delete entries |
+| History panel | ✅ | Searchable, click to navigate |
+| Hamburger menu | ✅ | Injected into child WebView2 (solves airspace problem) |
+| Zoom (per-tab) | ✅ | Zoom in/out/reset with live % display |
+| Find on Page | ✅ | Ctrl+F in browser, match navigation |
+| Design mode | ✅ | Click elements → annotated screenshot → AI |
+| Console capture | ✅ | `lens-console://` URI scheme, patched console.* methods |
+| Device preview | ✅ | Side-by-side responsive preview with emulation |
+
+#### Gaps vs Chrome/Edge
+
 | Feature | Chrome/Edge | Voice Mirror | Priority |
 |---------|-------------|-------------|----------|
-| **Download manager** | Full download UI with progress, pause, cancel | ❌ Downloads silently suppressed | **Medium** |
-| **Open local files in browser** | file:// URLs + Office integration | ❌ | Medium |
-| **Multiple tabs** | Full tab system | Single-tab model | Low (by design) |
+| **Open local files** | file:// URLs + Office integration | ❌ | Low |
 | **DevTools** | Full F12 DevTools | ❌ (console output captured via init script) | Low |
 | **Print** | Full print dialog | ❌ | Very low |
+| **Bookmark manager** | Full bookmarks system | ❌ | Very low |
 
-**Download manager details:** WebView2 requires explicit `DownloadStarting` event handling via `ICoreWebView2_4::add_DownloadStarting`. Without it, downloads are silently blocked. Need to: hook the event in browser bridge, allow downloads to proceed, show progress bar at bottom of browser panel, save to Downloads folder or prompt with save dialog. Discovered when trying to download OAuth JSON from Google Cloud Console.
+**Assessment:** Browser panel is now feature-compete for web development workflows. Downloads, history, tabs, zoom, find, and menu are all working. The remaining gaps (DevTools, print, bookmarks) are low priority — console capture + AI debugging covers the DevTools use case.
+
+---
+
+### 17. Window Capture — Universal App Vision
+
+> **Status:** Concept / not started. This is the "third unlock" for Voice Mirror.
+
+**The vision:** Voice Mirror has unlocked voice (stable) and web vision (browser panel). The next unlock is **universal app vision** — the AI can see any running application (games, CAD, spreadsheets, etc.) the same way it sees websites in the browser panel.
+
+**Why it matters:** Today, if you're modding Stardew Valley, Claude can help with the code but can't *see* the running game to verify your changes. You'd have to screenshot manually. The same applies to Excel formulas, Blender models, AutoCAD drawings, WoW addon development — anything outside the browser. Closing this loop means Voice Mirror works for *every* workflow, not just web development.
+
+**No other IDE does this.** Cursor, Windsurf, VS Code — none of them can see arbitrary running applications.
+
+#### Technical Approach
+
+**Windows Graphics Capture API** (WinRT, Win10 1903+) — the modern approach, same as OBS uses for window capture:
+- `GraphicsCaptureItem` for a specific window handle
+- `Direct3D11CaptureFramePool` delivers GPU-side frames
+- Hardware accelerated, works with DirectX/OpenGL games
+- Available via the `windows` crate (WinRT bindings already in our deps)
+
+**Streaming to browser panel** via MJPEG on localhost:
+```
+Target Window → WinRT Graphics Capture → GPU frames
+    → Encode JPEG (~2ms per frame)
+    → Serve on localhost as MJPEG stream
+    → <img src="http://localhost:{port}/stream/{window_id}"> in WebView2
+```
+
+MJPEG is the simplest option — no JavaScript needed, every browser supports it natively via `<img>` tag. Alternative: WebSocket + canvas for more control.
+
+**For AI consumption:** periodic snapshot (every 1-5s) → base64 → send as vision input. The AI doesn't need 60fps. We already have `list_windows` and `capture_window` — this extends them to continuous capture.
+
+#### Architecture
+
+```
+Rust:
+  - New service: window_capture.rs
+  - WinRT Graphics Capture for target window
+  - Configurable FPS (5-30)
+  - MJPEG endpoint: localhost:{port}/stream/{window_id}
+  - Snapshot endpoint: localhost:{port}/snapshot/{window_id}
+
+Frontend:
+  - Window picker (reuse existing list_windows)
+  - Display stream in browser panel or dedicated panel
+  - MCP tool: "look at {window}" → snapshot → model vision input
+
+MCP tools:
+  - capture_window_start(window_title, fps) → start streaming
+  - capture_window_stop() → stop streaming
+  - capture_window_snapshot(window_title) → single frame for AI
+```
+
+#### Use Cases
+
+- **Game modding:** See the running game while editing mod code
+- **Spreadsheets:** AI reads Excel/Sheets and suggests formulas
+- **CAD/3D:** AI reviews geometry while you model
+- **Any desktop app:** Troubleshoot, automate, or get AI help with any software
+
+#### Priority
+
+**Medium-High** — unique differentiator, no competitor has this. Should come after LSP Tier 2 features are stable. The capture API is well-documented and the `windows` crate already has bindings. Estimated effort: Medium (new service + MJPEG server + window picker UI + MCP tools).

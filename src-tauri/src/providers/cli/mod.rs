@@ -338,12 +338,15 @@ impl Provider for CliProvider {
         // are inherited and cause the child Claude Code to refuse to start.
         cmd.env_remove("CLAUDECODE");
         cmd.env_remove("CLAUDE_CODE_ENTRYPOINT");
+        cmd.env_remove("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS");
 
         // Spawn the child process in the PTY
+        info!("Spawning {} in PTY...", self.cli_config.display_name);
         let child = pty_pair
             .slave
             .spawn_command(cmd)
             .map_err(|e| format!("Failed to spawn {}: {}", self.cli_config.display_name, e))?;
+        info!("{} PTY process spawned successfully", self.cli_config.display_name);
 
         // Get the writer (master side of PTY for sending input)
         let writer = pty_pair
@@ -387,24 +390,93 @@ impl Provider for CliProvider {
             .collect();
         let display_name = self.cli_config.display_name.to_string();
 
+        // Safety net: if ready detection hasn't fired after 8 seconds, trigger it
+        // unconditionally. This handles cases where the TUI stalls during startup
+        // (e.g. MCP initialization) and produces no further output for pattern
+        // matching to trigger on.
+        {
+            let is_ready_timer = self.is_ready.clone();
+            let event_tx_timer = self.event_tx.clone();
+            let gen_timer = self.generation.clone();
+            let display_timer = self.cli_config.display_name.to_string();
+            let queue_timer = self.ready_queue.clone();
+            let writer_timer = shared_writer.clone();
+            let ready_delay_timer = self.cli_config.ready_delay_ms;
+            std::thread::spawn(move || {
+                std::thread::sleep(Duration::from_secs(8));
+                if gen_timer.load(Ordering::SeqCst) == my_gen
+                    && !is_ready_timer.load(Ordering::SeqCst)
+                {
+                    info!("{} TUI ready forced by safety-net timer (8s)", display_timer);
+                    is_ready_timer.store(true, Ordering::SeqCst);
+                    let _ = event_tx_timer.send(ProviderEvent::Ready);
+
+                    // Drain ready queue (same logic as reader thread)
+                    let gen_check = gen_timer;
+                    std::thread::spawn(move || {
+                        std::thread::sleep(Duration::from_millis(ready_delay_timer));
+                        if gen_check.load(Ordering::SeqCst) != my_gen {
+                            return;
+                        }
+                        let items: Vec<String> = {
+                            let mut q = queue_timer.lock().unwrap();
+                            q.drain(..).collect()
+                        };
+                        if items.is_empty() {
+                            return;
+                        }
+                        if let Ok(mut w) = writer_timer.lock() {
+                            for text in items {
+                                let clean = text.trim_end_matches(['\r', '\n']);
+                                info!("Safety-net: sending ready-queue item ({} bytes)", clean.len());
+                                let _ = w.write_all(clean.as_bytes());
+                                let _ = w.flush();
+                                std::thread::sleep(Duration::from_millis(200));
+                                let _ = w.write_all(b"\r");
+                                let _ = w.flush();
+                            }
+                        }
+                    });
+                }
+            });
+        }
+
         let reader_handle = std::thread::spawn(move || {
+            info!("{} PTY reader thread started (gen={})", display_name, my_gen);
             let mut buf = [0u8; 4096];
             let mut output_buffer = String::new();
+            let mut first_read = true;
+            let mut first_output_time: Option<std::time::Instant> = None;
 
             loop {
                 // Check if generation changed (provider was stopped/restarted)
                 if generation.load(Ordering::SeqCst) != my_gen {
+                    info!("{} reader: generation mismatch, exiting", display_name);
                     break;
                 }
 
                 match reader.read(&mut buf) {
                     Ok(0) => {
                         // EOF — process exited
+                        info!("{} reader: EOF — process exited", display_name);
                         break;
                     }
                     Ok(n) => {
+                        if first_read || output_buffer.len() < 8192 {
+                            let preview = String::from_utf8_lossy(&buf[..n.min(200)]);
+                            let clean_preview = strip_ansi_codes(&preview);
+                            // Safe UTF-8 truncation
+                            let truncated: String = clean_preview.chars().take(120).collect();
+                            info!(
+                                "{} reader: output chunk ({} bytes, total_buf={}) clean={:?}",
+                                display_name, n, output_buffer.len(), truncated
+                            );
+                            first_read = false;
+                        }
+
                         // Drop output from stale session
                         if generation.load(Ordering::SeqCst) != my_gen {
+                            info!("{} reader: generation mismatch after read, exiting", display_name);
                             break;
                         }
 
@@ -414,16 +486,33 @@ impl Provider for CliProvider {
                         // Ready detection
                         if !is_ready.load(Ordering::SeqCst) {
                             output_buffer.push_str(&data);
+                            if first_output_time.is_none() {
+                                first_output_time = Some(std::time::Instant::now());
+                            }
 
                             // Strip ANSI escape sequences for pattern matching
                             let clean = strip_ansi_codes(&output_buffer);
+                            // Time-based fallback: if 6+ seconds of output with
+                            // meaningful content, the TUI is up but prompt pattern
+                            // may differ from what we expect (e.g. MCP init delay).
+                            let timed_out = first_output_time
+                                .map(|t| t.elapsed() > Duration::from_secs(6) && clean.len() > 500)
+                                .unwrap_or(false);
                             let has_prompt = ready_patterns.iter().any(|p| clean.contains(p))
-                                || clean.len() > 8000; // Fallback: if 8KB+ of clean output, TUI is definitely up
+                                || clean.len() > 8000 // Size fallback: 8KB+ of clean output
+                                || timed_out;
 
                             if has_prompt {
+                                let reason = if ready_patterns.iter().any(|p| clean.contains(p)) {
+                                    "pattern match"
+                                } else if timed_out {
+                                    "timeout fallback (6s)"
+                                } else {
+                                    "size fallback (8KB)"
+                                };
                                 info!(
-                                    "{} TUI ready detected (buffer {} bytes, clean {} bytes)",
-                                    display_name, output_buffer.len(), clean.len()
+                                    "{} TUI ready detected via {} (buffer {} bytes, clean {} bytes)",
+                                    display_name, reason, output_buffer.len(), clean.len()
                                 );
                                 is_ready.store(true, Ordering::SeqCst);
                                 output_buffer.clear();

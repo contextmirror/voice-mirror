@@ -103,6 +103,11 @@
     border-color: var(--accent);
   }
 
+  .select-input:focus-visible {
+    outline: 2px solid var(--accent, #007acc);
+    outline-offset: -1px;
+  }
+
   .select-input:disabled {
     opacity: 0.5;
     cursor: not-allowed;

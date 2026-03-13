@@ -4,12 +4,14 @@
  * Aggregates editor state (cursor, indent, encoding, EOL, language), git info,
  * LSP diagnostics, dev server status, LSP health, and notifications into a
  * single reactive store consumed by the StatusBar component.
+ *
+ * Dev server status is pushed in by the StatusBar component (via updateDevServer)
+ * to avoid a circular dependency with dev-server-manager.
  */
 
 import { getGitChanges, lspGetStatus } from '../api.js';
 import { projectStore } from './project.svelte.js';
 import { lspDiagnosticsStore } from './lsp-diagnostics.svelte.js';
-import { devServerManager } from './dev-server-manager.svelte.js';
 import { navigationStore } from './navigation.svelte.js';
 import { tabsStore } from './tabs.svelte.js';
 
@@ -244,17 +246,14 @@ function createStatusBarStore() {
     diagWarnings = warnings;
   }
 
-  function updateDevServer() {
-    const project = projectStore.activeProject;
-    if (!project?.path) {
-      devServerStatus = null;
-      devServerPort = null;
-      return;
-    }
-    const state = devServerManager.getServerStatus(project.path);
-    if (state) {
-      devServerStatus = state.status;
-      devServerPort = state.port;
+  /**
+   * Update dev server status for the status bar.
+   * @param {ServerState|null} serverState - Current server state from devServerManager, or null
+   */
+  function updateDevServer(serverState) {
+    if (serverState) {
+      devServerStatus = serverState.status;
+      devServerPort = serverState.port;
     } else {
       devServerStatus = null;
       devServerPort = null;

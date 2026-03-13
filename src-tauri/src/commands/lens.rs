@@ -49,6 +49,8 @@ pub struct LensState {
     pub device_webviews: Mutex<Vec<DeviceWebview>>,
     /// In-memory download tracker. Arc allows cloning into COM handler closures.
     pub downloads: Arc<Mutex<Vec<DownloadEntry>>>,
+    /// Label of the DevTools side-panel webview (if open).
+    pub devtools_label: Mutex<Option<String>>,
 }
 
 /// Get the active lens webview from state, or return an IpcResponse error.
@@ -305,6 +307,10 @@ const CONSOLE_HOOK_SCRIPT: &str = r#"
 })();
 "#;
 
+/// Injected into the DevTools WebView2 for minor UI tweaks.
+/// Using devtools_app.html (no screencast module) so no layout hacks needed.
+const DEVTOOLS_INIT_SCRIPT: &str = "";
+
 /// Register `WebResourceRequested` filters on a child WebView2 so that
 /// `lens-shortcut` and `lens-console` custom URI scheme requests are intercepted
 /// at the COM level.  `register_uri_scheme_protocol` on the Tauri Builder only
@@ -405,6 +411,10 @@ fn register_custom_scheme_handler(app: &AppHandle, webview: &tauri::Webview) {
                                     "lens-url-changed",
                                     serde_json::json!({ "url": decoded_url }),
                                 );
+                            } else if key == "element-selected" {
+                                let _ = app_for_events.emit("element-selected", serde_json::json!({}));
+                            } else if key == "element-deselected" {
+                                let _ = app_for_events.emit("element-deselected", serde_json::json!({}));
                             } else if !key.is_empty() {
                                 info!("[lens-shortcut] Child webview forwarding: {}", key);
                                 let _ = app_for_events.emit("lens-shortcut", serde_json::json!({ "key": key }));
@@ -1671,7 +1681,10 @@ pub fn lens_set_zoom(
     factor: f64,
     state: tauri::State<'_, LensState>,
 ) -> IpcResponse {
-    let tabs = state.tabs.lock().unwrap();
+    let tabs = match state.tabs.lock() {
+        Ok(g) => g,
+        Err(e) => return IpcResponse::err(format!("tabs mutex poisoned: {e}")),
+    };
     let tab = match tabs.get(&tab_id) {
         Some(t) => t,
         None => return IpcResponse::err("Tab not found"),
@@ -1690,7 +1703,10 @@ pub fn lens_set_zoom(
             }
         });
 
-        let mut tabs = state.tabs.lock().unwrap();
+        let mut tabs = match state.tabs.lock() {
+            Ok(g) => g,
+            Err(e) => return IpcResponse::err(format!("tabs mutex poisoned: {e}")),
+        };
         if let Some(tab) = tabs.get_mut(&tab_id) {
             tab.zoom_factor = factor_clamped;
         }
@@ -1706,11 +1722,279 @@ pub fn lens_get_zoom(
     tab_id: String,
     state: tauri::State<'_, LensState>,
 ) -> IpcResponse {
-    let tabs = state.tabs.lock().unwrap();
+    let tabs = match state.tabs.lock() {
+        Ok(g) => g,
+        Err(e) => return IpcResponse::err(format!("tabs mutex poisoned: {e}")),
+    };
     match tabs.get(&tab_id) {
         Some(tab) => IpcResponse::ok(serde_json::json!({ "zoomFactor": tab.zoom_factor })),
         None => IpcResponse::err("Tab not found"),
     }
+}
+
+// ---------------------------------------------------------------------------
+// DevTools (embedded side-panel via remote debugging)
+// ---------------------------------------------------------------------------
+
+/// Query the remote debugging port to find the DevTools frontend URL for the
+/// active browser tab. This is a separate command from lens_open_devtools to
+/// avoid combining HTTP requests with WebView2 creation in one async call
+/// (which caused deadlocks with the WebView2 browser process).
+#[tauri::command]
+pub async fn lens_find_devtools_url(
+    app: AppHandle,
+    state: tauri::State<'_, LensState>,
+) -> Result<IpcResponse, String> {
+    // Get the active tab's URL for target matching
+    let tab_url = {
+        let active_id = state
+            .active_tab_id
+            .lock()
+            .map_err(|e| e.to_string())?
+            .clone()
+            .ok_or("No active tab")?;
+        let tabs = state.tabs.lock().map_err(|e| e.to_string())?;
+        let tab = tabs.get(&active_id).ok_or("Active tab not found")?;
+        let label = tab.webview_label.clone();
+        if let Some(wv) = app.get_webview(&label) {
+            wv.url().map(|u| u.to_string()).unwrap_or_default()
+        } else {
+            String::new()
+        }
+    };
+
+    info!("[lens] Looking up DevTools target for tab URL: {}", tab_url);
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(3))
+        .build()
+        .map_err(|e| format!("HTTP client error: {}", e))?;
+
+    let url = "http://127.0.0.1:9222/json";
+    let resp = client
+        .get(url)
+        .send()
+        .await
+        .map_err(|e| format!("Remote debug port not available: {}", e))?;
+
+    let targets: Vec<serde_json::Value> = resp
+        .json()
+        .await
+        .map_err(|e| format!("JSON parse failed: {}", e))?;
+
+    // Helper: build a local DevTools inspector URL from a target's page id.
+    // The remote debugging server serves the inspector frontend locally.
+    // devtools_app.html does NOT include the screencast module (unlike inspector.html),
+    // so there's no floating page preview or SplitWidget layout issues.
+    // panel=console: opens the Console tab by default
+    let make_inspector_url = |target_id: &str| -> String {
+        format!(
+            "http://127.0.0.1:9222/devtools/devtools_app.html?panel=console&ws=127.0.0.1:9222/devtools/page/{}",
+            target_id
+        )
+    };
+
+    // Find the page target matching the browser tab's URL (skip the main app webview)
+    for target in &targets {
+        if target["type"].as_str() == Some("page") {
+            if let Some(target_url) = target["url"].as_str() {
+                if target_url.starts_with("http://localhost:1420")
+                    || target_url.starts_with("https://tauri.localhost")
+                {
+                    continue;
+                }
+                if target_url == tab_url {
+                    if let Some(id) = target["id"].as_str() {
+                        let inspector_url = make_inspector_url(id);
+                        info!("[lens] DevTools URL resolved: {}", inspector_url);
+                        return Ok(IpcResponse::ok(
+                            serde_json::json!({ "url": inspector_url }),
+                        ));
+                    }
+                }
+            }
+        }
+    }
+
+    // Fallback: pick the first non-app page target
+    for target in &targets {
+        if target["type"].as_str() == Some("page") {
+            if let Some(target_url) = target["url"].as_str() {
+                if target_url.starts_with("http://localhost:1420")
+                    || target_url.starts_with("https://tauri.localhost")
+                {
+                    continue;
+                }
+                if let Some(id) = target["id"].as_str() {
+                    let inspector_url = make_inspector_url(id);
+                    info!("[lens] DevTools URL resolved (fallback): {}", inspector_url);
+                    return Ok(IpcResponse::ok(
+                        serde_json::json!({ "url": inspector_url }),
+                    ));
+                }
+            }
+        }
+    }
+
+    Err("No page target found on remote debug port".to_string())
+}
+
+/// Open a DevTools side-panel WebView2 connected to the active browser tab.
+///
+/// The frontend passes the DevTools frontend URL (discovered via fetch to
+/// the remote debugging port). This command just creates the WebView2 using
+/// the same spawn_blocking + add_child pattern as create_tab_webview.
+#[tauri::command]
+pub async fn lens_open_devtools(
+    app: AppHandle,
+    url: String,
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+    state: tauri::State<'_, LensState>,
+) -> Result<IpcResponse, String> {
+    // If already open, just return
+    {
+        let dt = state.devtools_label.lock().map_err(|e| e.to_string())?;
+        if dt.is_some() {
+            return Ok(IpcResponse::ok(serde_json::json!({ "already_open": true })));
+        }
+    }
+
+    info!("[lens] Opening DevTools panel at ({}, {}) {}x{} url={}", x, y, width, height, url);
+
+    let parsed_url = url
+        .parse::<tauri::Url>()
+        .map_err(|e| format!("Invalid DevTools URL: {}", e))?;
+
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+    let label = format!("devtools-{}", timestamp);
+    let label_clone = label.clone();
+
+    // Use spawn_blocking + add_child — same proven pattern as create_tab_webview
+    let app_clone = app.clone();
+    let create_result = tokio::task::spawn_blocking(move || {
+        let Some(window) = app_clone.get_window("main") else {
+            return Err("Main window not found".to_string());
+        };
+
+        let builder = WebviewBuilder::new(
+            &label_clone,
+            tauri::WebviewUrl::External(parsed_url),
+        )
+        .initialization_script(DEVTOOLS_INIT_SCRIPT);
+
+        match window.add_child(
+            builder,
+            Position::Logical(LogicalPosition::new(x, y)),
+            Size::Logical(LogicalSize::new(width, height)),
+        ) {
+            Ok(_webview) => {
+                info!("[lens] DevTools panel webview created: {}", label_clone);
+                Ok(label_clone)
+            }
+            Err(e) => Err(format!("Failed to create DevTools webview: {}", e)),
+        }
+    })
+    .await
+    .map_err(|e| format!("Spawn blocking failed: {}", e))?
+    .map_err(|e| e)?;
+
+    // Store the label
+    {
+        let mut dt = state.devtools_label.lock().map_err(|e| e.to_string())?;
+        *dt = Some(create_result.clone());
+    }
+
+    info!("[lens] DevTools panel opened: {}", create_result);
+
+    Ok(IpcResponse::ok(serde_json::json!({ "opened": true })))
+}
+
+/// Close the DevTools side-panel WebView2.
+#[tauri::command]
+pub fn lens_close_devtools(
+    app: AppHandle,
+    state: tauri::State<'_, LensState>,
+) -> IpcResponse {
+    let label = {
+        let mut dt = match state.devtools_label.lock() {
+            Ok(g) => g,
+            Err(e) => return IpcResponse::err(format!("Lock error: {}", e)),
+        };
+        dt.take()
+    };
+
+    if let Some(label) = label {
+        if let Some(webview) = app.get_webview(&label) {
+            let _ = webview.close();
+        }
+        IpcResponse::ok_empty()
+    } else {
+        IpcResponse::ok_empty()
+    }
+}
+
+/// Reposition and resize the DevTools side-panel WebView2.
+#[tauri::command]
+pub fn lens_resize_devtools(
+    app: AppHandle,
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+    state: tauri::State<'_, LensState>,
+) -> IpcResponse {
+    let label = {
+        let dt = match state.devtools_label.lock() {
+            Ok(g) => g,
+            Err(e) => return IpcResponse::err(format!("Lock error: {}", e)),
+        };
+        match dt.as_ref() {
+            Some(l) => l.clone(),
+            None => return IpcResponse::err("No DevTools panel open"),
+        }
+    };
+
+    if let Some(webview) = app.get_webview(&label) {
+        let _ = webview.set_position(Position::Logical(LogicalPosition::new(x, y)));
+        let _ = webview.set_size(Size::Logical(LogicalSize::new(width, height)));
+        IpcResponse::ok_empty()
+    } else {
+        IpcResponse::err("DevTools webview not found")
+    }
+}
+
+/// Show or hide the DevTools side-panel WebView2.
+#[tauri::command]
+pub fn lens_set_devtools_visible(
+    app: AppHandle,
+    visible: bool,
+    state: tauri::State<'_, LensState>,
+) -> IpcResponse {
+    let label = {
+        let dt = match state.devtools_label.lock() {
+            Ok(g) => g,
+            Err(e) => return IpcResponse::err(format!("Lock error: {}", e)),
+        };
+        match dt.as_ref() {
+            Some(l) => l.clone(),
+            None => return IpcResponse::ok_empty(),
+        }
+    };
+
+    if let Some(webview) = app.get_webview(&label) {
+        if visible {
+            let _ = webview.show();
+        } else {
+            let _ = webview.hide();
+        }
+    }
+    IpcResponse::ok_empty()
 }
 
 // ---------------------------------------------------------------------------
@@ -1727,7 +2011,10 @@ pub fn lens_find_on_page(
     query: String,
     state: tauri::State<'_, LensState>,
 ) -> IpcResponse {
-    let tabs = state.tabs.lock().unwrap();
+    let tabs = match state.tabs.lock() {
+        Ok(g) => g,
+        Err(e) => return IpcResponse::err(format!("tabs mutex poisoned: {e}")),
+    };
     let tab = match tabs.get(&tab_id) {
         Some(t) => t,
         None => return IpcResponse::err("Tab not found"),
@@ -1785,7 +2072,10 @@ pub fn lens_eval_tab_js(
     js: String,
     state: tauri::State<'_, LensState>,
 ) -> IpcResponse {
-    let tabs = state.tabs.lock().unwrap();
+    let tabs = match state.tabs.lock() {
+        Ok(g) => g,
+        Err(e) => return IpcResponse::err(format!("tabs mutex poisoned: {e}")),
+    };
     let tab = match tabs.get(&tab_id) {
         Some(t) => t,
         None => return IpcResponse::err("Tab not found"),
@@ -1811,7 +2101,10 @@ pub fn lens_find_next(
     query: String,
     state: tauri::State<'_, LensState>,
 ) -> IpcResponse {
-    let tabs = state.tabs.lock().unwrap();
+    let tabs = match state.tabs.lock() {
+        Ok(g) => g,
+        Err(e) => return IpcResponse::err(format!("tabs mutex poisoned: {e}")),
+    };
     let tab = match tabs.get(&tab_id) {
         Some(t) => t,
         None => return IpcResponse::err("Tab not found"),
@@ -1868,7 +2161,10 @@ pub fn lens_find_previous(
     query: String,
     state: tauri::State<'_, LensState>,
 ) -> IpcResponse {
-    let tabs = state.tabs.lock().unwrap();
+    let tabs = match state.tabs.lock() {
+        Ok(g) => g,
+        Err(e) => return IpcResponse::err(format!("tabs mutex poisoned: {e}")),
+    };
     let tab = match tabs.get(&tab_id) {
         Some(t) => t,
         None => return IpcResponse::err("Tab not found"),
@@ -1925,7 +2221,10 @@ pub fn lens_close_find(
     tab_id: String,
     state: tauri::State<'_, LensState>,
 ) -> IpcResponse {
-    let tabs = state.tabs.lock().unwrap();
+    let tabs = match state.tabs.lock() {
+        Ok(g) => g,
+        Err(e) => return IpcResponse::err(format!("tabs mutex poisoned: {e}")),
+    };
     let tab = match tabs.get(&tab_id) {
         Some(t) => t,
         None => return IpcResponse::err("Tab not found"),
@@ -2039,7 +2338,10 @@ pub fn lens_delete_history_entry(timestamp: u128) -> IpcResponse {
 pub fn lens_get_downloads(
     state: tauri::State<'_, LensState>,
 ) -> IpcResponse {
-    let downloads = state.downloads.lock().unwrap();
+    let downloads = match state.downloads.lock() {
+        Ok(g) => g,
+        Err(e) => return IpcResponse::err(format!("downloads mutex poisoned: {e}")),
+    };
     IpcResponse::ok(serde_json::json!({ "downloads": downloads.clone() }))
 }
 
@@ -2049,14 +2351,31 @@ pub fn lens_get_downloads(
 pub fn lens_clear_downloads(
     state: tauri::State<'_, LensState>,
 ) -> IpcResponse {
-    let mut downloads = state.downloads.lock().unwrap();
+    let mut downloads = match state.downloads.lock() {
+        Ok(g) => g,
+        Err(e) => return IpcResponse::err(format!("downloads mutex poisoned: {e}")),
+    };
     downloads.retain(|d| d.state == "downloading");
     IpcResponse::ok_empty()
 }
 
 /// Open a downloaded file with the OS default handler.
+/// Validates that the path exists in the tracked downloads list to prevent
+/// arbitrary file execution.
 #[tauri::command]
-pub fn lens_open_download(path: String) -> IpcResponse {
+pub fn lens_open_download(
+    path: String,
+    state: tauri::State<'_, LensState>,
+) -> IpcResponse {
+    let downloads = match state.downloads.lock() {
+        Ok(g) => g,
+        Err(e) => return IpcResponse::err(format!("downloads mutex poisoned: {e}")),
+    };
+    let found = downloads.iter().any(|d| d.path == path);
+    if !found {
+        return IpcResponse::err("Path not found in downloads list".to_string());
+    }
+    drop(downloads);
     if let Err(e) = opener::open(&path) {
         return IpcResponse::err(format!("Failed to open: {}", e));
     }
@@ -2064,12 +2383,16 @@ pub fn lens_open_download(path: String) -> IpcResponse {
 }
 
 /// Open the folder containing a downloaded file.
+/// Validates that the resolved parent directory exists on disk.
 #[tauri::command]
 pub fn lens_open_download_folder(path: String) -> IpcResponse {
     let parent = std::path::Path::new(&path)
         .parent()
         .map(|p| p.to_string_lossy().to_string())
         .unwrap_or_default();
+    if parent.is_empty() || !std::path::Path::new(&parent).is_dir() {
+        return IpcResponse::err("Directory does not exist".to_string());
+    }
     if let Err(e) = opener::open(&parent) {
         return IpcResponse::err(format!("Failed to open folder: {}", e));
     }

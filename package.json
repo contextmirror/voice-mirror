@@ -9,7 +9,7 @@
     "predev": "taskkill /F /IM voice-mirror-mcp.exe >nul 2>&1 & exit /b 0",
     "dev": "cargo build --manifest-path src-tauri/Cargo.toml --bin voice-mirror-mcp && tauri dev",
     "build": "cargo build --manifest-path src-tauri/Cargo.toml --release --bin voice-mirror-mcp && tauri build",
-    "preview": "vite preview",
+    "preview": "npx vite build && start \"vite-preview\" /B npx vite preview --port 1420 && timeout /T 2 /NOBREAK >nul && cargo run --manifest-path src-tauri/Cargo.toml --features native-ml,cuda",
     "check": "svelte-check --tsconfig ./jsconfig.json",
     "test": "node --test \"test/**/*.test.cjs\" \"test/**/*.test.mjs\"",
     "test:rust": "cd src-tauri && cargo test",
@@ -46,6 +46,7 @@
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^5.0.0",
     "@tauri-apps/cli": "^2.0.0",
+    "rollup-plugin-visualizer": "^7.0.1",
     "svelte": "^5.0.0",
     "svelte-check": "^4.0.0",
     "vite": "^6.0.0"

@@ -77,6 +77,8 @@
         data-path={entry.path}
         style="padding-left: {8 + depth * 16}px"
         draggable="true"
+        role="treeitem"
+        aria-expanded={isExpanded}
         onclick={() => onToggle(entry)}
         oncontextmenu={(e) => onContextMenu(e, entry, true, false)}
         ondragstart={(e) => handleFileDragStart(e, entry)}
@@ -165,6 +167,7 @@
         data-path={entry.path}
         style="padding-left: {8 + depth * 16 + 18}px"
         draggable="true"
+        role="treeitem"
         onclick={() => onFileClick(entry)}
         ondblclick={() => onFileDblClick(entry)}
         oncontextmenu={(e) => onContextMenu(e, entry, false, false)}

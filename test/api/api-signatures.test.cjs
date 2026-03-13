@@ -107,6 +107,9 @@ describe('api.js -- critical Tauri command names', () => {
     'lens_set_visible',
     'lens_hard_refresh',
     'lens_clear_cache',
+    // DevTools
+    'lens_find_devtools_url',
+    'lens_open_devtools',
     // Browser Tabs
     'lens_create_tab',
     'lens_close_tab',
@@ -191,6 +194,9 @@ describe('api.js -- critical Tauri command names', () => {
     'lsp_request_supertypes',
     'lsp_request_subtypes',
     'lsp_request_selection_range',
+    // Workspace State
+    'save_workspace_state',
+    'load_workspace_state',
   ];
 
   for (const cmd of criticalCommands) {
@@ -209,10 +215,14 @@ describe('api.js -- exported async functions', () => {
     'getConfig',
     'setConfig',
     'resetConfig',
+    'getPlatformInfo',
     // Window
     'getWindowPosition',
     'setWindowPosition',
     'minimizeWindow',
+    'maximizeWindow',
+    'saveWindowBounds',
+    'quitApp',
     'setWindowSize',
     'setAlwaysOnTop',
     'setResizable',
@@ -226,6 +236,7 @@ describe('api.js -- exported async functions', () => {
     'setVoiceMode',
     'listAudioDevices',
     'speakText',
+    'stopSpeaking',
     'pttPress',
     'pttRelease',
     'configurePttKey',
@@ -234,6 +245,8 @@ describe('api.js -- exported async functions', () => {
     // AI
     'startAI',
     'stopAI',
+    'interruptAI',
+    'getProvider',
     'getAIStatus',
     'aiPtyInput',
     'aiRawInput',
@@ -252,22 +265,27 @@ describe('api.js -- exported async functions', () => {
     'chatRename',
     'exportChatToFile',
     // Screenshot
+    'takeScreenshot',
     'listMonitors',
     'listWindows',
     'captureMonitor',
     'captureWindow',
     'lensCapturePreview',
     // Tools
+    'scanCliTools',
     'checkNpmVersions',
     'updateNpmPackage',
     // Shortcuts
     'registerShortcut',
     'unregisterShortcut',
     'unregisterAllShortcuts',
+    'listShortcuts',
     // Performance Stats
     'getProcessStats',
     // Migration
     // Lens
+    'lensCreateWebview',
+    'lensCloseWebview',
     'lensNavigate',
     'lensGoBack',
     'lensGoForward',
@@ -278,7 +296,9 @@ describe('api.js -- exported async functions', () => {
     'lensClearCache',
     // Design Overlay
     'designCommand',
+    'designExpandTreeNode',
     'designGetElement',
+    'designSelectByTreeId',
     // Browser Tabs
     'lensCreateTab',
     'lensCloseTab',
@@ -286,6 +306,11 @@ describe('api.js -- exported async functions', () => {
     'lensCloseAllTabs',
     'lensSetZoom',
     'lensGetZoom',
+    'lensOpenDevtools',
+    'findDevtoolsUrl',
+    'lensCloseDevtools',
+    'lensResizeDevtools',
+    'lensSetDevtoolsVisible',
     'lensEvalTabJs',
     'lensFindOnPage',
     'lensFindNext',
@@ -307,6 +332,7 @@ describe('api.js -- exported async functions', () => {
     'probePort',
     'killPortProcess',
     // Files
+    'getProjectRoot',
     'listDirectory',
     'getGitChanges',
     'readFile',
@@ -348,6 +374,7 @@ describe('api.js -- exported async functions', () => {
     'terminalResize',
     'terminalKill',
     'terminalDetectProfiles',
+    'terminalList',
     // LSP
     'lspOpenFile',
     'lspCloseFile',
@@ -411,6 +438,13 @@ describe('api.js -- exported async functions', () => {
     'lensClearDownloads',
     'lensOpenDownload',
     'lensOpenDownloadFolder',
+    // Project icon management
+    'saveProjectIcon',
+    'removeProjectIcon',
+    'loadProjectIcons',
+    // Workspace State
+    'saveWorkspaceState',
+    'loadWorkspaceState',
   ];
 
   for (const fn of expectedExports) {
@@ -434,7 +468,7 @@ describe('api.js -- exported async functions', () => {
 });
 
 describe('api.js -- section organization', () => {
-  const sections = ['Config', 'Window', 'Voice', 'AI', 'Inbox', 'Chat', 'Screenshot', 'Tools', 'Shortcuts', 'Performance Stats', 'Config Migration', 'Design Overlay', 'Lens', 'Browser Tabs', 'Browser History', 'Downloads', 'Dev Server', 'GPU / Model Management', 'Files', 'Terminal', 'LSP', 'Project Output Channels', 'Output / Diagnostics'];
+  const sections = ['Config', 'Window', 'Voice', 'AI', 'Inbox', 'Chat', 'Screenshot', 'Tools', 'Shortcuts', 'Performance Stats', 'Config Migration', 'Design Overlay', 'Lens', 'Browser Tabs', 'Browser History', 'Downloads', 'Dev Server', 'GPU / Model Management', 'Files', 'Terminal', 'LSP', 'Project Output Channels', 'Output / Diagnostics', 'Workspace State'];
 
   for (const section of sections) {
     it(`has "${section}" section comment`, () => {

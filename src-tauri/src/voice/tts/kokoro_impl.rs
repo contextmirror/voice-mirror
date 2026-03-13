@@ -117,7 +117,10 @@ mod inner {
 
         /// Change the active voice.
         pub fn set_voice(&mut self, voice: &str) {
-            *self.voice.lock().unwrap() = voice.to_string();
+            match self.voice.lock() {
+                Ok(mut g) => *g = voice.to_string(),
+                Err(e) => warn!("voice mutex poisoned in set_voice: {e}"),
+            }
         }
 
         /// Change the playback speed.
@@ -251,7 +254,9 @@ mod inner {
                 TtsError::SynthesisError(format!("ONNX speed tensor failed: {}", e))
             })?;
 
-            let mut session = self.session.lock().unwrap();
+            let mut session = self.session.lock().map_err(|e| {
+                TtsError::SynthesisError(format!("session mutex poisoned: {e}"))
+            })?;
             let outputs = session
                 .run(ort::inputs! {
                     "tokens" => input_ids,
@@ -290,7 +295,9 @@ mod inner {
                     return Ok(Vec::new());
                 }
 
-                let voice_name = self.voice.lock().unwrap().clone();
+                let voice_name = self.voice.lock()
+                    .map_err(|e| TtsError::SynthesisError(format!("voice mutex poisoned: {e}")))?
+                    .clone();
 
                 let voice_data = self.voices.get(&voice_name).ok_or_else(|| {
                     TtsError::SynthesisError(format!("Unknown Kokoro voice: {}", voice_name))
@@ -364,7 +371,10 @@ mod inner {
         }
 
         fn name(&self) -> String {
-            let voice = self.voice.lock().unwrap();
+            let voice = match self.voice.lock() {
+                Ok(g) => g.clone(),
+                Err(_) => "unknown".to_string(),
+            };
             format!("Kokoro ({})", voice)
         }
 

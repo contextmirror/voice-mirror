@@ -194,10 +194,34 @@
     close();
   }
 
+  let modalEl = $state(null);
+
   function handleKeydown(e) {
     if (e.key === 'Escape') {
       e.preventDefault();
       close();
+      return;
+    }
+    // Focus trap: wrap Tab/Shift+Tab within the modal
+    if (e.key === 'Tab' && modalEl) {
+      const focusable = modalEl.querySelectorAll(
+        'input, button, [tabindex]:not([tabindex="-1"]), select, textarea, a[href]'
+      );
+      if (focusable.length > 0) {
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (e.shiftKey) {
+          if (document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+          }
+        } else {
+          if (document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+          }
+        }
+      }
       return;
     }
     if (e.key === 'ArrowDown') {
@@ -338,7 +362,7 @@
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="backdrop" onmousedown={handleBackdropClick}>
     <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div class="modal" style="-webkit-app-region: no-drag" onkeydown={handleKeydown}>
+    <div class="modal" style="-webkit-app-region: no-drag" onkeydown={handleKeydown} bind:this={modalEl} role="dialog" aria-modal="true" aria-label="Command palette">
       <div class="search-row">
         {#if mode !== 'files'}
           <span class="mode-pill">{query.charAt(0)}</span>

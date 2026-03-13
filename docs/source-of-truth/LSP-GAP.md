@@ -142,15 +142,15 @@ VS Code remaps 8 "style check" diagnostic codes from Error → Warning. This is 
 | Range formatting | `textDocument/rangeFormatting` | Full | Full (Shift+Alt+F + context menu) | ✅ | ✅ |
 | On-type formatting | `textDocument/onTypeFormatting` | Full | Full (+ CM ViewPlugin, triggers: `;` `}` `\n`) | ✅ | ✅ |
 | Linked editing | `textDocument/linkedEditingRange` | Full | Full (+ CM transactionFilter) | ✅ | ✅ |
-| Selection range | `textDocument/selectionRange` | Full | Full | ✅ | |
+| Selection range | `textDocument/selectionRange` | Full | Full | ✅ | ✅ |
 
 ### Visual Enhancements
 
 | Feature | LSP Method | VS Code | Voice Mirror | Impl | Tested |
 |---------|-----------|---------|-------------|:----:|:------:|
 | Semantic tokens | `textDocument/semanticTokens` | Full (delta encoding) | Full (+ CM extension, 10 token types) | ✅ | |
-| Document colors | `textDocument/documentColor` | Full (color picker) | Full (+ CM swatch widget) | ✅ | |
-| Folding ranges | `textDocument/foldingRange` | Full (kind support) | Full (+ CM foldService) | ✅ | |
+| Document colors | `textDocument/documentColor` | Full (color picker) | Full (+ CM swatch widget) | ✅ | ✅ |
+| Folding ranges | `textDocument/foldingRange` | Full (kind support) | Full (+ CM foldService) | ✅ | ✅ |
 
 ### Infrastructure
 
@@ -175,7 +175,7 @@ VS Code remaps 8 "style check" diagnostic codes from Error → Warning. This is 
 | Navigation Tier 1 (5) | 5/5 | 5/5 | 5/5 | 5/5 |
 | Navigation Tier 2 (6) | 6/6 | 6/6 | 6/6 | 3/6 ⏭️3 |
 | Inline Assistance (3) | 3/3 | 3/3 | 3/3 | 3/3 |
-| Formatting & Editing (5) | 5/5 | 5/5 | 5/5 | 4/5 |
+| Formatting & Editing (5) | 5/5 | 5/5 | 5/5 | 5/5 |
 | Visual (3) | 3/3 | 3/3 | 3/3 | 0/3 |
 | Infrastructure (10) | 10/10 | 10/10 | 10/10 | 0/10 |
 | **Total** | **37/37** | **37/37** | **37/37** | **20/37** |

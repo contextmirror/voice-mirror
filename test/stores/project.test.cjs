@@ -242,14 +242,14 @@ describe('project: removeProject behavior', () => {
 // ============ Imports ============
 
 describe('project: imports', () => {
-  it('imports updateConfig from config store', () => {
-    assert.ok(src.includes('updateConfig'), 'Should import updateConfig');
+  it('imports setConfig from api for direct persistence', () => {
+    assert.ok(src.includes('setConfig'), 'Should import setConfig');
   });
 
-  it('imports from ./config.svelte.js', () => {
+  it('imports from ../api.js', () => {
     assert.ok(
-      src.includes("'./config.svelte.js'") || src.includes('"./config.svelte.js"'),
-      'Should import from ./config.svelte.js'
+      src.includes("'../api.js'") || src.includes('"../api.js"'),
+      'Should import from ../api.js'
     );
   });
 
@@ -311,15 +311,26 @@ describe('project: loadSessions behavior', () => {
 // ============ _persist behavior ============
 
 describe('project: _persist behavior', () => {
-  it('calls updateConfig with projects data', () => {
+  it('calls setConfig directly to avoid reactive cascade', () => {
     assert.ok(
-      src.includes('updateConfig(') && src.includes('projects:'),
-      'Should persist projects via updateConfig'
+      src.includes('setConfig(') && src.includes('projects:'),
+      'Should persist projects via setConfig (not updateConfig) to avoid config store cascade'
     );
   });
 
   it('persists entries and activeIndex', () => {
     assert.ok(src.includes('entries,') || src.includes('entries'), 'Should persist entries');
     assert.ok(src.includes('activeIndex'), 'Should persist activeIndex');
+  });
+
+  it('debounces persist calls to batch rapid-fire updates', () => {
+    assert.ok(src.includes('clearTimeout(persistTimer)'), 'Should clear previous persist timer');
+    assert.ok(src.includes('persistTimer = setTimeout'), 'Should use setTimeout for debounce');
+  });
+
+  it('does not import updateConfig (avoids configStore cascade)', () => {
+    // updateConfig() replaces configStore.value which re-triggers all config effects
+    const importLine = src.match(/import\s*\{[^}]*updateConfig[^}]*\}/);
+    assert.ok(!importLine, 'Should NOT import updateConfig — use setConfig directly');
   });
 });

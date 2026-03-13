@@ -577,6 +577,87 @@ function createTabsStore() {
       }
       return true;
     },
+
+    /**
+     * Update metadata on a tab (cursor, scroll) — used by FileEditor for state capture.
+     * @param {string} tabId
+     * @param {{ cursor?: { line: number, col: number }, scroll?: { top: number } }} meta
+     */
+    updateTabMeta(tabId, meta) {
+      const tab = tabs.find(t => t.id === tabId);
+      if (tab) {
+        if (meta.cursor) tab.cursor = meta.cursor;
+        if (meta.scroll) tab.scroll = meta.scroll;
+      }
+    },
+
+    /**
+     * Serialize open tabs for workspace state persistence.
+     * Only file tabs are persisted (excludes diff and untitled tabs).
+     * @returns {Array<Object>}
+     */
+    serialize() {
+      return tabs
+        .filter(t => t.type === 'file' && !t.path.startsWith('untitled:'))
+        .map(t => ({
+          type: t.type,
+          path: t.path,
+          groupId: t.groupId,
+          pinned: !t.preview,
+          preview: t.preview || false,
+          cursor: t.cursor || null,
+          scroll: t.scroll || null,
+        }));
+    },
+
+    /**
+     * Restore tabs from persisted workspace state.
+     * Must be called AFTER editorGroupsStore.restore() so groups exist.
+     * @param {Array<Object>} tabsData - Serialized tab array
+     */
+    restore(tabsData) {
+      if (!Array.isArray(tabsData) || tabsData.length === 0) {
+        tabs.length = 0;
+        activeTabId = null;
+        return;
+      }
+
+      tabs.length = 0;
+      activeTabId = null;
+
+      for (const t of tabsData) {
+        if (!t.path || t.path.startsWith('untitled:')) continue;
+        const groupId = t.groupId || 1;
+        const tabId = groupId === 1 ? t.path : `${t.path}:g${groupId}`;
+        tabs.push({
+          id: tabId,
+          type: 'file',
+          title: basename(t.path),
+          path: t.path,
+          groupId,
+          preview: t.preview || false,
+          dirty: false,
+          readOnly: false,
+          external: false,
+          cursor: t.cursor || null,
+          scroll: t.scroll || null,
+        });
+      }
+    },
+
+    /**
+     * Set the active tab by ID without audit logging (for restore).
+     * @param {string} id
+     */
+    setActiveQuiet(id) {
+      const tab = tabs.find(t => t.id === id);
+      if (tab) {
+        activeTabId = id;
+        editorGroupsStore.setActiveTabForGroup(tab.groupId, id);
+        editorGroupsStore.setFocusedGroup(tab.groupId);
+      }
+    },
+
   };
 }
 
