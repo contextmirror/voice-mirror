@@ -1233,7 +1233,15 @@ fn detect_python_servers(
         let install_cmd = if source == "pyproject.toml" {
             format!("{} install --prefer-binary -e .", pip_path)
         } else {
-            format!("{} install --prefer-binary -r requirements.txt", pip_path)
+            // Try full install first; on failure (e.g. scipy can't build from source),
+            // fall back to installing each package individually so the rest still get installed.
+            format!(
+                "{pip} install --prefer-binary -r requirements.txt || \
+                 (echo '[setup] Full install failed, retrying packages individually...' && \
+                 grep -vE '^\\s*(#|$|-)' requirements.txt | \
+                 xargs -L1 {pip} install --prefer-binary 2>/dev/null; true)",
+                pip = pip_path
+            )
         };
 
         let mut cmds = Vec::new();
@@ -2161,6 +2169,43 @@ mod tests {
             assert!(cmds[0].starts_with("python3 "), "Unix should use 'python3'");
             assert!(cmds[1].contains(".venv/bin/pip"), "Unix pip path should use forward slashes");
         }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_requirements_txt_has_per_package_fallback() {
+        let dir = std::env::temp_dir().join("vm_test_py_fallback");
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::create_dir_all(&dir);
+        std::fs::write(dir.join("requirements.txt"), "flask==2.0\nscipy\n").unwrap();
+        std::fs::write(dir.join("app.py"), "from flask import Flask\n").unwrap();
+
+        let mut seen = std::collections::HashSet::new();
+        let servers = detect_python_servers(&dir, &mut seen);
+        assert_eq!(servers.len(), 1);
+        let install_cmd = &servers[0].setup_commands.last().unwrap();
+        // Should try full install first
+        assert!(install_cmd.contains("-r requirements.txt"), "Should try full install first");
+        // Should have per-package fallback with xargs
+        assert!(install_cmd.contains("xargs -L1"), "Should fall back to per-package install");
+        assert!(install_cmd.contains("|| ("), "Should use || for fallback");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_pyproject_toml_no_per_package_fallback() {
+        let dir = std::env::temp_dir().join("vm_test_py_no_fallback");
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::create_dir_all(&dir);
+        std::fs::write(dir.join("pyproject.toml"), "[project]\ndependencies = [\"flask\"]\n").unwrap();
+        std::fs::write(dir.join("app.py"), "from flask import Flask\n").unwrap();
+
+        let mut seen = std::collections::HashSet::new();
+        let servers = detect_python_servers(&dir, &mut seen);
+        assert_eq!(servers.len(), 1);
+        let install_cmd = &servers[0].setup_commands.last().unwrap();
+        assert!(install_cmd.contains("-e ."), "Should use editable install");
+        assert!(!install_cmd.contains("xargs"), "pyproject.toml should NOT have per-package fallback");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

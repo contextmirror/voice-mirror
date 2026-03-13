@@ -15,6 +15,7 @@ import { outputStore } from './output.svelte.js';
 // -- Constants --
 const POLL_INTERVAL = 500;
 const POLL_TIMEOUT = 30000;
+const SETUP_POLL_TIMEOUT = 300000; // 5 minutes for projects needing pip install
 const IDLE_TIMEOUT = 300000; // 5 minutes
 const MAX_CONCURRENT = 3;
 const CRASH_LOOP_COUNT = 3;
@@ -118,7 +119,7 @@ function createDevServerManager() {
    * @param {string} projectPath
    * @returns {Promise<boolean>}
    */
-  function pollPort(port, projectPath) {
+  function pollPort(port, projectPath, timeout = POLL_TIMEOUT) {
     return new Promise((resolve, reject) => {
       const startTime = Date.now();
       const interval = setInterval(async () => {
@@ -134,7 +135,7 @@ function createDevServerManager() {
           // Port not ready yet, keep polling
         }
 
-        if (Date.now() - startTime >= POLL_TIMEOUT) {
+        if (Date.now() - startTime >= timeout) {
           clearInterval(interval);
           pollTimers.delete(projectPath);
           resolve(false);
@@ -278,9 +279,11 @@ function createDevServerManager() {
       }
 
       // Poll port (may be cancelled via cancelPoll)
+      // Use longer timeout when setup commands are present (pip install can take minutes)
+      const hasSetup = server.setupCommands && server.setupCommands.length > 0;
       let ready = false;
       try {
-        ready = await pollPort(server.port, projectPath);
+        ready = await pollPort(server.port, projectPath, hasSetup ? SETUP_POLL_TIMEOUT : POLL_TIMEOUT);
       } catch (err) {
         if (err?.message === 'cancelled') return;
         throw err;
@@ -297,8 +300,10 @@ function createDevServerManager() {
         // Timeout -- don't kill, let user check terminal
         updateState(projectPath, { status: 'running', lastActiveTime: Date.now() });
         toastStore.addToast({
-          message: "Server didn't start — check terminal",
-          severity: 'error',
+          message: hasSetup
+            ? "Setup may still be running — check terminal"
+            : "Server didn't start — check terminal",
+          severity: hasSetup ? 'warning' : 'error',
         });
       }
     } catch (err) {
@@ -582,6 +587,7 @@ function createDevServerManager() {
     // Exposed for testing
     POLL_INTERVAL,
     POLL_TIMEOUT,
+    SETUP_POLL_TIMEOUT,
     IDLE_TIMEOUT,
     MAX_CONCURRENT,
     CRASH_LOOP_COUNT,
@@ -594,6 +600,7 @@ export const devServerManager = createDevServerManager();
 export {
   POLL_INTERVAL,
   POLL_TIMEOUT,
+  SETUP_POLL_TIMEOUT,
   IDLE_TIMEOUT,
   MAX_CONCURRENT,
   CRASH_LOOP_COUNT,
