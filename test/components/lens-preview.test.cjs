@@ -133,3 +133,21 @@ describe('LensPreview.svelte: dev server detection', () => {
     assert.ok(src.includes('devServerManager'), 'Should import devServerManager');
   });
 });
+
+describe('LensPreview.svelte: venv auto-setup toast', () => {
+  it('checks needsSetup flag on stopped server', () => {
+    assert.ok(src.includes('needsSetup'), 'Should check needsSetup on stopped server');
+  });
+
+  it('shows setup toast when needsSetup is true', () => {
+    assert.ok(
+      src.includes('Set up & start'),
+      'Should show "Set up & start" action for setup toast'
+    );
+  });
+
+  it('shows normal toast when needsSetup is false', () => {
+    assert.ok(src.includes('Always start'), 'Should still have Always start for normal servers');
+    assert.ok(src.includes('Start once'), 'Should still have Start once for normal servers');
+  });
+});
