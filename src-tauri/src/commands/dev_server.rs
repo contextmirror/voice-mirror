@@ -14,39 +14,44 @@ use crate::services::dev_server;
 /// for known framework patterns (Vite, Next.js, CRA, Angular, SvelteKit, Tauri).
 /// Also probes each detected port to see if a server is currently running.
 #[tauri::command]
-pub fn detect_dev_servers(project_root: String) -> IpcResponse {
-    let servers = dev_server::detect_dev_servers(&project_root);
-    let pkg_manager = dev_server::detect_package_manager(&project_root);
+pub async fn detect_dev_servers(project_root: String) -> IpcResponse {
+    tokio::task::spawn_blocking(move || {
+        let servers = dev_server::detect_dev_servers(&project_root);
+        let pkg_manager = dev_server::detect_package_manager(&project_root);
 
-    tracing::info!(
-        "[dev-server] detect_dev_servers root={} found={} pkg_manager={}",
-        project_root,
-        servers.len(),
-        pkg_manager
-    );
-    for s in &servers {
         tracing::info!(
-            "[dev-server]   {} :{} running={} source={}",
-            s.framework, s.port, s.running, s.source
+            "[dev-server] detect_dev_servers root={} found={} pkg_manager={}",
+            project_root,
+            servers.len(),
+            pkg_manager
         );
-    }
+        for s in &servers {
+            tracing::info!(
+                "[dev-server]   {} :{} running={} source={}",
+                s.framework, s.port, s.running, s.source
+            );
+        }
 
-    IpcResponse::ok(serde_json::json!({
-        "servers": servers,
-        "packageManager": pkg_manager,
-    }))
+        IpcResponse::ok(serde_json::json!({
+            "servers": servers,
+            "packageManager": pkg_manager,
+        }))
+    })
+    .await
+    .unwrap_or_else(|e| IpcResponse::err(format!("Detection failed: {}", e)))
 }
 
 /// Check if a specific port is accepting TCP connections on localhost.
 ///
 /// Returns `{ listening: true/false }`.
 #[tauri::command]
-pub fn probe_port(port: u16) -> IpcResponse {
-    let listening = dev_server::is_port_listening(port);
-
-    IpcResponse::ok(serde_json::json!({
-        "listening": listening,
-    }))
+pub async fn probe_port(port: u16) -> IpcResponse {
+    tokio::task::spawn_blocking(move || {
+        let listening = dev_server::is_port_listening(port);
+        IpcResponse::ok(serde_json::json!({ "listening": listening }))
+    })
+    .await
+    .unwrap_or_else(|e| IpcResponse::err(format!("Port probe failed: {}", e)))
 }
 
 /// Kill the process listening on a specific port.
@@ -54,36 +59,37 @@ pub fn probe_port(port: u16) -> IpcResponse {
 /// Uses platform-specific commands (netstat+taskkill on Windows, lsof+kill on Unix).
 /// Returns `{ killed: true }` on success.
 #[tauri::command]
-pub fn kill_port_process(port: u16) -> IpcResponse {
-    tracing::info!("[dev-server] kill_port_process port={}", port);
-
-    match dev_server::kill_port_process(port) {
-        Ok(()) => IpcResponse::ok(serde_json::json!({
-            "killed": true,
-        })),
-        Err(e) => {
-            tracing::warn!("[dev-server] kill_port_process failed: {}", e);
-            IpcResponse::err(&e)
+pub async fn kill_port_process(port: u16) -> IpcResponse {
+    tokio::task::spawn_blocking(move || {
+        tracing::info!("[dev-server] kill_port_process port={}", port);
+        match dev_server::kill_port_process(port) {
+            Ok(()) => IpcResponse::ok(serde_json::json!({ "killed": true })),
+            Err(e) => {
+                tracing::warn!("[dev-server] kill_port_process failed: {}", e);
+                IpcResponse::err(&e)
+            }
         }
-    }
+    })
+    .await
+    .unwrap_or_else(|e| IpcResponse::err(format!("Kill failed: {}", e)))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_detect_dev_servers_empty_dir() {
-        let resp = detect_dev_servers("/nonexistent/path".to_string());
+    #[tokio::test]
+    async fn test_detect_dev_servers_empty_dir() {
+        let resp = detect_dev_servers("/nonexistent/path".to_string()).await;
         assert!(resp.success);
         let data = resp.data.unwrap();
         assert!(data["servers"].as_array().unwrap().is_empty());
         assert_eq!(data["packageManager"].as_str().unwrap(), "npm");
     }
 
-    #[test]
-    fn test_probe_port_closed() {
-        let resp = probe_port(1);
+    #[tokio::test]
+    async fn test_probe_port_closed() {
+        let resp = probe_port(1).await;
         assert!(resp.success);
         assert!(!resp.data.unwrap()["listening"].as_bool().unwrap());
     }
