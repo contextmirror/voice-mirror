@@ -24,6 +24,10 @@
     var _selectedElement = null;
     var _selectTooltip = null;
 
+    // Shortcut base URL — always use https: variant on Windows (WebView2 filter
+    // is registered for https://lens-shortcut.localhost/* only).
+    var _shortcutBase = 'https://lens-shortcut.localhost/';
+
     // --- DOM tree serialization state ---
     var _treeIdCounter = 0;
 
@@ -1087,8 +1091,7 @@
 
         _selectedElement = _serializeElement(_hoveredEl);
         try {
-            var shortcutBase = location.protocol === 'https:' ? 'https://lens-shortcut.localhost/' : 'lens-shortcut://localhost/';
-            (new Image()).src = shortcutBase + 'element-selected?t=' + Date.now();
+            (new Image()).src = _shortcutBase + 'element-selected?t=' + Date.now();
         } catch (err) {}
         _drawElementHighlight(_hoveredEl);
         _removeSelectTooltip();
@@ -1118,8 +1121,7 @@
         _selectedElement = null;
         _hoveredEl = null;
         try {
-            var shortcutBase = location.protocol === 'https:' ? 'https://lens-shortcut.localhost/' : 'lens-shortcut://localhost/';
-            (new Image()).src = shortcutBase + 'element-deselected?t=' + Date.now();
+            (new Image()).src = _shortcutBase + 'element-deselected?t=' + Date.now();
         } catch (err) {}
         _removeSelectTooltip();
         _redrawAll();
@@ -1129,8 +1131,7 @@
         _selectMode = false;
         if (_selectedElement) {
             try {
-                var shortcutBase = location.protocol === 'https:' ? 'https://lens-shortcut.localhost/' : 'lens-shortcut://localhost/';
-                (new Image()).src = shortcutBase + 'element-deselected?t=' + Date.now();
+                (new Image()).src = _shortcutBase + 'element-deselected?t=' + Date.now();
             } catch (err) {}
         }
         _cancelSelect();
