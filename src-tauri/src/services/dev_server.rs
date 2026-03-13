@@ -1037,7 +1037,7 @@ fn read_conda_env_name_from_content(content: &str) -> Option<String> {
 /// venv's executables directly (works in cmd.exe, PowerShell, and bash).
 ///
 /// Returns:
-/// - `.venv\Scripts\` or `.venv/bin/` for venv directories
+/// - `.venv/Scripts/` or `.venv/bin/` for venv directories (forward slashes on Windows for Git Bash)
 /// - `conda run -n {envname} ` for conda environments
 /// - `pipenv run ` for Pipfile projects
 /// - `""` if no venv found
@@ -1047,7 +1047,8 @@ fn detect_python_venv(root: &Path) -> String {
         let venv_path = root.join(venv_dir);
         if venv_path.is_dir() {
             if cfg!(windows) {
-                return format!(r"{}\Scripts\", venv_dir);
+                // Use forward slashes — terminal is Git Bash, not cmd.exe
+                return format!("{}/Scripts/", venv_dir);
             } else {
                 return format!("{}/bin/", venv_dir);
             }
@@ -1167,7 +1168,8 @@ fn detect_python_servers(
     // (anticipates the venv that setup_commands will create)
     let effective_prefix = if needs_setup {
         if cfg!(target_os = "windows") {
-            ".venv\\Scripts\\".to_string()
+            // Use forward slashes — terminal is Git Bash, not cmd.exe
+            ".venv/Scripts/".to_string()
         } else {
             ".venv/bin/".to_string()
         }
@@ -1179,7 +1181,8 @@ fn detect_python_servers(
 
     let setup_commands = if needs_setup {
         let (python_cmd, pip_path) = if cfg!(target_os = "windows") {
-            ("python", ".venv\\Scripts\\pip")
+            // Use forward slashes — terminal is Git Bash, not cmd.exe
+            ("python", ".venv/Scripts/pip")
         } else {
             ("python3", ".venv/bin/pip")
         };
@@ -1746,7 +1749,7 @@ mod tests {
 
         let prefix = detect_python_venv(&dir);
         if cfg!(windows) {
-            assert!(prefix.contains(r".venv\Scripts\"), "Windows: {}", prefix);
+            assert!(prefix.contains(".venv/Scripts/"), "Windows: {}", prefix);
         } else {
             assert!(prefix.contains(".venv/bin/"), "Unix: {}", prefix);
         }
@@ -1762,7 +1765,7 @@ mod tests {
 
         let prefix = detect_python_venv(&dir);
         if cfg!(windows) {
-            assert!(prefix.contains(r"venv\Scripts\"), "Windows: {}", prefix);
+            assert!(prefix.contains("venv/Scripts/"), "Windows: {}", prefix);
         } else {
             assert!(prefix.contains("venv/bin/"), "Unix: {}", prefix);
         }
@@ -1940,7 +1943,7 @@ mod tests {
         let servers = detect_python_servers(&dir, &mut seen);
         assert_eq!(servers.len(), 1);
         if cfg!(windows) {
-            assert!(servers[0].start_command.contains(r".venv\Scripts\"), "Windows cmd: {}", servers[0].start_command);
+            assert!(servers[0].start_command.contains(".venv/Scripts/"), "Windows cmd: {}", servers[0].start_command);
         } else {
             assert!(servers[0].start_command.contains(".venv/bin/"), "Unix cmd: {}", servers[0].start_command);
         }
@@ -2057,7 +2060,7 @@ mod tests {
         assert_eq!(servers.len(), 1);
         // start_command should anticipate the .venv that setup will create
         if cfg!(target_os = "windows") {
-            assert!(servers[0].start_command.contains(".venv\\Scripts\\"), "start_command should use .venv prefix on Windows");
+            assert!(servers[0].start_command.contains(".venv/Scripts/"), "start_command should use .venv prefix on Windows");
         } else {
             assert!(servers[0].start_command.contains(".venv/bin/"), "start_command should use .venv prefix on Unix");
         }
@@ -2078,7 +2081,7 @@ mod tests {
         let cmds = &servers[0].setup_commands;
         if cfg!(target_os = "windows") {
             assert!(cmds[0].starts_with("python "), "Windows should use 'python' (not python3)");
-            assert!(cmds[1].contains(".venv\\Scripts\\pip"), "Windows pip path should use backslashes");
+            assert!(cmds[1].contains(".venv/Scripts/pip"), "Windows pip path should use forward slashes (Git Bash)");
         } else {
             assert!(cmds[0].starts_with("python3 "), "Unix should use 'python3'");
             assert!(cmds[1].contains(".venv/bin/pip"), "Unix pip path should use forward slashes");
