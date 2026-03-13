@@ -34,6 +34,7 @@ pub struct DetectedDevServer {
 /// 2. `vite.config.js` / `vite.config.ts` — regex for port
 /// 3. `.env` / `.env.local` — PORT or VITE_PORT
 /// 4. `package.json` scripts — pattern matching
+/// 5. Python project — requirements.txt / pyproject.toml / Pipfile
 pub fn detect_dev_servers(project_root: &str) -> Vec<DetectedDevServer> {
     let root = Path::new(project_root);
     let pkg_manager = detect_package_manager(project_root);
@@ -67,6 +68,11 @@ pub fn detect_dev_servers(project_root: &str) -> Vec<DetectedDevServer> {
         if seen_ports.insert(server.port) {
             servers.push(server);
         }
+    }
+
+    // 5. Python project detection
+    for server in detect_python_servers(root, &mut seen_ports) {
+        servers.push(server);
     }
 
     // Probe all ports
@@ -1051,6 +1057,101 @@ fn detect_python_venv(root: &Path) -> String {
 }
 
 // ---------------------------------------------------------------------------
+// Python start command + full detection pipeline
+// ---------------------------------------------------------------------------
+
+/// Build the start command for a Python server, applying venv prefix.
+///
+/// For venv directories, replaces `python`/tool names with the venv path.
+/// For conda/pipenv, prepends the runner prefix.
+fn build_python_start_command(
+    framework_name: &str,
+    entry: &str,
+    port: u16,
+    venv_prefix: &str,
+) -> String {
+    match framework_name {
+        "Django" => {
+            format!("{}python manage.py runserver 0.0.0.0:{}", venv_prefix, port)
+        }
+        "FastAPI" => {
+            let module = entry.strip_suffix(".py").unwrap_or(entry);
+            format!("{}uvicorn {}:app --host 0.0.0.0 --port {}", venv_prefix, module, port)
+        }
+        "Streamlit" => {
+            format!("{}streamlit run {} --server.port {}", venv_prefix, entry, port)
+        }
+        _ => {
+            // Flask, Gradio, Generic Python
+            format!("{}python {}", venv_prefix, entry)
+        }
+    }
+}
+
+/// Detect Python dev servers in a project directory.
+///
+/// Scans for requirements.txt/pyproject.toml/Pipfile, identifies framework,
+/// locates entry file, extracts port, and builds venv-aware start command.
+fn detect_python_servers(
+    root: &Path,
+    seen_ports: &mut std::collections::HashSet<u16>,
+) -> Vec<DetectedDevServer> {
+    let mut servers = Vec::new();
+
+    // Step 1: Parse dependency files
+    let deps = match parse_python_deps(root) {
+        Some(d) => d,
+        None => return servers,
+    };
+
+    // Determine which dep file was found (for source field)
+    let source = if root.join("requirements.txt").exists() {
+        "requirements.txt"
+    } else if root.join("pyproject.toml").exists() {
+        "pyproject.toml"
+    } else {
+        "Pipfile"
+    };
+
+    // Step 2: Identify framework
+    let (framework_name, entry_candidates, default_port) =
+        if let Some(fw) = identify_python_framework(&deps) {
+            (fw.name, fw.entry_candidates.to_vec(), fw.default_port)
+        } else {
+            ("Python", GENERIC_PYTHON_ENTRIES.to_vec(), GENERIC_PYTHON_PORT)
+        };
+
+    // Step 3: Locate entry file
+    let entry = match entry_candidates.iter().find(|f| root.join(f).exists()) {
+        Some(e) => *e,
+        None => return servers,
+    };
+
+    // Step 4: Extract port
+    let port = extract_python_port(root, &root.join(entry), default_port);
+
+    // Port dedup
+    if !seen_ports.insert(port) {
+        return servers;
+    }
+
+    // Step 5: Detect venv and build start command
+    let venv_prefix = detect_python_venv(root);
+    let start_command = build_python_start_command(framework_name, entry, port, &venv_prefix);
+
+    servers.push(DetectedDevServer {
+        framework: framework_name.to_string(),
+        port,
+        url: format!("http://localhost:{}", port),
+        start_command,
+        source: source.to_string(),
+        running: false,
+    });
+
+    servers
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -1651,5 +1752,138 @@ mod tests {
     #[test]
     fn test_read_conda_env_name_missing() {
         assert_eq!(read_conda_env_name_from_content("dependencies:\n  - flask\n"), None);
+    }
+
+    // --- Task 7: Python detection pipeline integration tests ---
+
+    #[test]
+    fn test_detect_python_servers_flask() {
+        let dir = std::env::temp_dir().join("vm_test_py_flask");
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::create_dir_all(&dir);
+
+        std::fs::write(dir.join("requirements.txt"), "flask==2.0\nrequests\n").unwrap();
+        std::fs::write(dir.join("app.py"), "from flask import Flask\napp = Flask(__name__)\napp.run(port=5001)\n").unwrap();
+
+        let mut seen = std::collections::HashSet::new();
+        let servers = detect_python_servers(&dir, &mut seen);
+        assert_eq!(servers.len(), 1);
+        assert_eq!(servers[0].framework, "Flask");
+        assert_eq!(servers[0].port, 5001);
+        assert!(servers[0].start_command.contains("app.py"));
+        assert_eq!(servers[0].source, "requirements.txt");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_detect_python_servers_django() {
+        let dir = std::env::temp_dir().join("vm_test_py_django");
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::create_dir_all(&dir);
+
+        std::fs::write(dir.join("requirements.txt"), "django>=4.0\n").unwrap();
+        std::fs::write(dir.join("manage.py"), "#!/usr/bin/env python\nimport os\n").unwrap();
+
+        let mut seen = std::collections::HashSet::new();
+        let servers = detect_python_servers(&dir, &mut seen);
+        assert_eq!(servers.len(), 1);
+        assert_eq!(servers[0].framework, "Django");
+        assert_eq!(servers[0].port, 8000);
+        assert!(servers[0].start_command.contains("manage.py"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_detect_python_servers_with_env_port() {
+        let dir = std::env::temp_dir().join("vm_test_py_env_port");
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::create_dir_all(&dir);
+
+        std::fs::write(dir.join("requirements.txt"), "flask\n").unwrap();
+        std::fs::write(dir.join("run_ui.py"), "# main entry\n").unwrap();
+        std::fs::write(dir.join(".env"), "WEB_UI_PORT=5555\n").unwrap();
+
+        let mut seen = std::collections::HashSet::new();
+        let servers = detect_python_servers(&dir, &mut seen);
+        assert_eq!(servers.len(), 1);
+        assert_eq!(servers[0].port, 5555, "Should pick up WEB_UI_PORT from .env");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_detect_python_servers_generic_fallback() {
+        let dir = std::env::temp_dir().join("vm_test_py_generic");
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::create_dir_all(&dir);
+
+        std::fs::write(dir.join("requirements.txt"), "requests\nnumpy\n").unwrap();
+        std::fs::write(dir.join("run_ui.py"), "# server code\nport = 9000\n").unwrap();
+
+        let mut seen = std::collections::HashSet::new();
+        let servers = detect_python_servers(&dir, &mut seen);
+        assert_eq!(servers.len(), 1);
+        assert_eq!(servers[0].framework, "Python");
+        assert_eq!(servers[0].port, 9000);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_detect_python_servers_no_entry_file() {
+        let dir = std::env::temp_dir().join("vm_test_py_no_entry");
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::create_dir_all(&dir);
+
+        std::fs::write(dir.join("requirements.txt"), "requests\n").unwrap();
+
+        let mut seen = std::collections::HashSet::new();
+        let servers = detect_python_servers(&dir, &mut seen);
+        assert!(servers.is_empty(), "No entry file should mean no detection");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_detect_python_servers_port_dedup() {
+        let dir = std::env::temp_dir().join("vm_test_py_dedup");
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::create_dir_all(&dir);
+
+        std::fs::write(dir.join("requirements.txt"), "flask\n").unwrap();
+        std::fs::write(dir.join("app.py"), "app.run(port=3000)\n").unwrap();
+
+        let mut seen = std::collections::HashSet::new();
+        seen.insert(3000u16);
+
+        let servers = detect_python_servers(&dir, &mut seen);
+        assert!(servers.is_empty(), "Should be skipped due to port dedup");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_detect_python_servers_with_venv() {
+        let dir = std::env::temp_dir().join("vm_test_py_venv_int");
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::create_dir_all(&dir);
+        let _ = std::fs::create_dir_all(dir.join(".venv").join("Scripts"));
+        let _ = std::fs::create_dir_all(dir.join(".venv").join("bin"));
+
+        std::fs::write(dir.join("requirements.txt"), "flask\n").unwrap();
+        std::fs::write(dir.join("app.py"), "from flask import Flask\n").unwrap();
+
+        let mut seen = std::collections::HashSet::new();
+        let servers = detect_python_servers(&dir, &mut seen);
+        assert_eq!(servers.len(), 1);
+        if cfg!(windows) {
+            assert!(servers[0].start_command.contains(r".venv\Scripts\"), "Windows cmd: {}", servers[0].start_command);
+        } else {
+            assert!(servers[0].start_command.contains(".venv/bin/"), "Unix cmd: {}", servers[0].start_command);
+        }
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
