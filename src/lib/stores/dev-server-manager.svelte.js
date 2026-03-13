@@ -209,6 +209,7 @@ function createDevServerManager() {
       framework: server.framework || null,
       url: server.url,
       startCommand: server.startCommand || null,
+      // setupCommands intentionally not stored — venv persists after first setup, restart doesn't need it
       lastActiveTime: Date.now(),
     });
 
@@ -264,8 +265,15 @@ function createDevServerManager() {
         startCommand = `${packageManager} run ${script}`;
       }
 
-      // Send start command
-      await terminalInput(shellId, startCommand + '\n');
+      // Chain setup commands (venv creation + pip install) with start command
+      // using && so the shell handles sequencing and fails fast.
+      // terminalInput() is fire-and-forget — cannot send commands one at a time.
+      if (server.setupCommands && server.setupCommands.length > 0) {
+        const fullCommand = [...server.setupCommands, startCommand].join(' && ');
+        await terminalInput(shellId, fullCommand + '\n');
+      } else {
+        await terminalInput(shellId, startCommand + '\n');
+      }
 
       // Poll port (may be cancelled via cancelPoll)
       let ready = false;
