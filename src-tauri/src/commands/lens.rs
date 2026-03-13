@@ -405,6 +405,10 @@ fn register_custom_scheme_handler(app: &AppHandle, webview: &tauri::Webview) {
                                     "lens-url-changed",
                                     serde_json::json!({ "url": decoded_url }),
                                 );
+                            } else if key == "element-selected" {
+                                let _ = app_for_events.emit("element-selected", serde_json::json!({}));
+                            } else if key == "element-deselected" {
+                                let _ = app_for_events.emit("element-deselected", serde_json::json!({}));
                             } else if !key.is_empty() {
                                 info!("[lens-shortcut] Child webview forwarding: {}", key);
                                 let _ = app_for_events.emit("lens-shortcut", serde_json::json!({ "key": key }));
