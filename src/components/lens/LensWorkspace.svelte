@@ -7,6 +7,7 @@
   import HistoryPanel from './HistoryPanel.svelte';
   import DownloadsPanel from './DownloadsPanel.svelte';
   import LensPreview from './LensPreview.svelte';
+  import ElementInspector from './ElementInspector.svelte';
   import BrowserTabBar from './BrowserTabBar.svelte';
   import FileTree from './FileTree.svelte';
   import GroupTabBar from './GroupTabBar.svelte';
@@ -24,7 +25,7 @@
   import { browserTabsStore } from '../../lib/stores/browser-tabs.svelte.js';
   import { browserHistoryStore } from '../../lib/stores/browser-history.svelte.js';
   import { downloadsStore } from '../../lib/stores/downloads.svelte.js';
-  import { lensSetVisible, startFileWatching, stopFileWatching, lensCapturePreview, lspShutdown, lensSetZoom, lensGetZoom } from '../../lib/api.js';
+  import { lensSetVisible, startFileWatching, stopFileWatching, lensCapturePreview, lspShutdown, lensSetZoom, lensGetZoom, designGetElement } from '../../lib/api.js';
   import { navigationStore } from '../../lib/stores/navigation.svelte.js';
   import { attachmentsStore } from '../../lib/stores/attachments.svelte.js';
   import { projectStore } from '../../lib/stores/project.svelte.js';
@@ -62,6 +63,7 @@
 
   // Browser is a fixed UI element, not a tab — follows the first (leftmost) group
   let showBrowser = $state(false);
+  let inspectorData = $state(null);
   let firstGroupId = $derived(editorGroupsStore.allGroupIds[0]);
 
   // ── Zoom ──
@@ -165,6 +167,42 @@
   $effect(() => {
     const tabId = browserTabsStore.activeTabId;
     refreshZoomForTab(tabId);
+  });
+
+  // ── Element Inspector events ──
+  $effect(() => {
+    let unlistenSelected;
+    let unlistenDeselected;
+    let unlistenUrlChanged;
+
+    (async () => {
+      unlistenSelected = await listen('element-selected', async () => {
+        const result = await designGetElement();
+        if (result?.success && result.data) {
+          inspectorData = result.data;
+        }
+      });
+
+      unlistenDeselected = await listen('element-deselected', () => {
+        inspectorData = null;
+      });
+
+      unlistenUrlChanged = await listen('lens-url-changed', () => {
+        inspectorData = null;
+      });
+    })();
+
+    return () => {
+      unlistenSelected?.();
+      unlistenDeselected?.();
+      unlistenUrlChanged?.();
+    };
+  });
+
+  $effect(() => {
+    if (!lensStore.designMode) {
+      inspectorData = null;
+    }
   });
 
   // Track drag state to suppress stop-sign cursor across the workspace
@@ -479,7 +517,16 @@
                             />
                           {/if}
                           <FindBar visible={findBarVisible} onClose={() => { findBarVisible = false; }} />
-                          <LensPreview bind:this={lensPreviewRef} />
+                          <div class="browser-with-inspector">
+                            <LensPreview bind:this={lensPreviewRef} />
+                            {#if inspectorData}
+                              <ElementInspector
+                                elementData={inspectorData}
+                                onClose={() => { inspectorData = null; }}
+                                onUpdateData={(data) => { inspectorData = data; }}
+                              />
+                            {/if}
+                          </div>
                           {#if showHistory}
                             <HistoryPanel onClose={() => showHistory = false} />
                           {/if}
@@ -669,6 +716,18 @@
     height: 100%;
     overflow: hidden;
     background: var(--bg);
+  }
+
+  .browser-with-inspector {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .browser-with-inspector :global(.lens-preview) {
+    flex: 1;
+    min-width: 0;
   }
 
 </style>
