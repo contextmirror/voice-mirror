@@ -205,9 +205,9 @@
           console.log('[lens] Auto-start check:', { autoStart, framework: stoppedServer.framework, port: stoppedServer.port });
           if (autoStart === null || autoStart === undefined) {
             if (stoppedServer.needsSetup) {
-              // No venv — offer to set up environment
+              // Missing venv or deps — offer to set up environment
               toastStore.addToast({
-                message: `${stoppedServer.framework || 'Python'} detected but no virtual environment. Set up & start?`,
+                message: `${stoppedServer.framework || 'Python'} detected but needs environment setup. Set up & start?`,
                 severity: 'warning',
                 key: 'dev-server-consent-' + project.path,
                 duration: 0,

@@ -1113,6 +1113,36 @@ fn build_python_start_command(
     }
 }
 
+/// Check if the framework's package is installed in .venv/site-packages.
+/// Returns true if the package directory exists, false otherwise.
+/// For unknown frameworks, returns true (assume installed).
+fn check_framework_installed(root: &Path, framework_name: &str) -> bool {
+    let package_name = match framework_name {
+        "Django" => "django",
+        "Flask" => "flask",
+        "FastAPI" => "fastapi",
+        "Streamlit" => "streamlit",
+        "Gradio" => "gradio",
+        _ => return true, // Unknown framework — skip check
+    };
+
+    if cfg!(target_os = "windows") {
+        // Windows: .venv/Lib/site-packages/<package>/
+        root.join(".venv").join("Lib").join("site-packages").join(package_name).is_dir()
+    } else {
+        // Unix: .venv/lib/python3.x/site-packages/<package>/
+        let lib_dir = root.join(".venv").join("lib");
+        if let Ok(entries) = std::fs::read_dir(&lib_dir) {
+            for entry in entries.flatten() {
+                if entry.path().join("site-packages").join(package_name).is_dir() {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+}
+
 /// Detect Python dev servers in a project directory.
 ///
 /// Scans for requirements.txt/pyproject.toml/Pipfile, identifies framework,
@@ -1160,15 +1190,29 @@ fn detect_python_servers(
         return servers;
     }
 
-    // Step 5: Detect venv and build start command
+    // Step 5: Detect venv, check deps, and build start command
     let venv_prefix = detect_python_venv(root);
-    let needs_setup = venv_prefix.is_empty() && source != "Pipfile";
+    let dot_venv_exists = root.join(".venv").is_dir();
 
-    // When setup is needed, use .venv prefix for start_command
+    // Determine if setup is needed:
+    // 1. No venv at all → full setup (create venv + install deps)
+    // 2. .venv exists but framework not installed → partial setup (just pip install)
+    // 3. .venv exists and framework present → no setup
+    // 4. Other venv type (conda, pipenv, venv/) → no setup
+    let needs_setup = if source == "Pipfile" {
+        false // Pipenv manages its own venv
+    } else if venv_prefix.is_empty() {
+        true // No venv at all
+    } else if dot_venv_exists {
+        !check_framework_installed(root, framework_name)
+    } else {
+        false // Non-.venv venv type — assume OK
+    };
+
+    // When setup is needed and no venv exists, use .venv prefix for start_command
     // (anticipates the venv that setup_commands will create)
-    let effective_prefix = if needs_setup {
+    let effective_prefix = if needs_setup && venv_prefix.is_empty() {
         if cfg!(target_os = "windows") {
-            // Use forward slashes — terminal is Git Bash, not cmd.exe
             ".venv/Scripts/".to_string()
         } else {
             ".venv/bin/".to_string()
@@ -1181,7 +1225,6 @@ fn detect_python_servers(
 
     let setup_commands = if needs_setup {
         let (python_cmd, pip_path) = if cfg!(target_os = "windows") {
-            // Use forward slashes — terminal is Git Bash, not cmd.exe
             ("python", ".venv/Scripts/pip")
         } else {
             ("python3", ".venv/bin/pip")
@@ -1193,10 +1236,12 @@ fn detect_python_servers(
             format!("{} install --prefer-binary -r requirements.txt", pip_path)
         };
 
-        vec![
-            format!("{} -m venv .venv", python_cmd),
-            install_cmd,
-        ]
+        let mut cmds = Vec::new();
+        if !dot_venv_exists {
+            cmds.push(format!("{} -m venv .venv", python_cmd));
+        }
+        cmds.push(install_cmd);
+        cmds
     } else {
         vec![]
     };
@@ -1977,20 +2022,50 @@ mod tests {
         let _ = std::fs::create_dir_all(&dir);
         std::fs::write(dir.join("requirements.txt"), "flask==2.0\n").unwrap();
         std::fs::write(dir.join("app.py"), "from flask import Flask\n").unwrap();
-        // Create .venv directory
+        // Create .venv directory with framework installed
         if cfg!(target_os = "windows") {
             std::fs::create_dir_all(dir.join(".venv").join("Scripts")).unwrap();
             std::fs::write(dir.join(".venv").join("Scripts").join("python.exe"), "").unwrap();
+            std::fs::create_dir_all(dir.join(".venv").join("Lib").join("site-packages").join("flask")).unwrap();
         } else {
             std::fs::create_dir_all(dir.join(".venv").join("bin")).unwrap();
             std::fs::write(dir.join(".venv").join("bin").join("python"), "").unwrap();
+            std::fs::create_dir_all(dir.join(".venv").join("lib").join("python3.12").join("site-packages").join("flask")).unwrap();
         }
 
         let mut seen = std::collections::HashSet::new();
         let servers = detect_python_servers(&dir, &mut seen);
         assert_eq!(servers.len(), 1);
-        assert!(!servers[0].needs_setup, "Should NOT need setup when venv exists");
+        assert!(!servers[0].needs_setup, "Should NOT need setup when venv and deps exist");
         assert!(servers[0].setup_commands.is_empty(), "Should have no setup commands");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_detect_python_needs_setup_venv_exists_deps_missing() {
+        let dir = std::env::temp_dir().join("vm_test_py_deps_missing");
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::create_dir_all(&dir);
+        std::fs::write(dir.join("requirements.txt"), "flask==2.0\n").unwrap();
+        std::fs::write(dir.join("app.py"), "from flask import Flask\n").unwrap();
+        // Create .venv directory WITHOUT the framework package in site-packages
+        if cfg!(target_os = "windows") {
+            std::fs::create_dir_all(dir.join(".venv").join("Scripts")).unwrap();
+            std::fs::write(dir.join(".venv").join("Scripts").join("python.exe"), "").unwrap();
+            std::fs::create_dir_all(dir.join(".venv").join("Lib").join("site-packages")).unwrap();
+        } else {
+            std::fs::create_dir_all(dir.join(".venv").join("bin")).unwrap();
+            std::fs::write(dir.join(".venv").join("bin").join("python"), "").unwrap();
+            std::fs::create_dir_all(dir.join(".venv").join("lib").join("python3.12").join("site-packages")).unwrap();
+        }
+
+        let mut seen = std::collections::HashSet::new();
+        let servers = detect_python_servers(&dir, &mut seen);
+        assert_eq!(servers.len(), 1);
+        assert!(servers[0].needs_setup, "Should need setup when venv exists but deps missing");
+        // Should only have pip install (no venv creation since .venv exists)
+        assert_eq!(servers[0].setup_commands.len(), 1, "Should skip venv creation");
+        assert!(servers[0].setup_commands[0].contains("pip install"), "Should only pip install");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
