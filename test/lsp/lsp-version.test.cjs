@@ -6,9 +6,7 @@ const path = require('node:path');
 const typesSrc = fs.readFileSync(
   path.join(__dirname, '../../src-tauri/src/lsp/types.rs'), 'utf-8'
 );
-const modSrc = fs.readFileSync(
-  path.join(__dirname, '../../src-tauri/src/lsp/mod.rs'), 'utf-8'
-);
+const { modSrc } = require('./_read-lsp-sources.cjs');
 
 describe('types.rs: version field', () => {
   it('LspServerStatus has version field', () => {

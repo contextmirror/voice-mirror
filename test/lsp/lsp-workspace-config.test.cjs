@@ -8,10 +8,7 @@ const clientSrc = fs.readFileSync(
   'utf-8'
 );
 
-const modSrc = fs.readFileSync(
-  path.join(__dirname, '../../src-tauri/src/lsp/mod.rs'),
-  'utf-8'
-);
+const { modSrc } = require('./_read-lsp-sources.cjs');
 
 describe('client.rs: workspace/configuration handler', () => {
   it('handles workspace/configuration requests', () => {

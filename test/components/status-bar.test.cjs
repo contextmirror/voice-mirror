@@ -605,10 +605,7 @@ describe('StatusBar.svelte: Node.js not-found listener', () => {
   });
 });
 
-const MOD_RS_SRC = fs.readFileSync(
-  path.join(__dirname, '../../src-tauri/src/lsp/mod.rs'),
-  'utf-8'
-);
+const { modSrc: MOD_RS_SRC } = require('../lsp/_read-lsp-sources.cjs');
 
 describe('mod.rs: Node.js not-found event emission', () => {
   it('uses AtomicBool for once-per-session guard', () => {

@@ -3,9 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const modSrc = fs.readFileSync(
-  path.join(__dirname, '../../src-tauri/src/lsp/mod.rs'), 'utf-8'
-);
+const { modSrc } = require('./_read-lsp-sources.cjs');
 const cmdSrc = fs.readFileSync(
   path.join(__dirname, '../../src-tauri/src/commands/lsp.rs'), 'utf-8'
 );
@@ -74,10 +72,12 @@ describe('mod.rs: project-scoped server keys', () => {
   });
 
   it('methods use server_key for HashMap lookups', () => {
-    // Count occurrences of server_key usage (should be many: contains_key, get, get_mut, insert, remove)
+    // Count occurrences of server_key usage across all LSP modules.
+    // After the send_and_wait refactor, the helper deduplicates server_key calls
+    // that were previously repeated in every request method.
     const matches = modSrc.match(/server_key\(lang_id/g);
-    assert.ok(matches && matches.length >= 16,
-      `Should have at least 16 server_key usages, found ${matches ? matches.length : 0}`);
+    assert.ok(matches && matches.length >= 10,
+      `Should have at least 10 server_key usages, found ${matches ? matches.length : 0}`);
   });
 });
 

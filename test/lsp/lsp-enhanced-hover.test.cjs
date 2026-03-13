@@ -10,10 +10,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 
-const modSrc = fs.readFileSync(
-  path.join(__dirname, '../../src-tauri/src/lsp/mod.rs'),
-  'utf-8'
-);
+const { modSrc } = require('./_read-lsp-sources.cjs');
 
 describe('mod.rs: request_hover uses standard textDocument/hover', () => {
   it('request_hover method exists', () => {

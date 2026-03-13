@@ -6,9 +6,7 @@ const path = require('node:path');
 const manifestSrc = fs.readFileSync(
   path.join(__dirname, '../../src-tauri/src/lsp/manifest.rs'), 'utf-8'
 );
-const modSrc = fs.readFileSync(
-  path.join(__dirname, '../../src-tauri/src/lsp/mod.rs'), 'utf-8'
-);
+const { modSrc } = require('./_read-lsp-sources.cjs');
 const cmdSrc = fs.readFileSync(
   path.join(__dirname, '../../src-tauri/src/commands/lsp.rs'), 'utf-8'
 );
