@@ -784,13 +784,8 @@ pub fn run() {
                 }
                 Err(e) => {
                     warn!("Failed to start pipe server: {} — falling back to file IPC", e);
-                    // Create a dummy state with a disconnected channel so commands don't panic
-                    let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
-                    app.manage(ipc::pipe_server::PipeServerState {
-                        pipe_name: String::new(),
-                        tx,
-                        connected: std::sync::Arc::new(tokio::sync::Mutex::new(false)),
-                    });
+                    // Create a dummy state with no sender so commands don't panic
+                    app.manage(ipc::pipe_server::PipeServerState::disconnected());
                 }
             }
 
