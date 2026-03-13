@@ -64,8 +64,6 @@
   }
 
   // --- Color swatch detection ---
-  const colorProps = ['color', 'background-color'];
-
   function isColorValue(value) {
     if (!value) return false;
     return /^(rgb|rgba|hsl|hsla|#)/.test(value.trim());

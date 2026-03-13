@@ -293,7 +293,9 @@ describe('api.js -- exported async functions', () => {
     'lensClearCache',
     // Design Overlay
     'designCommand',
+    'designExpandTreeNode',
     'designGetElement',
+    'designSelectByTreeId',
     // Browser Tabs
     'lensCreateTab',
     'lensCloseTab',
