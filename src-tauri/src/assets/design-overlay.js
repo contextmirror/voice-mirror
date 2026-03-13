@@ -25,6 +25,9 @@
     var _selectTooltip = null;
     var _selectActionBar = null;
 
+    // --- DOM tree serialization state ---
+    var _treeIdCounter = 0;
+
     // --- Listeners (stored for cleanup) ---
     var _onMouseDown = null;
     var _onMouseMove = null;
@@ -900,6 +903,123 @@
         return results;
     }
 
+    // =========================================================================
+    // DOM tree serialization
+    // =========================================================================
+
+    function _clearTreeIds() {
+        var tagged = document.querySelectorAll('[data-vm-tree-id]');
+        for (var i = 0; i < tagged.length; i++) {
+            tagged[i].removeAttribute('data-vm-tree-id');
+        }
+        _treeIdCounter = 0;
+    }
+
+    function _serializeTreeNode(el, selectedEl, isOnPath) {
+        var nodeId = 'vm-tree-' + (_treeIdCounter++);
+        el.setAttribute('data-vm-tree-id', nodeId);
+
+        var classes = '';
+        if (el.className && typeof el.className === 'string') {
+            classes = el.className.trim();
+        }
+
+        return {
+            nodeId: nodeId,
+            tagName: el.tagName.toLowerCase(),
+            id: el.id || '',
+            classes: classes,
+            childCount: el.children.length,
+            isSelected: el === selectedEl,
+            isOnPath: isOnPath,
+            children: []
+        };
+    }
+
+    function _serializeDomTree(selectedEl) {
+        _clearTreeIds();
+
+        // Build ancestor path from body to selected element
+        var ancestors = [];
+        var cur = selectedEl;
+        while (cur && cur !== document.body && cur !== document.documentElement) {
+            ancestors.unshift(cur);
+            cur = cur.parentElement;
+        }
+        if (document.body) {
+            ancestors.unshift(document.body);
+        }
+
+        // Build tree recursively along the ancestor path
+        var root = null;
+        var parentNode = null;
+
+        for (var i = 0; i < ancestors.length; i++) {
+            var ancestor = ancestors[i];
+            var node = _serializeTreeNode(ancestor, selectedEl, true);
+
+            // Add children of this ancestor
+            var childLimit = Math.min(ancestor.children.length, 200);
+            var childNodes = [];
+            for (var c = 0; c < childLimit; c++) {
+                var child = ancestor.children[c];
+                if (i + 1 < ancestors.length && child === ancestors[i + 1]) {
+                    continue;
+                }
+                var childNode = _serializeTreeNode(child, selectedEl, false);
+                childNodes.push(childNode);
+            }
+            if (ancestor.children.length > 200) {
+                node.truncated = true;
+            }
+
+            node.children = childNodes;
+
+            if (parentNode) {
+                var inserted = false;
+                var allChildren = [];
+                var parentEl = ancestors[i - 1];
+                for (var p = 0; p < Math.min(parentEl.children.length, 200); p++) {
+                    if (parentEl.children[p] === ancestor) {
+                        allChildren.push(node);
+                        inserted = true;
+                    } else {
+                        var found = false;
+                        for (var e = 0; e < parentNode.children.length; e++) {
+                            if (parentNode.children[e].tagName === parentEl.children[p].tagName.toLowerCase() &&
+                                parentNode.children[e].nodeId === parentEl.children[p].getAttribute('data-vm-tree-id')) {
+                                allChildren.push(parentNode.children[e]);
+                                found = true;
+                                break;
+                            }
+                        }
+                        if (!found) {
+                            allChildren.push(_serializeTreeNode(parentEl.children[p], selectedEl, false));
+                        }
+                    }
+                }
+                if (!inserted) allChildren.push(node);
+                parentNode.children = allChildren;
+            }
+
+            if (!root) root = node;
+            parentNode = node;
+        }
+
+        // Add direct children of selected element (one level, collapsed)
+        if (selectedEl && parentNode && parentNode.isSelected) {
+            var selChildLimit = Math.min(selectedEl.children.length, 200);
+            for (var s = 0; s < selChildLimit; s++) {
+                parentNode.children.push(_serializeTreeNode(selectedEl.children[s], selectedEl, false));
+            }
+            if (selectedEl.children.length > 200) {
+                parentNode.truncated = true;
+            }
+        }
+
+        return root;
+    }
+
     /**
      * Serialize a DOM element into a structured object for the host.
      */
@@ -956,7 +1076,8 @@
             styles: styles,
             parentChain: _getParentChain(el),
             pseudoRules: _getPseudoClassRules(el),
-            accessibility: _getAccessibility(el)
+            accessibility: _getAccessibility(el),
+            domTree: _serializeDomTree(el)
         };
     }
 

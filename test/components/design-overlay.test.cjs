@@ -907,3 +907,70 @@ describe('design-overlay.js: decimal precision bounds', () => {
     assert.ok(!boundsBlock.includes('Math.round(rect.left)'), 'Must not use plain Math.round on rect values');
   });
 });
+
+// =========================================================================
+// Task 3: DOM tree serialization
+// =========================================================================
+
+describe('design-overlay.js: DOM tree serialization', () => {
+  it('has _clearTreeIds function', () => {
+    assert.ok(src.includes('function _clearTreeIds'), 'Must have _clearTreeIds function');
+  });
+
+  it('_clearTreeIds removes data-vm-tree-id attributes', () => {
+    const fnBody = src.substring(src.indexOf('function _clearTreeIds'));
+    assert.ok(fnBody.includes('data-vm-tree-id'), 'Must query data-vm-tree-id attributes');
+    assert.ok(fnBody.includes('removeAttribute'), 'Must call removeAttribute');
+  });
+
+  it('has _serializeTreeNode function', () => {
+    assert.ok(src.includes('function _serializeTreeNode'), 'Must have _serializeTreeNode function');
+  });
+
+  it('_serializeTreeNode sets data-vm-tree-id on element', () => {
+    const fnBody = src.substring(src.indexOf('function _serializeTreeNode'));
+    assert.ok(fnBody.includes('setAttribute'), 'Must set data-vm-tree-id attribute on element');
+    assert.ok(fnBody.includes('data-vm-tree-id'), 'Must use data-vm-tree-id attribute name');
+  });
+
+  it('_serializeTreeNode returns correct structure', () => {
+    const fnBody = src.substring(src.indexOf('function _serializeTreeNode'));
+    const returnBlock = fnBody.substring(fnBody.indexOf('return {'));
+    assert.ok(returnBlock.includes('nodeId:'), 'Must include nodeId');
+    assert.ok(returnBlock.includes('tagName:'), 'Must include tagName');
+    assert.ok(returnBlock.includes('childCount:'), 'Must include childCount');
+    assert.ok(returnBlock.includes('isSelected:'), 'Must include isSelected');
+    assert.ok(returnBlock.includes('isOnPath:'), 'Must include isOnPath');
+    assert.ok(returnBlock.includes('children:'), 'Must include children');
+  });
+
+  it('has _serializeDomTree function', () => {
+    assert.ok(src.includes('function _serializeDomTree'), 'Must have _serializeDomTree function');
+  });
+
+  it('_serializeDomTree walks ancestor chain', () => {
+    const fnBody = src.substring(src.indexOf('function _serializeDomTree'));
+    assert.ok(fnBody.includes('parentElement'), 'Must walk parent chain');
+    assert.ok(fnBody.includes('document.body'), 'Must reference document.body as root');
+  });
+
+  it('_serializeDomTree caps children at 200', () => {
+    const fnBody = src.substring(src.indexOf('function _serializeDomTree'));
+    assert.ok(fnBody.includes('200'), 'Must cap direct children at 200');
+  });
+
+  it('_serializeDomTree calls _clearTreeIds before tagging', () => {
+    const fnBody = src.substring(src.indexOf('function _serializeDomTree'));
+    const clearIdx = fnBody.indexOf('_clearTreeIds');
+    const serializeNodeIdx = fnBody.indexOf('_serializeTreeNode');
+    assert.ok(clearIdx !== -1, 'Must call _clearTreeIds');
+    assert.ok(serializeNodeIdx !== -1, 'Must call _serializeTreeNode');
+    assert.ok(clearIdx < serializeNodeIdx, '_clearTreeIds must be called before _serializeTreeNode');
+  });
+
+  it('domTree field included in _serializeElement return', () => {
+    const fnBody = src.substring(src.indexOf('function _serializeElement'));
+    const returnBlock = fnBody.substring(fnBody.indexOf('return {'));
+    assert.ok(returnBlock.includes('domTree:'), 'Return object must include domTree field');
+  });
+});
