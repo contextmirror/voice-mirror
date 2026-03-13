@@ -1161,7 +1161,42 @@ fn detect_python_servers(
 
     // Step 5: Detect venv and build start command
     let venv_prefix = detect_python_venv(root);
-    let start_command = build_python_start_command(framework_name, entry, port, &venv_prefix);
+    let needs_setup = venv_prefix.is_empty() && source != "Pipfile";
+
+    // When setup is needed, use .venv prefix for start_command
+    // (anticipates the venv that setup_commands will create)
+    let effective_prefix = if needs_setup {
+        if cfg!(target_os = "windows") {
+            ".venv\\Scripts\\".to_string()
+        } else {
+            ".venv/bin/".to_string()
+        }
+    } else {
+        venv_prefix
+    };
+
+    let start_command = build_python_start_command(framework_name, entry, port, &effective_prefix);
+
+    let setup_commands = if needs_setup {
+        let (python_cmd, pip_path) = if cfg!(target_os = "windows") {
+            ("python", ".venv\\Scripts\\pip")
+        } else {
+            ("python3", ".venv/bin/pip")
+        };
+
+        let install_cmd = if source == "pyproject.toml" {
+            format!("{} install --prefer-binary -e .", pip_path)
+        } else {
+            format!("{} install --prefer-binary -r requirements.txt", pip_path)
+        };
+
+        vec![
+            format!("{} -m venv .venv", python_cmd),
+            install_cmd,
+        ]
+    } else {
+        vec![]
+    };
 
     servers.push(DetectedDevServer {
         framework: framework_name.to_string(),
@@ -1170,7 +1205,8 @@ fn detect_python_servers(
         start_command,
         source: source.to_string(),
         running: false,
-        ..Default::default()
+        needs_setup,
+        setup_commands,
     });
 
     servers
@@ -1952,6 +1988,121 @@ mod tests {
         assert_eq!(servers.len(), 1);
         assert!(!servers[0].needs_setup, "Should NOT need setup when venv exists");
         assert!(servers[0].setup_commands.is_empty(), "Should have no setup commands");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_setup_commands_requirements_txt() {
+        let dir = std::env::temp_dir().join("vm_test_py_setup_req");
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::create_dir_all(&dir);
+        std::fs::write(dir.join("requirements.txt"), "flask==2.0\n").unwrap();
+        std::fs::write(dir.join("app.py"), "from flask import Flask\n").unwrap();
+
+        let mut seen = std::collections::HashSet::new();
+        let servers = detect_python_servers(&dir, &mut seen);
+        assert_eq!(servers.len(), 1);
+        let cmds = &servers[0].setup_commands;
+        assert_eq!(cmds.len(), 2);
+        assert!(cmds[0].contains("venv .venv"), "First cmd should create venv");
+        assert!(cmds[1].contains("pip install"), "Second cmd should pip install");
+        assert!(cmds[1].contains("--prefer-binary"), "Should use --prefer-binary");
+        assert!(cmds[1].contains("requirements.txt"), "Should reference requirements.txt");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_setup_commands_pyproject_toml() {
+        let dir = std::env::temp_dir().join("vm_test_py_setup_pyproj");
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::create_dir_all(&dir);
+        std::fs::write(dir.join("pyproject.toml"), "[project]\ndependencies = [\"flask\"]\n").unwrap();
+        std::fs::write(dir.join("app.py"), "from flask import Flask\n").unwrap();
+
+        let mut seen = std::collections::HashSet::new();
+        let servers = detect_python_servers(&dir, &mut seen);
+        assert_eq!(servers.len(), 1);
+        let cmds = &servers[0].setup_commands;
+        assert_eq!(cmds.len(), 2);
+        assert!(cmds[1].contains("-e ."), "Should use editable install for pyproject.toml");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_setup_commands_pipfile_skipped() {
+        let dir = std::env::temp_dir().join("vm_test_py_setup_pipfile");
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::create_dir_all(&dir);
+        std::fs::write(dir.join("Pipfile"), "[packages]\nflask = \"*\"\n").unwrap();
+        std::fs::write(dir.join("app.py"), "from flask import Flask\n").unwrap();
+
+        let mut seen = std::collections::HashSet::new();
+        let servers = detect_python_servers(&dir, &mut seen);
+        assert_eq!(servers.len(), 1);
+        assert!(!servers[0].needs_setup, "Pipfile projects should NOT need setup (pipenv manages venv)");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_setup_start_command_uses_venv_prefix() {
+        let dir = std::env::temp_dir().join("vm_test_py_setup_prefix");
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::create_dir_all(&dir);
+        std::fs::write(dir.join("requirements.txt"), "flask==2.0\n").unwrap();
+        std::fs::write(dir.join("app.py"), "from flask import Flask\n").unwrap();
+        // No .venv
+
+        let mut seen = std::collections::HashSet::new();
+        let servers = detect_python_servers(&dir, &mut seen);
+        assert_eq!(servers.len(), 1);
+        // start_command should anticipate the .venv that setup will create
+        if cfg!(target_os = "windows") {
+            assert!(servers[0].start_command.contains(".venv\\Scripts\\"), "start_command should use .venv prefix on Windows");
+        } else {
+            assert!(servers[0].start_command.contains(".venv/bin/"), "start_command should use .venv prefix on Unix");
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_setup_commands_platform() {
+        let dir = std::env::temp_dir().join("vm_test_py_setup_platform");
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::create_dir_all(&dir);
+        std::fs::write(dir.join("requirements.txt"), "flask==2.0\n").unwrap();
+        std::fs::write(dir.join("app.py"), "from flask import Flask\n").unwrap();
+
+        let mut seen = std::collections::HashSet::new();
+        let servers = detect_python_servers(&dir, &mut seen);
+        assert_eq!(servers.len(), 1);
+        let cmds = &servers[0].setup_commands;
+        if cfg!(target_os = "windows") {
+            assert!(cmds[0].starts_with("python "), "Windows should use 'python' (not python3)");
+            assert!(cmds[1].contains(".venv\\Scripts\\pip"), "Windows pip path should use backslashes");
+        } else {
+            assert!(cmds[0].starts_with("python3 "), "Unix should use 'python3'");
+            assert!(cmds[1].contains(".venv/bin/pip"), "Unix pip path should use forward slashes");
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_node_projects_no_setup() {
+        let dir = std::env::temp_dir().join("vm_test_node_no_setup");
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::create_dir_all(&dir);
+        // Create a minimal Node.js project (package.json with dev script)
+        std::fs::write(
+            dir.join("package.json"),
+            r#"{"name":"test","scripts":{"dev":"vite"},"devDependencies":{"vite":"5.0.0"}}"#,
+        ).unwrap();
+        std::fs::create_dir_all(dir.join("node_modules/.package-lock.json")).ok();
+
+        let servers = detect_dev_servers(dir.to_str().unwrap());
+        for server in &servers {
+            assert!(!server.needs_setup, "Node.js projects should never have needs_setup=true");
+            assert!(server.setup_commands.is_empty(), "Node.js projects should have empty setup_commands");
+        }
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
