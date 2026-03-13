@@ -77,11 +77,14 @@
   // Drag-to-move state
   let dragOverPath = $state(null);
 
+  // Memoized root path — prevents re-triggers from unrelated entry field mutations
+  let projectRoot = $derived(projectStore.root);
+
   // Reload when active project changes.
   $effect(() => {
     const _idx = projectStore.activeIndex;
     const _len = projectStore.entries.length;
-    const _path = projectStore.root;
+    const _path = projectRoot;
     expandedDirs = new Set();
     dirChildren = new Map();
     loadRoot();

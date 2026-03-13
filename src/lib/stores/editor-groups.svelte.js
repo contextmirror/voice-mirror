@@ -339,7 +339,11 @@ function createEditorGroupsStore() {
      */
     reset() {
       gridRoot = { type: 'leaf', groupId: 1 };
-      groups = new SvelteMap([[1, { activeTabId: null, locked: false }]]);
+      // Mutate existing SvelteMap instead of replacing — replacement orphans
+      // the reactive signals that $derived expressions in EditorPane/GroupTabBar
+      // are tracking, causing them to return stale cached values.
+      groups.clear();
+      groups.set(1, { activeTabId: null, locked: false });
       focusedGroupId = 1;
       nextGroupId = 2;
       maximizedGroupId = null;
@@ -445,7 +449,8 @@ function createEditorGroupsStore() {
     restore(data) {
       if (!data || !data.root) return;
       gridRoot = data.root;
-      groups = new SvelteMap();
+      // Mutate existing SvelteMap — see reset() comment for why.
+      groups.clear();
       if (data.groupMeta) {
         for (const [id, meta] of Object.entries(data.groupMeta)) {
           groups.set(Number(id), { activeTabId: meta.activeTabId || null, locked: meta.locked || false });

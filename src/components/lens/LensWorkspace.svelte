@@ -298,6 +298,11 @@
     window.dispatchEvent(new CustomEvent('file-tree-drag-end'));
   }
 
+  // Memoized project root path — $derived compares by value (Object.is),
+  // so effects using this only re-trigger when the actual path string changes,
+  // not when unrelated entry fields (lastBrowserUrl, etc.) are mutated.
+  let projectRoot = $derived(projectStore.root);
+
   // Derive active file info for FileTree highlighting
   let focusedGroupId = $derived(editorGroupsStore.focusedGroupId);
   let focusedActiveTabId = $derived(editorGroupsStore.groups.get(focusedGroupId)?.activeTabId);
@@ -312,9 +317,10 @@
     lensSetVisible(showBrowser).catch(() => {});
   });
 
-  // Start/stop file watcher when entering Lens mode or switching projects
+  // Start/stop file watcher when entering Lens mode or switching projects.
+  // Uses memoized projectRoot so unrelated entry mutations don't churn the watcher.
   $effect(() => {
-    const path = projectStore.root;
+    const path = projectRoot;
     if (!path) return;
 
     startFileWatching(path).catch((err) => {
@@ -368,9 +374,10 @@
     });
   }
 
-  // Start/stop LSP diagnostics store listener on project switch
+  // Start/stop LSP diagnostics store listener on project switch.
+  // Uses memoized projectRoot so unrelated entry mutations don't restart LSP.
   $effect(() => {
-    const path = projectStore.root;
+    const path = projectRoot;
     if (!path) return;
 
     // Shut down LSP servers from previous project before starting new ones

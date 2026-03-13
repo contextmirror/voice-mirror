@@ -37,6 +37,9 @@
   // Conflict detection state — shown when file changes on disk while tab is dirty
   let conflictDetected = $state(false);
 
+  // Guard flag: true while dispatching a live-reload so onDocChanged skips setDirty
+  let isLiveReloading = false;
+
   // Markdown preview state
   let isMarkdown = $derived(!!tab?.path?.match(/\.(md|markdown)$/i));
   let markdownPreviewDefault = $derived(configStore.value?.editor?.markdownPreview !== false);
@@ -238,14 +241,17 @@
       if (!data?.content || data.content == null) return;
       const currentContent = view.state.doc.toString();
       if (data.content !== currentContent) {
+        isLiveReloading = true;
         view.dispatch({
           changes: { from: 0, to: currentContent.length, insert: data.content },
         });
+        isLiveReloading = false;
       }
       markdownContent = data.content;
       tabsStore.setDirty(tab.id, false);
       conflictDetected = false;
     } catch (err) {
+      isLiveReloading = false;
       console.warn('[FileEditor] Conflict reload failed:', err);
     }
   }
@@ -342,8 +348,10 @@
         filePath,
         voiceMirrorEditorTheme,
         onDocChanged: (update) => {
-          tabsStore.setDirty(tab.id, true);
-          tabsStore.pinTab(tab.id);
+          if (!isLiveReloading) {
+            tabsStore.setDirty(tab.id, true);
+            tabsStore.pinTab(tab.id);
+          }
           markdownContent = update.state.doc.toString();
           if (lsp.hasLsp) {
             const content = update.state.doc.toString();
@@ -648,10 +656,13 @@
           const currentContent = view.state.doc.toString();
           if (data.content === currentContent) return;
 
+          isLiveReloading = true;
           view.dispatch({
             changes: { from: 0, to: currentContent.length, insert: data.content },
           });
+          isLiveReloading = false;
         } catch (err) {
+          isLiveReloading = false;
           console.warn('[FileEditor] Live reload failed:', err);
         }
       });

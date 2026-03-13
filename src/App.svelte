@@ -46,10 +46,15 @@
     return () => overlayStore.destroyEventListeners();
   });
 
-  // Initialize sidebar state and restore overlay mode from config once loaded
-  let overlayRestored = $state(false);
+  // Initialize sidebar state and restore overlay mode from config once loaded.
+  // One-shot: only runs on first config load. Subsequent configStore.value
+  // changes (from updateConfig calls) must NOT re-initialize projectStore,
+  // because _persist() uses setConfig() directly, leaving configStore.value
+  // stale for projects — re-init would reset activeIndex to the stale value.
+  let configInitialized = $state(false);
   $effect(() => {
-    if (configStore.loaded) {
+    if (configStore.loaded && !configInitialized) {
+      configInitialized = true;
       const collapsed = configStore.value?.sidebar?.collapsed;
       if (collapsed !== undefined) {
         navigationStore.initSidebarState(collapsed);
@@ -65,18 +70,15 @@
 
       // Restore overlay (orb) mode if user was in compact mode last session.
       // After restore, show the window (it starts hidden to prevent flash).
-      if (!overlayRestored) {
-        overlayRestored = true;
-        overlayStore.restoreFromConfig(configStore.value);
-        document.body.classList.add('app-ready');
-        // Window starts hidden (visible:false in tauri.conf.json).
-        // Now that Svelte has mounted and the correct mode is set, show it.
-        showWindow().then(() => {
-          if (configStore.value?.behavior?.startMinimized) {
-            minimizeWindow().catch(() => {});
-          }
-        }).catch(() => {});
-      }
+      overlayStore.restoreFromConfig(configStore.value);
+      document.body.classList.add('app-ready');
+      // Window starts hidden (visible:false in tauri.conf.json).
+      // Now that Svelte has mounted and the correct mode is set, show it.
+      showWindow().then(() => {
+        if (configStore.value?.behavior?.startMinimized) {
+          minimizeWindow().catch(() => {});
+        }
+      }).catch(() => {});
     }
   });
 

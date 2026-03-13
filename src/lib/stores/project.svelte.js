@@ -2,11 +2,11 @@
  * project.svelte.js -- Svelte 5 reactive store for project management.
  *
  * Tracks project entries (path, name, color) and the active project index.
- * Persists to config backend via updateConfig().
+ * Persists to config backend via setConfig() directly — bypasses the reactive
+ * configStore to avoid cascading effect re-triggers on project switch.
  */
 
-import { updateConfig } from './config.svelte.js';
-import { chatList, loadProjectIcons } from '../api.js';
+import { setConfig, chatList, loadProjectIcons } from '../api.js';
 import { unwrapResult } from '../utils.js';
 import { saveCurrentState, restoreState, startAutoSave, stopAutoSave } from './workspace-state.svelte.js';
 import { tabsStore } from './tabs.svelte.js';
@@ -35,6 +35,7 @@ function createProjectStore() {
   let activeIndex = $state(0);
   let sessions = $state([]);
   let iconCache = $state({});
+  let persistTimer = null;
 
   return {
     get entries() { return entries; },
@@ -198,16 +199,25 @@ function createProjectStore() {
       }
     },
 
-    /** Persist current state to config backend */
+    /**
+     * Persist current state to config backend.
+     * Calls setConfig() directly (not updateConfig) to avoid replacing
+     * configStore.value, which would re-trigger every config-dependent
+     * effect (PTT keys, DOM handlers, etc.) on every project switch.
+     * Debounced to batch rapid-fire calls during switch flows.
+     */
     _persist() {
-      updateConfig({
-        projects: {
-          entries,
-          activeIndex,
-        },
-      }).catch((err) => {
-        console.error('[project] Failed to persist:', err);
-      });
+      clearTimeout(persistTimer);
+      persistTimer = setTimeout(() => {
+        setConfig({
+          projects: {
+            entries,
+            activeIndex,
+          },
+        }).catch((err) => {
+          console.error('[project] Failed to persist:', err);
+        });
+      }, 100);
     },
 
     /** Load icon data URLs for all entries that have icons. */
