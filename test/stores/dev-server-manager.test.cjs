@@ -507,17 +507,17 @@ describe('dev-server-manager.svelte.js -- startCommand preservation', () => {
     assert.ok(src.includes('startCommand: null'), 'getOrCreateState should initialize startCommand: null');
   });
 
-  it('startServer stores startCommand in state', () => {
+  it('startServer stores startCommand in state from camelCase field', () => {
     assert.ok(
-      src.includes('startCommand: server.start_command'),
-      'startServer should store start_command in state'
+      src.includes('startCommand: server.startCommand'),
+      'startServer should store startCommand from server (camelCase from Rust serde)'
     );
   });
 
-  it('restartServer includes start_command in serverConfig', () => {
+  it('restartServer includes startCommand in serverConfig', () => {
     assert.ok(
-      src.includes('start_command: state.startCommand'),
-      'restartServer should include start_command from state'
+      src.includes('startCommand: state.startCommand'),
+      'restartServer should include startCommand from state'
     );
   });
 });

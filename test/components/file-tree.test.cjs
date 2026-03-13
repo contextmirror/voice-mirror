@@ -431,18 +431,21 @@ describe('FileTree.svelte -- file watcher integration', () => {
     assert.ok(src.includes('return () =>'), 'Should return cleanup function from $effect');
   });
 
-  it('reloads root when rootChanged flag is true', () => {
-    const handlerStart = src.indexOf('async function handleTreeChanged');
-    const handlerEnd = src.indexOf('function handleGitChanged');
-    const handlerBody = src.slice(handlerStart, handlerEnd);
-    assert.ok(handlerBody.includes('loadRoot'), 'Should call loadRoot when root changed');
+  it('debounces tree refresh to avoid concurrent overlapping reloads', () => {
+    assert.ok(src.includes('treeRefreshTimer'), 'Should have debounce timer for tree refresh');
+    assert.ok(src.includes('clearTimeout(treeRefreshTimer)'), 'Should clear pending timer on new event');
   });
 
-  it('handleGitChanged calls loadGitChanges', () => {
-    const handlerStart = src.indexOf('function handleGitChanged');
-    const handlerEnd = src.indexOf('}', handlerStart + 10);
-    const handlerBody = src.slice(handlerStart, handlerEnd);
-    assert.ok(handlerBody.includes('loadGitChanges'), 'Should call loadGitChanges');
+  it('tree refresh calls loadRoot', () => {
+    const refreshStart = src.indexOf('async function doTreeRefresh');
+    const refreshEnd = src.indexOf('function handleGitChanged');
+    const refreshBody = src.slice(refreshStart, refreshEnd);
+    assert.ok(refreshBody.includes('loadRoot'), 'doTreeRefresh should call loadRoot');
+  });
+
+  it('debounces git refresh', () => {
+    assert.ok(src.includes('gitRefreshTimer'), 'Should have debounce timer for git refresh');
+    assert.ok(src.includes('loadGitChanges'), 'Should still call loadGitChanges');
   });
 });
 

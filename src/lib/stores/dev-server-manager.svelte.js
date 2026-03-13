@@ -183,7 +183,7 @@ function createDevServerManager() {
 
   /**
    * Start a dev server for a project.
-   * @param {{ url: string, port: number, framework?: string, start_command?: string }} server
+   * @param {{ url: string, port: number, framework?: string, startCommand?: string }} server
    * @param {string} projectPath
    * @param {string} [packageManager]
    */
@@ -208,7 +208,7 @@ function createDevServerManager() {
       port: server.port,
       framework: server.framework || null,
       url: server.url,
-      startCommand: server.start_command || null,
+      startCommand: server.startCommand || null,
       lastActiveTime: Date.now(),
     });
 
@@ -258,7 +258,7 @@ function createDevServerManager() {
       });
 
       // Build start command with correct package manager prefix
-      let startCommand = server.start_command || 'npm run dev';
+      let startCommand = server.startCommand || 'npm run dev';
       if (packageManager && packageManager !== 'npm' && startCommand.startsWith('npm run ')) {
         const script = startCommand.replace('npm run ', '');
         startCommand = `${packageManager} run ${script}`;
@@ -428,7 +428,7 @@ function createDevServerManager() {
       url: state.url,
       port: state.port,
       framework: state.framework,
-      start_command: state.startCommand,
+      startCommand: state.startCommand,
     };
 
     await stopServer(projectPath);
