@@ -1,10 +1,18 @@
 <script>
+  import { onMount } from 'svelte';
   import { open } from '@tauri-apps/plugin-dialog';
   import { projectStore } from '../../lib/stores/project.svelte.js';
+  import { lensStore } from '../../lib/stores/lens.svelte.js';
   import { saveProjectIcon, removeProjectIcon } from '../../lib/api.js';
   import { unwrapResult } from '../../lib/utils.js';
 
   let { projectIndex, onClose } = $props();
+
+  // Freeze WebView2 while modal is open (airspace problem — native control renders above HTML)
+  onMount(() => {
+    lensStore.freeze();
+    return () => lensStore.unfreeze();
+  });
 
   const entry = $derived(projectStore.entries[projectIndex]);
 
