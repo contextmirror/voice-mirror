@@ -30,7 +30,7 @@ pub struct TerminalProfile {
 }
 
 /// Event emitted by a terminal session (sent to the frontend via Tauri events).
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Clone, serde::Serialize)]
 pub struct TerminalEvent {
     /// The session ID this event belongs to (e.g. "terminal-1").
     pub id: String,
@@ -43,6 +43,24 @@ pub struct TerminalEvent {
     /// Exit code (present for "exit" events).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub code: Option<i32>,
+    /// Project output channel label (for forwarding loop to do project logging).
+    #[serde(skip)]
+    pub output_channel: Option<String>,
+    /// Project output store reference (for forwarding loop to do project logging).
+    #[serde(skip)]
+    pub output_store: Option<std::sync::Arc<crate::services::output::OutputStore>>,
+}
+
+impl std::fmt::Debug for TerminalEvent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TerminalEvent")
+            .field("id", &self.id)
+            .field("event_type", &self.event_type)
+            .field("text", &self.text.as_deref().map(|t| &t[..t.len().min(64)]))
+            .field("code", &self.code)
+            .field("output_channel", &self.output_channel)
+            .finish_non_exhaustive()
+    }
 }
 
 /// A single terminal PTY session.
@@ -67,9 +85,9 @@ pub struct TerminalManager {
     /// Active sessions keyed by ID.
     sessions: HashMap<String, TerminalSession>,
     /// Sender side of the event channel (cloned per session reader thread).
-    event_tx: mpsc::UnboundedSender<TerminalEvent>,
+    event_tx: mpsc::Sender<TerminalEvent>,
     /// Receiver side — taken once during Tauri setup for the forwarding loop.
-    event_rx: Option<mpsc::UnboundedReceiver<TerminalEvent>>,
+    event_rx: Option<mpsc::Receiver<TerminalEvent>>,
     /// Monotonic counter for generating unique session IDs.
     next_id: u64,
 }
@@ -115,7 +133,7 @@ fn find_git_bash() -> Option<String> {
 }
 
 /// Classify a terminal output line into a log level based on content heuristics.
-fn classify_terminal_line(line: &str) -> &'static str {
+pub(crate) fn classify_terminal_line(line: &str) -> &'static str {
     let lower = line.to_ascii_lowercase();
     if lower.contains("error") || lower.contains("failed") || lower.starts_with("✘") {
         "ERROR"
@@ -129,7 +147,7 @@ fn classify_terminal_line(line: &str) -> &'static str {
 impl TerminalManager {
     /// Create a new TerminalManager with a fresh event channel.
     pub fn new() -> Self {
-        let (tx, rx) = mpsc::unbounded_channel();
+        let (tx, rx) = mpsc::channel(2048);
         Self {
             sessions: HashMap::new(),
             event_tx: tx,
@@ -140,7 +158,7 @@ impl TerminalManager {
 
     /// Take the event receiver. Called once during Tauri `.setup()` to start the
     /// forwarding loop. Returns `None` on subsequent calls.
-    pub fn take_event_rx(&mut self) -> Option<mpsc::UnboundedReceiver<TerminalEvent>> {
+    pub fn take_event_rx(&mut self) -> Option<mpsc::Receiver<TerminalEvent>> {
         self.event_rx.take()
     }
 
@@ -419,28 +437,16 @@ impl TerminalManager {
                     Ok(n) => {
                         let text = String::from_utf8_lossy(&buf[..n]).to_string();
 
-                        // Mirror to project output channel if configured
-                        if let (Some(ref channel), Some(ref store)) = (&output_channel_clone, &output_store_clone) {
-                            for line in text.lines() {
-                                let trimmed = line.trim();
-                                if !trimmed.is_empty() {
-                                    // Strip ANSI escape codes so Output panel shows clean text
-                                    let clean = crate::util::strip_ansi_codes(trimmed);
-                                    let clean = clean.trim();
-                                    if !clean.is_empty() {
-                                        let level = classify_terminal_line(clean);
-                                        store.push_project(channel, level, clean);
-                                    }
-                                }
-                            }
-                        }
-
-                        let _ = event_tx.send(TerminalEvent {
+                        if event_tx.try_send(TerminalEvent {
                             id: session_id.clone(),
                             event_type: "stdout".to_string(),
                             text: Some(text),
                             code: None,
-                        });
+                            output_channel: output_channel_clone.clone(),
+                            output_store: output_store_clone.clone(),
+                        }).is_err() {
+                            warn!("Terminal {} channel full, dropping {} bytes", session_id, n);
+                        }
                     }
                     Err(e) => {
                         if thread_running.load(Ordering::SeqCst) {
@@ -453,12 +459,16 @@ impl TerminalManager {
 
             // Emit exit event
             thread_running.store(false, Ordering::SeqCst);
-            let _ = event_tx.send(TerminalEvent {
+            if event_tx.try_send(TerminalEvent {
                 id: session_id.clone(),
                 event_type: "exit".to_string(),
                 text: None,
                 code: Some(0),
-            });
+                output_channel: None,
+                output_store: None,
+            }).is_err() {
+                warn!("Terminal {} channel full, dropping exit event", session_id);
+            }
 
             info!("Terminal {} reader thread ended", session_id);
         });
