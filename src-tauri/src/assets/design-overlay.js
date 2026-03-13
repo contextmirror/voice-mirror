@@ -908,6 +908,12 @@
         var rect = el.getBoundingClientRect();
         var style = window.getComputedStyle(el);
 
+        // Collect all HTML attributes
+        var attrs = {};
+        for (var a = 0; a < el.attributes.length; a++) {
+            attrs[el.attributes[a].name] = el.attributes[a].value;
+        }
+
         // Strip script and style tags from outerHTML
         var clone = el.cloneNode(true);
         var scripts = clone.querySelectorAll('script, style');
@@ -938,6 +944,7 @@
             tagName: el.tagName.toLowerCase(),
             id: el.id || '',
             classes: el.className && typeof el.className === 'string' ? el.className.trim().split(/\s+/).filter(function (c) { return c; }) : [],
+            attributes: attrs,
             bounds: {
                 x: Math.round(rect.left),
                 y: Math.round(rect.top),

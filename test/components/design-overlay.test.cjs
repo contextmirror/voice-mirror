@@ -876,3 +876,21 @@ describe('design-overlay.js: _serializeElement includes accessibility', () => {
     assert.ok(src.includes('accessibility: _getAccessibility(el)'), 'Should include accessibility in serialized output');
   });
 });
+
+// =========================================================================
+// Task 1: attributes serialization
+// =========================================================================
+
+describe('design-overlay.js: attributes serialization', () => {
+  it('_serializeElement collects all HTML attributes', () => {
+    const fnBody = src.substring(src.indexOf('function _serializeElement'));
+    assert.ok(fnBody.includes('el.attributes.length'), '_serializeElement must iterate el.attributes');
+    assert.ok(fnBody.includes('el.attributes['), 'Must access individual attributes by index');
+  });
+
+  it('attributes field is included in returned object', () => {
+    const fnBody = src.substring(src.indexOf('function _serializeElement'));
+    const returnBlock = fnBody.substring(fnBody.indexOf('return {'));
+    assert.ok(returnBlock.includes('attributes:'), 'Return object must include attributes field');
+  });
+});
