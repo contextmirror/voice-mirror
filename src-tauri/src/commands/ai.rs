@@ -56,10 +56,21 @@ pub fn start_ai(
         }
     }
 
+    // Resolve API key: prefer explicit key from frontend, but if it's
+    // missing or masked (contains bullet char from get_config masking),
+    // fall back to the in-memory config which always has plaintext keys.
+    let resolved_key = match &api_key {
+        Some(k) if !k.is_empty() && !k.contains('\u{2022}') => api_key,
+        _ => {
+            let cfg = crate::commands::config::get_config_snapshot();
+            cfg.ai.api_keys.get(&provider_type).cloned().flatten()
+        }
+    };
+
     let config = ProviderConfig {
         model,
         base_url,
-        api_key,
+        api_key: resolved_key,
         context_length: context_length.unwrap_or(32768),
         system_prompt,
         cwd,
@@ -349,10 +360,19 @@ pub fn set_provider(
         }
     }
 
+    // Resolve API key (same logic as start_ai)
+    let resolved_key = match &api_key {
+        Some(k) if !k.is_empty() && !k.contains('\u{2022}') => api_key,
+        _ => {
+            let cfg = crate::commands::config::get_config_snapshot();
+            cfg.ai.api_keys.get(&provider_id).cloned().flatten()
+        }
+    };
+
     let config = ProviderConfig {
         model,
         base_url,
-        api_key,
+        api_key: resolved_key,
         context_length: context_length.unwrap_or(32768),
         system_prompt,
         cwd,

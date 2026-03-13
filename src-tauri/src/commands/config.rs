@@ -22,17 +22,68 @@ pub(crate) fn get_config_snapshot() -> AppConfig {
         .clone()
 }
 
-/// Get the full config.
+/// Get the full config with API keys masked for safety.
+///
+/// API keys are replaced with `"sk-ant-•••••c123"` style masks so they
+/// don't leak if the config object is logged or visible on stream.
+/// Use `get_api_key(provider)` to retrieve the full plaintext key.
 #[tauri::command]
 pub fn get_config() -> IpcResponse {
     let guard = match CONFIG.lock() {
         Ok(g) => g,
         Err(e) => return IpcResponse::err(format!("Failed to lock config: {}", e)),
     };
-    match serde_json::to_value(&*guard) {
-        Ok(val) => IpcResponse::ok(val),
-        Err(e) => IpcResponse::err(format!("Serialize error: {}", e)),
+    let mut val = match serde_json::to_value(&*guard) {
+        Ok(v) => v,
+        Err(e) => return IpcResponse::err(format!("Serialize error: {}", e)),
+    };
+
+    // Mask API keys in the response
+    use crate::config::crypto::mask_api_key;
+    if let Some(ai) = val.get_mut("ai") {
+        if let Some(keys) = ai.get_mut("apiKeys") {
+            if let Some(obj) = keys.as_object_mut() {
+                for (_provider, v) in obj.iter_mut() {
+                    if let Some(key_str) = v.as_str() {
+                        *v = match mask_api_key(key_str) {
+                            Some(masked) => serde_json::Value::String(masked),
+                            None => serde_json::Value::Null,
+                        };
+                    }
+                }
+            }
+        }
     }
+    if let Some(voice) = val.get_mut("voice") {
+        for field in &["ttsApiKey", "sttApiKey"] {
+            if let Some(v) = voice.get_mut(*field) {
+                if let Some(key_str) = v.as_str() {
+                    *v = match mask_api_key(key_str) {
+                        Some(masked) => serde_json::Value::String(masked),
+                        None => serde_json::Value::Null,
+                    };
+                }
+            }
+        }
+    }
+
+    IpcResponse::ok(val)
+}
+
+/// Get the full plaintext API key for a specific provider.
+///
+/// Only used by the Settings UI to populate the edit field.
+#[tauri::command]
+pub fn get_api_key(provider: String) -> IpcResponse {
+    let guard = match CONFIG.lock() {
+        Ok(g) => g,
+        Err(e) => return IpcResponse::err(format!("Failed to lock config: {}", e)),
+    };
+    let key = guard.ai.api_keys
+        .get(&provider)
+        .and_then(|v| v.as_deref())
+        .unwrap_or("");
+    IpcResponse::ok(serde_json::json!({ "key": key }))
 }
 
 /// Update config with a partial patch (deep merge).

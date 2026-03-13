@@ -16,6 +16,10 @@ export async function getConfig() {
   return invoke('get_config');
 }
 
+export async function getApiKey(provider) {
+  return invoke('get_api_key', { provider });
+}
+
 export async function setConfig(patch) {
   return invoke('set_config', { patch });
 }

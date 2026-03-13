@@ -213,6 +213,7 @@ describe('api.js -- exported async functions', () => {
   const expectedExports = [
     // Config
     'getConfig',
+    'getApiKey',
     'setConfig',
     'resetConfig',
     'getPlatformInfo',

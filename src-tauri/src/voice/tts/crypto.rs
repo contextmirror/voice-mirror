@@ -127,6 +127,14 @@ pub(crate) fn base64_encode(data: &[u8]) -> String {
     base64::engine::general_purpose::STANDARD.encode(data)
 }
 
+/// Base64-decode a string using the standard alphabet with padding.
+pub(crate) fn base64_decode(data: &str) -> Result<Vec<u8>, String> {
+    use base64::Engine;
+    base64::engine::general_purpose::STANDARD
+        .decode(data)
+        .map_err(|e| format!("Base64 decode error: {}", e))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

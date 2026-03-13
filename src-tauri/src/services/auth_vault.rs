@@ -117,6 +117,36 @@ pub fn load_key(auth_dir: &Path) -> Result<[u8; 32], String> {
     Ok(key)
 }
 
+/// Save a 256-bit key with a custom filename, wrapped with DPAPI.
+pub fn save_key_to(dir: &Path, filename: &str, key: &[u8; 32]) -> Result<(), String> {
+    fs::create_dir_all(dir).map_err(|e| format!("Failed to create dir: {e}"))?;
+    let protected = dpapi_protect(key)?;
+    let path = dir.join(filename);
+    fs::write(&path, &protected).map_err(|e| format!("Failed to write key file: {e}"))
+}
+
+/// Load a 256-bit key with a custom filename, unwrapping DPAPI.
+pub fn load_key_from(dir: &Path, filename: &str) -> Result<[u8; 32], String> {
+    let path = dir.join(filename);
+    let bytes = fs::read(&path).map_err(|e| format!("Failed to read key file: {e}"))?;
+
+    if bytes.len() == 32 {
+        tracing::info!("Migrating plaintext key {} to DPAPI-protected format", filename);
+        let mut key = [0u8; 32];
+        key.copy_from_slice(&bytes);
+        save_key_to(dir, filename, &key)?;
+        return Ok(key);
+    }
+
+    let raw = dpapi_unprotect(&bytes)?;
+    if raw.len() != 32 {
+        return Err(format!("Invalid key length after DPAPI unwrap: expected 32, got {}", raw.len()));
+    }
+    let mut key = [0u8; 32];
+    key.copy_from_slice(&raw);
+    Ok(key)
+}
+
 /// Load the existing key or generate + save a new one.
 pub fn ensure_key(auth_dir: &Path) -> Result<[u8; 32], String> {
     match load_key(auth_dir) {
