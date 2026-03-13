@@ -1300,6 +1300,31 @@
     }
 
     // =========================================================================
+    // Tree interaction helpers
+    // =========================================================================
+
+    function _selectByTreeId(nodeId) {
+        var el = document.querySelector('[data-vm-tree-id="' + nodeId + '"]');
+        if (!el) return null;
+        _hoveredEl = el;
+        _selectedElement = _serializeElement(el);
+        _drawElementHighlight(el);
+        _showSelectTooltip(el);
+        return _selectedElement;
+    }
+
+    function _expandTreeNode(nodeId) {
+        var el = document.querySelector('[data-vm-tree-id="' + nodeId + '"]');
+        if (!el) return [];
+        var children = [];
+        var limit = Math.min(el.children.length, 200);
+        for (var i = 0; i < limit; i++) {
+            children.push(_serializeTreeNode(el.children[i], _hoveredEl, false));
+        }
+        return children;
+    }
+
+    // =========================================================================
     // Public API
     // =========================================================================
 
@@ -1411,6 +1436,9 @@
 
         getSelectedElement: function () {
             return _selectedElement;
-        }
+        },
+
+        selectByTreeId: function (nodeId) { return _selectByTreeId(nodeId); },
+        expandTreeNode: function (nodeId) { return _expandTreeNode(nodeId); }
     };
 })();

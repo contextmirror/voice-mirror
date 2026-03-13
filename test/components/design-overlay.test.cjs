@@ -961,3 +961,37 @@ describe('design-overlay.js: DOM tree serialization', () => {
   });
 });
 
+// =========================================================================
+// Task 5: tree interaction APIs
+// =========================================================================
+
+describe('design-overlay.js: tree interaction APIs', () => {
+  it('has selectByTreeId on public API', () => {
+    assert.ok(src.includes('selectByTreeId'), 'Must expose selectByTreeId');
+    const apiBlock = src.substring(src.indexOf('window.vmDesign'));
+    assert.ok(apiBlock.includes('selectByTreeId'), 'selectByTreeId must be on window.vmDesign');
+  });
+
+  it('selectByTreeId queries by data-vm-tree-id', () => {
+    const fnBody = src.substring(src.indexOf('selectByTreeId'));
+    assert.ok(fnBody.includes('data-vm-tree-id'), 'Must query by data-vm-tree-id attribute');
+    assert.ok(fnBody.includes('querySelector'), 'Must use querySelector');
+  });
+
+  it('selectByTreeId returns serialized element data', () => {
+    const fnBody = src.substring(src.indexOf('selectByTreeId'));
+    assert.ok(fnBody.includes('_serializeElement'), 'Must call _serializeElement');
+  });
+
+  it('has expandTreeNode on public API', () => {
+    assert.ok(src.includes('expandTreeNode'), 'Must expose expandTreeNode');
+    const apiBlock = src.substring(src.indexOf('window.vmDesign'));
+    assert.ok(apiBlock.includes('expandTreeNode'), 'expandTreeNode must be on window.vmDesign');
+  });
+
+  it('expandTreeNode returns child nodes for given nodeId', () => {
+    const fnBody = src.substring(src.indexOf('expandTreeNode'));
+    assert.ok(fnBody.includes('data-vm-tree-id'), 'Must query by data-vm-tree-id');
+    assert.ok(fnBody.includes('children'), 'Must return children');
+  });
+});
