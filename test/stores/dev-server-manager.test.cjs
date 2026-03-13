@@ -499,3 +499,25 @@ describe('dev-server-manager.svelte.js -- startServer race condition fix', () =>
     assert.ok(startingIdx < evictIdx, 'Should set starting BEFORE evictIfNeeded');
   });
 });
+
+// -- startCommand preservation --
+
+describe('dev-server-manager.svelte.js -- startCommand preservation', () => {
+  it('ServerState includes startCommand field in default', () => {
+    assert.ok(src.includes('startCommand: null'), 'getOrCreateState should initialize startCommand: null');
+  });
+
+  it('startServer stores startCommand in state', () => {
+    assert.ok(
+      src.includes('startCommand: server.start_command'),
+      'startServer should store start_command in state'
+    );
+  });
+
+  it('restartServer includes start_command in serverConfig', () => {
+    assert.ok(
+      src.includes('start_command: state.startCommand'),
+      'restartServer should include start_command from state'
+    );
+  });
+});

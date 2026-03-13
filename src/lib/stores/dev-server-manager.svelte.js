@@ -57,6 +57,7 @@ function createDevServerManager() {
         port: null,
         framework: null,
         url: null,
+        startCommand: null,
         crashCount: 0,
         lastCrashTime: null,
         lastActiveTime: Date.now(),
@@ -207,6 +208,7 @@ function createDevServerManager() {
       port: server.port,
       framework: server.framework || null,
       url: server.url,
+      startCommand: server.start_command || null,
       lastActiveTime: Date.now(),
     });
 
@@ -426,6 +428,7 @@ function createDevServerManager() {
       url: state.url,
       port: state.port,
       framework: state.framework,
+      start_command: state.startCommand,
     };
 
     await stopServer(projectPath);
