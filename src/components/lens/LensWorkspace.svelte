@@ -25,7 +25,7 @@
   import { browserTabsStore } from '../../lib/stores/browser-tabs.svelte.js';
   import { browserHistoryStore } from '../../lib/stores/browser-history.svelte.js';
   import { downloadsStore } from '../../lib/stores/downloads.svelte.js';
-  import { lensSetVisible, startFileWatching, stopFileWatching, lensCapturePreview, lspShutdown, lensSetZoom, lensGetZoom, designGetElement } from '../../lib/api.js';
+  import { lensSetVisible, startFileWatching, stopFileWatching, lensCapturePreview, lspShutdown, lensSetZoom, lensGetZoom, designGetElement, lensOpenDevtools, lensCloseDevtools, lensResizeDevtools, lensSetDevtoolsVisible, findDevtoolsUrl } from '../../lib/api.js';
   import { navigationStore } from '../../lib/stores/navigation.svelte.js';
   import { attachmentsStore } from '../../lib/stores/attachments.svelte.js';
   import { projectStore } from '../../lib/stores/project.svelte.js';
@@ -126,6 +126,76 @@
 
   // ── Downloads Panel ──
   let showDownloads = $state(false);
+
+  // ── DevTools Panel (native WebView2) ──
+  let showDevtools = $state(false);
+  let devtoolsContainerEl = $state(null);
+  let devtoolsOpen = $state(false); // tracks whether the native WebView2 is created
+
+  async function toggleDevtools() {
+    if (showDevtools) {
+      // Close
+      showDevtools = false;
+      devtoolsOpen = false;
+      await lensCloseDevtools().catch(() => {});
+    } else {
+      // Discover the DevTools URL from the remote debugging port
+      const devtoolsUrl = await findDevtoolsUrl();
+      if (!devtoolsUrl) {
+        console.warn('[LensWorkspace] No DevTools target found on remote debugging port');
+        return;
+      }
+      // Open — show the container first so it gets measured, then create the WebView2
+      showDevtools = true;
+      // Wait for layout to settle
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+      if (devtoolsContainerEl) {
+        const rect = devtoolsContainerEl.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          try {
+            await lensOpenDevtools(devtoolsUrl, rect.left, rect.top, rect.width, rect.height);
+            devtoolsOpen = true;
+          } catch (err) {
+            console.warn('[LensWorkspace] Failed to open DevTools:', err);
+            showDevtools = false;
+          }
+        }
+      }
+    }
+  }
+
+  // Sync DevTools WebView2 position on resize
+  $effect(() => {
+    if (!devtoolsContainerEl || !devtoolsOpen) return;
+    const observer = new ResizeObserver(() => {
+      if (!devtoolsContainerEl || !devtoolsOpen) return;
+      const rect = devtoolsContainerEl.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        lensResizeDevtools(rect.left, rect.top, rect.width, rect.height).catch(() => {});
+      }
+    });
+    observer.observe(devtoolsContainerEl);
+    return () => observer.disconnect();
+  });
+
+  // Hide DevTools WebView2 when browser is hidden, show when visible
+  $effect(() => {
+    if (!devtoolsOpen) return;
+    if (!showBrowser) {
+      lensSetDevtoolsVisible(false).catch(() => {});
+    } else {
+      lensSetDevtoolsVisible(true).catch(() => {});
+    }
+  });
+
+  // Close DevTools when navigating away
+  $effect(() => {
+    if (!showBrowser && devtoolsOpen) {
+      showDevtools = false;
+      devtoolsOpen = false;
+      lensCloseDevtools().catch(() => {});
+    }
+  });
 
   // Freeze WebView2 when History or Downloads panels are open (airspace problem)
   $effect(() => {
@@ -515,6 +585,8 @@
                             onHistory={() => showHistory = true}
                             onDownloads={() => showDownloads = true}
                             onDownloadSettings={handleDownloadSettings}
+                            onDevtools={toggleDevtools}
+                            devtoolsActive={showDevtools}
                           />
                           {#if lensStore.designMode}
                             <DesignToolbar
@@ -532,6 +604,9 @@
                                 onClose={() => { inspectorData = null; }}
                                 onUpdateData={(data) => { inspectorData = data; }}
                               />
+                            {/if}
+                            {#if showDevtools}
+                              <div class="devtools-container" bind:this={devtoolsContainerEl}></div>
                             {/if}
                           </div>
                           {#if showHistory}
@@ -735,6 +810,13 @@
   .browser-with-inspector :global(.lens-preview) {
     flex: 1;
     min-width: 0;
+  }
+
+  .devtools-container {
+    width: 45%;
+    min-width: 300px;
+    height: 100%;
+    /* Native WebView2 renders here — this div is just a positioning placeholder */
   }
 
 </style>

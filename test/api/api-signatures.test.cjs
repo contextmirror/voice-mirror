@@ -107,6 +107,9 @@ describe('api.js -- critical Tauri command names', () => {
     'lens_set_visible',
     'lens_hard_refresh',
     'lens_clear_cache',
+    // DevTools
+    'lens_find_devtools_url',
+    'lens_open_devtools',
     // Browser Tabs
     'lens_create_tab',
     'lens_close_tab',
@@ -303,6 +306,11 @@ describe('api.js -- exported async functions', () => {
     'lensCloseAllTabs',
     'lensSetZoom',
     'lensGetZoom',
+    'lensOpenDevtools',
+    'findDevtoolsUrl',
+    'lensCloseDevtools',
+    'lensResizeDevtools',
+    'lensSetDevtoolsVisible',
     'lensEvalTabJs',
     'lensFindOnPage',
     'lensFindNext',

@@ -465,6 +465,37 @@ export async function lensGetZoom(tabId) {
   return invoke('lens_get_zoom', { tabId });
 }
 
+export async function lensOpenDevtools(url, x, y, width, height) {
+  return invoke('lens_open_devtools', { url, x, y, width, height });
+}
+
+/**
+ * Discover the DevTools frontend URL by querying the remote debugging port.
+ * Uses a Tauri command (Rust-side HTTP) to bypass CORS restrictions.
+ * Returns the devtoolsFrontendUrl string, or null on failure.
+ */
+export async function findDevtoolsUrl() {
+  try {
+    const result = await invoke('lens_find_devtools_url');
+    return result?.data?.url || null;
+  } catch (e) {
+    console.warn('[api] DevTools URL discovery failed:', e);
+    return null;
+  }
+}
+
+export async function lensCloseDevtools() {
+  return invoke('lens_close_devtools');
+}
+
+export async function lensResizeDevtools(x, y, width, height) {
+  return invoke('lens_resize_devtools', { x, y, width, height });
+}
+
+export async function lensSetDevtoolsVisible(visible) {
+  return invoke('lens_set_devtools_visible', { visible });
+}
+
 export async function lensEvalTabJs(tabId, js) {
   return invoke('lens_eval_tab_js', { tabId, js });
 }

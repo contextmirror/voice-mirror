@@ -14,6 +14,8 @@
     onDownloads,
     onHistory,
     onDownloadSettings,
+    onDevtools,
+    devtoolsActive = false,
   } = $props();
 
   let urlInput = $state('');
@@ -82,6 +84,18 @@
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke-width="1.5">
       <rect x="2" y="2" width="20" height="20" rx="2" stroke="currentColor" fill="none"/>
       <path d="M8 7l-1 10 3.5-3.5 3 5 1.5-.9-3-5H16L8 7z" fill="currentColor"/>
+    </svg>
+  </button>
+  <button
+    class="nav-btn"
+    class:active={devtoolsActive}
+    onclick={onDevtools}
+    title="Toggle DevTools"
+    aria-label="Toggle DevTools"
+  >
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="4 17 10 11 4 5"/>
+      <line x1="12" y1="19" x2="20" y2="19"/>
     </svg>
   </button>
   <BrowserMenu
@@ -167,5 +181,6 @@
   .url-input::placeholder {
     color: var(--muted);
   }
+
 
 </style>
