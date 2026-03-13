@@ -946,10 +946,10 @@
             classes: el.className && typeof el.className === 'string' ? el.className.trim().split(/\s+/).filter(function (c) { return c; }) : [],
             attributes: attrs,
             bounds: {
-                x: Math.round(rect.left),
-                y: Math.round(rect.top),
-                width: Math.round(rect.width),
-                height: Math.round(rect.height)
+                x: Math.round(rect.left * 100) / 100,
+                y: Math.round(rect.top * 100) / 100,
+                width: Math.round(rect.width * 100) / 100,
+                height: Math.round(rect.height * 100) / 100
             },
             html: html,
             text: text,

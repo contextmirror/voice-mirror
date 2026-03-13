@@ -328,10 +328,10 @@ describe('design-overlay.js: _serializeElement', () => {
 
   it('returns bounds with x, y, width, height', () => {
     assert.ok(src.includes('bounds:'), 'Should include bounds object');
-    assert.ok(src.includes('Math.round(rect.left)'), 'Bounds should have rounded x');
-    assert.ok(src.includes('Math.round(rect.top)'), 'Bounds should have rounded y');
-    assert.ok(src.includes('Math.round(rect.width)'), 'Bounds should have rounded width');
-    assert.ok(src.includes('Math.round(rect.height)'), 'Bounds should have rounded height');
+    assert.ok(src.includes('Math.round(rect.left * 100)'), 'Bounds should have decimal-precise x');
+    assert.ok(src.includes('Math.round(rect.top * 100)'), 'Bounds should have decimal-precise y');
+    assert.ok(src.includes('Math.round(rect.width * 100)'), 'Bounds should have decimal-precise width');
+    assert.ok(src.includes('Math.round(rect.height * 100)'), 'Bounds should have decimal-precise height');
   });
 
   it('strips script and style tags from HTML', () => {
@@ -892,5 +892,18 @@ describe('design-overlay.js: attributes serialization', () => {
     const fnBody = src.substring(src.indexOf('function _serializeElement'));
     const returnBlock = fnBody.substring(fnBody.indexOf('return {'));
     assert.ok(returnBlock.includes('attributes:'), 'Return object must include attributes field');
+  });
+});
+
+// =========================================================================
+// Task 2: decimal precision bounds
+// =========================================================================
+
+describe('design-overlay.js: decimal precision bounds', () => {
+  it('bounds use 2-decimal precision instead of Math.round', () => {
+    const fnBody = src.substring(src.indexOf('function _serializeElement'));
+    const boundsBlock = fnBody.substring(fnBody.indexOf('bounds:'), fnBody.indexOf('bounds:') + 300);
+    assert.ok(boundsBlock.includes('* 100) / 100'), 'bounds must use Math.round(x * 100) / 100 for decimal precision');
+    assert.ok(!boundsBlock.includes('Math.round(rect.left)'), 'Must not use plain Math.round on rect values');
   });
 });
