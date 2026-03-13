@@ -10,7 +10,7 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 
 /// A detected dev server configuration from project files.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct DetectedDevServer {
     /// Framework name (e.g. "Vite", "Next.js", "Tauri")
@@ -25,6 +25,12 @@ pub struct DetectedDevServer {
     pub source: String,
     /// Whether the port is currently accepting connections
     pub running: bool,
+    /// Whether the project environment needs to be set up before the server can start
+    #[serde(default)]
+    pub needs_setup: bool,
+    /// Commands to run to set up the environment (e.g. ["python -m venv .venv", "pip install -r requirements.txt"])
+    #[serde(default)]
+    pub setup_commands: Vec<String>,
 }
 
 /// Scan a project directory and return all detected dev servers.
@@ -211,6 +217,7 @@ fn detect_from_tauri_conf(root: &Path, pkg_manager: &str) -> Option<DetectedDevS
         start_command: make_start_command(pkg_manager, "dev"),
         source: "tauri.conf.json".to_string(),
         running: false,
+        ..Default::default()
     })
 }
 
@@ -228,6 +235,7 @@ fn detect_from_vite_config(root: &Path, pkg_manager: &str) -> Option<DetectedDev
                     start_command: make_start_command(pkg_manager, "dev"),
                     source: filename.to_string(),
                     running: false,
+                    ..Default::default()
                 });
             }
         }
@@ -247,6 +255,7 @@ fn detect_from_env(root: &Path, filename: &str, pkg_manager: &str) -> Option<Det
         start_command: make_start_command(pkg_manager, "dev"),
         source: filename.to_string(),
         running: false,
+        ..Default::default()
     })
 }
 
@@ -304,6 +313,7 @@ fn match_script_pattern(cmd: &str, script_key: &str, pkg_manager: &str) -> Optio
             start_command: make_start_command(pkg_manager, script_key),
             source: "package.json".to_string(),
             running: false,
+            ..Default::default()
         });
     }
 
@@ -316,6 +326,7 @@ fn match_script_pattern(cmd: &str, script_key: &str, pkg_manager: &str) -> Optio
             start_command: make_start_command(pkg_manager, script_key),
             source: "package.json".to_string(),
             running: false,
+            ..Default::default()
         });
     }
 
@@ -328,6 +339,7 @@ fn match_script_pattern(cmd: &str, script_key: &str, pkg_manager: &str) -> Optio
             start_command: make_start_command(pkg_manager, script_key),
             source: "package.json".to_string(),
             running: false,
+            ..Default::default()
         });
     }
 
@@ -340,6 +352,7 @@ fn match_script_pattern(cmd: &str, script_key: &str, pkg_manager: &str) -> Optio
             start_command: make_start_command(pkg_manager, script_key),
             source: "package.json".to_string(),
             running: false,
+            ..Default::default()
         });
     }
 
@@ -352,6 +365,7 @@ fn match_script_pattern(cmd: &str, script_key: &str, pkg_manager: &str) -> Optio
             start_command: make_start_command(pkg_manager, script_key),
             source: "package.json".to_string(),
             running: false,
+            ..Default::default()
         });
     }
 
@@ -364,6 +378,7 @@ fn match_script_pattern(cmd: &str, script_key: &str, pkg_manager: &str) -> Optio
             start_command: make_start_command(pkg_manager, script_key),
             source: "package.json".to_string(),
             running: false,
+            ..Default::default()
         });
     }
 
@@ -376,6 +391,7 @@ fn match_script_pattern(cmd: &str, script_key: &str, pkg_manager: &str) -> Optio
             start_command: make_start_command(pkg_manager, script_key),
             source: "package.json".to_string(),
             running: false,
+            ..Default::default()
         });
     }
 
@@ -388,6 +404,7 @@ fn match_script_pattern(cmd: &str, script_key: &str, pkg_manager: &str) -> Optio
             start_command: make_start_command(pkg_manager, script_key),
             source: "package.json".to_string(),
             running: false,
+            ..Default::default()
         });
     }
 
@@ -400,6 +417,7 @@ fn match_script_pattern(cmd: &str, script_key: &str, pkg_manager: &str) -> Optio
             start_command: make_start_command(pkg_manager, script_key),
             source: "package.json".to_string(),
             running: false,
+            ..Default::default()
         });
     }
 
@@ -413,6 +431,7 @@ fn match_script_pattern(cmd: &str, script_key: &str, pkg_manager: &str) -> Optio
             start_command: make_start_command(pkg_manager, script_key),
             source: "package.json".to_string(),
             running: false,
+            ..Default::default()
         });
     }
 
@@ -427,6 +446,7 @@ fn match_script_pattern(cmd: &str, script_key: &str, pkg_manager: &str) -> Optio
             start_command: make_start_command(pkg_manager, script_key),
             source: "package.json".to_string(),
             running: false,
+            ..Default::default()
         });
     }
 
@@ -440,6 +460,7 @@ fn match_script_pattern(cmd: &str, script_key: &str, pkg_manager: &str) -> Optio
             start_command: make_start_command(pkg_manager, script_key),
             source: "package.json".to_string(),
             running: false,
+            ..Default::default()
         });
     }
 
@@ -453,6 +474,7 @@ fn match_script_pattern(cmd: &str, script_key: &str, pkg_manager: &str) -> Optio
             start_command: format!("{} run {}", pkg_manager, script_key),
             source: "package.json".to_string(),
             running: false,
+            ..Default::default()
         });
     }
 
@@ -471,6 +493,7 @@ fn match_script_pattern(cmd: &str, script_key: &str, pkg_manager: &str) -> Optio
                 start_command: format!("{} run {}", pkg_manager, script_key),
                 source: "package.json".to_string(),
                 running: false,
+                ..Default::default()
             });
         }
     }
@@ -485,6 +508,7 @@ fn match_script_pattern(cmd: &str, script_key: &str, pkg_manager: &str) -> Optio
             start_command: make_start_command(pkg_manager, script_key),
             source: "package.json".to_string(),
             running: false,
+            ..Default::default()
         });
     }
 
@@ -1146,6 +1170,7 @@ fn detect_python_servers(
         start_command,
         source: source.to_string(),
         running: false,
+        ..Default::default()
     });
 
     servers
@@ -1884,6 +1909,49 @@ mod tests {
             assert!(servers[0].start_command.contains(".venv/bin/"), "Unix cmd: {}", servers[0].start_command);
         }
 
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_detect_python_needs_setup_no_venv() {
+        let dir = std::env::temp_dir().join("vm_test_py_needs_setup");
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::create_dir_all(&dir);
+        // Create requirements.txt with flask
+        std::fs::write(dir.join("requirements.txt"), "flask==2.0\n").unwrap();
+        // Create entry file
+        std::fs::write(dir.join("app.py"), "from flask import Flask\napp = Flask(__name__)\n").unwrap();
+        // NO .venv directory
+
+        let mut seen = std::collections::HashSet::new();
+        let servers = detect_python_servers(&dir, &mut seen);
+        assert_eq!(servers.len(), 1);
+        assert!(servers[0].needs_setup, "Should need setup when no venv exists");
+        assert!(!servers[0].setup_commands.is_empty(), "Should have setup commands");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_detect_python_no_setup_with_venv() {
+        let dir = std::env::temp_dir().join("vm_test_py_no_setup_venv");
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::create_dir_all(&dir);
+        std::fs::write(dir.join("requirements.txt"), "flask==2.0\n").unwrap();
+        std::fs::write(dir.join("app.py"), "from flask import Flask\n").unwrap();
+        // Create .venv directory
+        if cfg!(target_os = "windows") {
+            std::fs::create_dir_all(dir.join(".venv").join("Scripts")).unwrap();
+            std::fs::write(dir.join(".venv").join("Scripts").join("python.exe"), "").unwrap();
+        } else {
+            std::fs::create_dir_all(dir.join(".venv").join("bin")).unwrap();
+            std::fs::write(dir.join(".venv").join("bin").join("python"), "").unwrap();
+        }
+
+        let mut seen = std::collections::HashSet::new();
+        let servers = detect_python_servers(&dir, &mut seen);
+        assert_eq!(servers.len(), 1);
+        assert!(!servers[0].needs_setup, "Should NOT need setup when venv exists");
+        assert!(servers[0].setup_commands.is_empty(), "Should have no setup commands");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
