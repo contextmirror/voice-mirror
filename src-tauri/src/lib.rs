@@ -167,6 +167,10 @@ pub fn run() {
                     "lens-url-changed",
                     serde_json::json!({ "url": decoded_url }),
                 );
+            } else if key == "element-selected" {
+                let _ = ctx.app_handle().emit("element-selected", serde_json::json!({}));
+            } else if key == "element-deselected" {
+                let _ = ctx.app_handle().emit("element-deselected", serde_json::json!({}));
             } else if !key.is_empty() {
                 info!("[lens-shortcut] Forwarding shortcut key: {}", key);
                 let _ = ctx.app_handle().emit("lens-shortcut", serde_json::json!({ "key": key }));
@@ -487,6 +491,8 @@ pub fn run() {
             // Design canvas overlay
             design_cmds::design_command,
             design_cmds::design_get_element,
+            design_cmds::design_select_by_tree_id,
+            design_cmds::design_expand_tree_node,
             // Output / diagnostics
             output_cmds::get_output_logs,
             output_cmds::log_frontend_error,

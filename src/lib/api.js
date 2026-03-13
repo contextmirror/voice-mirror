@@ -431,6 +431,14 @@ export async function designGetElement() {
   return invoke('design_get_element');
 }
 
+export async function designSelectByTreeId(nodeId) {
+  return invoke('design_select_by_tree_id', { nodeId });
+}
+
+export async function designExpandTreeNode(nodeId) {
+  return invoke('design_expand_tree_node', { nodeId });
+}
+
 // ============ Browser Tabs ============
 
 export async function lensCreateTab(tabId, url, x, y, width, height) {
