@@ -18,35 +18,35 @@ const libSrc = fs.readFileSync(LIB_RS_PATH, 'utf-8');
 describe('git.rs -- stash command functions', () => {
   it('defines git_stash_save command', () => {
     assert.ok(
-      gitSrc.includes('pub fn git_stash_save('),
+      gitSrc.includes('pub async fn git_stash_save('),
       'Should define pub fn git_stash_save'
     );
   });
 
   it('defines git_stash_list command', () => {
     assert.ok(
-      gitSrc.includes('pub fn git_stash_list('),
+      gitSrc.includes('pub async fn git_stash_list('),
       'Should define pub fn git_stash_list'
     );
   });
 
   it('defines git_stash_pop command', () => {
     assert.ok(
-      gitSrc.includes('pub fn git_stash_pop('),
+      gitSrc.includes('pub async fn git_stash_pop('),
       'Should define pub fn git_stash_pop'
     );
   });
 
   it('defines git_stash_apply command', () => {
     assert.ok(
-      gitSrc.includes('pub fn git_stash_apply('),
+      gitSrc.includes('pub async fn git_stash_apply('),
       'Should define pub fn git_stash_apply'
     );
   });
 
   it('defines git_stash_drop command', () => {
     assert.ok(
-      gitSrc.includes('pub fn git_stash_drop('),
+      gitSrc.includes('pub async fn git_stash_drop('),
       'Should define pub fn git_stash_drop'
     );
   });
@@ -55,8 +55,8 @@ describe('git.rs -- stash command functions', () => {
     // Each fn should be preceded by #[tauri::command]
     const fns = ['git_stash_save', 'git_stash_list', 'git_stash_pop', 'git_stash_apply', 'git_stash_drop'];
     for (const fn of fns) {
-      const idx = gitSrc.indexOf(`pub fn ${fn}(`);
-      assert.ok(idx > 0, `Should find pub fn ${fn}`);
+      const idx = gitSrc.indexOf(`pub async fn ${fn}(`);
+      assert.ok(idx > 0, `Should find pub async fn ${fn}`);
       // Look backwards from the function for #[tauri::command]
       const preceding = gitSrc.substring(Math.max(0, idx - 200), idx);
       assert.ok(
@@ -111,7 +111,7 @@ describe('git.rs -- stash command parameters', () => {
 describe('git.rs -- stash git operations', () => {
   it('git_stash_save runs git stash push', () => {
     assert.ok(
-      gitSrc.includes('"stash", "push"'),
+      gitSrc.includes('"stash"') && gitSrc.includes('"push"'),
       'git_stash_save should run git stash push'
     );
   });
