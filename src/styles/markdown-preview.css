@@ -41,11 +41,16 @@
 .markdown-preview {
   flex: 1;
   overflow: auto;
-  padding: 24px 32px;
+  padding: 24px 48px;
   font-family: var(--font-family);
   font-size: 14px;
   line-height: 1.6;
   color: var(--text);
+}
+
+.markdown-preview-content {
+  max-width: 820px;
+  margin: 0 auto;
 }
 
 .markdown-preview :global(h1) {

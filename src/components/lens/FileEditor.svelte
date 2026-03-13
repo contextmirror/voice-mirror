@@ -908,11 +908,13 @@
         open(href);
       }
     }}>
-      {#if markdownContent}
-        {@html renderMarkdown(markdownContent)}
-      {:else}
-        <div class="editor-loading"><span class="loading-text">No content</span></div>
-      {/if}
+      <div class="markdown-preview-content">
+        {#if markdownContent}
+          {@html renderMarkdown(markdownContent)}
+        {:else}
+          <div class="editor-loading"><span class="loading-text">No content</span></div>
+        {/if}
+      </div>
     </div>
   {/if}
   <div class="file-editor" class:hidden={isMarkdown && showPreview} bind:this={editorEl}
