@@ -265,11 +265,13 @@ function createDevServerManager() {
         startCommand = `${packageManager} run ${script}`;
       }
 
-      // Chain setup commands (venv creation + pip install) with start command
-      // using && so the shell handles sequencing and fails fast.
+      // Chain setup commands with && (fail-fast among setup steps),
+      // but use ; before the start command so it always attempts to start
+      // even if pip install partially fails (e.g. one package can't build).
       // terminalInput() is fire-and-forget — cannot send commands one at a time.
       if (server.setupCommands && server.setupCommands.length > 0) {
-        const fullCommand = [...server.setupCommands, startCommand].join(' && ');
+        const setupChain = server.setupCommands.join(' && ');
+        const fullCommand = setupChain + '; ' + startCommand;
         await terminalInput(shellId, fullCommand + '\n');
       } else {
         await terminalInput(shellId, startCommand + '\n');
