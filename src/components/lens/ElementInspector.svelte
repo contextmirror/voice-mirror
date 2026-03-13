@@ -4,10 +4,12 @@
   /** @type {{ elementData?: object, onClose?: () => void, onUpdateData?: (data: object) => void }} */
   let { elementData = null, onClose = () => {}, onUpdateData = () => {} } = $props();
 
+  // --- Tab state ---
+  let activeTab = $state('design');
+
   // --- Tree state ---
   let expandedNodes = $state(new Set());
 
-  // Initialize expanded state from tree data
   $effect(() => {
     if (elementData?.domTree) {
       const newExpanded = new Set();
@@ -36,11 +38,9 @@
       newSet.delete(node.nodeId);
     } else {
       newSet.add(node.nodeId);
-      // Lazy-load children if not yet fetched
       if (node.childCount > 0 && (!node.children || node.children.length === 0)) {
         const result = await designExpandTreeNode(node.nodeId);
         if (result?.success && result.data) {
-          // Update via parent callback — props are read-only in Svelte 5
           onUpdateData({ ...elementData, _expandedNodeId: node.nodeId, _expandedChildren: result.data });
         }
       }
@@ -49,8 +49,7 @@
   }
 
   async function selectTreeNode(nodeId) {
-    const result = await designSelectByTreeId(nodeId);
-    // Parent will handle updating elementData via the event flow
+    await designSelectByTreeId(nodeId);
   }
 
   function formatNodeLabel(node) {
@@ -63,34 +62,40 @@
     return label;
   }
 
-  // --- Color swatch detection ---
   function isColorValue(value) {
     if (!value) return false;
     return /^(rgb|rgba|hsl|hsla|#)/.test(value.trim());
   }
 
+  function getStyle(prop) {
+    const all = elementData?.allStyles || elementData?.styles || {};
+    return all[prop] || '';
+  }
+
+  function parsePixels(val) {
+    if (!val && val !== 0) return '0';
+    const n = parseFloat(val);
+    return isNaN(n) ? String(val) : String(Math.round(n * 100) / 100);
+  }
+
   // --- Computed values ---
-  let attributes = $derived(elementData?.attributes || {});
-  let styles = $derived(elementData?.styles || {});
   let bounds = $derived(elementData?.bounds || {});
-  let selector = $derived(elementData?.selector || '');
-  let tagDisplay = $derived.by(() => {
-    if (!elementData) return '';
-    let s = '<' + elementData.tagName;
-    if (elementData.id) s += ' id="' + elementData.id + '"';
-    if (elementData.classes?.length) {
-      const cls = Array.isArray(elementData.classes) ? elementData.classes.join(' ') : elementData.classes;
-      if (cls) s += ' class="' + cls + '"';
-    }
-    s += '>';
-    return s;
+  let styles = $derived(elementData?.styles || {});
+  let allStyles = $derived(elementData?.allStyles || elementData?.styles || {});
+
+  let sortedCssProps = $derived.by(() => {
+    const entries = Object.entries(allStyles);
+    entries.sort((a, b) => a[0].localeCompare(b[0]));
+    return entries;
   });
 </script>
 
 <div class="element-inspector" role="complementary">
-  <!-- COMPONENTS tree -->
-  <div class="section tree-section">
-    <div class="section-header">COMPONENTS</div>
+  <button class="panel-close" onclick={onClose} aria-label="Close inspector">&times;</button>
+
+  <!-- Components tree -->
+  <div class="tree-section">
+    <div class="tree-header">Components</div>
     <div class="tree-scroll">
       {#if elementData?.domTree}
         {#snippet treeNode(node, depth)}
@@ -121,44 +126,132 @@
     </div>
   </div>
 
-  <!-- Detail sections -->
-  <div class="detail-scroll">
-    <!-- ELEMENT header -->
-    <div class="section">
-      <div class="section-header">
-        ELEMENT
-        <button class="close-btn" onclick={onClose} aria-label="Close inspector">&times;</button>
+  <!-- Design | CSS tabs -->
+  <div class="tab-bar">
+    <button class="tab-btn" class:active={activeTab === 'design'} onclick={() => activeTab = 'design'}>Design</button>
+    <button class="tab-btn" class:active={activeTab === 'css'} onclick={() => activeTab = 'css'}>CSS</button>
+  </div>
+
+  <!-- Tab content -->
+  <div class="tab-content">
+    {#if activeTab === 'design'}
+      <!-- Position -->
+      <div class="ds">
+        <div class="ds-header">Position</div>
+        <div class="field-grid">
+          <div class="field"><span class="field-l">X</span><span class="field-v">{parsePixels(bounds.x)}</span><span class="field-u">px</span></div>
+          <div class="field"><span class="field-l">Y</span><span class="field-v">{parsePixels(bounds.y)}</span><span class="field-u">px</span></div>
+        </div>
       </div>
-      <div class="element-tag">{tagDisplay}</div>
-    </div>
 
-    <!-- PATH -->
-    <div class="section">
-      <div class="section-header">PATH</div>
-      <div class="path-value">{selector}</div>
-    </div>
-
-    <!-- ATTRIBUTES -->
-    <div class="section">
-      <div class="section-header">ATTRIBUTES</div>
-      <div class="kv-list">
-        {#each Object.entries(attributes) as [key, value]}
-          <div class="kv-row">
-            <span class="kv-key">{key}:</span>
-            <span class="kv-value">{value}</span>
+      <!-- Layout -->
+      <div class="ds">
+        <div class="ds-header">Layout</div>
+        <div class="prop-row">
+          <span class="prop-label">Display</span>
+          <span class="prop-val">{getStyle('display') || 'block'}</span>
+        </div>
+        {#if getStyle('display')?.includes('flex')}
+          <div class="prop-row">
+            <span class="prop-label">Direction</span>
+            <span class="prop-val">{getStyle('flex-direction') || 'row'}</span>
           </div>
-        {/each}
+          <div class="prop-row">
+            <span class="prop-label">Align</span>
+            <span class="prop-val">{getStyle('align-items') || 'stretch'}</span>
+          </div>
+          <div class="prop-row">
+            <span class="prop-label">Justify</span>
+            <span class="prop-val">{getStyle('justify-content') || 'flex-start'}</span>
+          </div>
+          <div class="prop-row">
+            <span class="prop-label">Gap</span>
+            <span class="prop-val">{getStyle('gap') || '0px'}</span>
+          </div>
+        {/if}
+        <div class="field-grid" style="margin-top: 6px">
+          <div class="field"><span class="field-l">W</span><span class="field-v">{parsePixels(bounds.width)}</span><span class="field-u">px</span></div>
+          <div class="field"><span class="field-l">H</span><span class="field-v">{parsePixels(bounds.height)}</span><span class="field-u">px</span></div>
+        </div>
       </div>
-    </div>
 
-    <!-- COMPUTED STYLES -->
-    <div class="section">
-      <div class="section-header">COMPUTED STYLES</div>
-      <div class="kv-list">
-        {#each Object.entries(styles) as [key, value]}
-          <div class="kv-row">
-            <span class="kv-key">{key}:</span>
-            <span class="kv-value">
+      <!-- Padding -->
+      <div class="ds">
+        <div class="ds-header">Padding</div>
+        <div class="box-grid">
+          <div class="box-field"><span class="box-side">top</span><span class="box-val">{parsePixels(getStyle('padding-top'))}</span></div>
+          <div class="box-field"><span class="box-side">right</span><span class="box-val">{parsePixels(getStyle('padding-right'))}</span></div>
+          <div class="box-field"><span class="box-side">bottom</span><span class="box-val">{parsePixels(getStyle('padding-bottom'))}</span></div>
+          <div class="box-field"><span class="box-side">left</span><span class="box-val">{parsePixels(getStyle('padding-left'))}</span></div>
+        </div>
+      </div>
+
+      <!-- Margin -->
+      <div class="ds">
+        <div class="ds-header">Margin</div>
+        <div class="box-grid">
+          <div class="box-field"><span class="box-side">top</span><span class="box-val">{parsePixels(getStyle('margin-top'))}</span></div>
+          <div class="box-field"><span class="box-side">right</span><span class="box-val">{parsePixels(getStyle('margin-right'))}</span></div>
+          <div class="box-field"><span class="box-side">bottom</span><span class="box-val">{parsePixels(getStyle('margin-bottom'))}</span></div>
+          <div class="box-field"><span class="box-side">left</span><span class="box-val">{parsePixels(getStyle('margin-left'))}</span></div>
+        </div>
+      </div>
+
+      <!-- Appearance -->
+      <div class="ds">
+        <div class="ds-header">Appearance</div>
+        <div class="prop-row">
+          <span class="prop-label">Opacity</span>
+          <span class="prop-val">{Math.round(parseFloat(getStyle('opacity') || '1') * 100)}%</span>
+        </div>
+        <div class="prop-row">
+          <span class="prop-label">Corner Radius</span>
+          <span class="prop-val">{getStyle('border-radius') || '0px'}</span>
+        </div>
+        {#if getStyle('box-shadow') && getStyle('box-shadow') !== 'none'}
+          <div class="prop-row">
+            <span class="prop-label">Shadow</span>
+            <span class="prop-val truncate">{getStyle('box-shadow')}</span>
+          </div>
+        {/if}
+      </div>
+
+      <!-- Text -->
+      <div class="ds">
+        <div class="ds-header">Text</div>
+        <div class="prop-row">
+          <span class="prop-label">Font</span>
+          <span class="prop-val truncate">{getStyle('font-family') || 'inherit'}</span>
+        </div>
+        <div class="prop-row">
+          <span class="prop-label">Size</span>
+          <span class="prop-val">{getStyle('font-size') || '16px'}</span>
+        </div>
+        <div class="prop-row">
+          <span class="prop-label">Weight</span>
+          <span class="prop-val">{getStyle('font-weight') || '400'}</span>
+        </div>
+        <div class="prop-row">
+          <span class="prop-label">Color</span>
+          <span class="prop-val">
+            {#if isColorValue(getStyle('color'))}
+              <span class="swatch" style="background: {getStyle('color')}"></span>
+            {/if}
+            {getStyle('color')}
+          </span>
+        </div>
+        <div class="prop-row">
+          <span class="prop-label">Line Height</span>
+          <span class="prop-val">{getStyle('line-height') || 'normal'}</span>
+        </div>
+      </div>
+    {:else}
+      <!-- CSS tab: all computed styles alphabetical -->
+      <div class="css-list">
+        {#each sortedCssProps as [prop, value]}
+          <div class="css-row">
+            <span class="css-prop">{prop}</span>
+            <span class="css-value" title={value}>
               {#if isColorValue(value)}
                 <span class="swatch" style="background: {value}"></span>
               {/if}
@@ -167,18 +260,7 @@
           </div>
         {/each}
       </div>
-    </div>
-
-    <!-- POSITION & SIZE -->
-    <div class="section">
-      <div class="section-header">POSITION & SIZE</div>
-      <div class="kv-list">
-        <div class="kv-row"><span class="kv-key">top:</span><span class="kv-value">{bounds.y}px</span></div>
-        <div class="kv-row"><span class="kv-key">left:</span><span class="kv-value">{bounds.x}px</span></div>
-        <div class="kv-row"><span class="kv-key">width:</span><span class="kv-value">{bounds.width}px</span></div>
-        <div class="kv-row"><span class="kv-key">height:</span><span class="kv-value">{bounds.height}px</span></div>
-      </div>
-    </div>
+    {/if}
   </div>
 </div>
 
@@ -194,36 +276,47 @@
     color: var(--text);
     font-size: 12px;
     overflow: hidden;
+    position: relative;
   }
 
-  .section {
-    border-bottom: 1px solid var(--border);
-    padding: 8px 10px;
-  }
-
-  .section-header {
-    font-size: 11px;
-    font-weight: 600;
+  .panel-close {
+    position: absolute;
+    top: 4px;
+    right: 6px;
+    background: none;
+    border: none;
     color: var(--text-secondary);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    margin-bottom: 6px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
+    font-size: 14px;
+    cursor: pointer;
+    padding: 2px 4px;
+    line-height: 1;
+    z-index: 1;
   }
 
-  /* --- Tree section --- */
+  .panel-close:hover {
+    color: var(--text);
+  }
+
+  /* --- Tree --- */
   .tree-section {
     flex: 0 0 auto;
     max-height: 40%;
     display: flex;
     flex-direction: column;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .tree-header {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    padding: 8px 10px 4px;
   }
 
   .tree-scroll {
     overflow-y: auto;
     flex: 1;
+    padding-bottom: 4px;
   }
 
   .tree-node {
@@ -273,66 +366,177 @@
     color: var(--accent);
   }
 
-  /* --- Detail sections --- */
-  .detail-scroll {
+  /* --- Tabs --- */
+  .tab-bar {
+    display: flex;
+    gap: 2px;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .tab-btn {
+    padding: 3px 10px;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+
+  .tab-btn.active {
+    background: color-mix(in srgb, var(--text) 15%, transparent);
+    color: var(--text);
+  }
+
+  .tab-btn:hover:not(.active) {
+    color: var(--text);
+  }
+
+  /* --- Tab content --- */
+  .tab-content {
     flex: 1;
     overflow-y: auto;
   }
 
-  .close-btn {
-    background: none;
-    border: none;
-    color: var(--text-secondary);
-    font-size: 16px;
-    cursor: pointer;
-    padding: 0 2px;
-    line-height: 1;
+  /* --- Design sections --- */
+  .ds {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
   }
 
-  .close-btn:hover {
+  .ds-header {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+  }
+
+  .field-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+  }
+
+  .field {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: color-mix(in srgb, var(--text) 8%, transparent);
+    border-radius: 3px;
+    padding: 3px 6px;
+    font-family: monospace;
+    font-size: 11px;
+  }
+
+  .field-l {
+    color: var(--text-secondary);
+    font-size: 10px;
+    min-width: 10px;
+  }
+
+  .field-v {
+    flex: 1;
     color: var(--text);
   }
 
-  .element-tag {
-    font-family: monospace;
-    font-size: 12px;
-    color: var(--accent);
-    word-break: break-all;
+  .field-u {
+    color: var(--text-secondary);
+    font-size: 10px;
   }
 
-  .path-value {
+  /* Property rows */
+  .prop-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 2px 0;
+    gap: 8px;
+  }
+
+  .prop-label {
+    color: var(--text-secondary);
+    font-size: 11px;
+  }
+
+  .prop-val {
     font-family: monospace;
     font-size: 11px;
-    color: var(--text-secondary);
-    word-break: break-all;
-    line-height: 1.4;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 4px;
   }
 
-  .kv-list {
+  .prop-val.truncate {
+    max-width: 140px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Box model grid (Padding, Margin) */
+  .box-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+  }
+
+  .box-field {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: color-mix(in srgb, var(--text) 8%, transparent);
+    border-radius: 3px;
+    padding: 3px 6px;
+    font-family: monospace;
+    font-size: 11px;
+  }
+
+  .box-side {
+    color: var(--text-secondary);
+    font-size: 10px;
+    min-width: 30px;
+  }
+
+  .box-val {
+    flex: 1;
+    color: var(--text);
+  }
+
+  /* --- CSS tab --- */
+  .css-list {
     display: flex;
     flex-direction: column;
-    gap: 2px;
   }
 
-  .kv-row {
+  .css-row {
     display: flex;
     gap: 8px;
+    padding: 2px 10px;
     line-height: 1.6;
   }
 
-  .kv-key {
+  .css-row:hover {
+    background: color-mix(in srgb, var(--text) 5%, transparent);
+  }
+
+  .css-prop {
     font-family: monospace;
     font-size: 11px;
     color: var(--text-secondary);
     flex-shrink: 0;
-    min-width: 100px;
+    min-width: 130px;
   }
 
-  .kv-value {
+  .css-value {
     font-family: monospace;
     font-size: 11px;
     color: var(--text);
-    word-break: break-all;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     display: flex;
     align-items: center;
     gap: 4px;
@@ -340,8 +544,8 @@
 
   .swatch {
     display: inline-block;
-    width: 12px;
-    height: 12px;
+    width: 10px;
+    height: 10px;
     border: 1px solid var(--border);
     border-radius: 2px;
     flex-shrink: 0;

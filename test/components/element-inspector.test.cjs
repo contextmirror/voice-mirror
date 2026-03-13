@@ -19,48 +19,71 @@ describe('ElementInspector.svelte: structure', () => {
 
   it('uses CSS variables for theming (no hardcoded colors)', () => {
     const styleBlock = src.substring(src.indexOf('<style'));
-    const lines = styleBlock.split('\n');
-    for (const line of lines) {
-      if (line.includes('color:') && !line.includes('var(') && !line.includes('currentColor') && !line.includes('//') && !line.includes('transparent') && !line.includes('inherit')) {
-        if (!line.includes('swatch') && !line.includes('background:') && !line.includes('.swatch')) {
-        }
-      }
-    }
     assert.ok(styleBlock.includes('var(--bg'), 'Must use --bg CSS variable');
     assert.ok(styleBlock.includes('var(--text'), 'Must use --text CSS variable');
     assert.ok(styleBlock.includes('var(--border'), 'Must use --border CSS variable');
   });
 });
 
-describe('ElementInspector.svelte: sections', () => {
-  it('has COMPONENTS section header', () => {
-    assert.ok(src.includes('COMPONENTS') || src.includes('Components'), 'Must have Components section');
+describe('ElementInspector.svelte: tabs', () => {
+  it('has Design and CSS tabs', () => {
+    assert.ok(src.includes('Design'), 'Must have Design tab');
+    assert.ok(src.includes('>CSS<') || (src.includes('tab-btn') && src.includes("'css'")), 'Must have CSS tab');
+    assert.ok(src.includes('tab-btn'), 'Must have tab button class');
   });
 
-  it('has ELEMENT section', () => {
-    assert.ok(src.includes('ELEMENT') || src.includes('Element'), 'Must have Element section');
+  it('has activeTab state for tab switching', () => {
+    assert.ok(src.includes('activeTab'), 'Must have activeTab state');
+  });
+});
+
+describe('ElementInspector.svelte: Design tab sections', () => {
+  it('has Components tree section', () => {
+    assert.ok(src.includes('Components'), 'Must have Components section');
   });
 
-  it('has PATH section', () => {
-    assert.ok(src.includes('PATH') || src.includes('Path'), 'Must have Path section');
+  it('has Position section', () => {
+    assert.ok(src.includes('Position'), 'Must have Position section');
   });
 
-  it('has ATTRIBUTES section', () => {
-    assert.ok(src.includes('ATTRIBUTES') || src.includes('Attributes'), 'Must have Attributes section');
+  it('has Layout section', () => {
+    assert.ok(src.includes('Layout'), 'Must have Layout section');
   });
 
-  it('has COMPUTED STYLES section', () => {
-    assert.ok(src.includes('COMPUTED STYLES') || src.includes('Computed Styles'), 'Must have Computed Styles section');
+  it('has Padding section', () => {
+    assert.ok(src.includes('Padding'), 'Must have Padding section');
   });
 
-  it('has POSITION & SIZE section', () => {
-    assert.ok(src.includes('POSITION') || src.includes('Position'), 'Must have Position section');
+  it('has Margin section', () => {
+    assert.ok(src.includes('Margin'), 'Must have Margin section');
+  });
+
+  it('has Appearance section', () => {
+    assert.ok(src.includes('Appearance'), 'Must have Appearance section');
+  });
+
+  it('has Text section', () => {
+    assert.ok(src.includes('>Text<') || src.includes("'Text'") || src.includes('"Text"') || src.includes('>Text</'), 'Must have Text section');
+  });
+});
+
+describe('ElementInspector.svelte: CSS tab', () => {
+  it('renders sorted CSS properties', () => {
+    assert.ok(src.includes('sortedCssProps'), 'Must have sorted CSS properties list');
+  });
+
+  it('uses allStyles data for full computed styles', () => {
+    assert.ok(src.includes('allStyles'), 'Must reference allStyles for CSS tab');
+  });
+
+  it('has color swatch elements for CSS color values', () => {
+    assert.ok(src.includes('swatch'), 'Must render color swatches for color values');
   });
 });
 
 describe('ElementInspector.svelte: tree view', () => {
   it('renders tree nodes with expand/collapse arrows', () => {
-    assert.ok(src.includes('▶') || src.includes('▼') || src.includes('expand') || src.includes('collapse'), 'Must have expand/collapse indicators');
+    assert.ok(src.includes('▶') || src.includes('▼'), 'Must have expand/collapse indicators');
   });
 
   it('imports designSelectByTreeId API', () => {
@@ -73,21 +96,15 @@ describe('ElementInspector.svelte: tree view', () => {
 });
 
 describe('ElementInspector.svelte: Svelte 5 runes', () => {
-  it('uses $derived.by for computed values (not $derived with function)', () => {
+  it('uses $derived.by for computed values', () => {
     assert.ok(src.includes('$derived.by'), 'Must use $derived.by for function-based derivations');
-  });
-});
-
-describe('ElementInspector.svelte: color swatches', () => {
-  it('has color swatch elements for CSS color values', () => {
-    assert.ok(src.includes('swatch'), 'Must render color swatches for color values');
   });
 });
 
 describe('ElementInspector.svelte: panel styling', () => {
   it('has fixed width around 300px', () => {
     const styleBlock = src.substring(src.indexOf('<style'));
-    assert.ok(styleBlock.includes('300px') || styleBlock.includes('width'), 'Panel must have ~300px width');
+    assert.ok(styleBlock.includes('300px'), 'Panel must have ~300px width');
   });
 
   it('uses monospace font for values', () => {

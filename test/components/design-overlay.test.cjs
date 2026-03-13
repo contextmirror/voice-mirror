@@ -881,6 +881,20 @@ describe('design-overlay.js: attributes serialization', () => {
   });
 });
 
+describe('design-overlay.js: allStyles serialization', () => {
+  it('_serializeElement captures all computed styles via style.length iteration', () => {
+    const fnBody = src.substring(src.indexOf('function _serializeElement'));
+    assert.ok(fnBody.includes('allStyles'), 'Must have allStyles variable');
+    assert.ok(fnBody.includes('style.length') || fnBody.includes('cs.length'), 'Must iterate all computed style properties');
+  });
+
+  it('allStyles field is included in returned object', () => {
+    const fnBody = src.substring(src.indexOf('function _serializeElement'));
+    const returnBlock = fnBody.substring(fnBody.indexOf('return {'));
+    assert.ok(returnBlock.includes('allStyles:'), 'Return object must include allStyles field');
+  });
+});
+
 // =========================================================================
 // Task 2: decimal precision bounds
 // =========================================================================

@@ -999,6 +999,13 @@
             if (val) styles[styleProps[j]] = val;
         }
 
+        // Capture ALL computed styles for the CSS tab
+        var allStyles = {};
+        for (var k = 0; k < style.length; k++) {
+            var prop = style[k];
+            allStyles[prop] = style.getPropertyValue(prop);
+        }
+
         return {
             selector: selector,
             tagName: el.tagName.toLowerCase(),
@@ -1014,6 +1021,7 @@
             html: html,
             text: text,
             styles: styles,
+            allStyles: allStyles,
             parentChain: _getParentChain(el),
             pseudoRules: _getPseudoClassRules(el),
             accessibility: _getAccessibility(el),
