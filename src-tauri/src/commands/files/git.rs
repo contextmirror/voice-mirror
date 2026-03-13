@@ -4,6 +4,35 @@ use crate::util::find_project_root;
 use std::path::PathBuf;
 use tracing::{debug, info};
 
+/// Run a git command asynchronously using spawn_blocking.
+async fn run_git(args: &[&str], cwd: &std::path::Path) -> Result<std::process::Output, String> {
+    let args: Vec<String> = args.iter().map(|s| s.to_string()).collect();
+    let cwd = cwd.to_path_buf();
+    tokio::task::spawn_blocking(move || {
+        std::process::Command::new("git")
+            .args(&args)
+            .current_dir(&cwd)
+            .output()
+            .map_err(|e| format!("Failed to run git: {}", e))
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
+}
+
+/// Run a git command with owned String args (for dynamic arg lists).
+async fn run_git_owned(args: Vec<String>, cwd: &std::path::Path) -> Result<std::process::Output, String> {
+    let cwd = cwd.to_path_buf();
+    tokio::task::spawn_blocking(move || {
+        std::process::Command::new("git")
+            .args(&args)
+            .current_dir(&cwd)
+            .output()
+            .map_err(|e| format!("Failed to run git: {}", e))
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
+}
+
 /// Get git status changes (added, modified, deleted files).
 ///
 /// Returns `{ "changes": [...] }` where each change has a `path` and `status`.
@@ -11,7 +40,7 @@ use tracing::{debug, info};
 ///
 /// When `root` is provided, uses that path as CWD for git instead of auto-detecting.
 #[tauri::command]
-pub fn get_git_changes(root: Option<String>) -> IpcResponse {
+pub async fn get_git_changes(root: Option<String>) -> IpcResponse {
     let root = match root {
         Some(r) => PathBuf::from(r),
         None => match find_project_root() {
@@ -20,11 +49,7 @@ pub fn get_git_changes(root: Option<String>) -> IpcResponse {
         },
     };
 
-    let output = match std::process::Command::new("git")
-        .args(["status", "--porcelain=v1"])
-        .current_dir(&root)
-        .output()
-    {
+    let output = match run_git(&["status", "--porcelain=v1"], &root).await {
         Ok(o) => o,
         Err(e) => {
             info!("git status failed (git may not be installed): {}", e);
@@ -38,10 +63,8 @@ pub fn get_git_changes(root: Option<String>) -> IpcResponse {
     }
 
     // Get the current branch name
-    let branch = std::process::Command::new("git")
-        .args(["rev-parse", "--abbrev-ref", "HEAD"])
-        .current_dir(&root)
-        .output()
+    let branch = run_git(&["rev-parse", "--abbrev-ref", "HEAD"], &root)
+        .await
         .ok()
         .and_then(|o| {
             if o.status.success() {
@@ -156,7 +179,7 @@ pub fn get_git_changes(root: Option<String>) -> IpcResponse {
 /// For new (untracked) files, returns empty content with `isNew: true`.
 /// `path` is relative to the project root.
 #[tauri::command]
-pub fn get_file_git_content(path: String, root: Option<String>) -> IpcResponse {
+pub async fn get_file_git_content(path: String, root: Option<String>) -> IpcResponse {
     let root = match root {
         Some(r) => PathBuf::from(r),
         None => match find_project_root() {
@@ -168,11 +191,7 @@ pub fn get_file_git_content(path: String, root: Option<String>) -> IpcResponse {
     // Normalize path separators for git (always forward slashes)
     let git_path = path.replace('\\', "/");
 
-    let output = match std::process::Command::new("git")
-        .args(["show", &format!("HEAD:{}", git_path)])
-        .current_dir(&root)
-        .output()
-    {
+    let output = match run_git(&["show", &format!("HEAD:{}", git_path)], &root).await {
         Ok(o) => o,
         Err(e) => {
             info!("git show failed: {}", e);
@@ -209,7 +228,7 @@ pub fn get_file_git_content(path: String, root: Option<String>) -> IpcResponse {
 ///
 /// `paths` are relative to the project root. Errors if paths is empty.
 #[tauri::command]
-pub fn git_stage(paths: Vec<String>, root: Option<String>) -> IpcResponse {
+pub async fn git_stage(paths: Vec<String>, root: Option<String>) -> IpcResponse {
     if paths.is_empty() {
         return IpcResponse::err("No paths provided to stage");
     }
@@ -221,11 +240,7 @@ pub fn git_stage(paths: Vec<String>, root: Option<String>) -> IpcResponse {
     let mut args = vec!["add".to_string(), "--".to_string()];
     args.extend(normalized);
 
-    let output = match std::process::Command::new("git")
-        .args(&args)
-        .current_dir(&root)
-        .output()
-    {
+    let output = match run_git_owned(args, &root).await {
         Ok(o) => o,
         Err(e) => return IpcResponse::err(format!("Failed to run git add: {}", e)),
     };
@@ -243,7 +258,7 @@ pub fn git_stage(paths: Vec<String>, root: Option<String>) -> IpcResponse {
 ///
 /// `paths` are relative to the project root. Errors if paths is empty.
 #[tauri::command]
-pub fn git_unstage(paths: Vec<String>, root: Option<String>) -> IpcResponse {
+pub async fn git_unstage(paths: Vec<String>, root: Option<String>) -> IpcResponse {
     if paths.is_empty() {
         return IpcResponse::err("No paths provided to unstage");
     }
@@ -255,11 +270,7 @@ pub fn git_unstage(paths: Vec<String>, root: Option<String>) -> IpcResponse {
     let mut args = vec!["reset".to_string(), "HEAD".to_string(), "--".to_string()];
     args.extend(normalized);
 
-    let output = match std::process::Command::new("git")
-        .args(&args)
-        .current_dir(&root)
-        .output()
-    {
+    let output = match run_git_owned(args, &root).await {
         Ok(o) => o,
         Err(e) => return IpcResponse::err(format!("Failed to run git reset: {}", e)),
     };
@@ -275,17 +286,13 @@ pub fn git_unstage(paths: Vec<String>, root: Option<String>) -> IpcResponse {
 
 /// Stage all changes (tracked and untracked).
 #[tauri::command]
-pub fn git_stage_all(root: Option<String>) -> IpcResponse {
+pub async fn git_stage_all(root: Option<String>) -> IpcResponse {
     let root = match resolve_root(root) {
         Ok(r) => r,
         Err(e) => return e,
     };
 
-    let output = match std::process::Command::new("git")
-        .args(["add", "-A"])
-        .current_dir(&root)
-        .output()
-    {
+    let output = match run_git(&["add", "-A"], &root).await {
         Ok(o) => o,
         Err(e) => return IpcResponse::err(format!("Failed to run git add -A: {}", e)),
     };
@@ -301,17 +308,13 @@ pub fn git_stage_all(root: Option<String>) -> IpcResponse {
 
 /// Unstage all staged changes.
 #[tauri::command]
-pub fn git_unstage_all(root: Option<String>) -> IpcResponse {
+pub async fn git_unstage_all(root: Option<String>) -> IpcResponse {
     let root = match resolve_root(root) {
         Ok(r) => r,
         Err(e) => return e,
     };
 
-    let output = match std::process::Command::new("git")
-        .args(["reset", "HEAD"])
-        .current_dir(&root)
-        .output()
-    {
+    let output = match run_git(&["reset", "HEAD"], &root).await {
         Ok(o) => o,
         Err(e) => return IpcResponse::err(format!("Failed to run git reset HEAD: {}", e)),
     };
@@ -329,7 +332,7 @@ pub fn git_unstage_all(root: Option<String>) -> IpcResponse {
 ///
 /// Returns the short hash of the new commit on success.
 #[tauri::command]
-pub fn git_commit(message: String, root: Option<String>) -> IpcResponse {
+pub async fn git_commit(message: String, root: Option<String>) -> IpcResponse {
     if message.trim().is_empty() {
         return IpcResponse::err("Commit message cannot be empty");
     }
@@ -338,11 +341,7 @@ pub fn git_commit(message: String, root: Option<String>) -> IpcResponse {
         Err(e) => return e,
     };
 
-    let output = match std::process::Command::new("git")
-        .args(["commit", "-m", &message])
-        .current_dir(&root)
-        .output()
-    {
+    let output = match run_git(&["commit", "-m", &message], &root).await {
         Ok(o) => o,
         Err(e) => return IpcResponse::err(format!("Failed to run git commit: {}", e)),
     };
@@ -353,10 +352,8 @@ pub fn git_commit(message: String, root: Option<String>) -> IpcResponse {
     }
 
     // Get the short hash of the new commit
-    let hash = std::process::Command::new("git")
-        .args(["rev-parse", "--short", "HEAD"])
-        .current_dir(&root)
-        .output()
+    let hash = run_git(&["rev-parse", "--short", "HEAD"], &root)
+        .await
         .ok()
         .and_then(|o| {
             if o.status.success() {
@@ -375,7 +372,7 @@ pub fn git_commit(message: String, root: Option<String>) -> IpcResponse {
 ///
 /// Only works on tracked files. Errors if paths is empty.
 #[tauri::command]
-pub fn git_discard(paths: Vec<String>, root: Option<String>) -> IpcResponse {
+pub async fn git_discard(paths: Vec<String>, root: Option<String>) -> IpcResponse {
     if paths.is_empty() {
         return IpcResponse::err("No paths provided to discard");
     }
@@ -387,11 +384,7 @@ pub fn git_discard(paths: Vec<String>, root: Option<String>) -> IpcResponse {
     let mut args = vec!["checkout".to_string(), "--".to_string()];
     args.extend(normalized);
 
-    let output = match std::process::Command::new("git")
-        .args(&args)
-        .current_dir(&root)
-        .output()
-    {
+    let output = match run_git_owned(args, &root).await {
         Ok(o) => o,
         Err(e) => return IpcResponse::err(format!("Failed to run git checkout: {}", e)),
     };
@@ -407,17 +400,13 @@ pub fn git_discard(paths: Vec<String>, root: Option<String>) -> IpcResponse {
 
 /// Push commits to the remote.
 #[tauri::command]
-pub fn git_push(root: Option<String>) -> IpcResponse {
+pub async fn git_push(root: Option<String>) -> IpcResponse {
     let root = match resolve_root(root) {
         Ok(r) => r,
         Err(e) => return e,
     };
 
-    let output = match std::process::Command::new("git")
-        .args(["push"])
-        .current_dir(&root)
-        .output()
-    {
+    let output = match run_git(&["push"], &root).await {
         Ok(o) => o,
         Err(e) => return IpcResponse::err(format!("Failed to run git push: {}", e)),
     };
@@ -436,17 +425,13 @@ pub fn git_push(root: Option<String>) -> IpcResponse {
 /// Returns `{ ahead: N, behind: N, hasUpstream: bool }`.
 /// If no upstream is configured, returns zeros with `hasUpstream: false`.
 #[tauri::command]
-pub fn git_ahead_behind(root: Option<String>) -> IpcResponse {
+pub async fn git_ahead_behind(root: Option<String>) -> IpcResponse {
     let root = match resolve_root(root) {
         Ok(r) => r,
         Err(e) => return e,
     };
 
-    let output = match std::process::Command::new("git")
-        .args(["rev-list", "--count", "--left-right", "@{upstream}...HEAD"])
-        .current_dir(&root)
-        .output()
-    {
+    let output = match run_git(&["rev-list", "--count", "--left-right", "@{upstream}...HEAD"], &root).await {
         Ok(o) => o,
         Err(_) => {
             return IpcResponse::ok(serde_json::json!({ "ahead": 0, "behind": 0, "hasUpstream": false }));
@@ -469,17 +454,13 @@ pub fn git_ahead_behind(root: Option<String>) -> IpcResponse {
 
 /// Fetch from the remote.
 #[tauri::command]
-pub fn git_fetch(root: Option<String>) -> IpcResponse {
+pub async fn git_fetch(root: Option<String>) -> IpcResponse {
     let root = match resolve_root(root) {
         Ok(r) => r,
         Err(e) => return e,
     };
 
-    let output = match std::process::Command::new("git")
-        .args(["fetch"])
-        .current_dir(&root)
-        .output()
-    {
+    let output = match run_git(&["fetch"], &root).await {
         Ok(o) => o,
         Err(e) => return IpcResponse::err(format!("Failed to run git fetch: {}", e)),
     };
@@ -497,7 +478,7 @@ pub fn git_fetch(root: Option<String>) -> IpcResponse {
 ///
 /// When `rebase` is true, uses `git pull --rebase` instead of merge.
 #[tauri::command]
-pub fn git_pull(rebase: Option<bool>, root: Option<String>) -> IpcResponse {
+pub async fn git_pull(rebase: Option<bool>, root: Option<String>) -> IpcResponse {
     let root = match resolve_root(root) {
         Ok(r) => r,
         Err(e) => return e,
@@ -508,11 +489,7 @@ pub fn git_pull(rebase: Option<bool>, root: Option<String>) -> IpcResponse {
         args.push("--rebase");
     }
 
-    let output = match std::process::Command::new("git")
-        .args(&args)
-        .current_dir(&root)
-        .output()
-    {
+    let output = match run_git(&args, &root).await {
         Ok(o) => o,
         Err(e) => return IpcResponse::err(format!("Failed to run git pull: {}", e)),
     };
@@ -529,17 +506,13 @@ pub fn git_pull(rebase: Option<bool>, root: Option<String>) -> IpcResponse {
 
 /// Force-push commits to the remote.
 #[tauri::command]
-pub fn git_force_push(root: Option<String>) -> IpcResponse {
+pub async fn git_force_push(root: Option<String>) -> IpcResponse {
     let root = match resolve_root(root) {
         Ok(r) => r,
         Err(e) => return e,
     };
 
-    let output = match std::process::Command::new("git")
-        .args(["push", "--force"])
-        .current_dir(&root)
-        .output()
-    {
+    let output = match run_git(&["push", "--force"], &root).await {
         Ok(o) => o,
         Err(e) => return IpcResponse::err(format!("Failed to run git push --force: {}", e)),
     };
@@ -558,17 +531,15 @@ pub fn git_force_push(root: Option<String>) -> IpcResponse {
 /// Returns `{ branches: [{ name, isCurrent, isRemote }], current: "branch-name" }`.
 /// Sorted: current branch first, then local branches, then remote branches.
 #[tauri::command]
-pub fn git_list_branches(root: Option<String>) -> IpcResponse {
+pub async fn git_list_branches(root: Option<String>) -> IpcResponse {
     let root = match resolve_root(root) {
         Ok(r) => r,
         Err(e) => return e,
     };
 
     // Get current branch
-    let current = std::process::Command::new("git")
-        .args(["rev-parse", "--abbrev-ref", "HEAD"])
-        .current_dir(&root)
-        .output()
+    let current = run_git(&["rev-parse", "--abbrev-ref", "HEAD"], &root)
+        .await
         .ok()
         .and_then(|o| {
             if o.status.success() {
@@ -580,10 +551,7 @@ pub fn git_list_branches(root: Option<String>) -> IpcResponse {
         .unwrap_or_default();
 
     // Get local branches
-    let local_output = std::process::Command::new("git")
-        .args(["branch", "--format=%(refname:short)"])
-        .current_dir(&root)
-        .output();
+    let local_output = run_git(&["branch", "--format=%(refname:short)"], &root).await;
 
     let mut branches: Vec<serde_json::Value> = Vec::new();
 
@@ -603,10 +571,7 @@ pub fn git_list_branches(root: Option<String>) -> IpcResponse {
     }
 
     // Get remote branches
-    let remote_output = std::process::Command::new("git")
-        .args(["branch", "-r", "--format=%(refname:short)"])
-        .current_dir(&root)
-        .output();
+    let remote_output = run_git(&["branch", "-r", "--format=%(refname:short)"], &root).await;
 
     if let Ok(output) = &remote_output {
         if output.status.success() {
@@ -647,7 +612,7 @@ pub fn git_list_branches(root: Option<String>) -> IpcResponse {
 /// Runs `git checkout <branch_name>`. For remote branches like `origin/feature`,
 /// git will auto-create a local tracking branch.
 #[tauri::command]
-pub fn git_checkout_branch(branch: String, root: Option<String>) -> IpcResponse {
+pub async fn git_checkout_branch(branch: String, root: Option<String>) -> IpcResponse {
     if branch.trim().is_empty() {
         return IpcResponse::err("Branch name cannot be empty");
     }
@@ -656,11 +621,7 @@ pub fn git_checkout_branch(branch: String, root: Option<String>) -> IpcResponse 
         Err(e) => return e,
     };
 
-    let output = match std::process::Command::new("git")
-        .args(["checkout", branch.trim()])
-        .current_dir(&root)
-        .output()
-    {
+    let output = match run_git(&["checkout", branch.trim()], &root).await {
         Ok(o) => o,
         Err(e) => return IpcResponse::err(format!("Failed to run git checkout: {}", e)),
     };
@@ -679,27 +640,21 @@ pub fn git_checkout_branch(branch: String, root: Option<String>) -> IpcResponse 
 /// Runs `git stash push -m "{message}"`. If no message is provided,
 /// git generates an automatic description.
 #[tauri::command]
-pub fn git_stash_save(message: Option<String>, root: Option<String>) -> IpcResponse {
+pub async fn git_stash_save(message: Option<String>, root: Option<String>) -> IpcResponse {
     let root = match resolve_root(root) {
         Ok(r) => r,
         Err(e) => return e,
     };
 
-    let mut args = vec!["stash", "push"];
-    let msg;
+    let mut args = vec!["stash".to_string(), "push".to_string()];
     if let Some(ref m) = message {
         if !m.trim().is_empty() {
-            msg = m.clone();
-            args.push("-m");
-            args.push(&msg);
+            args.push("-m".to_string());
+            args.push(m.clone());
         }
     }
 
-    let output = match std::process::Command::new("git")
-        .args(&args)
-        .current_dir(&root)
-        .output()
-    {
+    let output = match run_git_owned(args, &root).await {
         Ok(o) => o,
         Err(e) => return IpcResponse::err(format!("Failed to run git stash push: {}", e)),
     };
@@ -719,17 +674,13 @@ pub fn git_stash_save(message: Option<String>, root: Option<String>) -> IpcRespo
 /// Runs `git stash list` and parses output into structured data.
 /// Each stash entry has: `index` (number), `branch` (string), `message` (string).
 #[tauri::command]
-pub fn git_stash_list(root: Option<String>) -> IpcResponse {
+pub async fn git_stash_list(root: Option<String>) -> IpcResponse {
     let root = match resolve_root(root) {
         Ok(r) => r,
         Err(e) => return e,
     };
 
-    let output = match std::process::Command::new("git")
-        .args(["stash", "list"])
-        .current_dir(&root)
-        .output()
-    {
+    let output = match run_git(&["stash", "list"], &root).await {
         Ok(o) => o,
         Err(e) => return IpcResponse::err(format!("Failed to run git stash list: {}", e)),
     };
@@ -795,18 +746,14 @@ pub fn git_stash_list(root: Option<String>) -> IpcResponse {
 ///
 /// Runs `git stash pop stash@{index}`. Defaults to index 0 if not specified.
 #[tauri::command]
-pub fn git_stash_pop(index: Option<u32>, root: Option<String>) -> IpcResponse {
+pub async fn git_stash_pop(index: Option<u32>, root: Option<String>) -> IpcResponse {
     let root = match resolve_root(root) {
         Ok(r) => r,
         Err(e) => return e,
     };
 
     let stash_ref = format!("stash@{{{}}}", index.unwrap_or(0));
-    let output = match std::process::Command::new("git")
-        .args(["stash", "pop", &stash_ref])
-        .current_dir(&root)
-        .output()
-    {
+    let output = match run_git(&["stash", "pop", &stash_ref], &root).await {
         Ok(o) => o,
         Err(e) => return IpcResponse::err(format!("Failed to run git stash pop: {}", e)),
     };
@@ -825,18 +772,14 @@ pub fn git_stash_pop(index: Option<u32>, root: Option<String>) -> IpcResponse {
 ///
 /// Runs `git stash apply stash@{index}`. Defaults to index 0 if not specified.
 #[tauri::command]
-pub fn git_stash_apply(index: Option<u32>, root: Option<String>) -> IpcResponse {
+pub async fn git_stash_apply(index: Option<u32>, root: Option<String>) -> IpcResponse {
     let root = match resolve_root(root) {
         Ok(r) => r,
         Err(e) => return e,
     };
 
     let stash_ref = format!("stash@{{{}}}", index.unwrap_or(0));
-    let output = match std::process::Command::new("git")
-        .args(["stash", "apply", &stash_ref])
-        .current_dir(&root)
-        .output()
-    {
+    let output = match run_git(&["stash", "apply", &stash_ref], &root).await {
         Ok(o) => o,
         Err(e) => return IpcResponse::err(format!("Failed to run git stash apply: {}", e)),
     };
@@ -855,18 +798,14 @@ pub fn git_stash_apply(index: Option<u32>, root: Option<String>) -> IpcResponse 
 ///
 /// Runs `git stash drop stash@{index}`.
 #[tauri::command]
-pub fn git_stash_drop(index: u32, root: Option<String>) -> IpcResponse {
+pub async fn git_stash_drop(index: u32, root: Option<String>) -> IpcResponse {
     let root = match resolve_root(root) {
         Ok(r) => r,
         Err(e) => return e,
     };
 
     let stash_ref = format!("stash@{{{}}}", index);
-    let output = match std::process::Command::new("git")
-        .args(["stash", "drop", &stash_ref])
-        .current_dir(&root)
-        .output()
-    {
+    let output = match run_git(&["stash", "drop", &stash_ref], &root).await {
         Ok(o) => o,
         Err(e) => return IpcResponse::err(format!("Failed to run git stash drop: {}", e)),
     };
@@ -885,37 +824,37 @@ pub fn git_stash_drop(index: u32, root: Option<String>) -> IpcResponse {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_git_stage_empty_paths_returns_error() {
-        let result = git_stage(vec![], None);
+    #[tokio::test]
+    async fn test_git_stage_empty_paths_returns_error() {
+        let result = git_stage(vec![], None).await;
         assert!(!result.success);
         assert!(result.error.as_deref().unwrap().contains("No paths provided"));
     }
 
-    #[test]
-    fn test_git_unstage_empty_paths_returns_error() {
-        let result = git_unstage(vec![], None);
+    #[tokio::test]
+    async fn test_git_unstage_empty_paths_returns_error() {
+        let result = git_unstage(vec![], None).await;
         assert!(!result.success);
         assert!(result.error.as_deref().unwrap().contains("No paths provided"));
     }
 
-    #[test]
-    fn test_git_discard_empty_paths_returns_error() {
-        let result = git_discard(vec![], None);
+    #[tokio::test]
+    async fn test_git_discard_empty_paths_returns_error() {
+        let result = git_discard(vec![], None).await;
         assert!(!result.success);
         assert!(result.error.as_deref().unwrap().contains("No paths provided"));
     }
 
-    #[test]
-    fn test_git_commit_empty_message_returns_error() {
-        let result = git_commit("".to_string(), None);
+    #[tokio::test]
+    async fn test_git_commit_empty_message_returns_error() {
+        let result = git_commit("".to_string(), None).await;
         assert!(!result.success);
         assert!(result.error.as_deref().unwrap().contains("empty"));
     }
 
-    #[test]
-    fn test_git_commit_whitespace_message_returns_error() {
-        let result = git_commit("   ".to_string(), None);
+    #[tokio::test]
+    async fn test_git_commit_whitespace_message_returns_error() {
+        let result = git_commit("   ".to_string(), None).await;
         assert!(!result.success);
         assert!(result.error.as_deref().unwrap().contains("empty"));
     }
