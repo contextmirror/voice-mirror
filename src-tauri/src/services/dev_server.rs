@@ -665,6 +665,167 @@ fn extract_port_flag(cmd: &str) -> Option<u16> {
 }
 
 // ---------------------------------------------------------------------------
+// Python detection helpers
+// ---------------------------------------------------------------------------
+
+/// Parse requirements.txt content and return normalized (lowercased) package names.
+fn parse_requirements_txt(content: &str) -> Vec<String> {
+    static PKG_RE: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
+        regex::Regex::new(r"^([A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?)").unwrap()
+    });
+
+    content
+        .lines()
+        .filter_map(|line| {
+            let trimmed = line.trim();
+            if trimmed.is_empty()
+                || trimmed.starts_with('#')
+                || trimmed.starts_with('-')
+                || trimmed.starts_with("http")
+                || trimmed.starts_with('/')
+                || trimmed.starts_with('.')
+            {
+                return None;
+            }
+            let before_comment = trimmed.split('#').next().unwrap_or("").trim();
+            let before_extras = before_comment.split('[').next().unwrap_or("");
+            PKG_RE.captures(before_extras).map(|caps| {
+                caps.get(1).unwrap().as_str().to_lowercase()
+            })
+        })
+        .collect()
+}
+
+/// Parse pyproject.toml content and return normalized package names.
+///
+/// Handles two formats:
+/// - PEP 621: `[project] dependencies = ["flask>=2.0", ...]` (may span multiple lines)
+/// - Poetry: `[tool.poetry.dependencies] flask = "^2.0"` (key-value per line)
+fn parse_pyproject_toml(content: &str) -> Vec<String> {
+    static QUOTED_PKG_RE: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
+        regex::Regex::new(r#""([A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?)"#).unwrap()
+    });
+
+    let mut deps = Vec::new();
+    let lines: Vec<&str> = content.lines().collect();
+    let mut i = 0;
+
+    while i < lines.len() {
+        let trimmed = lines[i].trim();
+
+        // PEP 621: [project] section
+        if trimmed == "[project]" {
+            i += 1;
+            while i < lines.len() {
+                let line = lines[i].trim();
+                if line.starts_with('[') { break; }
+                if line.starts_with("dependencies") && line.contains('=') {
+                    let mut array_str = String::new();
+                    let after_eq = line.splitn(2, '=').nth(1).unwrap_or("");
+                    array_str.push_str(after_eq);
+                    if !array_str.contains(']') {
+                        i += 1;
+                        while i < lines.len() {
+                            array_str.push_str(lines[i]);
+                            if lines[i].contains(']') { break; }
+                            i += 1;
+                        }
+                    }
+                    for caps in QUOTED_PKG_RE.captures_iter(&array_str) {
+                        let name = caps.get(1).unwrap().as_str().to_lowercase();
+                        let pkg = name.split(|c: char| !c.is_alphanumeric() && c != '-' && c != '_' && c != '.').next().unwrap_or(&name);
+                        if !pkg.is_empty() {
+                            deps.push(pkg.to_string());
+                        }
+                    }
+                }
+                i += 1;
+            }
+            continue;
+        }
+
+        // Poetry: [tool.poetry.dependencies]
+        if trimmed == "[tool.poetry.dependencies]" {
+            i += 1;
+            while i < lines.len() {
+                let line = lines[i].trim();
+                if line.starts_with('[') { break; }
+                if line.is_empty() || line.starts_with('#') {
+                    i += 1;
+                    continue;
+                }
+                if let Some(key) = line.split(|c: char| c == '=' || c.is_whitespace()).next() {
+                    let name = key.trim().to_lowercase();
+                    if !name.is_empty() && name != "python" {
+                        deps.push(name);
+                    }
+                }
+                i += 1;
+            }
+            continue;
+        }
+
+        i += 1;
+    }
+
+    deps
+}
+
+/// Parse Pipfile content and return normalized package names from [packages] section.
+fn parse_pipfile(content: &str) -> Vec<String> {
+    let mut deps = Vec::new();
+    let mut in_packages = false;
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+
+        if trimmed == "[packages]" {
+            in_packages = true;
+            continue;
+        }
+        if trimmed.starts_with('[') {
+            in_packages = false;
+            continue;
+        }
+
+        if in_packages && !trimmed.is_empty() && !trimmed.starts_with('#') {
+            if let Some(key) = trimmed.split('=').next() {
+                let name = key.trim().to_lowercase();
+                if !name.is_empty() {
+                    deps.push(name);
+                }
+            }
+        }
+    }
+
+    deps
+}
+
+/// Parse Python dependency files from a project root.
+/// Tries requirements.txt -> pyproject.toml -> Pipfile in order.
+/// Returns None if no Python dependency file is found.
+fn parse_python_deps(root: &Path) -> Option<Vec<String>> {
+    if let Ok(content) = std::fs::read_to_string(root.join("requirements.txt")) {
+        let deps = parse_requirements_txt(&content);
+        if !deps.is_empty() {
+            return Some(deps);
+        }
+    }
+
+    if let Ok(content) = std::fs::read_to_string(root.join("pyproject.toml")) {
+        let deps = parse_pyproject_toml(&content);
+        return Some(deps);
+    }
+
+    if let Ok(content) = std::fs::read_to_string(root.join("Pipfile")) {
+        let deps = parse_pipfile(&content);
+        return Some(deps);
+    }
+
+    None
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -985,5 +1146,64 @@ mod tests {
     fn test_is_port_listening_closed_ipv6() {
         // Port 1 should not be listening on IPv6 either
         assert!(!is_port_listening(1));
+    }
+
+    #[test]
+    fn test_parse_requirements_txt_basic() {
+        let content = "flask==2.0.0\nuvicorn>=0.18\nrequests\n";
+        let deps = parse_requirements_txt(content);
+        assert!(deps.contains(&"flask".to_string()));
+        assert!(deps.contains(&"uvicorn".to_string()));
+        assert!(deps.contains(&"requests".to_string()));
+    }
+
+    #[test]
+    fn test_parse_requirements_txt_extras_and_comments() {
+        let content = "# comment\nFlask[async]>=2.0\n-r other.txt\n\nDjango>=4.0  # inline comment\n";
+        let deps = parse_requirements_txt(content);
+        assert!(deps.contains(&"flask".to_string()), "Should lowercase");
+        assert!(deps.contains(&"django".to_string()));
+        assert!(!deps.iter().any(|d| d.contains("-r")), "Should skip -r lines");
+        assert_eq!(deps.len(), 2);
+    }
+
+    #[test]
+    fn test_parse_requirements_txt_empty() {
+        let deps = parse_requirements_txt("");
+        assert!(deps.is_empty());
+    }
+
+    #[test]
+    fn test_parse_pyproject_toml_pep621() {
+        let content = "[project]\nname = \"myapp\"\ndependencies = [\n    \"flask>=2.0\",\n    \"uvicorn\",\n]\n";
+        let deps = parse_pyproject_toml(content);
+        assert!(deps.contains(&"flask".to_string()));
+        assert!(deps.contains(&"uvicorn".to_string()));
+    }
+
+    #[test]
+    fn test_parse_pyproject_toml_pep621_single_line() {
+        let content = "[project]\ndependencies = [\"django>=4.0\", \"gunicorn\"]\n";
+        let deps = parse_pyproject_toml(content);
+        assert!(deps.contains(&"django".to_string()));
+        assert!(deps.contains(&"gunicorn".to_string()));
+    }
+
+    #[test]
+    fn test_parse_pyproject_toml_poetry() {
+        let content = "[tool.poetry.dependencies]\npython = \"^3.12\"\nflask = \"^2.0\"\ngradio = {version = \"^4.0\"}\n";
+        let deps = parse_pyproject_toml(content);
+        assert!(deps.contains(&"flask".to_string()));
+        assert!(deps.contains(&"gradio".to_string()));
+        assert!(!deps.contains(&"python".to_string()), "Should skip python itself");
+    }
+
+    #[test]
+    fn test_parse_pipfile() {
+        let content = "[packages]\nflask = \"*\"\nuvicorn = \">=0.18\"\n\n[dev-packages]\npytest = \"*\"\n";
+        let deps = parse_pipfile(content);
+        assert!(deps.contains(&"flask".to_string()));
+        assert!(deps.contains(&"uvicorn".to_string()));
+        assert!(!deps.contains(&"pytest".to_string()), "Should skip dev-packages");
     }
 }
