@@ -122,10 +122,13 @@ pub fn run() {
     // Enable Chrome DevTools Protocol remote debugging on the WebView2 browser
     // process. This allows creating a second WebView2 that loads the DevTools
     // frontend UI, enabling embedded (Cursor-style) DevTools panels.
-    std::env::set_var(
-        "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
-        "--remote-debugging-port=9222 --remote-allow-origins=*",
-    );
+    // SAFETY: Called at app startup before any threads are spawned.
+    unsafe {
+        std::env::set_var(
+            "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
+            "--remote-debugging-port=9222 --remote-allow-origins=*",
+        );
+    }
 
     tauri::Builder::default()
         .plugin(tauri_plugin_decorum::init())
