@@ -86,6 +86,9 @@ tauri-plugin-decorum = "1.1.1"
 # Cross-platform trash/recycle bin support
 trash = "5"
 
+# Lock-free frame buffer for window streaming
+arc-swap = "1"
+
 # Open files/folders with the OS default handler
 opener = "0.7"
 
@@ -103,6 +106,17 @@ windows = { version = "0.61", features = [
     "Win32_Graphics_Dwm",
     "Win32_Storage_Xps",
     "Win32_Security_Cryptography",
+    "Graphics_Capture",
+    "Graphics_DirectX",
+    "Graphics_DirectX_Direct3D11",
+    "Graphics_Imaging",
+    "Win32_Graphics_Direct3D11",
+    "Win32_Graphics_Direct3D",
+    "Win32_Graphics_Dxgi",
+    "Win32_Graphics_Dxgi_Common",
+    "Win32_System_WinRT_Direct3D11",
+    "Win32_System_WinRT_Graphics_Capture",
+    "Foundation",
 ] }
 
 [[bin]]
