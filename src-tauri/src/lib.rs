@@ -524,6 +524,7 @@ pub fn run() {
             // MCP Server Management
             mcp_cmds::mcp_write_server,
             mcp_cmds::mcp_delete_server,
+            mcp_cmds::mcp_test_connection,
             // Workspace State
             ws_state_cmds::save_workspace_state,
             ws_state_cmds::load_workspace_state,
