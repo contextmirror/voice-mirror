@@ -519,6 +519,7 @@ pub fn run() {
             project_cmds::save_project_icon,
             project_cmds::remove_project_icon,
             project_cmds::load_project_icons,
+            project_cmds::discover_mcp_servers,
             // Workspace State
             ws_state_cmds::save_workspace_state,
             ws_state_cmds::load_workspace_state,

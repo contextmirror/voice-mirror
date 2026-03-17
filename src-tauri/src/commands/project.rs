@@ -3,7 +3,11 @@
 use super::IpcResponse;
 use base64::Engine as _;
 use serde::Deserialize;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+
+use crate::config::schema::McpServerPref;
+use crate::providers::cli::mcp_config::discover_mcp_servers_impl;
 
 /// Get the project-icons directory under %APPDATA%/voice-mirror/.
 fn icons_dir() -> Result<PathBuf, String> {
@@ -179,6 +183,33 @@ pub fn load_project_icons(params: LoadIconsParams) -> IpcResponse {
     }
 
     IpcResponse::ok(serde_json::json!({ "icons": icons }))
+}
+
+// ── discover_mcp_servers ──
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscoverMcpParams {
+    pub workspace_path: String,
+    pub preferences: Option<HashMap<String, McpServerPref>>,
+}
+
+#[tauri::command]
+pub fn discover_mcp_servers(params: DiscoverMcpParams) -> IpcResponse {
+    let workspace = Path::new(&params.workspace_path);
+    if !workspace.exists() {
+        return IpcResponse::err(format!(
+            "Workspace path does not exist: {}",
+            params.workspace_path
+        ));
+    }
+
+    let servers = discover_mcp_servers_impl(workspace, &params.preferences);
+
+    match serde_json::to_value(&servers) {
+        Ok(val) => IpcResponse::ok(val),
+        Err(e) => IpcResponse::err(format!("Failed to serialize discovery result: {e}")),
+    }
 }
 
 // ── Tests ──
