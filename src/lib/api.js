@@ -1084,6 +1084,20 @@ export async function mcpDeleteServer(name, scope) {
   return invoke('mcp_delete_server', { params: { name, scope } });
 }
 
+// ============ Window Streaming ============
+
+export async function startWindowStream(hwnd, fps) {
+  return invoke('start_window_stream', { params: { hwnd, fps: fps || null } });
+}
+
+export async function stopWindowStream() {
+  return invoke('stop_window_stream');
+}
+
+export async function getStreamStatus() {
+  return invoke('get_stream_status');
+}
+
 // ============ Workspace State ============
 
 export async function saveWorkspaceState(projectPath, state) {
