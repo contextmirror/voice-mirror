@@ -489,6 +489,9 @@ pub struct ProjectsConfig {
     pub entries: Vec<ProjectEntry>,
     #[serde(default)]
     pub active_index: usize,
+    /// MCP server preferences for the default workspace (Voice Mirror project root).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_mcp_servers: Option<HashMap<String, McpServerPref>>,
 }
 
 /// A single project entry (path + display name + color tag).
@@ -500,6 +503,15 @@ pub struct ProjectEntry {
     pub color: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub icon: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mcp_servers: Option<HashMap<String, McpServerPref>>,
+}
+
+/// Per-server enable/disable preference for a project workspace.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct McpServerPref {
+    pub enabled: bool,
 }
 
 /// Browser settings (download behavior).
