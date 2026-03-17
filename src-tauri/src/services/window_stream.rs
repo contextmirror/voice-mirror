@@ -350,7 +350,6 @@ fn run_capture(
 // ── MJPEG server ────────────────────────────────────────────────────────
 
 fn run_mjpeg_server(port: u16, stop_flag: Arc<AtomicBool>, buffer: Arc<ArcSwap<Vec<u8>>>) {
-    use std::io::Write;
     use std::net::TcpListener;
 
     let addr = format!("127.0.0.1:{}", port);

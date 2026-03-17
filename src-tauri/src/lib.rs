@@ -313,6 +313,9 @@ pub fn run() {
             screenshot_cmds::capture_monitor,
             screenshot_cmds::capture_window,
             screenshot_cmds::lens_capture_browser,
+            screenshot_cmds::start_window_stream,
+            screenshot_cmds::stop_window_stream,
+            screenshot_cmds::get_stream_status,
             // Voice
             voice_cmds::start_voice,
             voice_cmds::stop_voice,
