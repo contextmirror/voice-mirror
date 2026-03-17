@@ -73,6 +73,8 @@
         <option value={5}>5</option>
         <option value={15}>15</option>
         <option value={30}>30</option>
+        <option value={60}>60</option>
+        <option value={144}>144</option>
       </select>
     </div>
 

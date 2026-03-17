@@ -1390,7 +1390,7 @@ pub struct StartStreamParams {
 
 #[tauri::command]
 pub async fn start_window_stream(params: StartStreamParams) -> IpcResponse {
-    let fps = params.fps.unwrap_or(30).clamp(1, 60);
+    let fps = params.fps.unwrap_or(30).clamp(1, 144);
     match crate::services::window_stream::start(params.hwnd, fps) {
         Ok(port) => IpcResponse::ok(serde_json::json!({
             "port": port,
