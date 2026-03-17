@@ -7,6 +7,7 @@
    * and send button.
    */
   import { chatStore } from '../../lib/stores/chat.svelte.js';
+  import { lensStore } from '../../lib/stores/lens.svelte.js';
   import { stopWindowStream, getStreamStatus } from '../../lib/api.js';
   import { unwrapResult } from '../../lib/utils.js';
   import WindowPickerModal from './WindowPickerModal.svelte';
@@ -121,6 +122,8 @@
   function handleStreamStarted(data) {
     isStreaming = true;
     streamUrl = data.url;
+    // Navigate Browser panel to the stream
+    lensStore.navigate(data.url);
   }
 
   async function handleStopStream() {

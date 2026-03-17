@@ -292,14 +292,15 @@ fn run_capture(
             std::slice::from_raw_parts(mapped.pData as *const u8, row_pitch * height as usize)
         };
 
-        // BGRA → RGB for JPEG encoding
+        // B8G8R8A8 → RGB for JPEG encoding
+        // Memory layout: [B, G, R, A] per pixel
         let mut rgb = Vec::with_capacity((width * height * 3) as usize);
         for y in 0..height as usize {
             for x in 0..width as usize {
                 let offset = y * row_pitch + x * 4;
-                rgb.push(data[offset + 2]); // R
+                rgb.push(data[offset]); // R (offset 0 in captured texture)
                 rgb.push(data[offset + 1]); // G
-                rgb.push(data[offset]); // B
+                rgb.push(data[offset + 2]); // B
             }
         }
 
