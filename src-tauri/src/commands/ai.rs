@@ -68,6 +68,17 @@ pub fn start_ai(
         }
     };
 
+    // Resolve MCP preferences from config for the active project
+    let mcp_prefs = {
+        let cfg = crate::commands::config::get_config_snapshot();
+        let projects = &cfg.projects;
+        // If there's a CWD, find matching project entry's prefs; else use default
+        cwd.as_ref()
+            .and_then(|c| projects.entries.iter().find(|e| e.path == *c))
+            .and_then(|e| e.mcp_servers.clone())
+            .or_else(|| projects.default_mcp_servers.clone())
+    };
+
     let config = ProviderConfig {
         model,
         base_url,
@@ -75,7 +86,7 @@ pub fn start_ai(
         context_length: context_length.unwrap_or(32768),
         system_prompt,
         cwd,
-        mcp_preferences: None,
+        mcp_preferences: mcp_prefs,
     };
 
     match manager.start(&provider_type, cols, rows, config) {

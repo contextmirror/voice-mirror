@@ -100,10 +100,12 @@ pub fn write_mcp_config(
             continue; // already inserted voice-mirror above
         }
         let mut entry = server.config.clone();
-        if !server.enabled {
-            entry
-                .as_object_mut()
-                .map(|obj| obj.insert("disabled".to_string(), serde_json::json!(true)));
+        if let Some(obj) = entry.as_object_mut() {
+            if !server.enabled {
+                obj.insert("disabled".to_string(), serde_json::json!(true));
+            } else {
+                obj.remove("disabled");
+            }
         }
         mcp_servers.insert(server.name.clone(), entry);
     }

@@ -862,7 +862,6 @@
             {/each}
           {/each}
 
-          {#if projectStore.entries.length > 0 || projectStore.activeProject}
           <div class="context-menu-divider"></div>
           <button class="context-menu-item" onclick={openMcpMenu}>
             <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
@@ -874,7 +873,6 @@
               <polyline points="9 6 15 12 9 18"/>
             </svg>
           </button>
-          {/if}
 
           {#if aiStatusStore.running || aiStatusStore.starting}
             <div class="context-menu-divider"></div>
