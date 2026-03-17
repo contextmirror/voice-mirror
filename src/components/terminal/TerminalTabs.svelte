@@ -15,7 +15,7 @@
   import { terminalTabsStore } from '../../lib/stores/terminal-tabs.svelte.js';
   import { devServerManager } from '../../lib/stores/dev-server-manager.svelte.js';
   import { projectStore } from '../../lib/stores/project.svelte.js';
-  import { sendVoiceLoop } from '../../lib/api.js';
+  import { sendVoiceLoop, discoverMcpServers } from '../../lib/api.js';
   import { voiceStore } from '../../lib/stores/voice.svelte.js';
   import { aiStatusStore, switchProvider, stopProvider } from '../../lib/stores/ai-status.svelte.js';
   import { configStore, updateConfig } from '../../lib/stores/config.svelte.js';
@@ -29,7 +29,7 @@
   import ProblemsPanel from '../lens/ProblemsPanel.svelte';
   import { lspDiagnosticsStore } from '../../lib/stores/lsp-diagnostics.svelte.js';
   import { severityLabel } from '../../lib/lsp-severity.js';
-  import { formatLogTime } from '../../lib/utils.js';
+  import { formatLogTime, unwrapResult } from '../../lib/utils.js';
 
   // ---- Bottom panel mode: ai | output | terminal | problems ----
   let bottomPanelMode = $state('ai');
@@ -123,6 +123,8 @@
   // ---- Right-click context menu (Voice Agent tab) ----
 
   let contextMenu = $state({ visible: false, x: 0, y: 0, tabId: null, step: 'providers', pendingProvider: null });
+  let mcpMenuServers = $state([]);
+  let mcpMenuLoading = $state(false);
 
   function showContextMenu(e, tabId) {
     e.preventDefault();
@@ -216,6 +218,39 @@
         severity: 'error',
       });
     }
+  }
+
+  async function openMcpMenu() {
+    mcpMenuLoading = true;
+    contextMenu = { ...contextMenu, step: 'mcp-servers' };
+    try {
+      const project = projectStore.activeProject;
+      const path = project?.path || '';
+      const prefs = project?.mcpServers || null;
+      const result = await discoverMcpServers(path, prefs);
+      const servers = unwrapResult(result) || [];
+      mcpMenuServers = servers;
+    } catch (err) {
+      console.error('[terminal-tabs] MCP discovery failed:', err);
+      mcpMenuServers = [];
+    } finally {
+      mcpMenuLoading = false;
+    }
+  }
+
+  function toggleMcpServer(serverName, currentEnabled) {
+    const newEnabled = !currentEnabled;
+    mcpMenuServers = mcpMenuServers.map(s =>
+      s.name === serverName ? { ...s, enabled: newEnabled } : s
+    );
+    const project = projectStore.activeProject;
+    if (project) {
+      projectStore.setMcpServer(project.path, serverName, newEnabled);
+    }
+  }
+
+  function refreshMcpMenu() {
+    openMcpMenu();
   }
 
   // Close context menu on outside click
@@ -744,6 +779,44 @@
           </svg>
           Open folder...
         </button>
+      {:else if contextMenu.step === 'mcp-servers'}
+        <!-- MCP server toggles -->
+        <button class="context-menu-item" onclick={() => contextMenu = { ...contextMenu, step: 'providers' }}>
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="15 18 9 12 15 6"/>
+          </svg>
+          Back
+        </button>
+        <div class="context-menu-divider"></div>
+        <div class="context-menu-group-label">MCP Servers ({projectStore.activeProject?.name || 'default'})</div>
+        {#if mcpMenuLoading}
+          <div class="context-menu-item" style="opacity: 0.5; pointer-events: none;">Discovering...</div>
+        {:else}
+          {#each mcpMenuServers as server}
+            <button
+              class="context-menu-item"
+              onclick={(e) => { e.stopPropagation(); if (!server.isOwn) toggleMcpServer(server.name, server.enabled); }}
+            >
+              {#if server.enabled}
+                <svg class="ctx-check" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+              {:else}
+                <span style="width: 12px; display: inline-block;"></span>
+              {/if}
+              <span class="ctx-provider-label">{server.name}</span>
+              <span class="mcp-source-badge">{server.source}</span>
+            </button>
+          {/each}
+          <div class="context-menu-divider"></div>
+          <button class="context-menu-item" onclick={refreshMcpMenu}>
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="23 4 23 10 17 10"/>
+              <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/>
+            </svg>
+            Refresh
+          </button>
+        {/if}
       {:else}
         <button class="context-menu-item" onclick={contextClear}>
           <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
@@ -788,6 +861,20 @@
               </button>
             {/each}
           {/each}
+
+          {#if projectStore.entries.length > 0 || projectStore.activeProject}
+          <div class="context-menu-divider"></div>
+          <button class="context-menu-item" onclick={openMcpMenu}>
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
+            </svg>
+            Configure MCP Servers...
+            <svg class="ctx-submenu-arrow" viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="9 6 15 12 9 18"/>
+            </svg>
+          </button>
+          {/if}
 
           {#if aiStatusStore.running || aiStatusStore.starting}
             <div class="context-menu-divider"></div>
@@ -1169,6 +1256,15 @@
     flex-shrink: 0;
     opacity: 0.4;
     margin-left: auto;
+  }
+
+  .mcp-source-badge {
+    font-size: 10px;
+    color: var(--muted);
+    margin-left: auto;
+    padding: 1px 4px;
+    background: var(--bg);
+    border-radius: 3px;
   }
 
   .ctx-workspace-dot {
