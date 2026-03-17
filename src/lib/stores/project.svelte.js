@@ -248,6 +248,37 @@ function createProjectStore() {
       delete next[filename];
       iconCache = next;
     },
+
+    /**
+     * Set MCP server enabled/disabled for a project.
+     * @param {string} projectPath - Project path (or '' for default workspace)
+     * @param {string} serverName - MCP server name
+     * @param {boolean} enabled
+     */
+    setMcpServer(projectPath, serverName, enabled) {
+      if (!projectPath) {
+        // Default workspace — will be handled in Task 9
+        return;
+      }
+      const idx = entries.findIndex(e => e.path === projectPath);
+      if (idx === -1) return;
+      if (!entries[idx].mcpServers) {
+        entries[idx].mcpServers = {};
+      }
+      entries[idx].mcpServers[serverName] = { enabled };
+      this._persist();
+    },
+
+    /**
+     * Get MCP server preferences for a project.
+     * @param {string} projectPath - Project path (or '' for default workspace)
+     * @returns {Object} Map of server name → { enabled }
+     */
+    getMcpServers(projectPath) {
+      if (!projectPath) return {};
+      const entry = entries.find(e => e.path === projectPath);
+      return entry?.mcpServers || {};
+    },
   };
 }
 

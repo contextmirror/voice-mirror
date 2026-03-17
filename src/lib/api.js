@@ -1065,6 +1065,12 @@ export async function loadProjectIcons(filenames) {
   return invoke('load_project_icons', { params: { filenames } });
 }
 
+// ============ MCP Discovery ============
+
+export async function discoverMcpServers(workspacePath, preferences) {
+  return invoke('discover_mcp_servers', { params: { workspacePath, preferences: preferences || null } });
+}
+
 // ============ Workspace State ============
 
 export async function saveWorkspaceState(projectPath, state) {
