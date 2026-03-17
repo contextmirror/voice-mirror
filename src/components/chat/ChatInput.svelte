@@ -8,6 +8,7 @@
    */
   import { chatStore } from '../../lib/stores/chat.svelte.js';
   import { lensStore } from '../../lib/stores/lens.svelte.js';
+  import { navigationStore } from '../../lib/stores/navigation.svelte.js';
   import { stopWindowStream, getStreamStatus } from '../../lib/api.js';
   import { unwrapResult } from '../../lib/utils.js';
   import WindowPickerModal from './WindowPickerModal.svelte';
@@ -122,8 +123,10 @@
   function handleStreamStarted(data) {
     isStreaming = true;
     streamUrl = data.url;
-    // Navigate Browser panel to the stream
-    lensStore.navigate(data.url);
+    // Switch to Browser view and navigate to the stream URL
+    navigationStore.setView('lens');
+    // Small delay to let the WebView initialize if it wasn't active
+    setTimeout(() => lensStore.navigate(data.url), 300);
   }
 
   async function handleStopStream() {
