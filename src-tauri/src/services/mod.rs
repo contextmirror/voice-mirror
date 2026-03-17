@@ -9,3 +9,4 @@ pub mod logger;
 pub mod output;
 pub mod platform;
 pub mod text_injector;
+pub mod window_stream;
