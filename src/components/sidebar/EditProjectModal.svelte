@@ -3,7 +3,7 @@
   import { open } from '@tauri-apps/plugin-dialog';
   import { projectStore } from '../../lib/stores/project.svelte.js';
   import { lensStore } from '../../lib/stores/lens.svelte.js';
-  import { saveProjectIcon, removeProjectIcon } from '../../lib/api.js';
+  import { saveProjectIcon, removeProjectIcon, discoverMcpServers } from '../../lib/api.js';
   import { unwrapResult } from '../../lib/utils.js';
 
   let { projectIndex, onClose } = $props();
@@ -11,6 +11,22 @@
   // Freeze WebView2 while modal is open (airspace problem — native control renders above HTML)
   onMount(() => {
     lensStore.freeze();
+    // Fetch MCP servers for this project
+    if (entry?.path) {
+      discoverMcpServers(entry.path, entry.mcpServers || null)
+        .then(result => {
+          const servers = unwrapResult(result) || [];
+          mcpServers = servers;
+          mcpToggles = {};
+          for (const s of servers) {
+            mcpToggles[s.name] = s.enabled;
+          }
+        })
+        .catch(err => console.error('[edit-project] MCP discovery failed:', err))
+        .finally(() => { mcpLoading = false; });
+    } else {
+      mcpLoading = false;
+    }
     return () => lensStore.unfreeze();
   });
 
@@ -24,6 +40,9 @@
   let uploadedFilename = $state(null);
   let sizeWarning = $state(false);
   let saving = $state(false);
+  let mcpServers = $state([]);
+  let mcpLoading = $state(true);
+  let mcpToggles = $state({}); // { serverName: boolean }
 
   const originalIcon = entry?.icon || null;
 
@@ -98,6 +117,16 @@
       try { await removeProjectIcon(uploadedFilename); } catch {}
     }
 
+    // Save MCP server preferences
+    if (mcpServers.length > 0) {
+      const mcpPrefs = {};
+      for (const s of mcpServers) {
+        if (s.isOwn) continue;
+        mcpPrefs[s.name] = { enabled: mcpToggles[s.name] ?? true };
+      }
+      projectStore.updateProjectField(projectIndex, 'mcpServers', mcpPrefs);
+    }
+
     onClose();
   }
 
@@ -156,6 +185,28 @@
           >
             {(name.charAt(0) || '?').toUpperCase()}
           </button>
+        {/each}
+      </div>
+    {/if}
+
+    <!-- MCP Servers -->
+    {#if mcpLoading}
+      <div class="field-label" style="margin-top: 16px;">MCP Servers</div>
+      <div class="mcp-loading">Discovering servers...</div>
+    {:else if mcpServers.length > 0}
+      <div class="field-label" style="margin-top: 16px;">MCP Servers</div>
+      <div class="mcp-list">
+        {#each mcpServers as server}
+          <label class="mcp-row">
+            <input
+              type="checkbox"
+              checked={mcpToggles[server.name] ?? true}
+              disabled={server.isOwn}
+              onchange={(e) => { mcpToggles[server.name] = e.target.checked; mcpToggles = mcpToggles; }}
+            />
+            <span class="mcp-name">{server.name}</span>
+            <span class="mcp-source">{server.source}</span>
+          </label>
         {/each}
       </div>
     {/if}
@@ -366,5 +417,56 @@
   .btn-save:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+
+  .mcp-loading {
+    font-size: 12px;
+    color: var(--muted);
+    padding: 8px 0;
+  }
+
+  .mcp-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 160px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 4px;
+  }
+
+  .mcp-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 6px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--text);
+  }
+
+  .mcp-row:hover {
+    background: var(--bg-hover);
+  }
+
+  .mcp-row input[type="checkbox"] {
+    margin: 0;
+    accent-color: var(--accent);
+  }
+
+  .mcp-name {
+    flex: 1;
+    font-family: var(--font-mono, monospace);
+    font-size: 12px;
+  }
+
+  .mcp-source {
+    font-size: 11px;
+    color: var(--muted);
+    padding: 1px 5px;
+    background: var(--bg);
+    border-radius: 3px;
   }
 </style>
