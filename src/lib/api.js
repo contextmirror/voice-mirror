@@ -1072,6 +1072,18 @@ export async function discoverMcpServers(workspacePath, preferences) {
   return invoke('discover_mcp_servers', { params: { workspacePath, preferences: preferences || null } });
 }
 
+export async function mcpTestConnection(command, args, env) {
+  return invoke('mcp_test_connection', { params: { command, args, env: env || null } });
+}
+
+export async function mcpWriteServer(name, command, args, env, scope) {
+  return invoke('mcp_write_server', { params: { name, command, args, env: env || null, scope } });
+}
+
+export async function mcpDeleteServer(name, scope) {
+  return invoke('mcp_delete_server', { params: { name, scope } });
+}
+
 // ============ Workspace State ============
 
 export async function saveWorkspaceState(projectPath, state) {
