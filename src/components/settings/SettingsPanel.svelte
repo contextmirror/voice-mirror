@@ -6,6 +6,7 @@
    * Tab order:
    *   - General
    *   - AI & Tools
+   *   - MCP Servers
    *   - Voice & Audio
    *   - Appearance
    *   - Dependencies (hidden behind advanced.showDependencies flag)
@@ -17,10 +18,12 @@
   import ToolSettings from './ToolSettings.svelte';
   import AppearanceSettings from './AppearanceSettings.svelte';
   import DependencySettings from './DependencySettings.svelte';
+  import McpServerSettings from './McpServerSettings.svelte';
 
   const TABS = [
     { id: 'general', label: 'General' },
     { id: 'ai', label: 'AI & Tools' },
+    { id: 'mcp', label: 'MCP Servers' },
     { id: 'voice', label: 'Voice & Audio' },
     { id: 'appearance', label: 'Appearance' },
     { id: 'dependencies', label: 'Dependencies', flag: 'showDependencies' },
@@ -71,6 +74,10 @@
       >
         <AISettings />
         <ToolSettings />
+      </div>
+    {:else if activeTab === 'mcp'}
+      <div class="settings-tab-content" id="settings-tab-mcp" role="tabpanel">
+        <McpServerSettings />
       </div>
     {:else if activeTab === 'voice'}
       <div
