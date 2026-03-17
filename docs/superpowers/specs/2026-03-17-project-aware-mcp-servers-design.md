@@ -190,7 +190,7 @@ Current signature adds Voice Mirror's own server to `.mcp.json`. Extended to als
 
 ### Extend config schema
 
-In `src-tauri/src/config/schema.rs`, add to `ProjectEntry`:
+In `src-tauri/src/config/schema.rs`, add `default_mcp_servers` to `ProjectsConfig` and `mcp_servers` to `ProjectEntry`:
 
 ```rust
 // Note: ProjectEntry uses #[serde(rename_all = "camelCase")]
@@ -255,6 +255,24 @@ CLI provider starts (Claude Code / OpenCode)
     4. Write effective .mcp.json to workspace
   → CLI spawns, reads .mcp.json, connects to enabled servers
 ```
+
+## Default Workspace
+
+"Voice Mirror (default)" is the app's project root, not a user-added project entry. It still needs MCP preferences. Store these under a dedicated key in Voice Mirror config:
+
+```json
+{
+  "projects": {
+    "defaultMcpServers": {
+      "filesystem": { "enabled": true },
+      "brave-search": { "enabled": false }
+    },
+    "entries": [...]
+  }
+}
+```
+
+The backend resolves preferences by: if workspace path matches project root → use `projects.defaultMcpServers`, otherwise → look up the matching `entries[].mcpServers`. The context menu and Edit Project modal both work the same way regardless of which workspace is active.
 
 ## Edge Cases
 
