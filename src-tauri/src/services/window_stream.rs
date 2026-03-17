@@ -208,6 +208,13 @@ fn run_capture(
     let session = pool
         .CreateCaptureSession(&item)
         .map_err(|e| format!("CreateCaptureSession failed: {}", e))?;
+
+    // Disable the yellow capture border (privacy indicator)
+    // Available on Windows 11 and newer Windows 10 builds
+    if let Err(e) = session.SetIsBorderRequired(false) {
+        warn!("Could not disable capture border (older Windows?): {}", e);
+    }
+
     session
         .StartCapture()
         .map_err(|e| format!("StartCapture failed: {}", e))?;
