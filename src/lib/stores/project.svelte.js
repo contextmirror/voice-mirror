@@ -35,6 +35,7 @@ function createProjectStore() {
   let activeIndex = $state(0);
   let sessions = $state([]);
   let iconCache = $state({});
+  let defaultMcpServers = $state({});
   let persistTimer = null;
 
   return {
@@ -43,6 +44,7 @@ function createProjectStore() {
     get sessions() { return sessions; },
     /** Map of icon filename → base64 data URL */
     get iconCache() { return iconCache; },
+    get _defaultMcpServers() { return defaultMcpServers; },
 
     /** The currently active project entry, or null if none */
     get activeProject() {
@@ -61,6 +63,7 @@ function createProjectStore() {
     init(config) {
       entries = config.entries || [];
       activeIndex = config.activeIndex || 0;
+      defaultMcpServers = config.defaultMcpServers || {};
       if (activeIndex >= entries.length) {
         activeIndex = 0;
       }
@@ -257,7 +260,13 @@ function createProjectStore() {
      */
     setMcpServer(projectPath, serverName, enabled) {
       if (!projectPath) {
-        // Default workspace — will be handled in Task 9
+        // Default workspace — persist via setConfig directly (deep merge safe)
+        defaultMcpServers = { ...defaultMcpServers, [serverName]: { enabled } };
+        setConfig({
+          projects: {
+            defaultMcpServers: defaultMcpServers,
+          },
+        }).catch(err => console.error('[project] Failed to persist default MCP prefs:', err));
         return;
       }
       const idx = entries.findIndex(e => e.path === projectPath);
@@ -275,7 +284,7 @@ function createProjectStore() {
      * @returns {Object} Map of server name → { enabled }
      */
     getMcpServers(projectPath) {
-      if (!projectPath) return {};
+      if (!projectPath) return defaultMcpServers;
       const entry = entries.find(e => e.path === projectPath);
       return entry?.mcpServers || {};
     },
