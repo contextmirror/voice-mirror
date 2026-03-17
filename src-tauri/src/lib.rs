@@ -26,6 +26,7 @@ use commands::design as design_cmds;
 use commands::output as output_cmds;
 use commands::project as project_cmds;
 use commands::workspace_state as ws_state_cmds;
+use commands::mcp as mcp_cmds;
 
 use providers::manager::AiManager;
 use providers::ProviderEvent;
@@ -520,6 +521,9 @@ pub fn run() {
             project_cmds::remove_project_icon,
             project_cmds::load_project_icons,
             project_cmds::discover_mcp_servers,
+            // MCP Server Management
+            mcp_cmds::mcp_write_server,
+            mcp_cmds::mcp_delete_server,
             // Workspace State
             ws_state_cmds::save_workspace_state,
             ws_state_cmds::load_workspace_state,
