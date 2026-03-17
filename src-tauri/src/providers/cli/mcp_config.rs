@@ -24,7 +24,12 @@ use crate::config::schema::McpServerPref;
 /// in a non-Voice-Mirror project.
 ///
 /// The `enabled_groups` parameter comes from the user's configured tool profile.
-pub fn write_mcp_config(project_root: &std::path::Path, enabled_groups: &str, cwd_override: Option<&PathBuf>) -> Result<(), String> {
+pub fn write_mcp_config(
+    project_root: &std::path::Path,
+    enabled_groups: &str,
+    cwd_override: Option<&PathBuf>,
+    mcp_preferences: &Option<HashMap<String, McpServerPref>>,
+) -> Result<(), String> {
     // Resolve the Rust MCP binary
     let mcp_binary = resolve_mcp_binary(project_root)?;
     let binary_path_str = mcp_binary.to_string_lossy().replace('\\', "/");
@@ -80,16 +85,41 @@ pub fn write_mcp_config(project_root: &std::path::Path, enabled_groups: &str, cw
         }
     }
 
-    // --- 2. Write {project_root}/.mcp.json (project-level fallback) ---
-    let project_mcp = serde_json::json!({
-        "mcpServers": {
-            "voice-mirror": voice_mirror_entry
+    // --- 2. Discover third-party MCP servers and build merged config ---
+    let effective_workspace = cwd_override
+        .map(|p| p.as_path())
+        .unwrap_or(project_root);
+    let discovered = discover_mcp_servers_impl(effective_workspace, mcp_preferences);
+
+    // Build merged mcpServers map: voice-mirror + all discovered (enabled as-is, disabled with "disabled":true)
+    let mut mcp_servers = serde_json::Map::new();
+    mcp_servers.insert("voice-mirror".to_string(), voice_mirror_entry.clone());
+
+    for server in &discovered {
+        if server.is_own {
+            continue; // already inserted voice-mirror above
         }
-    });
+        let mut entry = server.config.clone();
+        if !server.enabled {
+            entry
+                .as_object_mut()
+                .map(|obj| obj.insert("disabled".to_string(), serde_json::json!(true)));
+        }
+        mcp_servers.insert(server.name.clone(), entry);
+    }
+
+    let server_count = mcp_servers.len();
+    let merged_mcp = serde_json::json!({ "mcpServers": mcp_servers });
+
+    // Write {project_root}/.mcp.json (project-level fallback)
     let project_mcp_path = project_root.join(".mcp.json");
-    match serde_json::to_string_pretty(&project_mcp) {
+    match serde_json::to_string_pretty(&merged_mcp) {
         Ok(s) => match std::fs::write(&project_mcp_path, &s) {
-            Ok(()) => info!("Wrote project MCP config to {}", project_mcp_path.display()),
+            Ok(()) => info!(
+                "Wrote project MCP config to {} ({} servers)",
+                project_mcp_path.display(),
+                server_count
+            ),
             Err(e) => warn!("Failed to write {}: {}", project_mcp_path.display(), e),
         },
         Err(e) => warn!("Failed to serialize .mcp.json: {}", e),
@@ -103,14 +133,13 @@ pub fn write_mcp_config(project_root: &std::path::Path, enabled_groups: &str, cw
     if let Some(cwd) = cwd_override {
         if cwd.exists() {
             let cwd_mcp_path = cwd.join(".mcp.json");
-            let cwd_mcp = serde_json::json!({
-                "mcpServers": {
-                    "voice-mirror": voice_mirror_entry
-                }
-            });
-            match serde_json::to_string_pretty(&cwd_mcp) {
+            match serde_json::to_string_pretty(&merged_mcp) {
                 Ok(s) => match std::fs::write(&cwd_mcp_path, &s) {
-                    Ok(()) => info!("Wrote CWD MCP config to {}", cwd_mcp_path.display()),
+                    Ok(()) => info!(
+                        "Wrote CWD MCP config to {} ({} servers)",
+                        cwd_mcp_path.display(),
+                        server_count
+                    ),
                     Err(e) => warn!("Failed to write CWD .mcp.json {}: {}", cwd_mcp_path.display(), e),
                 },
                 Err(e) => warn!("Failed to serialize CWD .mcp.json: {}", e),
