@@ -240,6 +240,7 @@ export async function setProvider(providerId, options = {}) {
     cwd: options.cwd,
     cols: options.cols,
     rows: options.rows,
+    mcpPreferences: options.mcpPreferences || null,
   });
 }
 

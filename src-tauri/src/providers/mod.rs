@@ -4,7 +4,10 @@ pub mod dictation;
 pub mod manager;
 pub mod tool_calling;
 
+use std::collections::HashMap;
 use std::fmt;
+
+use crate::config::schema::McpServerPref;
 
 /// Known CLI-based providers (spawned in a PTY terminal).
 pub const CLI_PROVIDERS: &[&str] = &["claude", "opencode", "codex", "gemini-cli", "kimi-cli"];
@@ -156,6 +159,8 @@ pub struct ProviderConfig {
     pub system_prompt: Option<String>,
     /// Working directory for CLI providers.
     pub cwd: Option<String>,
+    /// Per-server MCP preferences (enable/disable) from the project store.
+    pub mcp_preferences: Option<HashMap<String, McpServerPref>>,
 }
 
 impl Default for ProviderConfig {
@@ -167,6 +172,7 @@ impl Default for ProviderConfig {
             context_length: 32768,
             system_prompt: None,
             cwd: None,
+            mcp_preferences: None,
         }
     }
 }

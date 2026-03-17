@@ -3,6 +3,7 @@
 //! These commands are invoked from the frontend via Tauri's IPC bridge.
 //! They delegate to the `AiManager` held in Tauri's managed state.
 
+use std::collections::HashMap;
 use std::sync::Mutex;
 
 use tauri::State;
@@ -74,6 +75,7 @@ pub fn start_ai(
         context_length: context_length.unwrap_or(32768),
         system_prompt,
         cwd,
+        mcp_preferences: None,
     };
 
     match manager.start(&provider_type, cols, rows, config) {
@@ -347,6 +349,7 @@ pub fn set_provider(
     cwd: Option<String>,
     cols: Option<u16>,
     rows: Option<u16>,
+    mcp_preferences: Option<HashMap<String, crate::config::schema::McpServerPref>>,
 ) -> IpcResponse {
     let mut manager = lock_manager!(state);
 
@@ -376,6 +379,7 @@ pub fn set_provider(
         context_length: context_length.unwrap_or(32768),
         system_prompt,
         cwd,
+        mcp_preferences,
     };
 
     match manager.switch(&provider_id, cols, rows, config) {
