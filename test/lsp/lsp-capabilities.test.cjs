@@ -8,9 +8,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const src = fs.readFileSync(
-  path.join(__dirname, '../../src-tauri/src/lsp/mod.rs'), 'utf-8'
-);
+const { modSrc: src } = require('./_read-lsp-sources.cjs');
 
 describe('mod.rs: publishDiagnostics capability', () => {
   it('declares relatedInformation: true', () => {

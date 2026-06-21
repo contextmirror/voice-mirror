@@ -48,6 +48,7 @@
   let outputDevice = $state('');
   let announceStartup = $state(true);
   let announceProvider = $state(true);
+  let dictionary = $state([]);
 
   let audioInputDevices = $state([]);
   let audioOutputDevices = $state([]);
@@ -172,7 +173,19 @@
     outputDevice = cfg.voice?.outputDevice || '';
     announceStartup = cfg.voice?.announceStartup !== false;
     announceProvider = cfg.voice?.announceProviderSwitch !== false;
+    // Clone so edits don't mutate the config store before saving.
+    dictionary = Array.isArray(cfg.voice?.dictionary)
+      ? cfg.voice.dictionary.map((e) => ({ from: e.from ?? '', to: e.to ?? '' }))
+      : [];
   });
+
+  function addDictionaryEntry() {
+    dictionary = [...dictionary, { from: '', to: '' }];
+  }
+
+  function removeDictionaryEntry(index) {
+    dictionary = dictionary.filter((_, i) => i !== index);
+  }
 
   // ---- Save handler ----
 
@@ -217,6 +230,10 @@
           outputDevice: outputDevice || null,
           announceStartup,
           announceProviderSwitch: announceProvider,
+          // Drop empty rows; trim whitespace.
+          dictionary: dictionary
+            .map((e) => ({ from: (e.from || '').trim(), to: (e.to || '').trim() }))
+            .filter((e) => e.from),
         },
       };
       await updateConfig(patch);
@@ -460,6 +477,39 @@
     </div>
   </section>
 
+  <!-- Dictation Dictionary -->
+  <section class="settings-section">
+    <h3>Dictation Dictionary</h3>
+    <p class="dict-hint">
+      Fix words the model mishears. Each entry replaces the heard text with the
+      correct text (case-insensitive). Applied to all transcription — works with
+      any STT model.
+    </p>
+    <div class="settings-group">
+      {#if dictionary.length > 0}
+        <div class="dict-header">
+          <span>Heard</span>
+          <span></span>
+          <span>Replace with</span>
+          <span></span>
+        </div>
+        {#each dictionary as entry, i (i)}
+          <div class="dict-row">
+            <input class="dict-input" placeholder="Power to Keep" bind:value={entry.from} />
+            <span class="dict-arrow">→</span>
+            <input class="dict-input" placeholder="Parakeet" bind:value={entry.to} />
+            <button class="dict-remove" title="Remove" aria-label="Remove correction" onclick={() => removeDictionaryEntry(i)}>×</button>
+          </div>
+        {/each}
+      {:else}
+        <div class="dict-empty">No corrections yet.</div>
+      {/if}
+      <div class="dict-add">
+        <Button small onClick={addDictionaryEntry}>+ Add correction</Button>
+      </div>
+    </div>
+  </section>
+
   <!-- Installed Models -->
   <section class="settings-section">
     <h3>Installed Models</h3>
@@ -590,6 +640,74 @@
     padding: 8px 12px;
     font-size: 12px;
     color: var(--warn);
+  }
+
+  .dict-hint {
+    font-size: 12px;
+    color: var(--muted);
+    margin: 0 0 10px 0;
+    line-height: 1.5;
+  }
+
+  .dict-header,
+  .dict-row {
+    display: grid;
+    grid-template-columns: 1fr 16px 1fr 24px;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 8px;
+  }
+
+  .dict-header {
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .dict-input {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm, 4px);
+    color: var(--text);
+    font-size: 13px;
+    padding: 6px 8px;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .dict-input:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+
+  .dict-arrow {
+    color: var(--muted);
+    text-align: center;
+  }
+
+  .dict-remove {
+    background: none;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 18px;
+    line-height: 1;
+    padding: 0;
+  }
+
+  .dict-remove:hover {
+    color: var(--danger);
+  }
+
+  .dict-empty {
+    padding: 8px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .dict-add {
+    padding: 8px;
   }
 
   .model-row {

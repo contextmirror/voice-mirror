@@ -15,12 +15,43 @@ import { unwrapResult } from '../utils.js';
 /** Dedup window (ms) — ignore duplicate transcription text within this period. */
 const TRANSCRIPTION_DEDUP_MS = 3000;
 
+/**
+ * Apply user dictionary corrections to a transcription.
+ *
+ * Each entry replaces `from` with `to`, case-insensitively, on word
+ * boundaries where applicable. This is a model-agnostic post-processing
+ * fix for proper nouns / jargon the STT model mishears (e.g.
+ * "Power to Keep" -> "Parakeet") — it runs on the transcript text, so it
+ * behaves identically on any Whisper size or STT engine.
+ *
+ * @param {string} text - raw transcription from the STT engine
+ * @param {Array<{from:string,to:string}>} [dictionary]
+ * @returns {string} corrected text
+ */
+export function applyDictionary(text, dictionary) {
+  if (!text || !Array.isArray(dictionary) || dictionary.length === 0) return text;
+  let out = text;
+  for (const entry of dictionary) {
+    const from = entry?.from?.trim();
+    if (!from) continue;
+    const to = entry?.to ?? '';
+    const escaped = from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // Anchor on word boundaries only where the phrase edges are word
+    // characters, so phrases like "5070 Ti" still match cleanly.
+    const left = /^\w/.test(from) ? '\\b' : '';
+    const right = /\w$/.test(from) ? '\\b' : '';
+    out = out.replace(new RegExp(`${left}${escaped}${right}`, 'gi'), to);
+  }
+  return out;
+}
+
 function createVoiceStore() {
   let state = $state('idle');           // idle | listening | recording | processing | speaking
   let running = $state(false);
   let lastTranscription = $state('');
   let error = $state(null);
   let isDictating = $state(false);     // true when recording for dictation (not AI)
+  let stuck = $state(null);            // { state, elapsedSecs } when pipeline is wedged, else null
   let lastRoutedText = '';
   let lastRoutedTime = 0;
 
@@ -36,6 +67,7 @@ function createVoiceStore() {
     get isSpeaking() { return state === 'speaking'; },
     get isProcessing() { return state === 'processing'; },
     get isDictating() { return isDictating; },
+    get stuck() { return stuck; },
 
     /** Update state from voice-event payload */
     _handleVoiceEvent(payload) {
@@ -48,6 +80,14 @@ function createVoiceStore() {
       switch (eventType) {
         case 'state_change':
           state = data.state || 'idle';
+          // Any state transition means the pipeline is making progress —
+          // clear a stale "stuck" indicator. If it wedges again the
+          // watchdog will re-emit a fresh 'stuck' event.
+          stuck = null;
+          break;
+        case 'stuck':
+          // Watchdog detected the pipeline wedged in a non-idle state.
+          stuck = { state: data.state, elapsedSecs: data.elapsed_secs ?? 0 };
           break;
         case 'ready':
           running = true;
@@ -64,24 +104,27 @@ function createVoiceStore() {
           break;
         case 'transcription':
           if (data.text) {
-            lastTranscription = data.text;
+            // Apply user dictionary corrections before anything consumes the
+            // text (dedup, injection, AI routing all use the corrected form).
+            const text = applyDictionary(data.text, configStore.value?.voice?.dictionary);
+            lastTranscription = text;
 
             // Dedup: the voice pipeline can fire multiple transcription events
             // for the same audio segment. Skip if same text within the dedup window.
             const now = Date.now();
-            if (data.text === lastRoutedText && (now - lastRoutedTime) < TRANSCRIPTION_DEDUP_MS) {
+            if (text === lastRoutedText && (now - lastRoutedTime) < TRANSCRIPTION_DEDUP_MS) {
               break;
             }
-            lastRoutedText = data.text;
+            lastRoutedText = text;
             lastRoutedTime = now;
 
             if (isDictating || aiStatusStore.isDictationProvider) {
               if (isDictating) isDictating = false;
-              injectText(data.text).catch((err) => {
+              injectText(text).catch((err) => {
                 console.warn('[voice] Failed to inject dictation text:', err);
               });
             } else {
-              routeTranscriptionToAI(data.text);
+              routeTranscriptionToAI(text);
             }
           }
           break;
@@ -118,6 +161,11 @@ function createVoiceStore() {
 
     stopDictation() {
       isDictating = false;
+    },
+
+    /** Manually clear the stuck indicator (e.g. after the user restarts voice). */
+    clearStuck() {
+      stuck = null;
     },
   };
 }

@@ -31,6 +31,7 @@
   let loading = $state(true);
   let error = $state(null);
   let isBinary = $state(false);
+  let imageDataUrl = $state(null);
   let fileSize = $state(0);
   let currentPath = $state(null);
 
@@ -286,6 +287,7 @@
     loading = true;
     error = null;
     isBinary = false;
+    imageDataUrl = null;
     conflictDetected = false;
     showPreview = markdownPreviewDefault;
 
@@ -319,6 +321,7 @@
 
         if (data?.binary) {
           isBinary = true;
+          imageDataUrl = data.dataUrl || null;
           fileSize = data.size || 0;
           loading = false;
           return;
@@ -860,7 +863,12 @@
   });
 </script>
 
-{#if isBinary}
+{#if isBinary && imageDataUrl}
+  <div class="editor-image-preview">
+    <img src={imageDataUrl} alt={currentPath?.split('/').pop() || 'Image preview'} />
+    <span class="image-detail">{(fileSize / 1024).toFixed(1)} KB</span>
+  </div>
+{:else if isBinary}
   <div class="editor-binary">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="32" height="32">
       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
@@ -1085,6 +1093,32 @@
   }
 
   .editor-error,
+  .editor-image-preview {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    padding: 24px;
+    overflow: auto;
+    background: var(--checkerboard, repeating-conic-gradient(#1a1a1a 0% 25%, #222 0% 50%) 50% / 16px 16px);
+  }
+
+  .editor-image-preview img {
+    max-width: 100%;
+    max-height: calc(100% - 32px);
+    object-fit: contain;
+    border-radius: 4px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
+  }
+
+  .image-detail {
+    margin-top: 8px;
+    color: var(--muted);
+    font-size: 12px;
+    font-family: var(--font-family);
+  }
+
   .editor-binary {
     display: flex;
     flex-direction: column;

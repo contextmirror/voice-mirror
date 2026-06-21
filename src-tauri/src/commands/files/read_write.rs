@@ -4,6 +4,29 @@ use std::path::PathBuf;
 use tauri::{AppHandle, Emitter};
 use tracing::{info, warn};
 
+/// Build a base64 data URL for known image file extensions.
+/// Returns `None` for non-image files or files > 10 MB.
+fn image_data_url(path: &str, bytes: &[u8]) -> Option<String> {
+    const MAX_IMAGE_SIZE: usize = 10 * 1024 * 1024; // 10 MB
+    if bytes.len() > MAX_IMAGE_SIZE {
+        return None;
+    }
+    let ext = path.rsplit('.').next()?.to_lowercase();
+    let mime = match ext.as_str() {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "svg" => "image/svg+xml",
+        "ico" => "image/x-icon",
+        "bmp" => "image/bmp",
+        "avif" => "image/avif",
+        _ => return None,
+    };
+    let b64 = crate::voice::tts::crypto::base64_encode(bytes);
+    Some(format!("data:{};base64,{}", mime, b64))
+}
+
 /// Read a file's contents as UTF-8 text.
 ///
 /// `path` is relative to the project root (or the provided `root`).
@@ -50,14 +73,16 @@ pub fn read_file(path: String, root: Option<String>) -> IpcResponse {
         Err(e) => return IpcResponse::err(format!("Failed to read file: {}", e)),
     };
 
-    let content = match String::from_utf8(bytes) {
+    let content = match String::from_utf8(bytes.clone()) {
         Ok(c) => c,
         Err(_) => {
-            // Return a structured error so the frontend can show "binary file" UI
+            // For image files, include a base64 data URL so the frontend can preview
+            let data_url = image_data_url(&path, &bytes);
             return IpcResponse::ok(serde_json::json!({
                 "binary": true,
                 "path": path,
-                "size": size
+                "size": size,
+                "dataUrl": data_url
             }));
         }
     };

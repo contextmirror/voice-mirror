@@ -35,6 +35,7 @@ const DEFAULT_CONFIG = {
     outputDevice: null,
     announceStartup: true,
     announceProviderSwitch: true,
+    dictionary: [],
   },
   appearance: {
     orbSize: 80,

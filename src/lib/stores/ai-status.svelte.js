@@ -14,6 +14,7 @@ import { listen } from '@tauri-apps/api/event';
 import { startAI, stopAI, getAIStatus, setProvider as apiSetProvider, speakText } from '../api.js';
 import { configStore } from './config.svelte.js';
 import { chatStore } from './chat.svelte.js';
+import { projectStore } from './project.svelte.js';
 import { buildLocalLlmInstructions } from '../local-llm-instructions.js';
 import { unwrapResult } from '../utils.js';
 import { PROVIDER_NAMES, CLI_PROVIDERS } from '../providers.js';
@@ -167,6 +168,7 @@ export async function switchProvider(providerId, opts = {}) {
       cwd: opts.cwd || undefined,
       cols: opts.cols || 120,
       rows: opts.rows || 30,
+      mcpPreferences: projectStore.getMcpServers(projectStore.activeProject?.path || '') || undefined,
     });
 
     if (result?.success === false) {

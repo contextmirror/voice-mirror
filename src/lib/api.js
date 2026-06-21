@@ -16,6 +16,10 @@ export async function getConfig() {
   return invoke('get_config');
 }
 
+export async function getApiKey(provider) {
+  return invoke('get_api_key', { provider });
+}
+
 export async function setConfig(patch) {
   return invoke('set_config', { patch });
 }
@@ -236,6 +240,7 @@ export async function setProvider(providerId, options = {}) {
     cwd: options.cwd,
     cols: options.cols,
     rows: options.rows,
+    mcpPreferences: options.mcpPreferences || null,
   });
 }
 
@@ -1059,6 +1064,38 @@ export async function removeProjectIcon(filename) {
 
 export async function loadProjectIcons(filenames) {
   return invoke('load_project_icons', { params: { filenames } });
+}
+
+// ============ MCP Discovery ============
+
+export async function discoverMcpServers(workspacePath, preferences) {
+  return invoke('discover_mcp_servers', { params: { workspacePath, preferences: preferences || null } });
+}
+
+export async function mcpTestConnection(command, args, env) {
+  return invoke('mcp_test_connection', { params: { command, args, env: env || null } });
+}
+
+export async function mcpWriteServer(name, command, args, env, scope) {
+  return invoke('mcp_write_server', { params: { name, command, args, env: env || null, scope } });
+}
+
+export async function mcpDeleteServer(name, scope) {
+  return invoke('mcp_delete_server', { params: { name, scope } });
+}
+
+// ============ Window Streaming ============
+
+export async function startWindowStream(hwnd, fps) {
+  return invoke('start_window_stream', { params: { hwnd, fps: fps || null } });
+}
+
+export async function stopWindowStream() {
+  return invoke('stop_window_stream');
+}
+
+export async function getStreamStatus() {
+  return invoke('get_stream_status');
 }
 
 // ============ Workspace State ============

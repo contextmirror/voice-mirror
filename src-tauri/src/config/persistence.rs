@@ -2,7 +2,9 @@ use std::fs;
 use std::path::Path;
 
 use serde_json::Value;
+use tracing::info;
 
+use super::crypto;
 use super::schema::AppConfig;
 
 /// Load config from disk, falling back to defaults.
@@ -13,6 +15,9 @@ use super::schema::AppConfig;
 ///
 /// If the main config is corrupt or missing, tries `config.json.bak`.
 /// If both fail, returns `AppConfig::default()`.
+///
+/// API keys are decrypted after loading. Legacy plaintext keys are
+/// auto-encrypted and saved back on the first load.
 pub fn load_config(config_dir: &Path) -> AppConfig {
     let config_path = config_dir.join("config.json");
     let backup_path = config_dir.join("config.json.bak");
@@ -27,7 +32,8 @@ pub fn load_config(config_dir: &Path) -> AppConfig {
                         Err(_) => return AppConfig::default(),
                     };
                     let merged = deep_merge(default_val, saved);
-                    if let Ok(config) = serde_json::from_value::<AppConfig>(merged) {
+                    if let Ok(mut config) = serde_json::from_value::<AppConfig>(merged) {
+                        decrypt_api_keys(config_dir, &mut config);
                         return config;
                     }
                 }
@@ -42,6 +48,9 @@ pub fn load_config(config_dir: &Path) -> AppConfig {
 ///
 /// Strategy: write to `.tmp`, backup existing to `.bak`, rename `.tmp` to final.
 /// This ensures the config file is never in a partially-written state.
+///
+/// API keys are encrypted with DPAPI before writing. The in-memory config
+/// retains plaintext keys — only the on-disk representation is encrypted.
 pub fn save_config(config_dir: &Path, config: &AppConfig) -> Result<(), String> {
     // Ensure config directory exists
     fs::create_dir_all(config_dir)
@@ -51,7 +60,11 @@ pub fn save_config(config_dir: &Path, config: &AppConfig) -> Result<(), String> 
     let tmp_path = config_dir.join("config.json.tmp");
     let backup_path = config_dir.join("config.json.bak");
 
-    let json = serde_json::to_string_pretty(config)
+    // Clone and encrypt API keys before serializing
+    let mut disk_config = config.clone();
+    encrypt_api_keys(config_dir, &mut disk_config);
+
+    let json = serde_json::to_string_pretty(&disk_config)
         .map_err(|e| format!("Serialize error: {}", e))?;
 
     // Step 1: Write to temp file
@@ -90,6 +103,103 @@ pub fn deep_merge(base: Value, patch: Value) -> Value {
         }
         // For non-object types, patch wins
         (_base, patch) => patch,
+    }
+}
+
+// ---------------------------------------------------------------------------
+// API key encryption helpers
+// ---------------------------------------------------------------------------
+
+/// Decrypt API keys in-place after loading from disk.
+///
+/// Also handles migration: if any key is plaintext (no `ENC:` prefix),
+/// re-encrypts and saves back to disk.
+fn decrypt_api_keys(config_dir: &Path, config: &mut AppConfig) {
+    let key = match crypto::ensure_config_key(config_dir) {
+        Ok(k) => k,
+        Err(e) => {
+            tracing::warn!("Cannot load vault key — API keys will remain as-is: {}", e);
+            return;
+        }
+    };
+
+    let mut needs_migration = false;
+
+    // Decrypt ai.api_keys
+    for (_provider, value) in config.ai.api_keys.iter_mut() {
+        if let Some(ref encrypted) = value {
+            if !encrypted.is_empty() {
+                if !crypto::is_encrypted(encrypted) {
+                    needs_migration = true;
+                }
+                let plaintext = crypto::decrypt_value(encrypted, &key);
+                *value = if plaintext.is_empty() { None } else { Some(plaintext) };
+            }
+        }
+    }
+
+    // Decrypt voice.tts_api_key
+    if let Some(ref encrypted) = config.voice.tts_api_key {
+        if !encrypted.is_empty() {
+            if !crypto::is_encrypted(encrypted) {
+                needs_migration = true;
+            }
+            let plaintext = crypto::decrypt_value(encrypted, &key);
+            config.voice.tts_api_key = if plaintext.is_empty() { None } else { Some(plaintext) };
+        }
+    }
+
+    // Decrypt voice.stt_api_key
+    if let Some(ref encrypted) = config.voice.stt_api_key {
+        if !encrypted.is_empty() {
+            if !crypto::is_encrypted(encrypted) {
+                needs_migration = true;
+            }
+            let plaintext = crypto::decrypt_value(encrypted, &key);
+            config.voice.stt_api_key = if plaintext.is_empty() { None } else { Some(plaintext) };
+        }
+    }
+
+    // If any keys were plaintext, re-save with encryption
+    if needs_migration {
+        info!("Migrating plaintext API keys to encrypted format");
+        if let Err(e) = save_config(config_dir, config) {
+            tracing::warn!("Failed to save migrated config: {}", e);
+        }
+    }
+}
+
+/// Encrypt API keys in-place before writing to disk.
+fn encrypt_api_keys(config_dir: &Path, config: &mut AppConfig) {
+    let key = match crypto::ensure_config_key(config_dir) {
+        Ok(k) => k,
+        Err(e) => {
+            tracing::warn!("Cannot load vault key — API keys will be stored as plaintext: {}", e);
+            return;
+        }
+    };
+
+    // Encrypt ai.api_keys
+    for (_provider, value) in config.ai.api_keys.iter_mut() {
+        if let Some(ref plaintext) = value {
+            if !plaintext.is_empty() && !crypto::is_encrypted(plaintext) {
+                *value = Some(crypto::encrypt_value(plaintext, &key));
+            }
+        }
+    }
+
+    // Encrypt voice.tts_api_key
+    if let Some(ref plaintext) = config.voice.tts_api_key {
+        if !plaintext.is_empty() && !crypto::is_encrypted(plaintext) {
+            config.voice.tts_api_key = Some(crypto::encrypt_value(plaintext, &key));
+        }
+    }
+
+    // Encrypt voice.stt_api_key
+    if let Some(ref plaintext) = config.voice.stt_api_key {
+        if !plaintext.is_empty() && !crypto::is_encrypted(plaintext) {
+            config.voice.stt_api_key = Some(crypto::encrypt_value(plaintext, &key));
+        }
     }
 }
 

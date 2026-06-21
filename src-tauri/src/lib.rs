@@ -26,6 +26,7 @@ use commands::design as design_cmds;
 use commands::output as output_cmds;
 use commands::project as project_cmds;
 use commands::workspace_state as ws_state_cmds;
+use commands::mcp as mcp_cmds;
 
 use providers::manager::AiManager;
 use providers::ProviderEvent;
@@ -122,10 +123,13 @@ pub fn run() {
     // Enable Chrome DevTools Protocol remote debugging on the WebView2 browser
     // process. This allows creating a second WebView2 that loads the DevTools
     // frontend UI, enabling embedded (Cursor-style) DevTools panels.
-    std::env::set_var(
-        "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
-        "--remote-debugging-port=9222 --remote-allow-origins=*",
-    );
+    // SAFETY: Called at app startup before any threads are spawned.
+    unsafe {
+        std::env::set_var(
+            "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
+            "--remote-debugging-port=9222 --remote-allow-origins=*",
+        );
+    }
 
     tauri::Builder::default()
         .plugin(tauri_plugin_decorum::init())
@@ -290,6 +294,7 @@ pub fn run() {
             config_cmds::set_config,
             config_cmds::reset_config,
             config_cmds::get_platform_info,
+            config_cmds::get_api_key,
             // Window
             window_cmds::get_window_position,
             window_cmds::set_window_position,
@@ -308,6 +313,9 @@ pub fn run() {
             screenshot_cmds::capture_monitor,
             screenshot_cmds::capture_window,
             screenshot_cmds::lens_capture_browser,
+            screenshot_cmds::start_window_stream,
+            screenshot_cmds::stop_window_stream,
+            screenshot_cmds::get_stream_status,
             // Voice
             voice_cmds::start_voice,
             voice_cmds::stop_voice,
@@ -358,54 +366,54 @@ pub fn run() {
             shortcut_cmds::unregister_all_shortcuts,
             // Performance stats
             window_cmds::get_process_stats,
-            // Lens (embedded browser)
-            lens_cmds::lens_create_webview,
-            lens_cmds::lens_create_tab,
-            lens_cmds::lens_close_tab,
-            lens_cmds::lens_switch_tab,
-            lens_cmds::lens_close_all_tabs,
-            lens_cmds::lens_navigate,
-            lens_cmds::lens_go_back,
-            lens_cmds::lens_go_forward,
-            lens_cmds::lens_reload,
-            lens_cmds::lens_resize_webview,
-            lens_cmds::lens_close_webview,
-            lens_cmds::lens_set_visible,
-            lens_cmds::lens_hard_refresh,
-            lens_cmds::lens_clear_cache,
-            // Device Preview
-            lens_cmds::lens_create_device_webview,
-            lens_cmds::lens_close_device_webview,
-            lens_cmds::lens_close_all_device_webviews,
-            lens_cmds::lens_resize_device_webview,
-            lens_cmds::lens_eval_device_js,
-            lens_cmds::lens_set_device_emulation,
-            // Zoom
-            lens_cmds::lens_set_zoom,
-            lens_cmds::lens_get_zoom,
-            // DevTools (embedded side-panel)
-            lens_cmds::lens_find_devtools_url,
-            lens_cmds::lens_open_devtools,
-            lens_cmds::lens_close_devtools,
-            lens_cmds::lens_resize_devtools,
-            lens_cmds::lens_set_devtools_visible,
-            // JS eval in child webview
-            lens_cmds::lens_eval_tab_js,
-            // Find on Page
-            lens_cmds::lens_find_on_page,
-            lens_cmds::lens_find_next,
-            lens_cmds::lens_find_previous,
-            lens_cmds::lens_close_find,
-            // Browser History
-            lens_cmds::lens_add_history_entry,
-            lens_cmds::lens_get_history,
-            lens_cmds::lens_clear_history,
-            lens_cmds::lens_delete_history_entry,
-            // Downloads
-            lens_cmds::lens_get_downloads,
-            lens_cmds::lens_clear_downloads,
-            lens_cmds::lens_open_download,
-            lens_cmds::lens_open_download_folder,
+            // Lens (embedded browser) — tabs
+            lens_cmds::tabs::lens_create_webview,
+            lens_cmds::tabs::lens_create_tab,
+            lens_cmds::tabs::lens_close_tab,
+            lens_cmds::tabs::lens_switch_tab,
+            lens_cmds::tabs::lens_close_all_tabs,
+            // Lens — navigation & webview lifecycle
+            lens_cmds::navigation::lens_navigate,
+            lens_cmds::navigation::lens_go_back,
+            lens_cmds::navigation::lens_go_forward,
+            lens_cmds::navigation::lens_reload,
+            lens_cmds::navigation::lens_resize_webview,
+            lens_cmds::navigation::lens_close_webview,
+            lens_cmds::navigation::lens_set_visible,
+            lens_cmds::navigation::lens_hard_refresh,
+            lens_cmds::navigation::lens_clear_cache,
+            // Lens — device preview
+            lens_cmds::device_preview::lens_create_device_webview,
+            lens_cmds::device_preview::lens_close_device_webview,
+            lens_cmds::device_preview::lens_close_all_device_webviews,
+            lens_cmds::device_preview::lens_resize_device_webview,
+            lens_cmds::device_preview::lens_eval_device_js,
+            lens_cmds::device_preview::lens_set_device_emulation,
+            // Lens — zoom
+            lens_cmds::zoom::lens_set_zoom,
+            lens_cmds::zoom::lens_get_zoom,
+            // Lens — DevTools (embedded side-panel)
+            lens_cmds::devtools::lens_find_devtools_url,
+            lens_cmds::devtools::lens_open_devtools,
+            lens_cmds::devtools::lens_close_devtools,
+            lens_cmds::devtools::lens_resize_devtools,
+            lens_cmds::devtools::lens_set_devtools_visible,
+            // Lens — find on page
+            lens_cmds::find::lens_eval_tab_js,
+            lens_cmds::find::lens_find_on_page,
+            lens_cmds::find::lens_find_next,
+            lens_cmds::find::lens_find_previous,
+            lens_cmds::find::lens_close_find,
+            // Lens — browser history
+            lens_cmds::history::lens_add_history_entry,
+            lens_cmds::history::lens_get_history,
+            lens_cmds::history::lens_clear_history,
+            lens_cmds::history::lens_delete_history_entry,
+            // Lens — downloads
+            lens_cmds::downloads::lens_get_downloads,
+            lens_cmds::downloads::lens_clear_downloads,
+            lens_cmds::downloads::lens_open_download,
+            lens_cmds::downloads::lens_open_download_folder,
             // File tree
             files_cmds::list_directory,
             files_cmds::get_git_changes,
@@ -515,6 +523,11 @@ pub fn run() {
             project_cmds::save_project_icon,
             project_cmds::remove_project_icon,
             project_cmds::load_project_icons,
+            project_cmds::discover_mcp_servers,
+            // MCP Server Management
+            mcp_cmds::mcp_write_server,
+            mcp_cmds::mcp_delete_server,
+            mcp_cmds::mcp_test_connection,
             // Workspace State
             ws_state_cmds::save_workspace_state,
             ws_state_cmds::load_workspace_state,

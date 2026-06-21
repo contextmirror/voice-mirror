@@ -3,10 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 
-const src = fs.readFileSync(
-  path.join(__dirname, '../../src-tauri/src/lsp/mod.rs'),
-  'utf-8'
-);
+const { modSrc: src } = require('./_read-lsp-sources.cjs');
 
 describe('mod.rs: workspaceFolders', () => {
   it('sends workspaceFolders in initialize request', () => {

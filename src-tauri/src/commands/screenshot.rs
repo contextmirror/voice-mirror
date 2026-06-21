@@ -1378,3 +1378,37 @@ Write-Output $thumbB64
         }
     }
 }
+
+// ── Window streaming ──
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StartStreamParams {
+    pub hwnd: i64,
+    pub fps: Option<u32>,
+}
+
+#[tauri::command]
+pub async fn start_window_stream(params: StartStreamParams) -> IpcResponse {
+    let fps = params.fps.unwrap_or(30).clamp(1, 144);
+    match crate::services::window_stream::start(params.hwnd, fps) {
+        Ok(port) => IpcResponse::ok(serde_json::json!({
+            "port": port,
+            "url": format!("http://localhost:{}/", port),
+        })),
+        Err(e) => IpcResponse::err(e),
+    }
+}
+
+#[tauri::command]
+pub async fn stop_window_stream() -> IpcResponse {
+    match crate::services::window_stream::stop() {
+        Ok(()) => IpcResponse::ok_empty(),
+        Err(e) => IpcResponse::err(e),
+    }
+}
+
+#[tauri::command]
+pub fn get_stream_status() -> IpcResponse {
+    IpcResponse::ok(crate::services::window_stream::status())
+}

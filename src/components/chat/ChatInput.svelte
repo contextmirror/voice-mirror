@@ -7,6 +7,11 @@
    * and send button.
    */
   import { chatStore } from '../../lib/stores/chat.svelte.js';
+  import { lensStore } from '../../lib/stores/lens.svelte.js';
+  import { navigationStore } from '../../lib/stores/navigation.svelte.js';
+  import { stopWindowStream, getStreamStatus } from '../../lib/api.js';
+  import { unwrapResult } from '../../lib/utils.js';
+  import WindowPickerModal from './WindowPickerModal.svelte';
 
   let {
     onSend = () => {},
@@ -25,6 +30,9 @@
   let textareaEl = $state(null);
   let menuOpen = $state(false);
   let menuBtnEl = $state(null);
+  let showWindowPicker = $state(false);
+  let isStreaming = $state(false);
+  let streamUrl = $state('');
 
   /** Max number of lines before textarea scrolls internally */
   const MAX_LINES = 5;
@@ -102,6 +110,31 @@
     }
   }
 
+  $effect(() => {
+    getStreamStatus().then(result => {
+      const data = unwrapResult(result);
+      if (data?.running) {
+        isStreaming = true;
+        streamUrl = `http://localhost:${data.port}/`;
+      }
+    }).catch(() => {});
+  });
+
+  function handleStreamStarted(data) {
+    isStreaming = true;
+    streamUrl = data.url;
+    // Switch to Browser view and navigate to the stream URL
+    navigationStore.setView('lens');
+    // Small delay to let the WebView initialize if it wasn't active
+    setTimeout(() => lensStore.navigate(data.url), 300);
+  }
+
+  async function handleStopStream() {
+    await stopWindowStream();
+    isStreaming = false;
+    streamUrl = '';
+  }
+
   const thumbnailUrls = $derived(
     attachments.map(att => ({ ...att, url: att.dataUrl || att.path }))
   );
@@ -162,6 +195,22 @@
             </svg>
             Screenshot
           </button>
+          {#if isStreaming}
+            <button class="action-menu-item" onclick={() => handleMenuAction(handleStopStream)} role="menuitem">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14">
+                <rect x="3" y="3" width="18" height="18" rx="2"/>
+              </svg>
+              Stop Stream
+            </button>
+          {:else}
+            <button class="action-menu-item" onclick={() => { closeMenu(); showWindowPicker = true; }} role="menuitem">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14">
+                <polygon points="23 7 16 12 23 17 23 7"/>
+                <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+              </svg>
+              Stream Window...
+            </button>
+          {/if}
           <button
             class="action-menu-item"
             class:saved={saveFlash}
@@ -226,6 +275,13 @@
     </button>
   </div>
 </div>
+
+{#if showWindowPicker}
+  <WindowPickerModal
+    onClose={() => showWindowPicker = false}
+    onStreamStarted={handleStreamStarted}
+  />
+{/if}
 
 <style>
   /* ========== Attachment Preview Strip ========== */

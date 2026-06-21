@@ -3,9 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const modSrc = fs.readFileSync(
-  path.join(__dirname, '../../src-tauri/src/lsp/mod.rs'), 'utf-8'
-);
+const { modSrc } = require('./_read-lsp-sources.cjs');
 
 describe('mod.rs: idle shutdown', () => {
   it('starts idle timer when all docs close', () => {

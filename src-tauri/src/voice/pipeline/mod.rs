@@ -76,6 +76,11 @@ pub enum VoiceEvent {
     Stopping {},
     /// Real-time audio levels for waveform visualization (emitted during recording).
     AudioLevel { levels: Vec<f32> },
+    /// Pipeline has been sitting in a non-idle state for an abnormally long
+    /// time and is likely stuck (e.g. STT wedged) or running away (e.g. a
+    /// recording the user forgot to stop). Lets the frontend surface a
+    /// visible indicator + recovery action instead of silently hanging.
+    Stuck { state: String, elapsed_secs: u64 },
 }
 
 /// Audio device info for the frontend.
@@ -275,6 +280,14 @@ impl VoicePipeline {
         let shared_clone = Arc::clone(&shared);
         let processing_handle = tauri::async_runtime::spawn(async move {
             audio_processing_loop(shared_clone).await;
+        });
+
+        // Spawn the stuck-state watchdog. Runs independently of the processing
+        // loop (which can block on STT), so it can still notify the frontend
+        // when the pipeline wedges. Exits when `running` is cleared in stop().
+        let watchdog_shared = Arc::clone(&shared);
+        tauri::async_runtime::spawn(async move {
+            stuck_watchdog(watchdog_shared).await;
         });
 
         // Set initial state based on mode
@@ -618,6 +631,73 @@ fn resample_linear(input: &[f32], from_rate: u32, to_rate: u32) -> Vec<f32> {
 ///
 /// Reads audio from the ring buffer, runs VAD, accumulates recording
 /// buffers, triggers STT on silence timeout, and orchestrates TTS.
+/// Background watchdog that detects when the pipeline is stuck.
+///
+/// Polls the pipeline state once a second and tracks how long it has been
+/// in the same non-idle state. STT normally completes in well under a second,
+/// so a `Processing` state lasting tens of seconds means it's wedged (e.g. a
+/// huge recording, or a hung inference). A very long `Recording` means the
+/// user forgot to stop a toggle-mode recording. Either way we emit a single
+/// `Stuck` event so the frontend can show a visible indicator + recovery,
+/// instead of the pipeline silently hanging with no UI feedback.
+async fn stuck_watchdog(shared: Arc<PipelineShared>) {
+    const POLL: Duration = Duration::from_secs(1);
+    /// STT taking this long means it's wedged, not merely slow (GPU large-v3
+    /// transcribes ~11s of audio in <1s; even CPU stays well under this).
+    const PROCESSING_STUCK_SECS: u64 = 30;
+    /// A toggle-mode recording running this long was almost certainly forgotten.
+    const RECORDING_LONG_SECS: u64 = 5 * 60;
+
+    let mut last_state = VoiceState::Idle;
+    let mut secs_in_state: u64 = 0;
+    let mut warned = false;
+
+    tracing::info!("Stuck watchdog started");
+
+    while shared.running.load(Ordering::Relaxed) {
+        tokio::time::sleep(POLL).await;
+
+        let state = state_from_u8(shared.state.load(Ordering::Acquire));
+        if state != last_state {
+            last_state = state;
+            secs_in_state = 0;
+            warned = false;
+            continue;
+        }
+
+        secs_in_state += 1;
+        if warned {
+            continue;
+        }
+
+        let threshold = match state {
+            VoiceState::Processing => Some(PROCESSING_STUCK_SECS),
+            VoiceState::Recording => Some(RECORDING_LONG_SECS),
+            _ => None,
+        };
+
+        if let Some(t) = threshold {
+            if secs_in_state >= t {
+                warned = true;
+                tracing::warn!(
+                    state = %state,
+                    secs_in_state,
+                    "Pipeline stuck/long-running — notifying frontend"
+                );
+                let _ = shared.app_handle.emit(
+                    "voice-event",
+                    VoiceEvent::Stuck {
+                        state: state.to_string(),
+                        elapsed_secs: secs_in_state,
+                    },
+                );
+            }
+        }
+    }
+
+    tracing::info!("Stuck watchdog exiting");
+}
+
 async fn audio_processing_loop(shared: Arc<PipelineShared>) {
     let mut read_buf = vec![0.0f32; CHUNK_SAMPLES];
     let mut vad = VadProcessor::new(shared.config.vad_threshold);

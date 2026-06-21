@@ -3,7 +3,11 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 
-const lensSrc = fs.readFileSync(path.join(__dirname, '../../src-tauri/src/commands/lens.rs'), 'utf-8');
+const lensDir = path.join(__dirname, '../../src-tauri/src/commands/lens');
+const lensSrc = fs.readdirSync(lensDir)
+    .filter(f => f.endsWith('.rs'))
+    .map(f => fs.readFileSync(path.join(lensDir, f), 'utf-8'))
+    .join('\n');
 const libSrc = fs.readFileSync(path.join(__dirname, '../../src-tauri/src/lib.rs'), 'utf-8');
 
 describe('device preview — Rust commands', () => {
@@ -54,28 +58,28 @@ describe('device preview — Rust commands', () => {
     describe('lib.rs command registration', () => {
         it('registers lens_create_device_webview', () => {
             assert.ok(
-                libSrc.includes('lens_cmds::lens_create_device_webview'),
+                libSrc.includes('lens_cmds::device_preview::lens_create_device_webview'),
                 'lens_create_device_webview not registered in lib.rs'
             );
         });
 
         it('registers lens_close_device_webview', () => {
             assert.ok(
-                libSrc.includes('lens_cmds::lens_close_device_webview'),
+                libSrc.includes('lens_cmds::device_preview::lens_close_device_webview'),
                 'lens_close_device_webview not registered in lib.rs'
             );
         });
 
         it('registers lens_close_all_device_webviews', () => {
             assert.ok(
-                libSrc.includes('lens_cmds::lens_close_all_device_webviews'),
+                libSrc.includes('lens_cmds::device_preview::lens_close_all_device_webviews'),
                 'lens_close_all_device_webviews not registered in lib.rs'
             );
         });
 
         it('registers lens_resize_device_webview', () => {
             assert.ok(
-                libSrc.includes('lens_cmds::lens_resize_device_webview'),
+                libSrc.includes('lens_cmds::device_preview::lens_resize_device_webview'),
                 'lens_resize_device_webview not registered in lib.rs'
             );
         });
@@ -271,7 +275,7 @@ describe('DevicePreview.svelte: interaction sync', () => {
 });
 
 // Check for lens_eval_device_js command
-const lensSrcV2 = fs.readFileSync(path.join(__dirname, '../../src-tauri/src/commands/lens.rs'), 'utf-8');
+const lensSrcV2 = lensSrc;
 const libSrcV2 = fs.readFileSync(path.join(__dirname, '../../src-tauri/src/lib.rs'), 'utf-8');
 const apiSrcV2 = fs.readFileSync(path.join(__dirname, '../../src/lib/api.js'), 'utf-8');
 
@@ -281,7 +285,7 @@ describe('lens_eval_device_js command', () => {
   });
 
   it('is registered in lib.rs', () => {
-    assert.ok(libSrcV2.includes('lens_cmds::lens_eval_device_js'), 'Should be registered');
+    assert.ok(libSrcV2.includes('lens_cmds::device_preview::lens_eval_device_js'), 'Should be registered');
   });
 
   it('has API wrapper in api.js', () => {
@@ -290,7 +294,7 @@ describe('lens_eval_device_js command', () => {
 });
 
 // Re-read sources for CDP emulation tests
-const lensSrcCDP = fs.readFileSync(path.join(__dirname, '../../src-tauri/src/commands/lens.rs'), 'utf-8');
+const lensSrcCDP = lensSrc;
 const libSrcCDP = fs.readFileSync(path.join(__dirname, '../../src-tauri/src/lib.rs'), 'utf-8');
 const apiSrcCDP = fs.readFileSync(path.join(__dirname, '../../src/lib/api.js'), 'utf-8');
 const componentSrcCDP = fs.readFileSync(path.join(__dirname, '../../src/components/lens/DevicePreview.svelte'), 'utf-8');
@@ -313,7 +317,7 @@ describe('CDP device emulation', () => {
   });
 
   it('is registered in lib.rs', () => {
-    assert.ok(libSrcCDP.includes('lens_cmds::lens_set_device_emulation'), 'Should be registered');
+    assert.ok(libSrcCDP.includes('lens_cmds::device_preview::lens_set_device_emulation'), 'Should be registered');
   });
 
   it('has API wrapper', () => {

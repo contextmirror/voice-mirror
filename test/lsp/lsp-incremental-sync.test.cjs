@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const modSrc = fs.readFileSync(path.join(__dirname, '../../src-tauri/src/lsp/mod.rs'), 'utf-8');
+const { modSrc } = require('./_read-lsp-sources.cjs');
 
 describe('mod.rs: incremental document sync', () => {
   it('has change_document_incremental method', () => {

@@ -16,7 +16,7 @@
 //! then firing queued "send when ready" callbacks.
 
 mod instructions;
-mod mcp_config;
+pub(crate) mod mcp_config;
 mod status_line;
 
 use std::io::{Read, Write as IoWrite};
@@ -264,7 +264,7 @@ impl Provider for CliProvider {
             // Write MCP config files for all supported providers
             if let Some(ref root) = project_root {
                 let cwd_override = work_dir.as_ref().filter(|w| w.as_path() != root.as_path());
-                if let Err(e) = mcp_config::write_mcp_config(root, &enabled_groups, cwd_override) {
+                if let Err(e) = mcp_config::write_mcp_config(root, &enabled_groups, cwd_override, &self.config.mcp_preferences) {
                     warn!("Failed to write MCP config: {}", e);
                 }
                 // Claude-only: configure status line (claude-pulse)
@@ -462,14 +462,13 @@ impl Provider for CliProvider {
                         break;
                     }
                     Ok(n) => {
-                        if first_read || output_buffer.len() < 8192 {
+                        if first_read {
                             let preview = String::from_utf8_lossy(&buf[..n.min(200)]);
                             let clean_preview = strip_ansi_codes(&preview);
-                            // Safe UTF-8 truncation
                             let truncated: String = clean_preview.chars().take(120).collect();
                             info!(
-                                "{} reader: output chunk ({} bytes, total_buf={}) clean={:?}",
-                                display_name, n, output_buffer.len(), truncated
+                                "{} reader: first output chunk ({} bytes) clean={:?}",
+                                display_name, n, truncated
                             );
                             first_read = false;
                         }

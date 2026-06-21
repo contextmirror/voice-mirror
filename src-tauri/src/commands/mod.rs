@@ -15,6 +15,7 @@ pub mod design;
 pub mod output;
 pub mod project;
 pub mod workspace_state;
+pub mod mcp;
 
 use serde_json::Value;
 

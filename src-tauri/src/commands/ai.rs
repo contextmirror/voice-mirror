@@ -3,6 +3,7 @@
 //! These commands are invoked from the frontend via Tauri's IPC bridge.
 //! They delegate to the `AiManager` held in Tauri's managed state.
 
+use std::collections::HashMap;
 use std::sync::Mutex;
 
 use tauri::State;
@@ -56,13 +57,36 @@ pub fn start_ai(
         }
     }
 
+    // Resolve API key: prefer explicit key from frontend, but if it's
+    // missing or masked (contains bullet char from get_config masking),
+    // fall back to the in-memory config which always has plaintext keys.
+    let resolved_key = match &api_key {
+        Some(k) if !k.is_empty() && !k.contains('\u{2022}') => api_key,
+        _ => {
+            let cfg = crate::commands::config::get_config_snapshot();
+            cfg.ai.api_keys.get(&provider_type).cloned().flatten()
+        }
+    };
+
+    // Resolve MCP preferences from config for the active project
+    let mcp_prefs = {
+        let cfg = crate::commands::config::get_config_snapshot();
+        let projects = &cfg.projects;
+        // If there's a CWD, find matching project entry's prefs; else use default
+        cwd.as_ref()
+            .and_then(|c| projects.entries.iter().find(|e| e.path == *c))
+            .and_then(|e| e.mcp_servers.clone())
+            .or_else(|| projects.default_mcp_servers.clone())
+    };
+
     let config = ProviderConfig {
         model,
         base_url,
-        api_key,
+        api_key: resolved_key,
         context_length: context_length.unwrap_or(32768),
         system_prompt,
         cwd,
+        mcp_preferences: mcp_prefs,
     };
 
     match manager.start(&provider_type, cols, rows, config) {
@@ -336,6 +360,7 @@ pub fn set_provider(
     cwd: Option<String>,
     cols: Option<u16>,
     rows: Option<u16>,
+    mcp_preferences: Option<HashMap<String, crate::config::schema::McpServerPref>>,
 ) -> IpcResponse {
     let mut manager = lock_manager!(state);
 
@@ -349,13 +374,23 @@ pub fn set_provider(
         }
     }
 
+    // Resolve API key (same logic as start_ai)
+    let resolved_key = match &api_key {
+        Some(k) if !k.is_empty() && !k.contains('\u{2022}') => api_key,
+        _ => {
+            let cfg = crate::commands::config::get_config_snapshot();
+            cfg.ai.api_keys.get(&provider_id).cloned().flatten()
+        }
+    };
+
     let config = ProviderConfig {
         model,
         base_url,
-        api_key,
+        api_key: resolved_key,
         context_length: context_length.unwrap_or(32768),
         system_prompt,
         cwd,
+        mcp_preferences,
     };
 
     match manager.switch(&provider_id, cols, rows, config) {

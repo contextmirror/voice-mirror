@@ -109,6 +109,23 @@ pub struct VoiceConfig {
     pub announce_startup: bool,
     #[serde(default = "default_true")]
     pub announce_provider_switch: bool,
+    /// User dictionary of transcription corrections (proper nouns / jargon
+    /// the STT model mishears). Applied as post-processing to every
+    /// transcription. Empty by default.
+    #[serde(default)]
+    pub dictionary: Vec<DictionaryEntry>,
+}
+
+/// A single transcription correction: replace `from` with `to`.
+///
+/// Post-processing fix for words the STT model mishears (e.g.
+/// "Power to Keep" -> "Parakeet"). Model-agnostic — it operates on the
+/// transcript text, so it works the same on any Whisper size or engine.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DictionaryEntry {
+    pub from: String,
+    pub to: String,
 }
 
 impl Default for VoiceConfig {
@@ -133,6 +150,7 @@ impl Default for VoiceConfig {
             output_device: None,
             announce_startup: true,
             announce_provider_switch: true,
+            dictionary: Vec::new(),
         }
     }
 }
@@ -489,6 +507,9 @@ pub struct ProjectsConfig {
     pub entries: Vec<ProjectEntry>,
     #[serde(default)]
     pub active_index: usize,
+    /// MCP server preferences for the default workspace (Voice Mirror project root).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_mcp_servers: Option<HashMap<String, McpServerPref>>,
 }
 
 /// A single project entry (path + display name + color tag).
@@ -500,6 +521,15 @@ pub struct ProjectEntry {
     pub color: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub icon: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mcp_servers: Option<HashMap<String, McpServerPref>>,
+}
+
+/// Per-server enable/disable preference for a project workspace.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct McpServerPref {
+    pub enabled: bool,
 }
 
 /// Browser settings (download behavior).

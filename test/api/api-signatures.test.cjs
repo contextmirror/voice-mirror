@@ -213,6 +213,7 @@ describe('api.js -- exported async functions', () => {
   const expectedExports = [
     // Config
     'getConfig',
+    'getApiKey',
     'setConfig',
     'resetConfig',
     'getPlatformInfo',
@@ -445,6 +446,15 @@ describe('api.js -- exported async functions', () => {
     // Workspace State
     'saveWorkspaceState',
     'loadWorkspaceState',
+    // MCP Discovery
+    'discoverMcpServers',
+    'mcpTestConnection',
+    'mcpWriteServer',
+    'mcpDeleteServer',
+    // Window Streaming
+    'startWindowStream',
+    'stopWindowStream',
+    'getStreamStatus',
   ];
 
   for (const fn of expectedExports) {
