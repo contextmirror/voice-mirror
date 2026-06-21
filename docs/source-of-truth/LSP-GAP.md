@@ -122,9 +122,9 @@ VS Code remaps 8 "style check" diagnostic codes from Error → Warning. This is 
 | Type definition | `textDocument/typeDefinition` | Full | Full (+ context menu) | ✅ | ✅ |
 | Go-to-declaration | `textDocument/declaration` | Full | Full (backend only — no menu for JS/TS, matching VS Code) | ✅ | ✅ |
 | Go-to-implementation | `textDocument/implementation` | Full | Full (+ Ctrl-F12 + context menu) | ✅ | ✅ |
-| Workspace symbols | `workspace/symbol` | Full | Full (backend + API, no UI yet) | ✅ | ⏭️ |
-| Call hierarchy | `callHierarchy/incomingCalls` | Full | Full (backend + API, no UI yet) | ✅ | ⏭️ |
-| Type hierarchy | `typeHierarchy/subtypes` | Full | Full (backend + API, no UI yet) | ✅ | ⏭️ |
+| Workspace symbols | `workspace/symbol` | Full | Full (backend + API, no UI yet) | ✅ | ⏭️ Backend verified |
+| Call hierarchy | `callHierarchy/incomingCalls` | Full | Full (backend + API, no UI yet) | ✅ | ⏭️ Backend verified |
+| Type hierarchy | `typeHierarchy/subtypes` | Full | Full (backend + API, no UI yet) | ✅ | ⏭️ Backend verified |
 
 ### Inline Assistance
 
@@ -148,7 +148,7 @@ VS Code remaps 8 "style check" diagnostic codes from Error → Warning. This is 
 
 | Feature | LSP Method | VS Code | Voice Mirror | Impl | Tested |
 |---------|-----------|---------|-------------|:----:|:------:|
-| Semantic tokens | `textDocument/semanticTokens` | Full (delta encoding) | Full (+ CM extension, 10 token types) | ✅ | |
+| Semantic tokens | `textDocument/semanticTokens` | Full (delta encoding) | Full (+ CM extension, 10 token types) | ✅ | ✅ |
 | Document colors | `textDocument/documentColor` | Full (color picker) | Full (+ CM swatch widget) | ✅ | ✅ |
 | Folding ranges | `textDocument/foldingRange` | Full (kind support) | Full (+ CM foldService) | ✅ | ✅ |
 
@@ -156,15 +156,15 @@ VS Code remaps 8 "style check" diagnostic codes from Error → Warning. This is 
 
 | Feature | VS Code | Voice Mirror | Impl | Tested |
 |---------|---------|-------------|:----:|:------:|
-| Server registry | Built-in | Full (lsp-servers.json, 7 servers) | ✅ | |
-| Auto-download servers | Built-in | Full (npm + github-release) | ✅ | |
-| Server config (initOptions + workspace/config) | Full | Full (manifest-driven + VS Code-compatible init options) | ✅ | |
-| Multi-server per file | Full | Full (primary + supplementary routing) | ✅ | |
-| Crash recovery | Full (backoff) | Full (exponential backoff, max 5, doc replay) | ✅ | |
-| Health monitoring | Full | Full (30s threshold, Unresponsive state) | ✅ | |
-| Idle shutdown | Full | Full (60s timer, auto-restart on reopen) | ✅ | |
-| Project-wide scanning | Full | Full (background didOpen, batched 10/100ms) | ✅ | |
-| Pull diagnostics | Full | Full | ✅ | |
+| Server registry | Built-in | Full (lsp-servers.json, 7 servers) | ✅ | ✅ |
+| Auto-download servers | Built-in | Full (npm + github-release) | ✅ | ✅ |
+| Server config (initOptions + workspace/config) | Full | Full (manifest-driven + VS Code-compatible init options) | ✅ | ✅ |
+| Multi-server per file | Full | Full (primary + supplementary routing) | ✅ | ✅ |
+| Crash recovery | Full (backoff) | Full (exponential backoff, max 5, doc replay) | ✅ | ✅ |
+| Health monitoring | Full | Full (30s threshold, Unresponsive state) | ✅ | ✅ |
+| Idle shutdown | Full | Full (60s timer, auto-restart on reopen) | ✅ | ✅ |
+| Project-wide scanning | Full | Full (background didOpen, batched 10/100ms) | ✅ | ✅ |
+| Pull diagnostics | Full | Full | ✅ | ✅ |
 | Remote LSP (SSH) | Full | None | N/A | N/A |
 
 ### Summary
@@ -173,12 +173,12 @@ VS Code remaps 8 "style check" diagnostic codes from Error → Warning. This is 
 |----------|---------|-------------|:----:|:------:|
 | Core (5) | 5/5 | 5/5 | 5/5 | 5/5 |
 | Navigation Tier 1 (5) | 5/5 | 5/5 | 5/5 | 5/5 |
-| Navigation Tier 2 (6) | 6/6 | 6/6 | 6/6 | 3/6 ⏭️3 |
+| Navigation Tier 2 (6) | 6/6 | 6/6 | 6/6 | 3/6 ⏭️3 backend |
 | Inline Assistance (3) | 3/3 | 3/3 | 3/3 | 3/3 |
 | Formatting & Editing (5) | 5/5 | 5/5 | 5/5 | 5/5 |
-| Visual (3) | 3/3 | 3/3 | 3/3 | 0/3 |
-| Infrastructure (10) | 10/10 | 10/10 | 10/10 | 0/10 |
-| **Total** | **37/37** | **37/37** | **37/37** | **20/37** |
+| Visual (3) | 3/3 | 3/3 | 3/3 | 3/3 |
+| Infrastructure (10) | 10/10 | 10/10 | 10/10 | 9/10 |
+| **Total** | **37/37** | **37/37** | **37/37** | **34/37** |
 
 > All features are implementation-complete including frontend CodeMirror wiring. The "Tested" column will be filled in during manual verification with screenshots.
 
