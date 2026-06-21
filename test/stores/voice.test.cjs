@@ -159,8 +159,8 @@ describe('voice: transcription routing to AI', () => {
 
   it('calls routeTranscriptionToAI when transcription arrives', () => {
     assert.ok(
-      src.includes('routeTranscriptionToAI(data.text)'),
-      'Should route transcription text to AI'
+      src.includes('routeTranscriptionToAI(text)'),
+      'Should route (dictionary-corrected) transcription text to AI'
     );
   });
 
@@ -221,6 +221,45 @@ describe('voice: transcription routing to AI', () => {
   });
 });
 
+// ============ Dictation dictionary (transcription corrections) ============
+
+describe('voice: dictation dictionary', () => {
+  it('exports applyDictionary function', () => {
+    assert.ok(
+      src.includes('export function applyDictionary'),
+      'Should export applyDictionary for testing/reuse'
+    );
+  });
+
+  it('applies dictionary to raw transcription before routing', () => {
+    assert.ok(
+      src.includes('applyDictionary(data.text, configStore.value?.voice?.dictionary)'),
+      'Should correct transcription using the configured voice dictionary'
+    );
+  });
+
+  it('returns text unchanged when dictionary is empty or missing', () => {
+    assert.ok(
+      src.includes('!Array.isArray(dictionary) || dictionary.length === 0'),
+      'Should short-circuit when there are no corrections'
+    );
+  });
+
+  it('matches corrections case-insensitively', () => {
+    assert.ok(
+      src.includes("'gi'") || src.includes('"gi"'),
+      'Should use a case-insensitive global regex for replacement'
+    );
+  });
+
+  it('escapes regex metacharacters in the "from" term', () => {
+    assert.ok(
+      src.includes('replace(/[.*+?^${}()|[\\]\\\\]/g'),
+      'Should escape regex special characters so literal phrases match'
+    );
+  });
+});
+
 // ============ Transcription deduplication ============
 
 describe('voice: transcription deduplication', () => {
@@ -238,7 +277,7 @@ describe('voice: transcription deduplication', () => {
 
   it('skips duplicate transcription within dedup window', () => {
     assert.ok(
-      src.includes('data.text === lastRoutedText'),
+      src.includes('text === lastRoutedText'),
       'Should compare against last routed text'
     );
     assert.ok(
@@ -328,8 +367,8 @@ describe('voice: dictation', () => {
 
   it('calls injectText when isDictating is true on transcription', () => {
     assert.ok(
-      src.includes('injectText(data.text)'),
-      'Should call injectText with transcription text when dictating'
+      src.includes('injectText(text)'),
+      'Should call injectText with (dictionary-corrected) transcription text when dictating'
     );
   });
 

@@ -244,6 +244,14 @@ function createOverlayStore() {
                 if (orbState === 'error') orbState = 'idle';
               }, 3000);
               break;
+            case 'stuck':
+              // A wedged transcription gets the error orb (persists until the
+              // next state_change — do NOT auto-revert). A merely long-running
+              // recording is still working, so leave its orb as-is.
+              if (data.state === 'processing') {
+                orbState = 'error';
+              }
+              break;
           }
         });
         eventUnlisteners.push(unlistenVoice);

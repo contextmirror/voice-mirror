@@ -10,8 +10,9 @@
   import { shortcutsStore, setActionHandler, setReleaseHandler, setupInAppShortcuts } from './lib/stores/shortcuts.svelte.js';
   import { initStartupGreeting } from './lib/voice-greeting.js';
   import { listen } from '@tauri-apps/api/event';
-  import { writeUserMessage, aiPtyInput, pttPress, pttRelease, configurePttKey, configureDictationKey, injectText, showWindow, minimizeWindow } from './lib/api.js';
+  import { writeUserMessage, aiPtyInput, pttPress, pttRelease, configurePttKey, configureDictationKey, injectText, showWindow, minimizeWindow, restartVoice } from './lib/api.js';
   import { chatStore } from './lib/stores/chat.svelte.js';
+  import { toastStore } from './lib/stores/toast.svelte.js';
   import { PROVIDER_ICONS } from './lib/providers.js';
   import { tabsStore } from './lib/stores/tabs.svelte.js';
   import { terminalTabsStore } from './lib/stores/terminal-tabs.svelte.js';
@@ -257,6 +258,45 @@
     if (!shortcutsInitialized) return;
     const cleanup = setupInAppShortcuts();
     return cleanup;
+  });
+
+  // Surface a visible indicator when the voice pipeline is stuck.
+  // Previously a wedged STT (e.g. transcribing a giant recording) just hung
+  // with no UI feedback — indistinguishable from idle. The backend watchdog
+  // now emits a 'stuck' event; show a persistent toast with a recovery action.
+  let stuckToastId = null;
+  $effect(() => {
+    const s = voiceStore.stuck;
+    if (s) {
+      const m = Math.floor(s.elapsedSecs / 60);
+      const sec = s.elapsedSecs % 60;
+      const dur = m > 0 ? `${m}m ${sec}s` : `${sec}s`;
+      if (s.state === 'recording') {
+        stuckToastId = toastStore.addToast({
+          message: `Still recording (${dur}) — press your voice key to stop.`,
+          severity: 'warning',
+          duration: 0,
+          key: 'voice-stuck',
+        });
+      } else {
+        stuckToastId = toastStore.addToast({
+          message: `Voice transcription has been running ${dur} — it may be stuck.`,
+          severity: 'error',
+          duration: 0,
+          key: 'voice-stuck',
+          action: {
+            label: 'Restart voice',
+            callback: () => {
+              voiceStore.clearStuck();
+              restartVoice().catch((err) => console.warn('[app] Failed to restart voice:', err));
+            },
+          },
+        });
+      }
+    } else if (stuckToastId) {
+      toastStore.dismissToast(stuckToastId);
+      stuckToastId = null;
+    }
   });
 
   // Forward shortcuts from the lens webview via custom URI scheme protocol.
