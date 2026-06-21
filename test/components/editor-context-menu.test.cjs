@@ -206,9 +206,6 @@ describe('EditorContextMenu.svelte: keyboard shortcuts', () => {
 });
 
 describe('EditorContextMenu.svelte: styling and layout', () => {
-  it('has disabled styling class', () => {
-    assert.ok(src.includes('disabled'));
-  });
   it('imports shared context-menu.css', () => {
     assert.ok(src.includes("@import '../../styles/context-menu.css'"), 'Should import shared context-menu styles');
   });

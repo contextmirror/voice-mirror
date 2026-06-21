@@ -58,6 +58,8 @@
 </script>
 
 {#if visible}
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
   <div class="icon-picker" style="left: {x}px; top: {y}px;" onclick={(e) => e.stopPropagation()}>
     <div class="icon-picker-label">Tab Icon</div>
     <input

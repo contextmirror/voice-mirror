@@ -64,12 +64,12 @@
 
 <div class="modal-overlay" onclick={onClose} role="presentation">
   <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <div class="picker-modal" onclick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Stream Window">
+  <div class="picker-modal" onclick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" tabindex="-1" aria-label="Stream Window">
     <h3 class="modal-title">Stream Window</h3>
 
     <div class="fps-row">
-      <label class="fps-label">FPS:</label>
-      <select class="fps-select" bind:value={fps}>
+      <label class="fps-label" for="fps-select">FPS:</label>
+      <select id="fps-select" class="fps-select" bind:value={fps}>
         <option value={5}>5</option>
         <option value={15}>15</option>
         <option value={30}>30</option>

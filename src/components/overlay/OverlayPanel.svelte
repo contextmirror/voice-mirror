@@ -50,6 +50,7 @@
 </script>
 
 <div class="overlay-panel">
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     class="orb-container"
     onpointerdown={onPointerDown}

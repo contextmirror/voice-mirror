@@ -1,5 +1,5 @@
 <script>
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { open } from '@tauri-apps/plugin-dialog';
   import { projectStore } from '../../lib/stores/project.svelte.js';
   import { lensStore } from '../../lib/stores/lens.svelte.js';
@@ -33,10 +33,10 @@
   const entry = $derived(projectStore.entries[projectIndex]);
 
   // Local editing state (only persisted on Save)
-  let name = $state(entry?.name || '');
-  let color = $state(entry?.color || '#3b82f6');
-  let iconFilename = $state(entry?.icon || null);
-  let iconPreview = $state(entry?.icon ? (projectStore.iconCache[entry.icon] || null) : null);
+  let name = $state(untrack(() => entry?.name || ''));
+  let color = $state(untrack(() => entry?.color || '#3b82f6'));
+  let iconFilename = $state(untrack(() => entry?.icon || null));
+  let iconPreview = $state(untrack(() => entry?.icon ? (projectStore.iconCache[entry.icon] || null) : null));
   let uploadedFilename = $state(null);
   let sizeWarning = $state(false);
   let saving = $state(false);
@@ -44,7 +44,7 @@
   let mcpLoading = $state(true);
   let mcpToggles = $state({}); // { serverName: boolean }
 
-  const originalIcon = entry?.icon || null;
+  const originalIcon = untrack(() => entry?.icon || null);
 
   const COLORS = [
     '#ef4444', '#f97316', '#eab308', '#22c55e',
@@ -143,7 +143,7 @@
 
 <div class="modal-overlay" onclick={handleCancel} role="presentation">
   <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <div class="modal" onclick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Edit project">
+  <div class="modal" onclick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" tabindex="-1" aria-label="Edit project">
     <h3 class="modal-title">Edit Project</h3>
 
     <!-- Name -->
@@ -370,13 +370,6 @@
   .swatch.selected {
     border-color: #fff;
     box-shadow: 0 0 0 2px var(--accent);
-  }
-
-  .swatch-icon {
-    width: 20px;
-    height: 20px;
-    border-radius: 4px;
-    object-fit: cover;
   }
 
   .modal-actions {

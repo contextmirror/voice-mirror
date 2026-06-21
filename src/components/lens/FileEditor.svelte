@@ -26,8 +26,8 @@
 
   let { tab, groupId = 1 } = $props();
 
-  let editorEl;
-  let view;
+  let editorEl = $state(null);
+  let view = $state(null);
   let loading = $state(true);
   let error = $state(null);
   let isBinary = $state(false);
@@ -936,6 +936,7 @@
       </div>
     </div>
   {/if}
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="file-editor" class:hidden={isMarkdown && showPreview} bind:this={editorEl}
     oncontextmenu={(e) => {
       // Fallback: catch right-clicks on gutter markers, tooltips, and other

@@ -10,6 +10,7 @@
    * ghostty-web provides an xterm.js-compatible API backed by Ghostty's
    * battle-tested WASM VT100 parser.
    */
+  import { untrack } from 'svelte';
   import { init, Terminal, FitAddon } from 'ghostty-web';
   import { listen } from '@tauri-apps/api/event';
   import { aiRawInput, aiPtyResize } from '../../lib/api.js';
@@ -154,8 +155,8 @@
     }
   }
 
-  // Register toolbar actions for parent TerminalTabs
-  onRegisterActions?.({ clear: handleClear, copy: handleCopy, paste: handlePaste });
+  // Register toolbar actions for parent TerminalTabs (one-time registration at setup)
+  untrack(() => onRegisterActions)?.({ clear: handleClear, copy: handleCopy, paste: handlePaste });
 
   // ---- AI output handler ----
 

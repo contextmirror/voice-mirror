@@ -312,20 +312,4 @@
     justify-content: space-between;
     -webkit-app-region: no-drag;
   }
-
-  .context-menu-item.disabled {
-    color: var(--muted);
-    cursor: default;
-    opacity: 0.4;
-  }
-
-  .context-menu-item.disabled:hover {
-    background: none;
-    color: var(--text);
-  }
-
-  .context-menu-item.disabled:hover .context-menu-shortcut {
-    color: var(--muted);
-    opacity: 1;
-  }
 </style>

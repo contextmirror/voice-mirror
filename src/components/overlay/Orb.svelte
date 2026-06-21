@@ -663,6 +663,7 @@
   });
 </script>
 
+<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 <div
   class="orb-wrapper"
   style:width="{displaySize}px"

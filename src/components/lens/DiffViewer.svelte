@@ -11,7 +11,7 @@
 
   let { tab } = $props();
 
-  let editorEl;
+  let editorEl = $state(null);
   let unifiedView;   // EditorView for unified mode
   let splitView;      // MergeView for split mode
   let loading = $state(true);

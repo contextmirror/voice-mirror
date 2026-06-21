@@ -67,7 +67,7 @@
       class="split-handle"
       role="separator"
       aria-orientation={direction === 'horizontal' ? 'vertical' : 'horizontal'}
-      tabindex="0"
+      tabindex="-1"
       onpointerdown={handlePointerDown}
       onpointermove={handlePointerMove}
       onpointerup={handlePointerUp}

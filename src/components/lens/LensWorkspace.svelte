@@ -538,6 +538,7 @@
 
 
 
+<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="lens-workspace" ondragover={(e) => { if (anyDragging) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; } }}>
   <div class="workspace-content">
     <!-- Horizontal split: left-column (chat) | center+right -->

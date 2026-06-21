@@ -236,11 +236,18 @@
       {#each lspServers as server}
         {@const key = serverKey(server)}
         {@const expanded = expandedKey === key}
-        <button
+        <div
           class="lsp-server-row"
           class:expanded
-          type="button"
+          role="button"
+          tabindex="0"
           onclick={() => toggleDetail(server)}
+          onkeydown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              toggleDetail(server);
+            }
+          }}
         >
           <span class="lsp-dot {dotClass(server.state)}"></span>
           <div class="lsp-server-info">
@@ -251,7 +258,8 @@
             {server.openDocsCount} file{server.openDocsCount !== 1 ? 's' : ''}
           </span>
           <span class="lsp-server-project">{basename(server.projectRoot)}</span>
-          <div class="lsp-server-actions" onclick={(e) => e.stopPropagation()}>
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <div class="lsp-server-actions" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
             {#if server.state === 'Running' || server.state === 'Failed' || server.state === 'Unresponsive'}
               <button
                 class="action-btn restart-btn"
@@ -276,7 +284,7 @@
             fill="none" stroke="currentColor" stroke-width="2"
             stroke-linecap="round" stroke-linejoin="round"
           ><polyline points="6 9 12 15 18 9"/></svg>
-        </button>
+        </div>
 
         {#if expanded}
           <div class="detail-section">

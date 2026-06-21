@@ -12,15 +12,23 @@
 </script>
 
 <!-- Edges -->
+<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="resize-edge top" onmousedown={startResize('North')}></div>
+<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="resize-edge right" onmousedown={startResize('East')}></div>
+<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="resize-edge bottom" onmousedown={startResize('South')}></div>
+<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="resize-edge left" onmousedown={startResize('West')}></div>
 
 <!-- Corners -->
+<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="resize-corner nw" onmousedown={startResize('NorthWest')}></div>
+<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="resize-corner ne" onmousedown={startResize('NorthEast')}></div>
+<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="resize-corner sw" onmousedown={startResize('SouthWest')}></div>
+<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="resize-corner se" onmousedown={startResize('SouthEast')}></div>
 
 <style>

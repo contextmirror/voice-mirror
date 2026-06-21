@@ -133,7 +133,7 @@
 <!-- Empty sidebar context menu (New Terminal) -->
 {#if emptyCtx.visible}
   <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="ctx-backdrop" onclick={closeEmptyContextMenu} oncontextmenu={(e) => { e.preventDefault(); closeEmptyContextMenu(); }}>
+  <div class="ctx-backdrop" onclick={closeEmptyContextMenu} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ' || e.key === 'Escape') { e.preventDefault(); closeEmptyContextMenu(); } }} oncontextmenu={(e) => { e.preventDefault(); closeEmptyContextMenu(); }}>
     <div class="ctx-menu" style="left: {emptyCtx.x}px; top: {emptyCtx.y}px;">
       <button class="ctx-item" onclick={handleNewTerminal}>New Terminal</button>
     </div>

@@ -30,6 +30,7 @@
       role="button"
       tabindex="0"
       onclick={() => onChangeClick(change)}
+      onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onChangeClick(change); } }}
       ondblclick={() => onChangeDblClick(change)}
       oncontextmenu={(e) => onContextMenu(e, change, false, true)}
     >
@@ -62,6 +63,7 @@
       role="button"
       tabindex="0"
       onclick={() => onChangeClick(change)}
+      onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onChangeClick(change); } }}
       ondblclick={() => onChangeDblClick(change)}
       oncontextmenu={(e) => onContextMenu(e, change, false, true)}
     >

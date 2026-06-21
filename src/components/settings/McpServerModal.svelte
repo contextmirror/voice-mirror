@@ -3,7 +3,7 @@
   import { unwrapResult } from '../../lib/utils.js';
   import { projectStore } from '../../lib/stores/project.svelte.js';
   import { lensStore } from '../../lib/stores/lens.svelte.js';
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
 
   let { mode = 'add', server = null, onClose, onSave } = $props();
 
@@ -14,15 +14,15 @@
   });
 
   // Form state
-  let name = $state(server?.name || '');
-  let command = $state(server?.config?.command || '');
-  let args = $state((server?.config?.args || []).join('\n'));
-  let envVars = $state(
+  let name = $state(untrack(() => server?.name || ''));
+  let command = $state(untrack(() => server?.config?.command || ''));
+  let args = $state(untrack(() => (server?.config?.args || []).join('\n')));
+  let envVars = $state(untrack(() =>
     server?.config?.env
       ? Object.entries(server.config.env).map(([k, v]) => ({ key: k, value: v }))
       : []
-  );
-  let scope = $state(server?.source === 'project' ? (server?._projectPath || 'global') : 'global');
+  ));
+  let scope = $state(untrack(() => server?.source === 'project' ? (server?._projectPath || 'global') : 'global'));
   let saving = $state(false);
   let nameError = $state('');
 
@@ -114,7 +114,7 @@
 
 <div class="modal-overlay" onclick={onClose} role="presentation">
   <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <div class="modal mcp-modal" onclick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="{mode === 'add' ? 'Add' : 'Edit'} MCP Server">
+  <div class="modal mcp-modal" onclick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" tabindex="-1" aria-label="{mode === 'add' ? 'Add' : 'Edit'} MCP Server">
     <h3 class="modal-title">{mode === 'add' ? 'Add MCP Server' : 'Edit MCP Server'}</h3>
 
     <!-- Name -->
