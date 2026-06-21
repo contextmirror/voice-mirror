@@ -56,6 +56,115 @@ export function lspPositionToOffset(doc, pos) {
   return line.from + Math.min(pos.character, line.length);
 }
 
+/**
+ * CodeMirror WidgetType for an inlay hint (inline type/parameter annotation).
+ * Lives at module scope (state passed via constructor) for performance.
+ * @type {any}
+ */
+let InlayHintWidget = null;
+
+/**
+ * CodeMirror WidgetType for a code lens (reference count / test link).
+ * Lives at module scope (state passed via constructor) for performance.
+ * @type {any}
+ */
+let CodeLensWidget = null;
+
+/**
+ * CodeMirror WidgetType for an inline color swatch.
+ * Lives at module scope (state passed via constructor) for performance.
+ * @type {any}
+ */
+let ColorSwatchWidget = null;
+
+/**
+ * Lazily define the module-scope widget classes once the CodeMirror view
+ * module (which provides WidgetType) is available. Idempotent.
+ * @param {typeof import('@codemirror/view')} cmView
+ */
+function ensureWidgetClasses(cmView) {
+  if (InlayHintWidget) return;
+  const { WidgetType } = cmView;
+
+  InlayHintWidget = class extends WidgetType {
+    constructor(label, kind, paddingLeft, paddingRight) {
+      super();
+      this.label = label;
+      this.kind = kind;
+      this.paddingLeft = paddingLeft;
+      this.paddingRight = paddingRight;
+    }
+
+    toDOM() {
+      const span = document.createElement('span');
+      span.className = 'cm-inlay-hint';
+      if (this.kind === 1) span.classList.add('cm-inlay-hint-type');
+      if (this.kind === 2) span.classList.add('cm-inlay-hint-parameter');
+      span.textContent = this.label;
+      if (this.paddingLeft) span.style.marginLeft = '2px';
+      if (this.paddingRight) span.style.marginRight = '2px';
+      return span;
+    }
+
+    eq(other) {
+      return this.label === other.label && this.kind === other.kind
+        && this.paddingLeft === other.paddingLeft && this.paddingRight === other.paddingRight;
+    }
+
+    ignoreEvent() { return true; }
+  };
+
+  CodeLensWidget = class extends WidgetType {
+    constructor(title) {
+      super();
+      this.title = title;
+    }
+
+    toDOM() {
+      const span = document.createElement('span');
+      span.className = 'cm-code-lens';
+      span.textContent = this.title;
+      return span;
+    }
+
+    eq(other) {
+      return this.title === other.title;
+    }
+
+    ignoreEvent() { return true; }
+  };
+
+  ColorSwatchWidget = class extends WidgetType {
+    // onActivate(widget, anchorEl) is invoked on mousedown to open the picker.
+    constructor(r, g, b, a, rangeFrom, rangeTo, onActivate) {
+      super();
+      this.r = r; this.g = g; this.b = b; this.a = a;
+      this.rangeFrom = rangeFrom;
+      this.rangeTo = rangeTo;
+      this.onActivate = onActivate;
+    }
+
+    toDOM() {
+      const span = document.createElement('span');
+      span.className = 'cm-color-swatch';
+      span.style.background = `rgba(${Math.round(this.r * 255)}, ${Math.round(this.g * 255)}, ${Math.round(this.b * 255)}, ${this.a})`;
+      const self = this;
+      span.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        self.onActivate(self, span);
+      });
+      return span;
+    }
+
+    eq(other) {
+      return this.r === other.r && this.g === other.g && this.b === other.b && this.a === other.a;
+    }
+
+    ignoreEvent() { return true; }
+  };
+}
+
 /** Map LSP CompletionItemKind number to CodeMirror completion type string */
 export function mapCompletionKind(kind) {
   const kinds = {
@@ -873,36 +982,9 @@ export function createEditorLsp() {
    * @returns {import('@codemirror/state').Extension} CM extension
    */
   function inlayHintExtension(currentPath, cmView, cmState) {
-    const { ViewPlugin, Decoration, WidgetType } = cmView;
+    const { ViewPlugin, Decoration } = cmView;
     const { RangeSet } = cmState;
-
-    class InlayHintWidget extends WidgetType {
-      constructor(label, kind, paddingLeft, paddingRight) {
-        super();
-        this.label = label;
-        this.kind = kind;
-        this.paddingLeft = paddingLeft;
-        this.paddingRight = paddingRight;
-      }
-
-      toDOM() {
-        const span = document.createElement('span');
-        span.className = 'cm-inlay-hint';
-        if (this.kind === 1) span.classList.add('cm-inlay-hint-type');
-        if (this.kind === 2) span.classList.add('cm-inlay-hint-parameter');
-        span.textContent = this.label;
-        if (this.paddingLeft) span.style.marginLeft = '2px';
-        if (this.paddingRight) span.style.marginRight = '2px';
-        return span;
-      }
-
-      eq(other) {
-        return this.label === other.label && this.kind === other.kind
-          && this.paddingLeft === other.paddingLeft && this.paddingRight === other.paddingRight;
-      }
-
-      ignoreEvent() { return true; }
-    }
+    ensureWidgetClasses(cmView);
 
     return ViewPlugin.fromClass(class {
       constructor(view) {
@@ -987,28 +1069,9 @@ export function createEditorLsp() {
    * @returns {import('@codemirror/state').Extension} CM extension
    */
   function codeLensExtension(currentPath, cmView, cmState) {
-    const { ViewPlugin, Decoration, WidgetType } = cmView;
+    const { ViewPlugin, Decoration } = cmView;
     const { RangeSet, StateField, StateEffect } = cmState;
-
-    class CodeLensWidget extends WidgetType {
-      constructor(title) {
-        super();
-        this.title = title;
-      }
-
-      toDOM() {
-        const span = document.createElement('span');
-        span.className = 'cm-code-lens';
-        span.textContent = this.title;
-        return span;
-      }
-
-      eq(other) {
-        return this.title === other.title;
-      }
-
-      ignoreEvent() { return true; }
-    }
+    ensureWidgetClasses(cmView);
 
     // Block decorations MUST come from a StateField, not a ViewPlugin.
     const setCodeLenses = StateEffect.define();
@@ -1101,8 +1164,9 @@ export function createEditorLsp() {
    * @returns {import('@codemirror/state').Extension} CM extension
    */
   function documentColorsExtension(currentPath, cmView, cmState) {
-    const { ViewPlugin, Decoration, WidgetType } = cmView;
+    const { ViewPlugin, Decoration } = cmView;
     const { RangeSet } = cmState;
+    ensureWidgetClasses(cmView);
 
     let currentView = null;
     let activePicker = null;
@@ -1443,36 +1507,13 @@ export function createEditorLsp() {
       };
     }
 
-    // ── Widget ──
-
-    class ColorSwatchWidget extends WidgetType {
-      constructor(r, g, b, a, rangeFrom, rangeTo) {
-        super();
-        this.r = r; this.g = g; this.b = b; this.a = a;
-        this.rangeFrom = rangeFrom;
-        this.rangeTo = rangeTo;
+    // ── Widget activation ──
+    // Bridges the module-scope ColorSwatchWidget back to this closure's
+    // currentView + openColorPicker (which capture per-editor state).
+    function activateSwatch(widget, anchorEl) {
+      if (currentView) {
+        openColorPicker(currentView, widget.r, widget.g, widget.b, widget.a, widget.rangeFrom, widget.rangeTo, anchorEl);
       }
-
-      toDOM() {
-        const span = document.createElement('span');
-        span.className = 'cm-color-swatch';
-        span.style.background = `rgba(${Math.round(this.r * 255)}, ${Math.round(this.g * 255)}, ${Math.round(this.b * 255)}, ${this.a})`;
-        const self = this;
-        span.addEventListener('mousedown', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          if (currentView) {
-            openColorPicker(currentView, self.r, self.g, self.b, self.a, self.rangeFrom, self.rangeTo, span);
-          }
-        });
-        return span;
-      }
-
-      eq(other) {
-        return this.r === other.r && this.g === other.g && this.b === other.b && this.a === other.a;
-      }
-
-      ignoreEvent() { return true; }
     }
 
     // ── ViewPlugin ──
@@ -1527,7 +1568,7 @@ export function createEditorLsp() {
               const { red, green, blue, alpha } = item.color;
               widgets.push(
                 Decoration.widget({
-                  widget: new ColorSwatchWidget(red, green, blue, alpha ?? 1, pos, endPos),
+                  widget: new ColorSwatchWidget(red, green, blue, alpha ?? 1, pos, endPos, activateSwatch),
                   side: -1,
                 }).range(pos)
               );

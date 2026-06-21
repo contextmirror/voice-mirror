@@ -362,7 +362,7 @@
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="backdrop" onmousedown={handleBackdropClick}>
     <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div class="modal" style="-webkit-app-region: no-drag" onkeydown={handleKeydown} bind:this={modalEl} role="dialog" aria-modal="true" aria-label="Command palette">
+    <div class="modal" style="-webkit-app-region: no-drag" onkeydown={handleKeydown} bind:this={modalEl} role="dialog" tabindex="-1" aria-modal="true" aria-label="Command palette">
       <div class="search-row">
         {#if mode !== 'files'}
           <span class="mode-pill">{query.charAt(0)}</span>

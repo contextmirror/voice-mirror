@@ -6,6 +6,7 @@
    * Shows base64 thumbnails of available targets. User selects one
    * and clicks "Share" to capture full-res.
    */
+  import { untrack } from 'svelte';
   import { fade, fly } from 'svelte/transition';
   import { listMonitors, listWindows, captureMonitor, captureWindow } from '../../lib/api.js';
   import { lensStore } from '../../lib/stores/lens.svelte.js';
@@ -18,7 +19,7 @@
     browserSnapshot = null,
   } = $props();
 
-  let activeTab = $state(browserSnapshot ? 'browser' : 'screen');
+  let activeTab = $state(untrack(() => browserSnapshot ? 'browser' : 'screen'));
   let monitors = $state([]);
   let windows = $state([]);
   let loading = $state(true);

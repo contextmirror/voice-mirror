@@ -289,8 +289,7 @@
         </button>
 
         {#if indentDropdownOpen}
-          <!-- svelte-ignore a11y_no_static_element_interactions -->
-          <div class="indent-dropdown" role="menu" onclick={(e) => e.stopPropagation()}>
+          <div class="indent-dropdown" role="menu" tabindex="-1" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
             <div class="indent-section-label">Indent Using Spaces</div>
             <div class="indent-size-row">
               {#each [2, 4, 8] as size}
@@ -368,8 +367,7 @@
 
       <!-- Notification panel dropdown -->
       {#if notifPanelOpen}
-        <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div class="notif-panel" onclick={(e) => e.stopPropagation()}>
+        <div class="notif-panel" role="menu" tabindex="-1" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
           <div class="notif-header">
             <span class="notif-title">Notifications</span>
             {#if statusBarStore.notifications.length > 0}

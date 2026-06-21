@@ -200,8 +200,8 @@
     </div>
 
     {#if appMenuOpen}
-      <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <nav class="menu-bar" onclick={(e) => e.stopPropagation()}>
+      <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+      <nav class="menu-bar" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
         {#each menuBarItems as item}
           <button
             class="menu-bar-item"
@@ -262,8 +262,7 @@
 
 <!-- Submenu dropdown (positioned absolutely under active menu bar item) -->
 {#if appMenuOpen && activeMenuId && menuDefinitions[activeMenuId]}
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="submenu-dropdown" style="left: {submenuLeft}px;" role="menu" onclick={(e) => e.stopPropagation()}>
+  <div class="submenu-dropdown" style="left: {submenuLeft}px;" role="menu" tabindex="-1" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
     {#each menuDefinitions[activeMenuId] as item}
       {#if item.separator}
         <div class="app-menu-separator"></div>
@@ -515,11 +514,6 @@
     padding: 0;
     -webkit-app-region: no-drag;
     z-index: 10001;
-  }
-
-  .win-btn svg {
-    width: 14px;
-    height: 14px;
   }
 
   .win-btn:hover {

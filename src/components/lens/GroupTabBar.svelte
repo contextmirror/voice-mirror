@@ -532,11 +532,6 @@
     color: var(--accent);
   }
 
-  .action-btn-danger:hover {
-    background: color-mix(in srgb, var(--danger) 20%, transparent);
-    color: var(--danger);
-  }
-
   .tab {
     display: flex;
     align-items: center;

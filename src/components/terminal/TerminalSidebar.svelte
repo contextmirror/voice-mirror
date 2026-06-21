@@ -104,6 +104,7 @@
   };
 </script>
 
+<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="terminal-sidebar" oncontextmenu={(e) => { e.preventDefault(); onEmptyContextMenu?.(e); }}>
   {#each terminalTabsStore.groups as group}
     {#each group.instanceIds as instId, idx}

@@ -547,7 +547,7 @@
 
   {#if ctxMenu.visible}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div class="terminal-ctx-backdrop" onclick={closeCtxMenu} oncontextmenu={(e) => { e.preventDefault(); closeCtxMenu(); }}>
+    <div class="terminal-ctx-backdrop" onclick={closeCtxMenu} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ' || e.key === 'Escape') { e.preventDefault(); closeCtxMenu(); } }} oncontextmenu={(e) => { e.preventDefault(); closeCtxMenu(); }}>
       <div class="terminal-ctx-menu" role="menu" style="left:{ctxMenu.x}px;top:{ctxMenu.y}px;">
         <button class="terminal-ctx-item" role="menuitem" onclick={ctxCopy}>Copy<span class="terminal-ctx-shortcut">Ctrl+C</span></button>
         <button class="terminal-ctx-item" role="menuitem" onclick={ctxPaste}>Paste<span class="terminal-ctx-shortcut">Ctrl+V</span></button>

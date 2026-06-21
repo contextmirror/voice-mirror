@@ -166,7 +166,7 @@
 {#if confirmDelete}
   <div class="modal-overlay" onclick={() => confirmDelete = null} role="presentation">
     <!-- svelte-ignore a11y_click_events_have_key_events -->
-    <div class="confirm-dialog" onclick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+    <div class="confirm-dialog" onclick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" tabindex="-1">
       <p>Delete <strong>{confirmDelete.name}</strong> from {confirmDelete.label}?</p>
       <div class="confirm-actions">
         <button class="btn-cancel" onclick={() => confirmDelete = null}>Cancel</button>

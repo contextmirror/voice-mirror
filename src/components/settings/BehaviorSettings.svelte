@@ -183,12 +183,12 @@
         onChange={(v) => (downloadAskLocation = v)}
       />
       <div class="path-setting">
-        <label class="path-label">Download Location</label>
+        <label class="path-label" for="download-location-btn">Download Location</label>
         <div class="path-row">
           <span class="path-display" title={downloadPath || 'System Downloads folder'}>
             {downloadPath || 'System Downloads folder'}
           </span>
-          <button class="path-btn" onclick={pickDownloadFolder}>Change</button>
+          <button id="download-location-btn" class="path-btn" onclick={pickDownloadFolder}>Change</button>
         </div>
       </div>
     </div>

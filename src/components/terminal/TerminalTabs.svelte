@@ -1441,10 +1441,6 @@
     display: none;
   }
 
-  .terminal-panel.hidden {
-    display: none;
-  }
-
   /* -- Problems badge -- */
   .problems-badge {
     display: inline-flex;

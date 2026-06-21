@@ -119,7 +119,10 @@
     class="context-menu"
     style="left: {x}px; top: {y}px;"
     bind:this={menuEl}
+    role="menu"
+    tabindex="-1"
     onclick={(e) => e.stopPropagation()}
+    onkeydown={(e) => e.stopPropagation()}
   >
     <button class="context-menu-item" onclick={handleSplitRight}>
       <svg width="13" height="13" viewBox="0 0 16 16" fill="none">

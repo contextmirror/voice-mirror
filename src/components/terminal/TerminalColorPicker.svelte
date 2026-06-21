@@ -46,6 +46,8 @@
 </script>
 
 {#if visible}
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
   <div class="color-picker" style="left: {x}px; top: {y}px;" onclick={(e) => e.stopPropagation()}>
     <div class="color-picker-label">Tab Color</div>
     <div class="color-grid">

@@ -7,6 +7,11 @@
   import { uid, unwrapResult } from '../../lib/utils.js';
   import { clampToViewport } from '$lib/clamp-to-viewport.js';
 
+  /** Focuses a node on mount (replacement for the autofocus attribute). */
+  function autofocusAction(node) {
+    node.focus();
+  }
+
   /** Dropdown open state */
   let open = $state(false);
   let searchQuery = $state('');
@@ -472,7 +477,7 @@
                   bind:value={renameValue}
                   onkeydown={handleRenameKeydown}
                   onblur={commitRename}
-                  autofocus
+                  use:autofocusAction
                 />
               </div>
             {:else}
