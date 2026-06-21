@@ -52,13 +52,17 @@ pub async fn get_git_changes(root: Option<String>) -> IpcResponse {
     let output = match run_git(&["status", "--porcelain=v1"], &root).await {
         Ok(o) => o,
         Err(e) => {
-            info!("git status failed (git may not be installed): {}", e);
+            // Polled every ~15s per open project; a non-git folder is normal
+            // (e.g. a non-code working dir), so keep this off the INFO channel.
+            debug!("git status failed (git may not be installed): {}", e);
             return IpcResponse::ok(serde_json::json!({ "changes": [], "branch": null }));
         }
     };
 
     if !output.status.success() {
-        info!("git status returned non-zero (may not be a git repo)");
+        // Normal for any open folder that isn't a git repo — debug, not info,
+        // so it doesn't spam the App log channel every poll.
+        debug!("git status returned non-zero (may not be a git repo)");
         return IpcResponse::ok(serde_json::json!({ "changes": [], "branch": null }));
     }
 
