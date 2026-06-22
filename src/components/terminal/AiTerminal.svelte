@@ -483,6 +483,35 @@
           }
           pendingEvents = [];
 
+          // TEMP DIAG: dump the real canvas pixel + the renderer's live theme bg
+          // + what we'd pass, at steady state. Tells us if the renderer has the
+          // right bg but isn't painting it (empty buffer) vs not getting it.
+          setTimeout(() => {
+            if (cancelled) return;
+            try {
+              const cv = containerEl?.querySelector('canvas');
+              let pixel = 'no-canvas';
+              if (cv) {
+                const ctx = cv.getContext('2d');
+                if (ctx) {
+                  const c = ctx.getImageData(Math.floor(cv.width / 2), Math.floor(cv.height / 2), 1, 1).data;
+                  const t = ctx.getImageData(2, 2, 1, 1).data;
+                  pixel = `centre=rgba(${c[0]},${c[1]},${c[2]},${c[3]}) corner=rgba(${t[0]},${t[1]},${t[2]},${t[3]})`;
+                } else { pixel = 'no-2d-ctx'; }
+              }
+              // @ts-ignore — read the renderer's live theme (TS-private only)
+              const rbg = term?.renderer?.theme?.background;
+              console.warn('[term-px2]', JSON.stringify({
+                pixel,
+                rendererThemeBg: rbg,
+                wouldPass: buildTermTheme().background,
+                hasWasmTerm: !!term?.wasmTerm,
+              }));
+            } catch (e) {
+              console.warn('[term-px2] failed', String(e));
+            }
+          }, 2000);
+
           // Apply the theme once the app's CSS variables are actually loaded.
           // On a cold boot the terminal can mount before the theme vars are set,
           // so buildTermTheme() falls back to #0c0d10 — slightly lighter than the
