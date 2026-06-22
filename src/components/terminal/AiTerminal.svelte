@@ -120,39 +120,6 @@
     }
   }
 
-  // TEMP DIAGNOSTIC (grey-box bug): logs the container/canvas geometry so we can
-  // see why the canvas doesn't fill the panel on first mount. Captured to the
-  // Frontend output channel (frontend.jsonl). Remove once the bug is fixed.
-  function logTermDiag(tag) {
-    try {
-      const c = containerEl;
-      const cv = c?.querySelector('canvas');
-      const rect = c?.getBoundingClientRect();
-      // Walk up the ancestor chain logging height + background so we can find
-      // the grey element (the terminal itself measures black + correctly sized).
-      const chain = [];
-      let el = c;
-      for (let i = 0; el && i < 10; i++) {
-        const cs = getComputedStyle(el);
-        chain.push(`${el.tagName.toLowerCase()}.${(el.className || '').toString().split(' ')[0]} h=${el.clientHeight} bg=${cs.backgroundColor}`);
-        el = el.parentElement;
-      }
-      // console.warn (not log) so the runtime capture forwards it to frontend.jsonl
-      console.warn('[term-diag]', tag, JSON.stringify({
-        initialized,
-        containerH: c?.clientHeight,
-        canvasH: cv?.clientHeight,
-        canvasBg: cv && getComputedStyle(cv).backgroundColor,
-        rows: term?.rows,
-        rectTop: rect && Math.round(rect.top),
-        rectH: rect && Math.round(rect.height),
-        chain,
-      }));
-    } catch (e) {
-      console.warn('[term-diag] failed', e);
-    }
-  }
-
   // ---- Toolbar actions ----
 
   function handleClear() {
@@ -464,7 +431,6 @@
         resizeTimeout = setTimeout(() => {
           fitTerminal();
           resizePtyIfChanged();
-          logTermDiag('resize-observer');
         }, 150);
       });
       observer.observe(containerEl);
@@ -489,42 +455,11 @@
           resizePtyIfChanged();
           // Gate: terminal is now fully initialized and ready for ai-output events
           initialized = true;
-          logTermDiag('after-initial-fit');
           // Replay any events that arrived during initialization
           for (const evt of pendingEvents) {
             handleAiOutput(evt.payload);
           }
           pendingEvents = [];
-
-          // Backstop: fit, then force a WASM reflow/paint with a resize JIGGLE.
-          // fitAddon.fit() is a no-op when cols/rows are unchanged, so on a
-          // fresh first mount with no provider output the canvas never paints a
-          // frame and shows grey until a remount. Resizing by -1 row then back
-          // forces the full ghostty resize path (text reflow + DirtyState.FULL +
-          // canvas repaint) — the same trick the provider-switch reveal uses.
-          setTimeout(() => {
-            if (cancelled) return;
-            fitTerminal();
-            resizePtyIfChanged();
-            if (term && term.rows > 2) {
-              const cols = term.cols;
-              const rows = term.rows;
-              term.resize(cols, rows - 1);
-              requestAnimationFrame(() => {
-                if (term && !cancelled) {
-                  term.resize(cols, rows);
-                  resizePtyIfChanged();
-                  logTermDiag('backstop-jiggle');
-                }
-              });
-            } else {
-              logTermDiag('backstop-250ms');
-            }
-          }, 250);
-          setTimeout(() => {
-            if (cancelled) return;
-            logTermDiag('settle-1500ms');
-          }, 1500);
         });
       });
     }

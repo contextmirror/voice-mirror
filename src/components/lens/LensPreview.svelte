@@ -42,7 +42,16 @@
 
   function syncBounds() {
     const bounds = getAbsoluteBounds();
-    if (!bounds || bounds.width <= 0 || bounds.height <= 0) return;
+    if (!bounds || bounds.width <= 0 || bounds.height <= 0) {
+      // Container is CSS-hidden (display:none — e.g. a file tab is active, not
+      // the browser). A native child WebView2 does NOT respect CSS display:none,
+      // so if a webview exists it would stay visible as a grey rectangle over
+      // the UI. Move it off-screen instead of bailing.
+      if (lensStore.webviewReady) {
+        lensResizeWebview(-9999, -9999, 0, 0).catch(() => {});
+      }
+      return;
+    }
     lensResizeWebview(bounds.x, bounds.y, bounds.width, bounds.height).catch(() => {});
   }
 

@@ -104,6 +104,15 @@ describe('LensPreview.svelte: bounds handling', () => {
   it('uses ResizeObserver', () => {
     assert.ok(src.includes('ResizeObserver'), 'Should observe container resize');
   });
+
+  it('moves the webview off-screen when the container is hidden (grey-box fix)', () => {
+    // Native WebView2 ignores CSS display:none, so when the browser container
+    // collapses (a file tab is active) syncBounds must move the webview
+    // off-screen rather than bail — otherwise it lingers as a grey rectangle.
+    const fn = src.slice(src.indexOf('function syncBounds'), src.indexOf('function syncBounds') + 600);
+    assert.ok(fn.includes('lensResizeWebview(-9999'), 'Hidden container should push the webview off-screen');
+    assert.ok(fn.includes('webviewReady'), 'Should only move an existing webview');
+  });
 });
 
 describe('LensPreview.svelte: page title tracking', () => {

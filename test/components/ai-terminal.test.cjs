@@ -26,8 +26,4 @@ describe('AiTerminal: cold-start sizing', () => {
     assert.ok(after.includes('fitTerminal()'), 'Should fit after fonts are ready');
     assert.ok(after.includes('initialized = true'), 'Should reveal (initialized) after the corrected fit');
   });
-
-  it('has a delayed backstop re-fit for late layout settling', () => {
-    assert.ok(/setTimeout\([^)]*\n?[^}]*fitTerminal/.test(src) || src.includes('Backstop re-fit'), 'Should re-fit after a short delay');
-  });
 });
