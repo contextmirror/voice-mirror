@@ -19,6 +19,7 @@
   import AppearanceSettings from './AppearanceSettings.svelte';
   import DependencySettings from './DependencySettings.svelte';
   import McpServerSettings from './McpServerSettings.svelte';
+  import DiagnosticsSettings from './DiagnosticsSettings.svelte';
 
   const TABS = [
     { id: 'general', label: 'General' },
@@ -94,6 +95,7 @@
         role="tabpanel"
       >
         <BehaviorSettings />
+        <DiagnosticsSettings />
       </div>
     {:else if activeTab === 'appearance'}
       <div

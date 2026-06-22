@@ -1048,6 +1048,10 @@ export async function getOutputLogs(params) {
   return invoke('get_output_logs', { params });
 }
 
+export async function exportDiagnostics(last) {
+  return invoke('export_diagnostics', { params: { last: last ?? null } });
+}
+
 export async function logFrontendError(params) {
   return invoke('log_frontend_error', { params });
 }

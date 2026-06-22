@@ -514,6 +514,7 @@ pub fn run() {
             design_cmds::design_expand_tree_node,
             // Output / diagnostics
             output_cmds::get_output_logs,
+            output_cmds::export_diagnostics,
             output_cmds::log_frontend_error,
             output_cmds::register_project_channel,
             output_cmds::unregister_project_channel,
