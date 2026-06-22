@@ -94,8 +94,13 @@ fn claude_auth() -> AuthState {
                 AuthState::Expired
             };
         }
-        if oauth.and_then(|o| o.get("accessToken")).is_some() {
-            return AuthState::LoggedIn;
+        if let Some(tok) = oauth
+            .and_then(|o| o.get("accessToken"))
+            .and_then(|v| v.as_str())
+        {
+            if !tok.is_empty() {
+                return AuthState::LoggedIn;
+            }
         }
     }
     AuthState::LoggedOut
@@ -231,8 +236,12 @@ fn probe_codex() -> AuthState {
         return AuthState::Unknown;
     };
     let low = out.to_lowercase();
-    // Order matters: "not logged in" contains "logged in".
-    if low.contains("not logged in") || low.contains("not authenticated") {
+    // Check the negatives FIRST: "not logged in" contains the substring
+    // "logged in", so a naive positive check would misfire.
+    if low.contains("not logged in")
+        || low.contains("not authenticated")
+        || low.contains("unauthorized")
+    {
         AuthState::LoggedOut
     } else if low.contains("logged in") {
         AuthState::LoggedIn

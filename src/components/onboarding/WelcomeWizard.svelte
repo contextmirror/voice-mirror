@@ -17,6 +17,7 @@
    * One-click install (Phase 2) and live auth/sign-in (Phase 3) replace the
    * copy-the-command guidance shown here.
    */
+  import { onMount } from 'svelte';
   import { detectProviders, installProvider, probeProviderAuth } from '../../lib/api.js';
   import { unwrapResult } from '../../lib/utils.js';
   import { updateConfig } from '../../lib/stores/config.svelte.js';
@@ -76,7 +77,11 @@
   }
 
   async function refineAuth() {
-    const installed = providers.filter((p) => p.installed);
+    // Snapshot the array we probed against; if a newer load (e.g. Re-check)
+    // replaces `providers` while these async probes are in flight, don't clobber
+    // the fresher data with our now-stale results.
+    const snapshot = providers;
+    const installed = snapshot.filter((p) => p.installed);
     const updates = await Promise.all(
       installed.map(async (p) => {
         try {
@@ -88,6 +93,7 @@
         }
       })
     );
+    if (providers !== snapshot) return;
     const byType = new Map(updates.filter(([, s]) => s));
     providers = providers.map((p) => {
       const authState = byType.get(p.providerType);
@@ -96,7 +102,7 @@
     });
   }
 
-  $effect(() => {
+  onMount(() => {
     loadProviders();
   });
 
