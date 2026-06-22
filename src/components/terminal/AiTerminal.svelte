@@ -32,6 +32,14 @@
   let pendingEvents = [];
   let providerSwitchHandler = null;
 
+  // Cover the terminal with the app background while no provider is running.
+  // An empty ghostty terminal paints its cells with the WASM's built-in default
+  // background (#0c0d10) — Ghostty treats a pure-black #000000 theme bg as
+  // "unset" and falls back to it — which reads as a grey box against the
+  // #000000 UI on cold start. The cover guarantees the empty/stopped state
+  // matches the surrounding background; it's hidden the moment a provider runs.
+  let showEmptyCover = $derived(!aiStatusStore.running);
+
   // Provider switch: hide the canvas via direct DOM style during the transition
   // so the user never sees garbled partial-frame renders from the TUI setup.
   // We use direct DOM manipulation (not Svelte $state) because Svelte batches
@@ -483,35 +491,6 @@
           }
           pendingEvents = [];
 
-          // TEMP DIAG: dump the real canvas pixel + the renderer's live theme bg
-          // + what we'd pass, at steady state. Tells us if the renderer has the
-          // right bg but isn't painting it (empty buffer) vs not getting it.
-          setTimeout(() => {
-            if (cancelled) return;
-            try {
-              const cv = containerEl?.querySelector('canvas');
-              let pixel = 'no-canvas';
-              if (cv) {
-                const ctx = cv.getContext('2d');
-                if (ctx) {
-                  const c = ctx.getImageData(Math.floor(cv.width / 2), Math.floor(cv.height / 2), 1, 1).data;
-                  const t = ctx.getImageData(2, 2, 1, 1).data;
-                  pixel = `centre=rgba(${c[0]},${c[1]},${c[2]},${c[3]}) corner=rgba(${t[0]},${t[1]},${t[2]},${t[3]})`;
-                } else { pixel = 'no-2d-ctx'; }
-              }
-              // @ts-ignore — read the renderer's live theme (TS-private only)
-              const rbg = term?.renderer?.theme?.background;
-              console.warn('[term-px2]', JSON.stringify({
-                pixel,
-                rendererThemeBg: rbg,
-                wouldPass: buildTermTheme().background,
-                hasWasmTerm: !!term?.wasmTerm,
-              }));
-            } catch (e) {
-              console.warn('[term-px2] failed', String(e));
-            }
-          }, 2000);
-
           // Apply the theme once the app's CSS variables are actually loaded.
           // On a cold boot the terminal can mount before the theme vars are set,
           // so buildTermTheme() falls back to #0c0d10 — slightly lighter than the
@@ -586,6 +565,9 @@
 
 <div class="terminal-view">
   <div class="terminal-container" class:ready={initialized} bind:this={containerEl}></div>
+  {#if showEmptyCover}
+    <div class="terminal-empty-cover"></div>
+  {/if}
 </div>
 
 <style>
@@ -598,6 +580,16 @@
     /* Visual spacing around terminal — applied here (not on inner container)
        so ghostty-web's canvas fills the container exactly without clipping */
     padding: 4px;
+    position: relative;
+  }
+
+  /* Covers the empty/stopped terminal so ghostty's default (grey) cell
+     background never shows; hidden as soon as a provider is running. */
+  .terminal-empty-cover {
+    position: absolute;
+    inset: 0;
+    background: var(--bg);
+    pointer-events: none;
   }
 
   .terminal-container {
