@@ -436,9 +436,21 @@
       observer.observe(containerEl);
       resizeObserver = observer;
 
-      // Initial fit after layout settles (double rAF)
+      // Initial fit after layout settles (double rAF).
       requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
+        requestAnimationFrame(async () => {
+          // Wait for the monospace web font before the first fit. On a cold
+          // start (now hit because the app boots straight into the Lens IDE),
+          // the font may not be loaded yet, so fitAddon.fit() miscomputes the
+          // cell size and the canvas leaves a grey band that only a later
+          // resize/remount fixes. fonts.ready resolves instantly once cached.
+          try {
+            await document.fonts.ready;
+          } catch {
+            // fonts API unavailable — proceed anyway
+          }
+          if (cancelled) return;
+
           fitTerminal();
           resizePtyIfChanged();
           // Gate: terminal is now fully initialized and ready for ai-output events
@@ -448,6 +460,14 @@
             handleAiOutput(evt.payload);
           }
           pendingEvents = [];
+
+          // Backstop re-fit: catches any late layout settling on the first
+          // boot into Lens (panel height resolving after mount).
+          setTimeout(() => {
+            if (cancelled) return;
+            fitTerminal();
+            resizePtyIfChanged();
+          }, 250);
         });
       });
     }
