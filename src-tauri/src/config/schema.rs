@@ -323,21 +323,12 @@ pub struct AdvancedConfig {
 pub struct SidebarConfig {
     #[serde(default)]
     pub collapsed: bool,
-    #[serde(default = "default_sidebar_mode")]
-    pub mode: String,
 }
 
 impl Default for SidebarConfig {
     fn default() -> Self {
-        Self {
-            collapsed: false,
-            mode: "mirror".into(),
-        }
+        Self { collapsed: false }
     }
-}
-
-fn default_sidebar_mode() -> String {
-    "mirror".to_string()
 }
 
 /// Lens workspace panel layout state.

@@ -32,25 +32,11 @@ describe('Sidebar.svelte', () => {
     assert.ok(!src.includes("import ChatList"), 'ChatList should be removed from Sidebar');
   });
 
-  it('has Chat navigation item', () => {
-    assert.ok(src.includes("id: 'chat'"), 'Should have Chat nav item');
-    assert.ok(src.includes("label: 'Chat'"), 'Should label it Chat');
-  });
-
-  it('has Terminal navigation item', () => {
-    assert.ok(src.includes("id: 'terminal'"), 'Should have Terminal nav item');
-    assert.ok(src.includes("label: 'Terminal'"), 'Should label it Terminal');
-  });
-
-  it('derives appMode from navigationStore', () => {
-    assert.ok(src.includes('navigationStore.appMode'), 'Should derive appMode from store');
-  });
-
-  it('has mode-conditional rendering for mirror vs lens', () => {
-    assert.ok(
-      src.includes("appMode === 'mirror'"),
-      'Should conditionally render based on appMode'
-    );
+  it('always renders the Lens ProjectStrip (Mirror nav removed)', () => {
+    assert.ok(src.includes('ProjectStrip'), 'Should render ProjectStrip');
+    assert.ok(src.includes('lens-sidebar'), 'Should use the lens-sidebar wrapper');
+    assert.ok(!src.includes('navigationStore.appMode'), 'Should no longer branch on appMode');
+    assert.ok(!src.includes("id: 'chat'"), 'Mirror chat/terminal nav tabs should be gone');
   });
 
   it('has Settings navigation item pinned above footer', () => {
@@ -85,10 +71,6 @@ describe('Sidebar.svelte', () => {
     assert.ok(src.includes('.sidebar.collapsed'), 'Should style collapsed state');
   });
 
-  it('has sidebar-nav CSS class', () => {
-    assert.ok(src.includes('.sidebar-nav'), 'Should have nav CSS');
-  });
-
   it('has nav-item CSS class', () => {
     assert.ok(src.includes('.nav-item'), 'Should have nav item CSS');
   });
@@ -103,8 +85,8 @@ describe('Sidebar.svelte', () => {
     assert.ok(src.includes('<svg'), 'Should use SVG icons');
   });
 
-  it('has aria-label on nav buttons', () => {
-    assert.ok(src.includes('aria-label={tab.label}'), 'Should have aria-label on nav buttons');
+  it('has aria-label on the Settings nav button', () => {
+    assert.ok(src.includes('aria-label="Settings"'), 'Settings button should have an aria-label');
   });
 
   it('shows voice status indicator', () => {
@@ -126,31 +108,6 @@ describe('Sidebar.svelte', () => {
 
   it('has tooltips for collapsed state', () => {
     assert.ok(src.includes('data-tooltip'), 'Should have tooltip attribute');
-  });
-});
-
-// ---- Sidebar: mode support ----
-
-describe('sidebar: mode support', () => {
-  const src = readComponent('Sidebar.svelte');
-
-  it('derives appMode from navigationStore', () => {
-    assert.ok(src.includes('navigationStore.appMode'), 'Should derive appMode');
-  });
-
-  it('conditionally renders based on appMode', () => {
-    assert.ok(
-      src.includes("appMode === 'mirror'"),
-      'Should branch on appMode for mirror mode'
-    );
-  });
-
-  it('has lens mode placeholder in sidebar', () => {
-    // In lens mode the nav area is an empty spacer
-    assert.ok(
-      src.includes("appMode === 'mirror'") || src.includes("{:else}"),
-      'Should have else branch for lens mode'
-    );
   });
 });
 

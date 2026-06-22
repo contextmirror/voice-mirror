@@ -20,7 +20,6 @@ describe('ChatSessionDropdown', () => {
   it('should import required stores', () => {
     assert.ok(src.includes('chatStore'), 'Should import chatStore');
     assert.ok(src.includes('projectStore'), 'Should import projectStore');
-    assert.ok(src.includes('navigationStore'), 'Should import navigationStore');
   });
 
   it('should import chat API functions', () => {
@@ -28,7 +27,6 @@ describe('ChatSessionDropdown', () => {
     assert.ok(src.includes('chatSave'), 'Should import chatSave');
     assert.ok(src.includes('chatDelete'), 'Should import chatDelete');
     assert.ok(src.includes('chatRename'), 'Should import chatRename');
-    assert.ok(src.includes('chatList'), 'Should import chatList');
   });
 
   it('should have date grouping logic', () => {
@@ -83,8 +81,10 @@ describe('ChatSessionDropdown', () => {
     assert.ok(src.includes('generateTitle'), 'Should auto-generate titles');
   });
 
-  it('should handle both Mirror and Lens modes', () => {
-    assert.ok(src.includes('appMode') || src.includes('navigationStore'), 'Should check app mode');
+  it('always uses project sessions (Mirror mode removed)', () => {
+    assert.ok(src.includes('projectStore.sessions'), 'Should derive sessions from projectStore');
+    assert.ok(!src.includes('isLensMode'), 'Should no longer branch on mode');
+    assert.ok(!src.includes('mirrorChats'), 'Should no longer track mirrorChats');
   });
 
   it('should show active session highlight', () => {

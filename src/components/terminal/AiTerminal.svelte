@@ -32,6 +32,14 @@
   let pendingEvents = [];
   let providerSwitchHandler = null;
 
+  // Cover the terminal with the app background while no provider is running.
+  // An empty ghostty terminal paints its cells with the WASM's built-in default
+  // background (#0c0d10) — Ghostty treats a pure-black #000000 theme bg as
+  // "unset" and falls back to it — which reads as a grey box against the
+  // #000000 UI on cold start. The cover guarantees the empty/stopped state
+  // matches the surrounding background; it's hidden the moment a provider runs.
+  let showEmptyCover = $derived(!aiStatusStore.running);
+
   // Provider switch: hide the canvas via direct DOM style during the transition
   // so the user never sees garbled partial-frame renders from the TUI setup.
   // We use direct DOM manipulation (not Svelte $state) because Svelte batches
@@ -56,7 +64,11 @@
    * Maps design tokens to ghostty-web's ITheme keys.
    */
   function buildTermTheme() {
-    const bg = getCssVar('--bg') || '#0c0d10';
+    // Fallback is pure black to match the app's --bg (#000000). On a cold boot
+    // the terminal can construct before --bg is applied; a near-black fallback
+    // like #0c0d10 would render fractionally lighter than the surrounding UI and
+    // read as a grey box on the empty/stopped terminal until a provider starts.
+    const bg = getCssVar('--bg') || '#000000';
     const bgElevated = getCssVar('--bg-elevated') || '#14161c';
     const text = getCssVar('--text') || '#e4e4e7';
     const textStrong = getCssVar('--text-strong') || '#fafafa';
@@ -92,6 +104,24 @@
       brightCyan: ok,
       brightWhite: textStrong,
     };
+  }
+
+  /**
+   * Apply the terminal theme, retrying until the app's CSS variables are loaded.
+   *
+   * On a cold boot the terminal can mount before the theme vars are applied to
+   * :root, so buildTermTheme() falls back to #0c0d10 — fractionally lighter than
+   * the #000000 UI, which shows as a grey box that only a remount clears.
+   * getCssVar('--bg') returns '' until the vars exist, so we keep re-applying
+   * (ghostty-web now honors post-open theme changes) until --bg resolves, then
+   * the final apply paints the real background.
+   */
+  function applyThemeWhenReady(tries = 0) {
+    if (!term) return;
+    term.options.theme = buildTermTheme();
+    if (!getCssVar('--bg') && tries < 20) {
+      setTimeout(() => applyThemeWhenReady(tries + 1), 100);
+    }
   }
 
   /**
@@ -436,9 +466,21 @@
       observer.observe(containerEl);
       resizeObserver = observer;
 
-      // Initial fit after layout settles (double rAF)
+      // Initial fit after layout settles (double rAF).
       requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
+        requestAnimationFrame(async () => {
+          // Wait for the monospace web font before the first fit. On a cold
+          // start (now hit because the app boots straight into the Lens IDE),
+          // the font may not be loaded yet, so fitAddon.fit() miscomputes the
+          // cell size and the canvas leaves a grey band that only a later
+          // resize/remount fixes. fonts.ready resolves instantly once cached.
+          try {
+            await document.fonts.ready;
+          } catch {
+            // fonts API unavailable — proceed anyway
+          }
+          if (cancelled) return;
+
           fitTerminal();
           resizePtyIfChanged();
           // Gate: terminal is now fully initialized and ready for ai-output events
@@ -448,6 +490,15 @@
             handleAiOutput(evt.payload);
           }
           pendingEvents = [];
+
+          // Apply the theme once the app's CSS variables are actually loaded.
+          // On a cold boot the terminal can mount before the theme vars are set,
+          // so buildTermTheme() falls back to #0c0d10 — slightly lighter than the
+          // #000000 UI around it, which reads as a grey box that only a remount
+          // (after vars load) clears. getCssVar('--bg') is empty until the vars
+          // are applied, so retry briefly until it resolves, then paint the real
+          // background. (ghostty-web now honors post-open theme changes.)
+          applyThemeWhenReady();
         });
       });
     }
@@ -514,6 +565,9 @@
 
 <div class="terminal-view">
   <div class="terminal-container" class:ready={initialized} bind:this={containerEl}></div>
+  {#if showEmptyCover}
+    <div class="terminal-empty-cover"></div>
+  {/if}
 </div>
 
 <style>
@@ -526,6 +580,16 @@
     /* Visual spacing around terminal — applied here (not on inner container)
        so ghostty-web's canvas fills the container exactly without clipping */
     padding: 4px;
+    position: relative;
+  }
+
+  /* Covers the empty/stopped terminal so ghostty's default (grey) cell
+     background never shows; hidden as soon as a provider is running. */
+  .terminal-empty-cover {
+    position: absolute;
+    inset: 0;
+    background: var(--bg);
+    pointer-events: none;
   }
 
   .terminal-container {

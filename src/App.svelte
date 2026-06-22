@@ -62,10 +62,6 @@
       if (collapsed !== undefined) {
         navigationStore.initSidebarState(collapsed);
       }
-      const mode = configStore.value?.sidebar?.mode;
-      if (mode) {
-        navigationStore.initMode(/** @type {'mirror'|'lens'} */ (mode));
-      }
       const projects = configStore.value?.projects;
       if (projects) {
         projectStore.init(projects);
@@ -234,7 +230,7 @@
       setActionHandler('go-to-line', () => { commandPaletteMode = 'goto-line'; commandPaletteVisible = true; });
       setActionHandler('go-to-symbol', () => { commandPaletteMode = 'goto-symbol'; commandPaletteVisible = true; });
       setActionHandler('open-text-search', () => {
-        navigationStore.setMode('lens');
+        navigationStore.setView('lens');
         if (!layoutStore.showFileTree) layoutStore.toggleFileTree();
         window.dispatchEvent(new CustomEvent('lens-focus-search'));
       });

@@ -2,8 +2,7 @@
   import { tick } from 'svelte';
   import { projectStore } from '../../lib/stores/project.svelte.js';
   import { chatStore } from '../../lib/stores/chat.svelte.js';
-  import { navigationStore } from '../../lib/stores/navigation.svelte.js';
-  import { chatList, chatLoad, chatSave, chatDelete, chatRename } from '../../lib/api.js';
+  import { chatLoad, chatSave, chatDelete, chatRename } from '../../lib/api.js';
   import { uid, unwrapResult } from '../../lib/utils.js';
   import { clampToViewport } from '$lib/clamp-to-viewport.js';
 
@@ -36,44 +35,12 @@
   /** Keyboard navigation */
   let selectedIndex = $state(-1);
 
-  /** Mirror-mode chat list (loaded from backend) */
-  let mirrorChats = $state([]);
-
   /** Auto-save tracking */
   let lastSavedMessageCount = 0;
   let saveTimeout = null;
 
-  /** Mode detection */
-  let isLensMode = $derived(navigationStore.appMode === 'lens');
-
-  /**
-   * Unified sessions list — Lens uses projectStore.sessions,
-   * Mirror uses locally-loaded chats filtered to exclude project-scoped ones.
-   */
-  let allSessions = $derived(isLensMode ? projectStore.sessions : mirrorChats);
-
-  /**
-   * Load Mirror-mode chats on mount.
-   * Filters out chats that have a projectPath (those belong to Lens mode).
-   */
-  $effect(() => {
-    if (!isLensMode) {
-      loadMirrorChats();
-    }
-  });
-
-  async function loadMirrorChats() {
-    try {
-      const result = await chatList();
-      const data = unwrapResult(result) || [];
-      mirrorChats = Array.isArray(data)
-        ? data.filter((c) => !c.projectPath).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
-        : [];
-    } catch (err) {
-      console.error('[ChatSessionDropdown] Failed to load chats:', err);
-      mirrorChats = [];
-    }
-  }
+  /** Sessions for the active project. */
+  let allSessions = $derived(projectStore.sessions);
 
   /**
    * Group sessions by date (Today, Yesterday, This Week, Older).
@@ -182,10 +149,10 @@
 
     const toSave = {
       id: activeId,
-      name: session.name || (isLensMode ? 'New Session' : 'New Chat'),
+      name: session.name || 'New Session',
       createdAt: session.createdAt || Date.now(),
       updatedAt: Date.now(),
-      projectPath: isLensMode ? (projectStore.root) : undefined,
+      projectPath: projectStore.root,
       messages: chatStore.messages.map((m) => ({
         id: m.id,
         role: m.role,
@@ -227,13 +194,9 @@
     });
   }
 
-  /** Reload sessions for the current mode */
+  /** Reload sessions for the active project. */
   function reloadSessions() {
-    if (isLensMode) {
-      projectStore.loadSessions();
-    } else {
-      loadMirrorChats();
-    }
+    projectStore.loadSessions();
   }
 
   /**
@@ -298,14 +261,13 @@
     const now = Date.now();
     const chat = {
       id,
-      name: isLensMode ? 'New Session' : 'New Chat',
+      name: 'New Session',
       messages: [],
       createdAt: now,
       updatedAt: now,
     };
 
-    // Add projectPath for Lens mode
-    if (isLensMode && projectStore.activeProject) {
+    if (projectStore.activeProject) {
       chat.projectPath = projectStore.activeProject.path;
     }
 
