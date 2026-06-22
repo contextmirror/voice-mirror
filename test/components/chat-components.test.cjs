@@ -392,6 +392,42 @@ describe('ChatPanel.svelte', () => {
     assert.ok(src.includes("forceSmooth ? 'smooth'"), 'Should use smooth for forced scroll');
     assert.ok(src.includes("chatStore.isStreaming ? 'instant'"), 'Should use instant during streaming');
   });
+
+  // ---- Image drag-and-drop ----
+
+  it('wires drag-and-drop handlers on the chat panel', () => {
+    assert.ok(src.includes('ondrop={handleDrop}'), 'Should bind ondrop on the panel');
+    assert.ok(src.includes('ondragover={handleDragOver}'), 'Should bind ondragover on the panel');
+    assert.ok(src.includes('ondragenter={handleDragEnter}'), 'Should bind ondragenter on the panel');
+    assert.ok(src.includes('ondragleave={handleDragLeave}'), 'Should bind ondragleave on the panel');
+  });
+
+  it('only reacts to OS file drags, not internal app drags', () => {
+    assert.ok(src.includes('function isFileDrag'), 'Should have isFileDrag guard');
+    assert.ok(src.includes("includes('Files')"), 'Should detect Files in dataTransfer types');
+  });
+
+  it('reads dropped images as data URLs and queues them as attachments', () => {
+    assert.ok(src.includes('readAsDataURL'), 'Should read dropped files as data URLs');
+    assert.ok(src.includes("f.type.startsWith('image/')"), 'Should filter to image files');
+    const dropBlock = src.slice(src.indexOf('async function handleDrop'));
+    assert.ok(dropBlock.includes('attachmentsStore.add'), 'handleDrop should queue via attachmentsStore.add');
+  });
+
+  it('prevents default on drag to stop WebView2 navigating to the file', () => {
+    assert.ok(src.includes('e.preventDefault()'), 'Should preventDefault on drag/drop');
+  });
+
+  it('shows a drop overlay while dragging, gated on dragActive', () => {
+    assert.ok(src.includes('dragActive'), 'Should track dragActive state');
+    assert.ok(src.includes('{#if dragActive}'), 'Should render overlay only while dragging');
+    assert.ok(src.includes('drop-overlay'), 'Should have a drop-overlay element');
+  });
+
+  it('drop overlay does not block input/mic (pointer-events: none)', () => {
+    const overlayCss = src.slice(src.indexOf('.drop-overlay {'));
+    assert.ok(overlayCss.includes('pointer-events: none'), 'Overlay must not intercept pointer/drop events');
+  });
 });
 
 // ---- ScreenshotPicker.svelte ----
