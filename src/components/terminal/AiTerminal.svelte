@@ -95,6 +95,24 @@
   }
 
   /**
+   * Apply the terminal theme, retrying until the app's CSS variables are loaded.
+   *
+   * On a cold boot the terminal can mount before the theme vars are applied to
+   * :root, so buildTermTheme() falls back to #0c0d10 — fractionally lighter than
+   * the #000000 UI, which shows as a grey box that only a remount clears.
+   * getCssVar('--bg') returns '' until the vars exist, so we keep re-applying
+   * (ghostty-web now honors post-open theme changes) until --bg resolves, then
+   * the final apply paints the real background.
+   */
+  function applyThemeWhenReady(tries = 0) {
+    if (!term) return;
+    term.options.theme = buildTermTheme();
+    if (!getCssVar('--bg') && tries < 20) {
+      setTimeout(() => applyThemeWhenReady(tries + 1), 100);
+    }
+  }
+
+  /**
    * Send resize to PTY only if cols/rows actually changed.
    * Prevents duplicate SIGWINCH signals.
    */
@@ -451,59 +469,24 @@
           }
           if (cancelled) return;
 
-          // Re-apply the theme now that CSS variables are guaranteed loaded.
-          // The construction-time theme can be built before the app's theme
-          // vars are set, leaving ghostty on its grey default; the theme effect
-          // may also have run before this async terminal existed. ghostty-web
-          // now honors theme changes after open(), so this paints the correct
-          // (black) background.
-          term.options.theme = buildTermTheme();
-
           fitTerminal();
           resizePtyIfChanged();
           // Gate: terminal is now fully initialized and ready for ai-output events
           initialized = true;
-
-          // TEMP DEFINITIVE DIAGNOSTIC (grey box): read the ACTUAL canvas pixel
-          // + what element is physically at the terminal's centre. This tells us
-          // whether the grey is the ghostty canvas painting grey, or a native
-          // webview overlaid on top (which is invisible to DOM measurement).
-          setTimeout(() => {
-            if (cancelled) return;
-            try {
-              const cv = containerEl?.querySelector('canvas');
-              let pixel = 'no-canvas';
-              if (cv) {
-                const ctx = cv.getContext('2d');
-                if (ctx) {
-                  const px = ctx.getImageData(Math.floor(cv.width / 2), Math.floor(cv.height / 2), 1, 1).data;
-                  pixel = `rgba(${px[0]},${px[1]},${px[2]},${px[3]})`;
-                } else {
-                  pixel = 'no-2d-ctx(webgl?)';
-                }
-              }
-              const r = containerEl?.getBoundingClientRect();
-              let elAtCentre = 'n/a';
-              if (r) {
-                const el = document.elementFromPoint(Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2));
-                elAtCentre = el ? `${el.tagName.toLowerCase()}.${(el.className || '').toString().split(' ')[0]}` : 'null';
-              }
-              console.warn('[term-pixel]', JSON.stringify({
-                canvasCentrePixel: pixel,
-                canvasW: cv?.width,
-                canvasH: cv?.height,
-                elementAtCentre: elAtCentre,
-                themeBg: buildTermTheme().background,
-              }));
-            } catch (e) {
-              console.warn('[term-pixel] failed', String(e));
-            }
-          }, 1500);
           // Replay any events that arrived during initialization
           for (const evt of pendingEvents) {
             handleAiOutput(evt.payload);
           }
           pendingEvents = [];
+
+          // Apply the theme once the app's CSS variables are actually loaded.
+          // On a cold boot the terminal can mount before the theme vars are set,
+          // so buildTermTheme() falls back to #0c0d10 — slightly lighter than the
+          // #000000 UI around it, which reads as a grey box that only a remount
+          // (after vars load) clears. getCssVar('--bg') is empty until the vars
+          // are applied, so retry briefly until it resolves, then paint the real
+          // background. (ghostty-web now honors post-open theme changes.)
+          applyThemeWhenReady();
         });
       });
     }
