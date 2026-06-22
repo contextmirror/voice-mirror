@@ -451,6 +451,14 @@
           }
           if (cancelled) return;
 
+          // Re-apply the theme now that CSS variables are guaranteed loaded.
+          // The construction-time theme can be built before the app's theme
+          // vars are set, leaving ghostty on its grey default; the theme effect
+          // may also have run before this async terminal existed. ghostty-web
+          // now honors theme changes after open(), so this paints the correct
+          // (black) background.
+          term.options.theme = buildTermTheme();
+
           fitTerminal();
           resizePtyIfChanged();
           // Gate: terminal is now fully initialized and ready for ai-output events
