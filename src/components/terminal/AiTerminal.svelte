@@ -127,17 +127,25 @@
     try {
       const c = containerEl;
       const cv = c?.querySelector('canvas');
+      const rect = c?.getBoundingClientRect();
+      // Walk up the ancestor chain logging height + background so we can find
+      // the grey element (the terminal itself measures black + correctly sized).
+      const chain = [];
+      let el = c;
+      for (let i = 0; el && i < 10; i++) {
+        const cs = getComputedStyle(el);
+        chain.push(`${el.tagName.toLowerCase()}.${(el.className || '').toString().split(' ')[0]} h=${el.clientHeight} bg=${cs.backgroundColor}`);
+        el = el.parentElement;
+      }
       // console.warn (not log) so the runtime capture forwards it to frontend.jsonl
       console.warn('[term-diag]', tag, JSON.stringify({
         initialized,
         containerH: c?.clientHeight,
-        containerW: c?.clientWidth,
         canvasH: cv?.clientHeight,
-        canvasW: cv?.clientWidth,
-        cols: term?.cols,
         rows: term?.rows,
-        containerBg: c && getComputedStyle(c).backgroundColor,
-        viewBg: c?.parentElement && getComputedStyle(c.parentElement).backgroundColor,
+        rectTop: rect && Math.round(rect.top),
+        rectH: rect && Math.round(rect.height),
+        chain,
       }));
     } catch (e) {
       console.warn('[term-diag] failed', e);
