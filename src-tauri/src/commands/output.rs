@@ -105,6 +105,86 @@ pub fn get_output_logs(
     }
 }
 
+#[derive(Debug, Deserialize)]
+pub struct ExportDiagnosticsParams {
+    /// How many recent lines to include per channel (default 200).
+    pub last: Option<usize>,
+}
+
+/// Bundle recent logs from every channel — plus the standalone MCP server's
+/// process log (a separate process, file-only) — into one plain-text blob the
+/// user can copy from Settings and paste for debugging. This is the only place
+/// the MCP binary's logs surface in the app, since it doesn't share the
+/// in-memory OutputStore.
+#[tauri::command]
+pub fn export_diagnostics(
+    params: ExportDiagnosticsParams,
+    output_store: State<'_, Arc<OutputStore>>,
+) -> IpcResponse {
+    use std::fmt::Write as _;
+
+    let last = params.last.unwrap_or(200);
+    let mut out = String::new();
+
+    let _ = writeln!(out, "=== Voice Mirror Diagnostics ===");
+    let _ = writeln!(out, "version: {}", env!("CARGO_PKG_VERSION"));
+    let _ = writeln!(out, "os: {} ({})", std::env::consts::OS, std::env::consts::ARCH);
+    let _ = writeln!(out, "lines per channel: {}", last);
+
+    // In-memory system channels (the app process).
+    let system_channels = [
+        Channel::App,
+        Channel::Cli,
+        Channel::Voice,
+        Channel::Mcp,
+        Channel::Browser,
+        Channel::Frontend,
+    ];
+    for channel in system_channels {
+        let (entries, total) = output_store.query(channel, None, Some(last), None);
+        let _ = writeln!(
+            out,
+            "\n----- {} ({} of {} lines) -----",
+            channel.as_str(),
+            entries.len(),
+            total
+        );
+        for e in &entries {
+            let _ = writeln!(out, "{}", e.format_line());
+        }
+    }
+
+    // Standalone MCP server process log (file-only — separate process).
+    let mcp_path = crate::services::output::mcp_server_log_path();
+    let mcp_entries = crate::services::output::read_log_file(&mcp_path, Some(last));
+    let _ = writeln!(
+        out,
+        "\n----- mcp-server [process] ({} lines from {}) -----",
+        mcp_entries.len(),
+        mcp_path.display()
+    );
+    for e in &mcp_entries {
+        let _ = writeln!(out, "{}", e.format_line());
+    }
+
+    // Project channels (dev server / browser console), if any.
+    for proj in output_store.list_project_channels() {
+        let (entries, total) = output_store.query_project(&proj.label, None, Some(last), None);
+        let _ = writeln!(
+            out,
+            "\n----- project: {} ({} of {} lines) -----",
+            proj.label,
+            entries.len(),
+            total
+        );
+        for e in &entries {
+            let _ = writeln!(out, "{}", e.format_line());
+        }
+    }
+
+    IpcResponse::ok(serde_json::json!({ "text": out }))
+}
+
 // ---------------------------------------------------------------------------
 // Project channel commands
 // ---------------------------------------------------------------------------

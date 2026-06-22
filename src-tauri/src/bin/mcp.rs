@@ -11,20 +11,42 @@
 
 use std::path::PathBuf;
 
+use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+
 use voice_mirror_lib::ipc::pipe_client;
 use voice_mirror_lib::mcp::pipe_router::PipeRouter;
 use voice_mirror_lib::mcp::server::run_server;
+use voice_mirror_lib::services::output::{self, FileLayer};
 
 #[tokio::main]
 async fn main() {
-    // Initialize logging to stderr (stdout is reserved for JSON-RPC).
-    tracing_subscriber::fmt()
-        .with_writer(std::io::stderr)
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
-        )
+    // Logging goes to TWO sinks:
+    // - stderr (stdout is reserved for JSON-RPC; Claude Code captures stderr)
+    // - a JSONL file under the shared log dir, so failures/panics are persisted
+    //   where the app's diagnostics export (and a connected Claude) can read
+    //   them instead of vanishing when this separate process dies.
+    let log_path = output::mcp_server_log_path();
+    let filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new("info"));
+
+    tracing_subscriber::registry()
+        .with(filter)
+        .with(fmt::layer().with_writer(std::io::stderr))
+        .with(FileLayer::new(log_path.clone()))
         .init();
+
+    // Persist panics to the log file before the process unwinds — stderr alone
+    // is captured only by Claude Code, so without this a crash leaves no trace
+    // Voice Mirror can surface. Chain to the default hook so behavior is
+    // otherwise unchanged.
+    let default_hook = std::panic::take_hook();
+    let panic_log_path = log_path.clone();
+    std::panic::set_hook(Box::new(move |info| {
+        output::append_log_line(&panic_log_path, "ERROR", &format!("PANIC: {}", info));
+        default_hook(info);
+    }));
+
+    tracing::info!("MCP server starting; logging to {}", log_path.display());
 
     // Resolve data directory
     let data_dir = std::env::var("VOICE_MIRROR_DATA_DIR")

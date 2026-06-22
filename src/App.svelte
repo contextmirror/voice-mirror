@@ -32,6 +32,8 @@
   import CommandPalette from './components/lens/CommandPalette.svelte';
   import { layoutStore } from './lib/stores/layout.svelte.js';
   import OverlayPanel from './components/overlay/OverlayPanel.svelte';
+  import WelcomeWizard from './components/onboarding/WelcomeWizard.svelte';
+  import { onboardingStore } from './lib/stores/onboarding.svelte.js';
   import ResizeEdges from './components/shared/ResizeEdges.svelte';
   import StatsBar from './components/shared/StatsBar.svelte';
   import ToastContainer from './components/shared/ToastContainer.svelte';
@@ -504,6 +506,15 @@
   let activeView = $derived(navigationStore.activeView);
   let isOverlay = $derived(overlayStore.isOverlayMode);
 
+  // First-run onboarding: show the welcome wizard once config has loaded and the
+  // user hasn't completed/skipped it yet. Gated on the persisted config flag so
+  // it never reappears after completion — unless the user re-opens it from
+  // Settings (onboardingStore.forceOpen).
+  let showWelcome = $derived(
+    configStore.loaded &&
+      (configStore.value?.system?.onboardingCompleted !== true || onboardingStore.forceOpen)
+  );
+
   // Provider status for titlebar
   let aiProviderType = $derived(aiStatusStore.providerType || 'claude');
   let providerIcon = $derived(PROVIDER_ICONS[aiProviderType] || null);
@@ -511,6 +522,8 @@
 
 {#if isOverlay}
   <OverlayPanel />
+{:else if showWelcome}
+  <WelcomeWizard />
 {:else}
   <ResizeEdges />
   <div class="app-shell">

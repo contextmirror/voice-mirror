@@ -112,6 +112,7 @@ const DEFAULT_CONFIG = {
   system: {
     acceptedDisclaimer: false,
     firstLaunchDone: false,
+    onboardingCompleted: false,
     lastGreetingPeriod: null,
     lastSeenVersion: null,
   },

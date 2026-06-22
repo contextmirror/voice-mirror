@@ -428,6 +428,10 @@ describe('api.js -- exported async functions', () => {
     'pushProjectLog',
     'listProjectChannels',
     'getOutputLogs',
+    'exportDiagnostics',
+    'detectProviders',
+    'installProvider',
+    'probeProviderAuth',
     'logFrontendError',
     // Browser History
     'lensAddHistoryEntry',

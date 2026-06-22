@@ -10,15 +10,15 @@ use super::IpcResponse;
 
 /// Information about a single CLI tool.
 #[derive(serde::Serialize)]
-struct ToolInfo {
-    name: String,
-    available: bool,
-    version: Option<String>,
-    path: Option<String>,
+pub(crate) struct ToolInfo {
+    pub name: String,
+    pub available: bool,
+    pub version: Option<String>,
+    pub path: Option<String>,
 }
 
 /// Detect a CLI tool by running `<tool> --version` and `which`/`where`.
-fn detect_tool(name: &str) -> ToolInfo {
+pub(crate) fn detect_tool(name: &str) -> ToolInfo {
     let mut info = ToolInfo {
         name: name.to_string(),
         available: false,

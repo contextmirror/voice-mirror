@@ -1003,6 +1003,109 @@ impl<S: Subscriber> Layer<S> for OutputLayer {
 }
 
 // ---------------------------------------------------------------------------
+// FileLayer — logging for the standalone MCP binary (a separate process)
+// ---------------------------------------------------------------------------
+
+/// Path to the standalone MCP server's log file under the shared log dir.
+///
+/// The MCP binary is a separate process and cannot share the app's in-memory
+/// OutputStore, so its logs (and panics) are persisted here instead of being
+/// lost to stderr. Kept distinct from `mcp.jsonl` (owned by the app process) so
+/// two processes never append to the same file.
+pub fn mcp_server_log_path() -> PathBuf {
+    super::platform::get_log_dir()
+        .join("current")
+        .join("mcp-server.jsonl")
+}
+
+/// Read the last `last` entries from an arbitrary JSONL log file (e.g. the MCP
+/// server's process log). Returns an empty vec if the file is missing.
+pub fn read_log_file(path: &Path, last: Option<usize>) -> Vec<LogEntry> {
+    read_entries_from_file(path, None, last, None).0
+}
+
+/// Append a single line to a JSONL log file in the [`LogEntry`] format.
+///
+/// Used by the MCP binary's panic hook, which must not depend on the tracing
+/// machinery still being intact when it runs.
+pub fn append_log_line(path: &Path, level: &str, message: &str) {
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64;
+    let entry = LogEntry {
+        id: NEXT_ENTRY_ID.fetch_add(1, Ordering::Relaxed),
+        timestamp,
+        level: level.to_string(),
+        channel: Channel::Mcp,
+        message: message.to_string(),
+    };
+    append_entry_to_file(path, &entry);
+}
+
+/// A minimal tracing layer that persists events as JSONL to a single file.
+///
+/// Unlike [`OutputLayer`] it has no ring buffer and no Tauri AppHandle — it only
+/// appends to disk. Built for the standalone MCP binary so its logs survive in a
+/// file the app's diagnostics export (and a connected Claude) can read.
+pub struct FileLayer {
+    path: PathBuf,
+    write_count: AtomicU64,
+}
+
+impl FileLayer {
+    pub fn new(path: PathBuf) -> Self {
+        if let Some(parent) = path.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+        Self {
+            path,
+            write_count: AtomicU64::new(0),
+        }
+    }
+}
+
+impl<S: Subscriber> Layer<S> for FileLayer {
+    fn on_event(&self, event: &tracing::Event<'_>, _ctx: Context<'_, S>) {
+        let metadata = event.metadata();
+        let level = match *metadata.level() {
+            tracing::Level::ERROR => "ERROR",
+            tracing::Level::WARN => "WARN",
+            tracing::Level::INFO => "INFO",
+            tracing::Level::DEBUG => "DEBUG",
+            tracing::Level::TRACE => "TRACE",
+        };
+
+        let channel = Channel::from_target(metadata.target());
+
+        let mut visitor = MessageVisitor::new();
+        event.record(&mut visitor);
+        let message = visitor.into_message();
+
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+
+        let entry = LogEntry {
+            id: NEXT_ENTRY_ID.fetch_add(1, Ordering::Relaxed),
+            timestamp,
+            level: level.to_string(),
+            channel,
+            message,
+        };
+
+        append_entry_to_file(&self.path, &entry);
+
+        // Bound the file size: check for truncation every 100 writes.
+        let count = self.write_count.fetch_add(1, Ordering::Relaxed);
+        if count % 100 == 0 {
+            truncate_file_if_needed(&self.path);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
