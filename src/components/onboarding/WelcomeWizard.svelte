@@ -21,6 +21,7 @@
   import { unwrapResult } from '../../lib/utils.js';
   import { updateConfig } from '../../lib/stores/config.svelte.js';
   import { navigationStore } from '../../lib/stores/navigation.svelte.js';
+  import { onboardingStore } from '../../lib/stores/onboarding.svelte.js';
   import { toastStore } from '../../lib/stores/toast.svelte.js';
   import Button from '../shared/Button.svelte';
 
@@ -162,9 +163,23 @@
 
   async function finish(message) {
     await updateConfig({ system: { onboardingCompleted: true } });
-    if (message) toastStore.addToast({ message, severity: 'success' });
+    onboardingStore.close();
+    if (message) {
+      // Orient the user to the core loop on the way out.
+      toastStore.addToast({
+        message: `${message} Press your push-to-talk key to talk, or just type below.`,
+        severity: 'success',
+      });
+    }
     navigationStore.setView('chat');
     onDone();
+  }
+
+  function handleKeydown(e) {
+    // Escape skips (never trap the user), unless mid-operation.
+    if (e.key === 'Escape' && !busy && !installing) {
+      skip();
+    }
   }
 
   async function copyHint(text, label) {
@@ -177,8 +192,10 @@
   }
 </script>
 
+<svelte:window onkeydown={handleKeydown} />
+
 <div class="welcome-overlay">
-  <div class="welcome-card">
+  <div class="welcome-card" role="dialog" aria-modal="true" aria-label="Welcome to Voice Mirror" tabindex="-1">
     {#if loading}
       <div class="welcome-loading">
         <div class="spinner"></div>
@@ -225,6 +242,9 @@
             {/each}
           </div>
         </details>
+      {:else if providers.length === 0}
+        <!-- Detection failed entirely -->
+        <p class="guide-intro">Couldn't detect your AI tools. Try Re-check, or skip and set one up later in Settings.</p>
       {:else}
         <!-- Guided: new user -> checklist -->
         <p class="guide-intro">Connect an AI coding CLI to get started:</p>

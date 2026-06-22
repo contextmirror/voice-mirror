@@ -10,6 +10,7 @@
   import Toggle from '../shared/Toggle.svelte';
   import TextInput from '../shared/TextInput.svelte';
   import Button from '../shared/Button.svelte';
+  import { onboardingStore } from '../../lib/stores/onboarding.svelte.js';
 
   // ---- Local state ----
 
@@ -213,6 +214,20 @@
     </div>
   </section>
 
+  <!-- Setup -->
+  <section class="settings-section">
+    <h3>Setup</h3>
+    <p class="setup-hint">
+      Re-run the first-run welcome wizard to detect, install, sign into, or switch
+      AI providers.
+    </p>
+    <div class="settings-group">
+      <div class="setup-actions">
+        <Button small onClick={() => onboardingStore.open()}>Run welcome setup again</Button>
+      </div>
+    </div>
+  </section>
+
   <!-- Save Button -->
   <div class="settings-actions">
     <Button variant="primary" onClick={saveBehaviorSettings} disabled={saving}>
@@ -305,5 +320,16 @@
     padding: 16px 0;
     border-top: 1px solid var(--border);
     margin-top: 8px;
+  }
+
+  .setup-hint {
+    font-size: 12px;
+    color: var(--muted);
+    margin: 0 0 10px 0;
+    line-height: 1.5;
+  }
+
+  .setup-actions {
+    padding: 8px;
   }
 </style>

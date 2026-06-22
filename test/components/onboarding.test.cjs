@@ -168,6 +168,43 @@ describe('frontend: WelcomeWizard', () => {
   });
 });
 
+describe('Phase 4: polish — re-run, a11y, edge cases', () => {
+  it('onboarding store supports forced re-open', () => {
+    const store = read('src/lib/stores/onboarding.svelte.js');
+    assert.ok(store.includes('forceOpen'), 'Should track forceOpen');
+    assert.ok(store.includes('open()') && store.includes('close()'), 'Should expose open/close');
+  });
+
+  it('App gate honours a forced re-open', () => {
+    const app = read('src/App.svelte');
+    assert.ok(app.includes('onboardingStore.forceOpen'), 'showWelcome should consider forceOpen');
+  });
+
+  it('Settings offers "Run welcome setup again"', () => {
+    const bs = read('src/components/settings/BehaviorSettings.svelte');
+    assert.ok(bs.includes('onboardingStore.open()'), 'Should re-open the wizard');
+    assert.ok(/Run welcome setup again/i.test(bs), 'Should label the button');
+  });
+
+  it('wizard is an accessible dialog with Escape-to-skip', () => {
+    const wiz = read('src/components/onboarding/WelcomeWizard.svelte');
+    assert.ok(wiz.includes('role="dialog"'), 'Should be a dialog');
+    assert.ok(wiz.includes('aria-modal="true"'), 'Should be modal');
+    assert.ok(wiz.includes('handleKeydown') && wiz.includes("e.key === 'Escape'"), 'Escape should skip');
+  });
+
+  it('wizard handles the no-providers-detected edge case', () => {
+    const wiz = read('src/components/onboarding/WelcomeWizard.svelte');
+    assert.ok(wiz.includes('providers.length === 0'), 'Should handle empty detection');
+  });
+
+  it('finishing clears the forced-open flag and gives a voice tip', () => {
+    const wiz = read('src/components/onboarding/WelcomeWizard.svelte');
+    assert.ok(wiz.includes('onboardingStore.close()'), 'finish should clear forceOpen');
+    assert.ok(/push-to-talk/i.test(wiz), 'Should orient the user to voice');
+  });
+});
+
 describe('App.svelte: first-run gating', () => {
   const app = read('src/App.svelte');
 
