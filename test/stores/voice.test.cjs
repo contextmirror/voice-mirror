@@ -421,3 +421,33 @@ describe('voice: applyVoiceModeFromConfig', () => {
     );
   });
 });
+
+// ============ Listener registration is idempotent (no duplicate injection) ============
+
+describe('voice: initVoiceListeners idempotency', () => {
+  it('guards against duplicate registration', () => {
+    assert.ok(
+      src.includes('voiceListenersInitialized'),
+      'Should track whether listeners are already registered'
+    );
+    assert.ok(
+      src.includes('if (voiceListenersInitialized) return'),
+      'Should early-return if already initialized (prevents stacked voice-event handlers)'
+    );
+  });
+
+  it('stores unlisten handles for teardown', () => {
+    assert.ok(
+      src.includes('voiceUnlisteners.push(await listen('),
+      'Should keep unlisten handles so listeners can be removed'
+    );
+  });
+
+  it('tears listeners down on HMR dispose so dev matches production', () => {
+    assert.ok(src.includes('import.meta.hot'), 'Should handle HMR disposal');
+    assert.ok(
+      src.includes('voiceListenersInitialized = false'),
+      'HMR dispose should reset the init guard'
+    );
+  });
+});
