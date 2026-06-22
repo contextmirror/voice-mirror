@@ -463,6 +463,42 @@
           resizePtyIfChanged();
           // Gate: terminal is now fully initialized and ready for ai-output events
           initialized = true;
+
+          // TEMP DEFINITIVE DIAGNOSTIC (grey box): read the ACTUAL canvas pixel
+          // + what element is physically at the terminal's centre. This tells us
+          // whether the grey is the ghostty canvas painting grey, or a native
+          // webview overlaid on top (which is invisible to DOM measurement).
+          setTimeout(() => {
+            if (cancelled) return;
+            try {
+              const cv = containerEl?.querySelector('canvas');
+              let pixel = 'no-canvas';
+              if (cv) {
+                const ctx = cv.getContext('2d');
+                if (ctx) {
+                  const px = ctx.getImageData(Math.floor(cv.width / 2), Math.floor(cv.height / 2), 1, 1).data;
+                  pixel = `rgba(${px[0]},${px[1]},${px[2]},${px[3]})`;
+                } else {
+                  pixel = 'no-2d-ctx(webgl?)';
+                }
+              }
+              const r = containerEl?.getBoundingClientRect();
+              let elAtCentre = 'n/a';
+              if (r) {
+                const el = document.elementFromPoint(Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2));
+                elAtCentre = el ? `${el.tagName.toLowerCase()}.${(el.className || '').toString().split(' ')[0]}` : 'null';
+              }
+              console.warn('[term-pixel]', JSON.stringify({
+                canvasCentrePixel: pixel,
+                canvasW: cv?.width,
+                canvasH: cv?.height,
+                elementAtCentre: elAtCentre,
+                themeBg: buildTermTheme().background,
+              }));
+            } catch (e) {
+              console.warn('[term-pixel] failed', String(e));
+            }
+          }, 1500);
           // Replay any events that arrived during initialization
           for (const evt of pendingEvents) {
             handleAiOutput(evt.payload);
