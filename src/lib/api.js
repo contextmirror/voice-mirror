@@ -1059,6 +1059,11 @@ export async function detectProviders() {
   return invoke('detect_providers');
 }
 
+/** Install a provider's CLI via its package manager, then re-detect it. */
+export async function installProvider(providerType) {
+  return invoke('install_provider', { params: { providerType } });
+}
+
 export async function logFrontendError(params) {
   return invoke('log_frontend_error', { params });
 }

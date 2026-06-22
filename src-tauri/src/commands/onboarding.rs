@@ -8,11 +8,11 @@
 
 use std::path::PathBuf;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use super::IpcResponse;
 use crate::commands::tools::detect_tool;
-use crate::providers::cli::get_cli_config;
+use crate::providers::cli::{get_cli_config, is_cli_available};
 
 /// Best-effort login state for a provider, derived from its credential files.
 #[derive(Serialize, Clone, Copy, PartialEq)]
@@ -168,4 +168,130 @@ pub fn detect_providers() -> IpcResponse {
         });
     }
     IpcResponse::ok(serde_json::json!({ "providers": providers }))
+}
+
+// ---------------------------------------------------------------------------
+// One-click install (Phase 2)
+// ---------------------------------------------------------------------------
+
+/// How to install a given provider's CLI.
+enum InstallMethod {
+    /// `npm install -g <package>`
+    Npm(&'static str),
+    /// `pip install <package>`
+    Pip(&'static str),
+}
+
+fn install_spec(provider_type: &str) -> Option<InstallMethod> {
+    match provider_type {
+        "claude" => Some(InstallMethod::Npm("@anthropic-ai/claude-code")),
+        "opencode" => Some(InstallMethod::Npm("opencode-ai")),
+        "codex" => Some(InstallMethod::Npm("@openai/codex")),
+        "gemini-cli" => Some(InstallMethod::Npm("@google/gemini-cli")),
+        "kimi-cli" => Some(InstallMethod::Pip("kimi-cli")),
+        _ => None,
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InstallProviderParams {
+    pub provider_type: String,
+}
+
+/// Install a provider's CLI via its package manager, then re-detect it.
+///
+/// Output is logged to the Output system (MCP/App channel) so it's inspectable.
+/// NOTE on PATH: installing a package into an *existing* global bin dir (the
+/// common case) is detectable immediately, since that dir is already on PATH.
+/// Only if the package manager itself was just installed would a restart be
+/// needed — the `detected` flag in the response tells the UI which case it is.
+#[tauri::command]
+pub async fn install_provider(params: InstallProviderParams) -> IpcResponse {
+    let ptype = params.provider_type;
+    let Some(spec) = install_spec(&ptype) else {
+        return IpcResponse::err(format!("No install method known for '{}'", ptype));
+    };
+    let Some(cfg) = get_cli_config(&ptype) else {
+        return IpcResponse::err(format!("Unknown provider '{}'", ptype));
+    };
+    let command = cfg.command.to_string();
+
+    let (tool, pkg): (&str, &str) = match spec {
+        InstallMethod::Npm(p) => ("npm", p),
+        InstallMethod::Pip(p) => ("pip", p),
+    };
+
+    // Require the package manager up front, with an actionable message.
+    if !is_cli_available(tool) {
+        let req = if tool == "npm" { "Node.js (npm)" } else { "Python (pip)" };
+        return IpcResponse::err(format!(
+            "{} is required to install {}. Install it first, then try again.",
+            req, cfg.display_name
+        ));
+    }
+
+    let ptype_log = ptype.clone();
+    let tool_owned = tool.to_string();
+    let pkg_owned = pkg.to_string();
+
+    // Run the (potentially slow) installer off the async runtime.
+    let output = tokio::task::spawn_blocking(move || {
+        let install_args = if tool_owned == "npm" {
+            format!("{} install -g {}", tool_owned, pkg_owned)
+        } else {
+            format!("{} install {}", tool_owned, pkg_owned)
+        };
+        // npm/pip are shims on Windows → must run through cmd.
+        if cfg!(target_os = "windows") {
+            std::process::Command::new("cmd")
+                .args(["/C", &install_args])
+                .output()
+        } else {
+            std::process::Command::new("sh")
+                .args(["-c", &install_args])
+                .output()
+        }
+    })
+    .await;
+
+    let output = match output {
+        Ok(Ok(o)) => o,
+        Ok(Err(e)) => return IpcResponse::err(format!("Failed to launch installer: {}", e)),
+        Err(e) => return IpcResponse::err(format!("Install task failed: {}", e)),
+    };
+
+    let mut combined = String::from_utf8_lossy(&output.stdout).to_string();
+    combined.push_str(&String::from_utf8_lossy(&output.stderr));
+    for line in combined.lines() {
+        tracing::info!(target: "voice_mirror_lib::mcp::install", "[install {}] {}", ptype_log, line);
+    }
+
+    let success = output.status.success();
+    // Re-detect: usually succeeds immediately (existing global bin dir on PATH).
+    let detected = detect_tool(&command).available;
+    // Last few lines as a tail for the UI.
+    let tail: String = combined
+        .lines()
+        .rev()
+        .take(6)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    if !success {
+        return IpcResponse::err(if tail.is_empty() {
+            format!("Install of {} failed.", cfg.display_name)
+        } else {
+            format!("Install of {} failed:\n{}", cfg.display_name, tail)
+        });
+    }
+
+    IpcResponse::ok(serde_json::json!({
+        "success": true,
+        "detected": detected,
+        "message": tail,
+    }))
 }

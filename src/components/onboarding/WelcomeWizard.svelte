@@ -17,7 +17,7 @@
    * One-click install (Phase 2) and live auth/sign-in (Phase 3) replace the
    * copy-the-command guidance shown here.
    */
-  import { detectProviders } from '../../lib/api.js';
+  import { detectProviders, installProvider } from '../../lib/api.js';
   import { unwrapResult } from '../../lib/utils.js';
   import { updateConfig } from '../../lib/stores/config.svelte.js';
   import { navigationStore } from '../../lib/stores/navigation.svelte.js';
@@ -30,15 +30,8 @@
   let providers = $state([]);
   let loading = $state(true);
   let busy = $state(false);
-
-  // Best-effort install commands shown as guidance until Phase 2 automates it.
-  const INSTALL_HINTS = {
-    claude: 'npm install -g @anthropic-ai/claude-code',
-    opencode: 'npm install -g opencode-ai',
-    codex: 'npm install -g @openai/codex',
-    'gemini-cli': 'npm install -g @google/gemini-cli',
-    'kimi-cli': 'pip install kimi-cli',
-  };
+  /** providerType currently being installed, or null. */
+  let installing = $state(null);
 
   // Stable, sensible display order.
   const ORDER = ['claude', 'opencode', 'codex', 'gemini-cli', 'kimi-cli'];
@@ -97,6 +90,34 @@
       console.warn('[onboarding] connect failed:', err);
       toastStore.addToast({ message: `Couldn't connect: ${err}`, severity: 'error' });
       busy = false;
+    }
+  }
+
+  async function install(p) {
+    if (busy || installing) return;
+    installing = p.providerType;
+    try {
+      const result = await installProvider(p.providerType);
+      if (result?.success === false) {
+        throw new Error(result.error || 'Install failed');
+      }
+      const data = unwrapResult(result);
+      await loadProviders();
+      if (data?.detected) {
+        toastStore.addToast({ message: `${p.displayName} installed.`, severity: 'success' });
+      } else {
+        // Package installed but not yet on the running app's PATH.
+        toastStore.addToast({
+          message: `${p.displayName} installed — restart Voice Mirror to use it.`,
+          severity: 'info',
+          duration: 0,
+        });
+      }
+    } catch (err) {
+      console.warn('[onboarding] install failed:', err);
+      toastStore.addToast({ message: `Install failed: ${err}`, severity: 'error', duration: 0 });
+    } finally {
+      installing = null;
     }
   }
 
@@ -205,10 +226,10 @@
           How to sign in
         </button>
       {:else}
-        <!-- Not installed (Phase 2 will make this one-click) -->
-        <button class="hint-btn" onclick={() => copyHint(INSTALL_HINTS[p.providerType] || p.command, 'Install command')} disabled={busy}>
-          Copy install command
-        </button>
+        <!-- Not installed — one-click install via its package manager -->
+        <Button small onClick={() => install(p)} disabled={busy || installing !== null}>
+          {installing === p.providerType ? 'Installing…' : 'Install'}
+        </Button>
       {/if}
     </div>
   </div>

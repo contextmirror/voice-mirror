@@ -515,6 +515,7 @@ pub fn run() {
             design_cmds::design_expand_tree_node,
             // Output / diagnostics
             onboarding_cmds::detect_providers,
+            onboarding_cmds::install_provider,
             output_cmds::get_output_logs,
             output_cmds::export_diagnostics,
             output_cmds::log_frontend_error,

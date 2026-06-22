@@ -36,11 +36,17 @@ describe('backend: detect_providers command', () => {
   });
 
   it('detects auth passively — never invokes the CLI', () => {
-    // Phase 1 must read credential files only (no Command spawning here).
+    // Auth detection must read credential files only. (install_provider, later
+    // in the file, legitimately spawns the package manager — so scope the
+    // "no spawning" check to just the auth-detection region.)
     assert.ok(src.includes('.credentials.json'), 'Should check Claude credential file');
     assert.ok(src.includes('.codex'), 'Should check Codex auth');
     assert.ok(src.includes('opencode'), 'Should check OpenCode auth');
-    assert.ok(!src.includes('Command::new'), 'Phase 1 auth detection must not spawn the CLI');
+    const authStart = src.indexOf('fn detect_auth');
+    const authEnd = src.indexOf('pub fn detect_providers');
+    assert.ok(authStart >= 0 && authEnd > authStart, 'auth-detection region should exist');
+    const authRegion = src.slice(authStart, authEnd);
+    assert.ok(!authRegion.includes('Command::new'), 'auth detection must not spawn the CLI');
   });
 
   it('parses Claude token expiry to distinguish expired from valid', () => {
@@ -51,6 +57,44 @@ describe('backend: detect_providers command', () => {
   it('is registered in lib.rs', () => {
     const lib = read('src-tauri/src/lib.rs');
     assert.ok(lib.includes('onboarding_cmds::detect_providers'), 'Should register detect_providers');
+  });
+});
+
+describe('backend: install_provider command (Phase 2)', () => {
+  const src = read('src-tauri/src/commands/onboarding.rs');
+
+  it('defines the install_provider command', () => {
+    assert.ok(src.includes('pub async fn install_provider'), 'Should define install_provider');
+  });
+
+  it('maps each provider to a package-manager install spec', () => {
+    assert.ok(src.includes('enum InstallMethod'), 'Should define InstallMethod');
+    assert.ok(src.includes('Npm(') && src.includes('Pip('), 'Should support npm and pip');
+    assert.ok(src.includes('@anthropic-ai/claude-code'), 'Should know the Claude Code package');
+  });
+
+  it('requires the package manager up front with an actionable error', () => {
+    assert.ok(src.includes('is_cli_available(tool)'), 'Should check the package manager exists');
+    assert.ok(src.includes('is required to install'), 'Should give an actionable message');
+  });
+
+  it('re-detects after install and reports whether a restart is needed', () => {
+    assert.ok(src.includes('detect_tool(&command).available'), 'Should re-detect post-install');
+    assert.ok(src.includes('"detected"'), 'Should return the detected flag');
+  });
+
+  it('is registered in lib.rs', () => {
+    const lib = read('src-tauri/src/lib.rs');
+    assert.ok(lib.includes('onboarding_cmds::install_provider'), 'Should register install_provider');
+  });
+
+  it('frontend exposes installProvider and the wizard wires an Install button', () => {
+    const api = read('src/lib/api.js');
+    assert.ok(api.includes('export async function installProvider'), 'api.js should expose installProvider');
+    const wiz = read('src/components/onboarding/WelcomeWizard.svelte');
+    assert.ok(wiz.includes('installProvider'), 'Wizard should call installProvider');
+    assert.ok(wiz.includes("installing === p.providerType ? 'Installing"), 'Should show installing state');
+    assert.ok(wiz.includes('restart Voice Mirror'), 'Should handle the PATH-not-refreshed restart case');
   });
 });
 

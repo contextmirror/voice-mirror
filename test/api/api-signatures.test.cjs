@@ -430,6 +430,7 @@ describe('api.js -- exported async functions', () => {
     'getOutputLogs',
     'exportDiagnostics',
     'detectProviders',
+    'installProvider',
     'logFrontendError',
     // Browser History
     'lensAddHistoryEntry',
