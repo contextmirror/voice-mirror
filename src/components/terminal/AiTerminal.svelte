@@ -56,7 +56,11 @@
    * Maps design tokens to ghostty-web's ITheme keys.
    */
   function buildTermTheme() {
-    const bg = getCssVar('--bg') || '#0c0d10';
+    // Fallback is pure black to match the app's --bg (#000000). On a cold boot
+    // the terminal can construct before --bg is applied; a near-black fallback
+    // like #0c0d10 would render fractionally lighter than the surrounding UI and
+    // read as a grey box on the empty/stopped terminal until a provider starts.
+    const bg = getCssVar('--bg') || '#000000';
     const bgElevated = getCssVar('--bg-elevated') || '#14161c';
     const text = getCssVar('--text') || '#e4e4e7';
     const textStrong = getCssVar('--text-strong') || '#fafafa';
