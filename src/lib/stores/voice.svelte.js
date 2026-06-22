@@ -246,14 +246,25 @@ export async function stopVoiceEngine() {
   }
 }
 
+/** Guards against duplicate registration. Re-registering the voice-event
+ *  listener (an effect re-run, a remount, or a dev HMR reload) would stack
+ *  handlers and inject dictated text multiple times. */
+let voiceListenersInitialized = false;
+/** Unlisten handles, kept so the listeners can be torn down on HMR dispose. */
+let voiceUnlisteners = [];
+
 /**
- * Initialize voice event listeners. Call once on app mount.
+ * Initialize voice event listeners. Idempotent — only the first call
+ * registers; later calls are no-ops. Call on app mount.
  */
 export async function initVoiceListeners() {
+  if (voiceListenersInitialized) return;
+  voiceListenersInitialized = true;
+
   // Listen for all voice pipeline events
-  await listen('voice-event', (event) => {
+  voiceUnlisteners.push(await listen('voice-event', (event) => {
     voiceStore._handleVoiceEvent(event.payload);
-  });
+  }));
 
   // Listen for MCP inbox messages (voice_send responses from AI → chat UI + TTS).
   // Messages arrive via both named pipe (fast) and inbox watcher (slow fallback).
@@ -262,11 +273,11 @@ export async function initVoiceListeners() {
 
   // When a new Claude session starts, reset dedup tracking.
   // The backend clears inbox.json on session start, so old IDs are irrelevant.
-  await listen('mcp-session-start', () => {
+  voiceUnlisteners.push(await listen('mcp-session-start', () => {
     seenMessageIds.clear();
-  });
+  }));
 
-  await listen('mcp-inbox-message', (event) => {
+  voiceUnlisteners.push(await listen('mcp-inbox-message', (event) => {
     const payload = event.payload;
     if (!payload || !payload.text) return;
 
@@ -296,7 +307,7 @@ export async function initVoiceListeners() {
       }
     }
     // user_message kind is NOT added here — ChatInput already adds it to the store
-  });
+  }));
 
   // Poll initial status
   try {
@@ -308,4 +319,18 @@ export async function initVoiceListeners() {
   } catch {
     // Backend may not be ready yet
   }
+}
+
+// Dev only: Vite swaps this module on edit. Without teardown, the previous
+// module's listeners stay alive — bound to a stale store with its own dedup
+// state — so dictated text gets injected once per accumulated reload. Dispose
+// them so dev behaves like production (a single injection).
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    for (const un of voiceUnlisteners) {
+      try { un?.(); } catch { /* ignore */ }
+    }
+    voiceUnlisteners = [];
+    voiceListenersInitialized = false;
+  });
 }
