@@ -120,6 +120,30 @@
     }
   }
 
+  // TEMP DIAGNOSTIC (grey-box bug): logs the container/canvas geometry so we can
+  // see why the canvas doesn't fill the panel on first mount. Captured to the
+  // Frontend output channel (frontend.jsonl). Remove once the bug is fixed.
+  function logTermDiag(tag) {
+    try {
+      const c = containerEl;
+      const cv = c?.querySelector('canvas');
+      // console.warn (not log) so the runtime capture forwards it to frontend.jsonl
+      console.warn('[term-diag]', tag, JSON.stringify({
+        initialized,
+        containerH: c?.clientHeight,
+        containerW: c?.clientWidth,
+        canvasH: cv?.clientHeight,
+        canvasW: cv?.clientWidth,
+        cols: term?.cols,
+        rows: term?.rows,
+        containerBg: c && getComputedStyle(c).backgroundColor,
+        viewBg: c?.parentElement && getComputedStyle(c.parentElement).backgroundColor,
+      }));
+    } catch (e) {
+      console.warn('[term-diag] failed', e);
+    }
+  }
+
   // ---- Toolbar actions ----
 
   function handleClear() {
@@ -431,6 +455,7 @@
         resizeTimeout = setTimeout(() => {
           fitTerminal();
           resizePtyIfChanged();
+          logTermDiag('resize-observer');
         }, 150);
       });
       observer.observe(containerEl);
@@ -455,6 +480,7 @@
           resizePtyIfChanged();
           // Gate: terminal is now fully initialized and ready for ai-output events
           initialized = true;
+          logTermDiag('after-initial-fit');
           // Replay any events that arrived during initialization
           for (const evt of pendingEvents) {
             handleAiOutput(evt.payload);
@@ -467,7 +493,12 @@
             if (cancelled) return;
             fitTerminal();
             resizePtyIfChanged();
+            logTermDiag('backstop-250ms');
           }, 250);
+          setTimeout(() => {
+            if (cancelled) return;
+            logTermDiag('settle-1500ms');
+          }, 1500);
         });
       });
     }
