@@ -17,7 +17,7 @@
    * One-click install (Phase 2) and live auth/sign-in (Phase 3) replace the
    * copy-the-command guidance shown here.
    */
-  import { detectProviders, installProvider } from '../../lib/api.js';
+  import { detectProviders, installProvider, probeProviderAuth } from '../../lib/api.js';
   import { unwrapResult } from '../../lib/utils.js';
   import { updateConfig } from '../../lib/stores/config.svelte.js';
   import { navigationStore } from '../../lib/stores/navigation.svelte.js';
@@ -32,6 +32,15 @@
   let busy = $state(false);
   /** providerType currently being installed, or null. */
   let installing = $state(null);
+
+  // Verified, exact sign-in commands per provider (for guidance copy).
+  const LOGIN_CMDS = {
+    claude: 'claude auth login',
+    opencode: 'opencode auth login',
+    codex: 'codex login',
+    'gemini-cli': 'gemini',
+    'kimi-cli': 'kimi',
+  };
 
   // Stable, sensible display order.
   const ORDER = ['claude', 'opencode', 'codex', 'gemini-cli', 'kimi-cli'];
@@ -60,6 +69,30 @@
     } finally {
       loading = false;
     }
+    // Refine auth with accurate live probes (catches expired/refreshed tokens
+    // the fast file heuristic can miss). Runs after the initial render.
+    refineAuth();
+  }
+
+  async function refineAuth() {
+    const installed = providers.filter((p) => p.installed);
+    const updates = await Promise.all(
+      installed.map(async (p) => {
+        try {
+          const r = await probeProviderAuth(p.providerType);
+          const data = unwrapResult(r);
+          return [p.providerType, data?.authState];
+        } catch {
+          return [p.providerType, null];
+        }
+      })
+    );
+    const byType = new Map(updates.filter(([, s]) => s));
+    providers = providers.map((p) => {
+      const authState = byType.get(p.providerType);
+      if (!authState || authState === 'unknown') return p;
+      return { ...p, authState, ready: p.installed && authState === 'loggedIn' };
+    });
   }
 
   $effect(() => {
@@ -221,9 +254,9 @@
       {#if canConnect(p)}
         <Button small onClick={() => connect(p)} disabled={busy}>Connect</Button>
       {:else if p.installed}
-        <!-- Installed but not signed in (Phase 3 will launch sign-in directly) -->
-        <button class="hint-btn" onclick={() => copyHint(`${p.command} ` + '/login', 'Sign-in command')} disabled={busy}>
-          How to sign in
+        <!-- Installed but not signed in — copy the exact verified login command -->
+        <button class="hint-btn" onclick={() => copyHint(LOGIN_CMDS[p.providerType] || `${p.command} auth login`, 'Sign-in command')} disabled={busy}>
+          Sign in
         </button>
       {:else}
         <!-- Not installed — one-click install via its package manager -->

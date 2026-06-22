@@ -431,6 +431,7 @@ describe('api.js -- exported async functions', () => {
     'exportDiagnostics',
     'detectProviders',
     'installProvider',
+    'probeProviderAuth',
     'logFrontendError',
     // Browser History
     'lensAddHistoryEntry',

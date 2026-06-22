@@ -98,6 +98,37 @@ describe('backend: install_provider command (Phase 2)', () => {
   });
 });
 
+describe('backend: live auth probe (Phase 3)', () => {
+  const src = read('src-tauri/src/commands/onboarding.rs');
+
+  it('defines probe_provider_auth using real status subcommands', () => {
+    assert.ok(src.includes('pub async fn probe_provider_auth'), 'Should define probe_provider_auth');
+    assert.ok(src.includes('claude auth status --json'), 'Should use the verified Claude status command');
+    assert.ok(src.includes('codex login status'), 'Should use the verified Codex status command');
+    assert.ok(src.includes('opencode auth list'), 'Should use the verified OpenCode status command');
+  });
+
+  it('nulls stdin so a probe can never hang on input', () => {
+    assert.ok(src.includes('Stdio::null()'), 'Probe should null stdin');
+  });
+
+  it('handles the "not logged in" substring trap for codex', () => {
+    assert.ok(src.includes('not logged in'), 'Should check not-logged-in before logged-in');
+  });
+
+  it('is registered in lib.rs', () => {
+    const lib = read('src-tauri/src/lib.rs');
+    assert.ok(lib.includes('onboarding_cmds::probe_provider_auth'), 'Should register probe_provider_auth');
+  });
+
+  it('wizard refines auth with live probes and gives verified sign-in commands', () => {
+    const wiz = read('src/components/onboarding/WelcomeWizard.svelte');
+    assert.ok(wiz.includes('refineAuth'), 'Should refine auth after detect');
+    assert.ok(wiz.includes('probeProviderAuth'), 'Should call probeProviderAuth');
+    assert.ok(wiz.includes("claude: 'claude auth login'"), 'Should use verified login commands');
+  });
+});
+
 describe('config: onboardingCompleted flag', () => {
   it('exists in the Rust schema (SystemConfig)', () => {
     const schema = read('src-tauri/src/config/schema.rs');

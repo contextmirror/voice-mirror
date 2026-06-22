@@ -1064,6 +1064,11 @@ export async function installProvider(providerType) {
   return invoke('install_provider', { params: { providerType } });
 }
 
+/** Live-probe a provider's auth state via its read-only `status` subcommand. */
+export async function probeProviderAuth(providerType) {
+  return invoke('probe_provider_auth', { params: { providerType } });
+}
+
 export async function logFrontendError(params) {
   return invoke('log_frontend_error', { params });
 }

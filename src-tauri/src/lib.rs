@@ -516,6 +516,7 @@ pub fn run() {
             // Output / diagnostics
             onboarding_cmds::detect_providers,
             onboarding_cmds::install_provider,
+            onboarding_cmds::probe_provider_auth,
             output_cmds::get_output_logs,
             output_cmds::export_diagnostics,
             output_cmds::log_frontend_error,

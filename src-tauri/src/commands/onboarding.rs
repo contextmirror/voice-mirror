@@ -171,6 +171,109 @@ pub fn detect_providers() -> IpcResponse {
 }
 
 // ---------------------------------------------------------------------------
+// Live auth probe (Phase 3)
+// ---------------------------------------------------------------------------
+
+/// Run a read-only status command and capture (success, combined output).
+/// stdin is nulled so a misbehaving CLI can't hang waiting for input.
+fn run_capture(cmdline: &str) -> Option<(bool, String)> {
+    let output = if cfg!(target_os = "windows") {
+        std::process::Command::new("cmd")
+            .args(["/C", cmdline])
+            .stdin(std::process::Stdio::null())
+            .output()
+    } else {
+        std::process::Command::new("sh")
+            .args(["-c", cmdline])
+            .stdin(std::process::Stdio::null())
+            .output()
+    }
+    .ok()?;
+    let mut s = String::from_utf8_lossy(&output.stdout).to_string();
+    s.push_str(&String::from_utf8_lossy(&output.stderr));
+    Some((output.status.success(), s))
+}
+
+/// Reliable per-provider auth check via the CLI's own read-only `status`
+/// subcommand (verified to exist + be non-interactive). Unlike the file
+/// heuristic, this catches expired/refreshed tokens accurately. Still safe:
+/// `status` never opens a browser or spends quota.
+fn probe_auth(provider_type: &str) -> AuthState {
+    match provider_type {
+        "claude" => probe_claude(),
+        "codex" => probe_codex(),
+        "opencode" => probe_opencode(),
+        // gemini (gcloud/ADC) and kimi: no verified non-interactive probe yet.
+        _ => AuthState::Unknown,
+    }
+}
+
+fn probe_claude() -> AuthState {
+    let Some((_ok, out)) = run_capture("claude auth status --json") else {
+        return AuthState::Unknown;
+    };
+    if let Ok(json) = serde_json::from_str::<serde_json::Value>(out.trim()) {
+        if let Some(b) = json.get("loggedIn").and_then(|v| v.as_bool()) {
+            return if b { AuthState::LoggedIn } else { AuthState::LoggedOut };
+        }
+    }
+    if out.contains("\"loggedIn\": true") || out.contains("\"loggedIn\":true") {
+        AuthState::LoggedIn
+    } else if out.contains("loggedIn") {
+        AuthState::LoggedOut
+    } else {
+        AuthState::Unknown
+    }
+}
+
+fn probe_codex() -> AuthState {
+    let Some((ok, out)) = run_capture("codex login status") else {
+        return AuthState::Unknown;
+    };
+    let low = out.to_lowercase();
+    // Order matters: "not logged in" contains "logged in".
+    if low.contains("not logged in") || low.contains("not authenticated") {
+        AuthState::LoggedOut
+    } else if low.contains("logged in") {
+        AuthState::LoggedIn
+    } else if ok {
+        AuthState::LoggedIn
+    } else {
+        AuthState::LoggedOut
+    }
+}
+
+fn probe_opencode() -> AuthState {
+    let Some((ok, out)) = run_capture("opencode auth list") else {
+        return AuthState::Unknown;
+    };
+    if !ok {
+        return AuthState::LoggedOut;
+    }
+    let low = out.to_lowercase();
+    if low.contains("anthropic")
+        || low.contains("openai")
+        || low.contains("openrouter")
+        || low.contains("credentials")
+    {
+        AuthState::LoggedIn
+    } else {
+        AuthState::LoggedOut
+    }
+}
+
+/// Live-probe a single provider's auth state (slower than the file heuristic;
+/// the wizard calls this lazily, in parallel, to refine the initial detection).
+#[tauri::command]
+pub async fn probe_provider_auth(params: InstallProviderParams) -> IpcResponse {
+    let ptype = params.provider_type;
+    let state = tokio::task::spawn_blocking(move || probe_auth(&ptype))
+        .await
+        .unwrap_or(AuthState::Unknown);
+    IpcResponse::ok(serde_json::json!({ "authState": state }))
+}
+
+// ---------------------------------------------------------------------------
 // One-click install (Phase 2)
 // ---------------------------------------------------------------------------
 
