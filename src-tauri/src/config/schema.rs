@@ -389,6 +389,9 @@ pub struct SystemConfig {
     pub accepted_disclaimer: bool,
     #[serde(default)]
     pub first_launch_done: bool,
+    /// Whether the first-run welcome wizard has been completed/dismissed.
+    #[serde(default)]
+    pub onboarding_completed: bool,
     #[serde(default)]
     pub last_greeting_period: Option<String>,
     #[serde(default)]

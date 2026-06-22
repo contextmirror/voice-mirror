@@ -27,6 +27,7 @@ use commands::output as output_cmds;
 use commands::project as project_cmds;
 use commands::workspace_state as ws_state_cmds;
 use commands::mcp as mcp_cmds;
+use commands::onboarding as onboarding_cmds;
 
 use providers::manager::AiManager;
 use providers::ProviderEvent;
@@ -513,6 +514,7 @@ pub fn run() {
             design_cmds::design_select_by_tree_id,
             design_cmds::design_expand_tree_node,
             // Output / diagnostics
+            onboarding_cmds::detect_providers,
             output_cmds::get_output_logs,
             output_cmds::export_diagnostics,
             output_cmds::log_frontend_error,

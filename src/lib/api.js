@@ -1052,6 +1052,13 @@ export async function exportDiagnostics(last) {
   return invoke('export_diagnostics', { params: { last: last ?? null } });
 }
 
+// ============ Onboarding ============
+
+/** Detect all supported AI providers: installed?, version, path, auth state. */
+export async function detectProviders() {
+  return invoke('detect_providers');
+}
+
 export async function logFrontendError(params) {
   return invoke('log_frontend_error', { params });
 }
