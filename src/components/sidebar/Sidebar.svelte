@@ -7,12 +7,6 @@
 
   const collapsed = $derived(navigationStore.sidebarCollapsed);
   const activeView = $derived(navigationStore.activeView);
-  const appMode = $derived(navigationStore.appMode);
-
-  const tabs = [
-    { id: 'chat', label: 'Chat', tooltip: 'Chat' },
-    { id: 'terminal', label: 'Terminal', tooltip: 'Terminal' },
-  ];
 
   function handleTabClick(tabId) {
     if (activeView === tabId) {
@@ -50,33 +44,9 @@
 </script>
 
 <aside class="sidebar" class:collapsed={collapsed}>
-  {#if appMode === 'mirror'}
-    <!-- Navigation Tabs -->
-    <nav class="sidebar-nav">
-      {#each tabs as tab}
-        <button
-          class="nav-item"
-          class:active={activeView === tab.id}
-          data-tooltip={tab.tooltip}
-          onclick={() => handleTabClick(tab.id)}
-          aria-label={tab.label}
-        >
-          {#if tab.id === 'chat'}
-            <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-          {:else if tab.id === 'terminal'}
-            <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
-          {/if}
-          {#if !collapsed}
-            <span class="nav-label">{tab.label}</span>
-          {/if}
-        </button>
-      {/each}
-    </nav>
-  {:else}
-    <div class="lens-sidebar">
-      <ProjectStrip />
-    </div>
-  {/if}
+  <div class="lens-sidebar">
+    <ProjectStrip />
+  </div>
 
   <!-- Settings (pinned above footer) -->
   <button
@@ -190,16 +160,6 @@
   }
 
   /* ========== Navigation ========== */
-  .sidebar-nav {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    padding: 8px 10px;
-    gap: 2px;
-    overflow-y: auto;
-    overflow-x: hidden;
-  }
-
   .nav-item {
     display: flex;
     align-items: center;
@@ -247,10 +207,6 @@
   }
 
   /* Collapsed nav items */
-  .collapsed .sidebar-nav {
-    padding: 4px;
-  }
-
   .collapsed .nav-item {
     justify-content: center;
     padding: 10px 6px;

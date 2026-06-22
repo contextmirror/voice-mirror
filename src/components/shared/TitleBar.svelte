@@ -5,12 +5,6 @@
   import { open } from '@tauri-apps/plugin-dialog';
   import Orb from '../overlay/Orb.svelte';
 
-  let appMode = $derived(navigationStore.appMode);
-
-  function handleModeSwitch(mode) {
-    navigationStore.setMode(mode);
-  }
-
   /** @type {{ centerContent?: import('svelte').Snippet, rightContent?: import('svelte').Snippet }} */
   let { centerContent, rightContent } = $props();
 
@@ -46,7 +40,7 @@
     const selected = await open({ directory: true });
     if (selected) {
       projectStore.addProject(selected);
-      navigationStore.setMode('lens');
+      navigationStore.setView('lens');
     }
   }
 
@@ -60,7 +54,7 @@
       ]
     });
     if (selected) {
-      navigationStore.setMode('lens');
+      navigationStore.setView('lens');
       window.dispatchEvent(new CustomEvent('lens-open-file', { detail: { path: selected } }));
     }
   }
@@ -215,25 +209,6 @@
         {/each}
       </nav>
     {/if}
-
-    <div class="mode-toggle" class:menu-open={appMenuOpen} role="radiogroup" aria-label="App mode">
-      <button
-        class="mode-btn"
-        class:active={appMode === 'mirror'}
-        onclick={() => handleModeSwitch('mirror')}
-        role="radio"
-        aria-checked={appMode === 'mirror'}
-        aria-label="Mirror mode"
-      >Mirror</button>
-      <button
-        class="mode-btn"
-        class:active={appMode === 'lens'}
-        onclick={() => handleModeSwitch('lens')}
-        role="radio"
-        aria-checked={appMode === 'lens'}
-        aria-label="Lens mode"
-      >Lens</button>
-    </div>
   </div>
 
   {#if centerContent}
@@ -372,49 +347,6 @@
   .menu-bar-item.active {
     background: var(--bg-hover);
     color: var(--text);
-  }
-
-  /* ========== Mode Toggle ========== */
-  .mode-toggle {
-    display: flex;
-    align-items: center;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: 9999px;
-    padding: 2px;
-    pointer-events: auto;
-    -webkit-app-region: no-drag;
-    z-index: 10001;
-    transition: margin-left var(--duration-normal, 200ms) var(--ease-out);
-  }
-
-  .mode-toggle.menu-open {
-    margin-left: 4px;
-  }
-
-  .mode-btn {
-    padding: 3px 12px;
-    border: none;
-    border-radius: 9999px;
-    background: transparent;
-    color: var(--muted);
-    font-size: 12px;
-    font-weight: 500;
-    font-family: var(--font-family);
-    cursor: pointer;
-    transition: all var(--duration-fast) var(--ease-out);
-    white-space: nowrap;
-    line-height: 1;
-  }
-
-  .mode-btn:hover:not(.active) {
-    color: var(--text);
-  }
-
-  .mode-btn.active {
-    background: var(--accent-subtle);
-    color: var(--accent);
-    font-weight: 600;
   }
 
   .titlebar-center {
@@ -567,7 +499,7 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .win-btn, .mode-btn, .menu-bar-item, .mode-toggle {
+    .win-btn, .menu-bar-item {
       transition: none;
     }
     .menu-bar, .submenu-dropdown {

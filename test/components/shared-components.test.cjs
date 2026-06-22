@@ -320,44 +320,10 @@ describe('TitleBar.svelte', () => {
     assert.ok(src.includes('navigationStore'), 'Should import navigationStore');
   });
 
-  it('has mode-toggle container', () => {
-    assert.ok(src.includes('mode-toggle'), 'Should have mode-toggle container');
-  });
-
-  it('has Mirror button text', () => {
-    assert.ok(src.includes('>Mirror<'), 'Should have Mirror button text');
-  });
-
-  it('has Lens button text', () => {
-    assert.ok(src.includes('>Lens<'), 'Should have Lens button text');
-  });
-
-  it('has role="radiogroup" for accessibility', () => {
-    assert.ok(src.includes('role="radiogroup"'), 'Should have radiogroup role');
-  });
-
-  it('has role="radio" on mode buttons', () => {
-    assert.ok(src.includes('role="radio"'), 'Should have radio role on buttons');
-  });
-
-  it('has aria-checked on mode buttons', () => {
-    assert.ok(src.includes('aria-checked='), 'Should have aria-checked on mode buttons');
-  });
-
-  it('has -webkit-app-region: no-drag on mode toggle', () => {
-    assert.ok(src.includes('-webkit-app-region: no-drag'), 'Should have no-drag on mode toggle');
-  });
-
-  it('has pointer-events: auto on mode toggle', () => {
-    assert.ok(src.includes('pointer-events: auto'), 'Should have pointer-events: auto');
-  });
-
-  it('calls handleModeSwitch on click', () => {
-    assert.ok(src.includes('handleModeSwitch'), 'Should call handleModeSwitch');
-  });
-
-  it('handleModeSwitch calls navigationStore.setMode', () => {
-    assert.ok(src.includes('navigationStore.setMode'), 'Should call setMode on store');
+  it('no longer has the Mirror/Lens mode toggle (Mirror mode removed)', () => {
+    assert.ok(!src.includes('mode-toggle'), 'Mode toggle should be gone');
+    assert.ok(!src.includes('>Mirror<'), 'Mirror button should be gone');
+    assert.ok(!src.includes('handleModeSwitch'), 'handleModeSwitch should be gone');
   });
 
   it('has data-tauri-drag-region for dragging', () => {

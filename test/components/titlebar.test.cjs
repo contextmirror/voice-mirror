@@ -18,47 +18,10 @@ describe('TitleBar.svelte', () => {
     assert.ok(src.includes('navigationStore'), 'Should import navigationStore');
   });
 
-  it('derives appMode from navigationStore', () => {
-    assert.ok(src.includes('navigationStore.appMode'), 'Should derive appMode');
-  });
-
-  it('has mode-toggle container', () => {
-    assert.ok(src.includes('mode-toggle'), 'Should have mode toggle class');
-  });
-
-  it('has Mirror button', () => {
-    assert.ok(src.includes('>Mirror</button>') || src.includes('>Mirror<'), 'Should have Mirror button text');
-  });
-
-  it('has Lens button', () => {
-    assert.ok(src.includes('>Lens</button>') || src.includes('>Lens<'), 'Should have Lens button text');
-  });
-
-  it('uses radiogroup role for accessibility', () => {
-    assert.ok(src.includes('role="radiogroup"'), 'Should have radiogroup role');
-  });
-
-  it('has radio role on mode buttons', () => {
-    assert.ok(src.includes('role="radio"'), 'Should have radio role on buttons');
-  });
-
-  it('has aria-checked on mode buttons', () => {
-    assert.ok(src.includes('aria-checked'), 'Should have aria-checked');
-  });
-
-  it('mode toggle has no-drag for Tauri frameless', () => {
-    assert.ok(src.includes('-webkit-app-region: no-drag'), 'Should have no-drag on mode toggle');
-  });
-
-  it('mode toggle has pointer-events auto', () => {
-    assert.ok(src.includes('pointer-events: auto'), 'Should have pointer-events auto');
-  });
-
-  it('calls setMode or handleModeSwitch', () => {
-    assert.ok(
-      src.includes('setMode') || src.includes('handleModeSwitch'),
-      'Should call mode switch handler'
-    );
+  it('no longer has the Mirror/Lens mode toggle (Mirror mode removed)', () => {
+    assert.ok(!src.includes('mode-toggle'), 'Mode toggle should be gone');
+    assert.ok(!src.includes('handleModeSwitch'), 'handleModeSwitch should be gone');
+    assert.ok(!src.includes('navigationStore.appMode'), 'appMode usage should be gone');
   });
 
   it('does not show static "Voice Mirror" text', () => {
@@ -140,13 +103,6 @@ describe('TitleBar: Zed-style menu bar', () => {
     assert.ok(menuBarMatch, 'Menu bar should have z-index >= 10001');
   });
 
-  it('mode toggle slides right when menu is open', () => {
-    assert.ok(src.includes('class:menu-open={appMenuOpen}'), 'Mode toggle should have menu-open class binding');
-    assert.ok(src.includes('.mode-toggle.menu-open'), 'Should have CSS for mode-toggle.menu-open');
-    // Should have transition on mode-toggle for smooth slide
-    const toggleMatch = src.match(/\.mode-toggle\s*\{[^}]*transition/);
-    assert.ok(toggleMatch, 'Mode toggle should have CSS transition');
-  });
 
   it('has keyboard shortcut labels in menu items', () => {
     assert.ok(src.includes("kbd: 'Ctrl+O'"), 'Should have Ctrl+O shortcut for Open File');

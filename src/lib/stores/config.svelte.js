@@ -78,7 +78,6 @@ const DEFAULT_CONFIG = {
   },
   sidebar: {
     collapsed: false,
-    mode: 'mirror',
   },
   projects: {
     entries: [],

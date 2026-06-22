@@ -248,7 +248,7 @@ commandRegistry.registerMany([
     id: 'view.openLens',
     label: 'Open Lens Workspace',
     category: 'View',
-    execute: () => navigationStore.setMode('lens'),
+    execute: () => navigationStore.setView('lens'),
   },
   {
     id: 'view.commandPalette',

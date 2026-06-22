@@ -10,22 +10,17 @@ import { updateConfig } from './config.svelte.js';
 /** Valid view identifiers */
 const VALID_VIEWS = ['chat', 'terminal', 'lens', 'settings'];
 
-/** Valid app mode identifiers */
-const VALID_MODES = ['mirror', 'lens'];
-
 /**
  * Reactive navigation store.
  * Access state via navigationStore.activeView and navigationStore.sidebarCollapsed.
  */
 function createNavigationStore() {
-  let activeView = $state('chat');
+  let activeView = $state('lens');
   let sidebarCollapsed = $state(false);
-  let appMode = $state('mirror');
 
   return {
     get activeView() { return activeView; },
     get sidebarCollapsed() { return sidebarCollapsed; },
-    get appMode() { return appMode; },
 
     /**
      * Switch to a different view.
@@ -58,42 +53,8 @@ function createNavigationStore() {
     initSidebarState(collapsed) {
       sidebarCollapsed = !!collapsed;
     },
-
-    /**
-     * Switch app mode and navigate to the appropriate view.
-     * Persists the mode to config backend.
-     * @param {'mirror'|'lens'} mode
-     */
-    setMode(mode) {
-      if (!VALID_MODES.includes(mode)) {
-        console.warn(`[navigation] Invalid mode: ${mode}`);
-        return;
-      }
-      appMode = mode;
-      if (mode === 'mirror') {
-        activeView = 'chat';
-      } else if (mode === 'lens') {
-        activeView = 'lens';
-      }
-      updateConfig({ sidebar: { mode } }).catch((err) => {
-        console.error('[navigation] Failed to persist mode:', err);
-      });
-    },
-
-    /**
-     * Initialize app mode from loaded config (no persistence).
-     * @param {'mirror'|'lens'} mode
-     */
-    initMode(mode) {
-      if (VALID_MODES.includes(mode)) {
-        appMode = mode;
-        if (mode === 'lens') {
-          activeView = 'lens';
-        }
-      }
-    },
   };
 }
 
 export const navigationStore = createNavigationStore();
-export { VALID_VIEWS, VALID_MODES };
+export { VALID_VIEWS };
