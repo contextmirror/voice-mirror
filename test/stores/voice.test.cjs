@@ -178,17 +178,17 @@ describe('voice: transcription routing to AI', () => {
     );
   });
 
-  it('uses aiPtyInput with imagePath for API providers', () => {
+  it('uses aiPtyInput with imagePath and imageDataUrl for API providers', () => {
     assert.ok(
-      src.includes('aiPtyInput(text, imagePath)'),
-      'Should call aiPtyInput with imagePath for API providers'
+      src.includes('aiPtyInput(text, imagePath, imageDataUrl)'),
+      'Should call aiPtyInput with imagePath and imageDataUrl for API providers'
     );
   });
 
-  it('uses writeUserMessage with imagePath for CLI providers', () => {
+  it('uses writeUserMessage with imagePath and imageDataUrl for CLI providers', () => {
     assert.ok(
-      src.includes('writeUserMessage(text, null, null, imagePath)'),
-      'Should call writeUserMessage with imagePath for CLI/MCP providers'
+      src.includes('writeUserMessage(text, null, null, imagePath, imageDataUrl)'),
+      'Should call writeUserMessage with imagePath and imageDataUrl for CLI/MCP providers'
     );
   });
 
@@ -217,6 +217,15 @@ describe('voice: transcription routing to AI', () => {
     assert.ok(
       src.includes('attachments[0].path'),
       'Should extract imagePath from first attachment'
+    );
+  });
+
+  it('extracts imageDataUrl from first attachment (drag-and-dropped images)', () => {
+    // Dropped images have only a dataUrl (no path on disk); the voice route
+    // must forward it or the image silently vanishes before reaching the AI.
+    assert.ok(
+      src.includes('attachments[0].dataUrl'),
+      'Should extract imageDataUrl from first attachment'
     );
   });
 });

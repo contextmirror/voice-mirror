@@ -187,16 +187,21 @@ function routeTranscriptionToAI(text) {
   // Add as user message in chat (with attachments if any)
   chatStore.addMessage('user', text, meta);
 
-  // Extract image path for the AI provider
-  const imagePath = attachments.length > 0 ? attachments[0].path : null;
+  // Extract image path AND data URL for the AI provider. Screenshot-picker
+  // attachments have a real path; drag-and-dropped images only have a data
+  // URL (no file on disk). Pass both — the backend prefers the data URL and
+  // falls back to reading the path — so dropped images reach the assistant
+  // by voice too, matching the text path in App.svelte.
+  const imagePath = attachments.length > 0 ? (attachments[0].path || null) : null;
+  const imageDataUrl = attachments.length > 0 ? (attachments[0].dataUrl || null) : null;
 
   // Route to appropriate provider
   if (aiStatusStore.isApiProvider) {
-    aiPtyInput(text, imagePath).catch((err) => {
+    aiPtyInput(text, imagePath, imageDataUrl).catch((err) => {
       console.warn('[voice] Failed to send transcription to API provider:', err);
     });
   } else {
-    writeUserMessage(text, null, null, imagePath).catch((err) => {
+    writeUserMessage(text, null, null, imagePath, imageDataUrl).catch((err) => {
       console.warn('[voice] Failed to send transcription to MCP inbox:', err);
     });
   }

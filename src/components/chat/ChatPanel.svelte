@@ -200,6 +200,87 @@
     showScreenshotPicker = false;
   }
 
+  // ---- Image drag-and-drop (OS files from Windows Explorer) ----
+  // Accepts image files dropped anywhere on the chat panel and queues them
+  // as attachments. They land in the SAME pending store the screenshot picker
+  // and voice path use, so a dropped image can be sent by typing OR by voice
+  // (drop an image, then talk about it — both go to the assistant together).
+  // HTML5 drops give us the file's CONTENT (not its real path); a data URL is
+  // all the backend needs (it prefers image_data_url over reading from disk).
+
+  /** Whether a file is currently being dragged over the panel. */
+  let dragActive = $state(false);
+  /** Ref-count of enter/leave events so the overlay doesn't flicker as the
+   *  drag crosses child elements. */
+  let dragDepth = 0;
+
+  /** True only when the drag carries OS files (not an internal app drag). */
+  function isFileDrag(e) {
+    const types = e.dataTransfer?.types;
+    return !!types && Array.from(types).includes('Files');
+  }
+
+  function handleDragEnter(e) {
+    if (!isFileDrag(e)) return;
+    e.preventDefault();
+    dragDepth += 1;
+    dragActive = true;
+  }
+
+  function handleDragOver(e) {
+    if (!isFileDrag(e)) return;
+    // preventDefault is required to mark this as a valid drop target and to
+    // stop WebView2 from navigating to the dropped file.
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+  }
+
+  function handleDragLeave(e) {
+    if (!isFileDrag(e)) return;
+    dragDepth -= 1;
+    if (dragDepth <= 0) {
+      dragDepth = 0;
+      dragActive = false;
+    }
+  }
+
+  async function handleDrop(e) {
+    if (!isFileDrag(e)) return;
+    e.preventDefault();
+    dragDepth = 0;
+    dragActive = false;
+
+    const files = Array.from(e.dataTransfer?.files ?? []);
+    const images = files.filter((f) => f.type.startsWith('image/'));
+    if (images.length === 0) return;
+
+    for (const file of images) {
+      try {
+        const dataUrl = await readFileAsDataUrl(file);
+        attachmentsStore.add({
+          // No real filesystem path is available from an HTML5 drop; the
+          // backend uses the data URL, so the name is just for display.
+          path: file.name,
+          dataUrl,
+          type: file.type || 'image/png',
+          name: file.name || 'Image',
+        });
+      } catch (err) {
+        console.warn('[ChatPanel] Failed to read dropped image:', err);
+      }
+    }
+  }
+
+  /** Read a File as a base64 data URL. */
+  function readFileAsDataUrl(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    });
+  }
+
   // Track previous message count and chat ID to detect new messages vs session switches
   let prevMessageCount = 0;
   let prevChatId = null;
@@ -247,7 +328,14 @@
   });
 </script>
 
-<div class="chat-panel">
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div
+  class="chat-panel"
+  ondragenter={handleDragEnter}
+  ondragover={handleDragOver}
+  ondragleave={handleDragLeave}
+  ondrop={handleDrop}
+>
   <ChatSessionDropdown />
   <div class="chat-scroll-area" bind:this={scrollContainer} onscroll={handleScroll}>
     {#if hasMessages}
@@ -291,6 +379,19 @@
       {browserSnapshot}
     />
   {/if}
+
+  {#if dragActive}
+    <div class="drop-overlay">
+      <div class="drop-overlay-inner">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="40" height="40">
+          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+          <circle cx="8.5" cy="8.5" r="1.5"/>
+          <path d="M21 15l-5-5L5 21"/>
+        </svg>
+        <p class="drop-overlay-text">Drop image to attach</p>
+      </div>
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -300,6 +401,38 @@
     height: 100%;
     overflow: hidden;
     background: var(--bg);
+    position: relative;
+  }
+
+  /* Drag-and-drop overlay shown while an image is dragged over the panel.
+     pointer-events: none so it never intercepts the drop (which must reach
+     the panel handler) nor blocks the mic / input underneath. */
+  .drop-overlay {
+    position: absolute;
+    inset: 6px;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    background: color-mix(in srgb, var(--bg) 72%, transparent);
+    border: 2px dashed var(--accent);
+    border-radius: var(--radius-md);
+  }
+
+  .drop-overlay-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    color: var(--accent);
+  }
+
+  .drop-overlay-text {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-strong);
   }
 
   .chat-scroll-area {
