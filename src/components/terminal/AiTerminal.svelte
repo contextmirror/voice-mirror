@@ -142,6 +142,7 @@
         initialized,
         containerH: c?.clientHeight,
         canvasH: cv?.clientHeight,
+        canvasBg: cv && getComputedStyle(cv).backgroundColor,
         rows: term?.rows,
         rectTop: rect && Math.round(rect.top),
         rectH: rect && Math.round(rect.height),
@@ -495,13 +496,30 @@
           }
           pendingEvents = [];
 
-          // Backstop re-fit: catches any late layout settling on the first
-          // boot into Lens (panel height resolving after mount).
+          // Backstop: fit, then force a WASM reflow/paint with a resize JIGGLE.
+          // fitAddon.fit() is a no-op when cols/rows are unchanged, so on a
+          // fresh first mount with no provider output the canvas never paints a
+          // frame and shows grey until a remount. Resizing by -1 row then back
+          // forces the full ghostty resize path (text reflow + DirtyState.FULL +
+          // canvas repaint) — the same trick the provider-switch reveal uses.
           setTimeout(() => {
             if (cancelled) return;
             fitTerminal();
             resizePtyIfChanged();
-            logTermDiag('backstop-250ms');
+            if (term && term.rows > 2) {
+              const cols = term.cols;
+              const rows = term.rows;
+              term.resize(cols, rows - 1);
+              requestAnimationFrame(() => {
+                if (term && !cancelled) {
+                  term.resize(cols, rows);
+                  resizePtyIfChanged();
+                  logTermDiag('backstop-jiggle');
+                }
+              });
+            } else {
+              logTermDiag('backstop-250ms');
+            }
           }, 250);
           setTimeout(() => {
             if (cancelled) return;
