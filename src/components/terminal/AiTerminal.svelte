@@ -20,6 +20,7 @@
   import { untrack } from 'svelte';
   import { Terminal } from '@xterm/xterm';
   import { FitAddon } from '@xterm/addon-fit';
+  import { WebglAddon } from '@xterm/addon-webgl';
   import '@xterm/xterm/css/xterm.css';
   import { listen } from '@tauri-apps/api/event';
   import { aiRawInput, aiPtyResize } from '../../lib/api.js';
@@ -32,6 +33,7 @@
   let containerEl = $state(null);
   let term = $state(null);
   let fitAddon = $state(null);
+  let webglAddon = $state(null);
   let resizeObserver = $state(null);
   let unlistenAiOutput = $state(null);
   let resizeTimeout = $state(null);
@@ -359,6 +361,27 @@
         return;
       }
 
+      // Load the WebGL renderer for GPU-accelerated drawing. xterm.js v6 ships
+      // the DOM renderer by default (slow for the heavy repaints TUI apps like
+      // Claude Code produce); WebGL is dramatically faster. It must be loaded
+      // AFTER open(). If the GPU context is lost (driver reset, tab backgrounded,
+      // too many WebGL contexts), the addon emits onContextLoss — we dispose it
+      // there and xterm.js automatically falls back to the DOM renderer rather
+      // than rendering a blank terminal.
+      try {
+        const webgl = new WebglAddon();
+        webgl.onContextLoss(() => {
+          console.warn('[Terminal] WebGL context lost — falling back to DOM renderer');
+          webgl.dispose();
+          if (webglAddon === webgl) webglAddon = null;
+        });
+        xterm.loadAddon(webgl);
+        webglAddon = webgl;
+      } catch (err) {
+        // WebGL unavailable (e.g. blocklisted GPU) — DOM renderer stays active.
+        console.warn('[Terminal] WebGL renderer unavailable, using DOM renderer:', err);
+      }
+
       // Store refs
       term = xterm;
       fitAddon = fit;
@@ -544,10 +567,12 @@
         unlistenAiOutput = null;
       }
       if (term) {
+        // term.dispose() also disposes loaded addons (fit, webgl); just drop refs.
         term.dispose();
         term = null;
       }
       fitAddon = null;
+      webglAddon = null;
       lastPtyCols = 0;
       lastPtyRows = 0;
       pendingEvents = [];
