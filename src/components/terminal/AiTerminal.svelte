@@ -1,17 +1,26 @@
 <script>
   /**
-   * Terminal.svelte -- ghostty-web terminal for AI provider PTY output.
+   * AiTerminal.svelte -- xterm.js terminal for AI provider PTY output.
    *
-   * Mounts a ghostty-web Terminal instance, listens for Tauri `ai-output` events
+   * Mounts an xterm.js Terminal instance, listens for Tauri `ai-output` events
    * to write data to the terminal, and captures keyboard input to send back
-   * to the PTY via the `aiRawInput()` API wrapper. Uses ghostty-web's FitAddon
+   * to the PTY via the `aiRawInput()` API wrapper. Uses xterm.js's FitAddon
    * to auto-resize the terminal to fill its container.
    *
-   * ghostty-web provides an xterm.js-compatible API backed by Ghostty's
-   * battle-tested WASM VT100 parser.
+   * NOTE (xterm experiment): this is the AI/voice-provider terminal swapped from
+   * ghostty-web to xterm.js. The user-shell terminal (Terminal.svelte) still uses
+   * ghostty-web, so the two can be compared side by side. ghostty-web mirrored the
+   * xterm.js API, so most calls are identical; the meaningful differences handled
+   * below are: (1) xterm has no `cursorStyle: 'none'` — we hide the cursor for
+   * Claude by setting the cursor color to the background; (2) ghostty-only methods
+   * (freeze/unfreeze/forceDirty) don't exist on xterm and are guarded so they
+   * no-op; (3) attachCustomKeyEventHandler return semantics are inverted in
+   * xterm.js (return false = prevent terminal processing).
    */
   import { untrack } from 'svelte';
-  import { init, Terminal, FitAddon } from 'ghostty-web';
+  import { Terminal } from '@xterm/xterm';
+  import { FitAddon } from '@xterm/addon-fit';
+  import '@xterm/xterm/css/xterm.css';
   import { listen } from '@tauri-apps/api/event';
   import { aiRawInput, aiPtyResize } from '../../lib/api.js';
   import { currentThemeName } from '../../lib/stores/theme.svelte.js';
@@ -81,7 +90,10 @@
     return {
       background: bg,
       foreground: text,
-      cursor: accent,
+      // xterm.js has no cursorStyle: 'none'. Claude Code draws its own cursor,
+      // so hide the terminal cursor for it by painting the cursor in the
+      // background color; other providers get the visible accent cursor.
+      cursor: aiStatusStore.providerType === 'claude' ? bg : accent,
       cursorAccent: bg,
       selectionBackground: accent + '4d', // ~30% opacity
       selectionForeground: textStrong,
@@ -233,12 +245,17 @@
           if (term.freeze) term.freeze();
         }
         isSwitching = false;
-        // Update cursor style for the new provider — Claude Code renders
-        // its own cursor, others (OpenCode) rely on the terminal cursor.
+        // Update cursor for the new provider — Claude Code renders its own
+        // cursor (hidden here via the theme cursor color), others (OpenCode)
+        // rely on the terminal cursor. xterm.js has no 'none' style, so we
+        // keep a 'bar' and toggle visibility through the theme + blink.
         if (term && term.options) {
           const isClaude = aiStatusStore.providerType === 'claude';
-          term.options.cursorStyle = isClaude ? 'none' : 'bar';
+          term.options.cursorStyle = 'bar';
           term.options.cursorBlink = !isClaude;
+          // Re-apply theme so the cursor color (visible vs. background) tracks
+          // the new provider.
+          term.options.theme = buildTermTheme();
         }
         if (switchRevealTimer) clearTimeout(switchRevealTimer);
         switchRevealTimer = setTimeout(() => {
@@ -308,23 +325,21 @@
   $effect(() => {
     if (!containerEl) return;
 
-    // ghostty-web requires async WASM initialization before creating terminals.
-    // We do this inside the $effect so it runs on mount.
+    // Set up the terminal inside the $effect so it runs on mount. (xterm.js
+    // needs no async WASM init — setup stays async only to await the Tauri
+    // event listener registration.)
     let cancelled = false;
 
     async function setup() {
-      // Initialize the WASM module (idempotent -- safe to call multiple times)
-      await init();
-
       if (cancelled) return;
 
-      // Create ghostty-web Terminal instance
-      const ghosttyTerm = new Terminal({
-        // Claude Code renders its own cursor — hide the terminal cursor to
-        // avoid a duplicate green bar. Other TUIs (OpenCode) rely on the
-        // terminal cursor for their input field.
+      // Create xterm.js Terminal instance. Claude Code renders its own cursor —
+      // we hide the terminal cursor for it via the theme cursor color (xterm has
+      // no 'none' style). Other TUIs (OpenCode) rely on the terminal cursor for
+      // their input field.
+      const xterm = new Terminal({
         cursorBlink: aiStatusStore.providerType !== 'claude',
-        cursorStyle: aiStatusStore.providerType === 'claude' ? 'none' : 'bar',
+        cursorStyle: 'bar',
         fontSize: 13,
         fontFamily: getCssVar('--font-mono') || "'Cascadia Code', 'Fira Code', monospace",
         theme: buildTermTheme(),
@@ -334,18 +349,18 @@
 
       // Create FitAddon for auto-resize
       const fit = new FitAddon();
-      ghosttyTerm.loadAddon(fit);
+      xterm.loadAddon(fit);
 
       // Mount into DOM
-      ghosttyTerm.open(containerEl);
+      xterm.open(containerEl);
 
       if (cancelled) {
-        ghosttyTerm.dispose();
+        xterm.dispose();
         return;
       }
 
       // Store refs
-      term = ghosttyTerm;
+      term = xterm;
       fitAddon = fit;
 
       // Send keyboard input to PTY.
@@ -354,7 +369,7 @@
       // Clicks (button 0-31), releases (lowercase m), and scroll (button 64+)
       // are still sent. Motion events are cosmetic (hover feedback) and not
       // needed for TUI interaction.
-      ghosttyTerm.onData((data) => {
+      xterm.onData((data) => {
         const motionMatch = data.match(/^\x1b\[<(\d+);\d+;\d+M$/);
         if (motionMatch) {
           const btn = parseInt(motionMatch[1], 10);
@@ -366,32 +381,33 @@
       });
 
       // Custom keyboard handler for Ctrl+C (copy selection) and Ctrl+V (paste)
-      // ghostty-web convention: return true = "handled, STOP processing"
-      //                         return false = "not handled, let terminal process"
-      ghosttyTerm.attachCustomKeyEventHandler((event) => {
+      // xterm.js convention (INVERTED vs ghostty-web): return true = "let the
+      //   terminal process the key normally"; return false = "stop, terminal
+      //   should NOT process this key".
+      xterm.attachCustomKeyEventHandler((event) => {
         // Only intercept keydown to avoid double-firing
-        if (event.type !== 'keydown') return false;
+        if (event.type !== 'keydown') return true;
 
         // Ctrl+C: copy selected text if there is a selection
         if (event.ctrlKey && event.key === 'c' && !event.shiftKey && !event.altKey) {
-          if (ghosttyTerm.hasSelection()) {
+          if (xterm.hasSelection()) {
             handleCopy();
-            return true; // Handled: prevent terminal from sending \x03
+            return false; // Prevent terminal from sending \x03
           }
-          return false; // Not handled: let terminal send interrupt (\x03)
+          return true; // Let terminal send interrupt (\x03)
         }
 
         // Ctrl+V: paste from clipboard
         if (event.ctrlKey && event.key === 'v' && !event.shiftKey && !event.altKey) {
           handlePaste();
-          return true; // Handled: prevent terminal default
+          return false; // Prevent terminal default
         }
 
-        return false; // Not handled: let terminal process all other keys
+        return true; // Let terminal process all other keys
       });
 
       // Listen for resize events from the terminal to send to PTY
-      ghosttyTerm.onResize(({ cols, rows }) => {
+      xterm.onResize(({ cols, rows }) => {
         if (cols === lastPtyCols && rows === lastPtyRows) return;
         lastPtyCols = cols;
         lastPtyRows = rows;
@@ -413,7 +429,7 @@
 
       if (cancelled) {
         unlisten();
-        ghosttyTerm.dispose();
+        xterm.dispose();
         return;
       }
 
@@ -504,7 +520,7 @@
     }
 
     setup().catch((err) => {
-      console.error('[Terminal] ghostty-web initialization failed:', err);
+      console.error('[Terminal] xterm.js initialization failed:', err);
     });
 
     // Cleanup on unmount
@@ -578,13 +594,13 @@
     overflow: hidden;
     background: var(--bg);
     /* Visual spacing around terminal — applied here (not on inner container)
-       so ghostty-web's canvas fills the container exactly without clipping */
+       so xterm.js's render area fills the container exactly without clipping */
     padding: 4px;
     position: relative;
   }
 
-  /* Covers the empty/stopped terminal so ghostty's default (grey) cell
-     background never shows; hidden as soon as a provider is running. */
+  /* Covers the empty/stopped terminal so no stale/default cell background
+     shows; hidden as soon as a provider is running. */
   .terminal-empty-cover {
     position: absolute;
     inset: 0;
@@ -595,12 +611,12 @@
   .terminal-container {
     flex: 1;
     overflow: hidden;
-    /* Ensure ghostty-web fills the container */
+    /* Ensure xterm.js fills the container */
     min-height: 0;
     position: relative;
-    /* Clip canvas rendering to container bounds */
+    /* Clip terminal rendering to container bounds */
     contain: strict;
-    /* Hidden until WASM init + first fit completes — prevents flash of raw escape sequences */
+    /* Hidden until first fit completes — prevents flash of raw escape sequences */
     visibility: hidden;
   }
 
@@ -608,14 +624,17 @@
     visibility: visible;
   }
 
-  /* ghostty-web renders into a canvas; ensure it fills the container */
-  .terminal-container :global(canvas) {
-    display: block;
+  /* Make xterm.js fill the container (its element is sized to rows*cellHeight;
+     letting it stretch keeps the themed background edge-to-edge). */
+  .terminal-container :global(.xterm) {
+    width: 100%;
+    height: 100%;
+    overflow: hidden !important;
   }
 
-  /* Prevent ghostty-web wrapper from overflowing */
-  .terminal-container :global(.ghostty-web),
-  .terminal-container :global(.xterm) {
-    overflow: hidden !important;
+  /* xterm.js (DOM renderer) renders rows as divs; if a canvas/webgl addon is
+     added later, ensure the canvas fills the container too. */
+  .terminal-container :global(canvas) {
+    display: block;
   }
 </style>
