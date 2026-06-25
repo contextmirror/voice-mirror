@@ -9,7 +9,8 @@
   import { chatStore } from '../../lib/stores/chat.svelte.js';
   import { lensStore } from '../../lib/stores/lens.svelte.js';
   import { navigationStore } from '../../lib/stores/navigation.svelte.js';
-  import { stopWindowStream, getStreamStatus } from '../../lib/api.js';
+  import { voiceStore } from '../../lib/stores/voice.svelte.js';
+  import { stopWindowStream, getStreamStatus, pttRelease, cancelRecording } from '../../lib/api.js';
   import { unwrapResult } from '../../lib/utils.js';
   import WindowPickerModal from './WindowPickerModal.svelte';
 
@@ -141,6 +142,26 @@
   const hasAttachments = $derived(attachments.length > 0);
   const sendDisabled = $derived(disabled || (text.trim().length === 0 && !hasAttachments));
   const hasMessages = $derived(chatStore.messages.length > 0);
+
+  // ── Voice recording bar ──
+  const WAVE_BARS = 56;
+  /** Fixed-width waveform: pad with silence on the left so the bar is full width. */
+  const waveBars = $derived.by(() => {
+    const lv = voiceStore.levels;
+    if (lv.length >= WAVE_BARS) return lv.slice(lv.length - WAVE_BARS);
+    return new Array(WAVE_BARS - lv.length).fill(0).concat(lv);
+  });
+  function barHeight(lvl) {
+    return Math.min(100, Math.max(6, lvl * 140));
+  }
+  /** Send: finalize the recording → transcribe → route to the AI. */
+  function handleVoiceSend() {
+    pttRelease().catch(() => {});
+  }
+  /** Cancel: discard the recording without transcribing. */
+  function handleVoiceCancel() {
+    cancelRecording().catch(() => {});
+  }
 </script>
 
 <svelte:document onclick={handleDocumentClick} onkeydown={handleDocumentKeydown} />
@@ -163,9 +184,33 @@
   {/if}
 
   {#if isRecording}
-    <div class="recording-indicator">
-      <span class="recording-dot"></span>
-      <span class="recording-text">Listening...</span>
+    <div class="recording-bar">
+      <div class="waveform" aria-hidden="true">
+        {#each waveBars as lvl}
+          <span class="wave-bar" style="height: {barHeight(lvl)}%"></span>
+        {/each}
+      </div>
+      <button
+        class="rec-btn cancel"
+        onclick={handleVoiceCancel}
+        title="Cancel (discard recording)"
+        aria-label="Cancel recording"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" width="16" height="16">
+          <line x1="18" y1="6" x2="6" y2="18"/>
+          <line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+      <button
+        class="rec-btn send"
+        onclick={handleVoiceSend}
+        title="Send recording"
+        aria-label="Send recording"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+      </button>
     </div>
   {/if}
 
@@ -380,7 +425,7 @@
 
   .action-menu {
     position: absolute;
-    bottom: calc(100% + 6px);
+    bottom: calc(100% + 14px);
     left: 0;
     z-index: 10001;
     background: var(--bg-elevated);
@@ -491,38 +536,84 @@
     cursor: not-allowed;
   }
 
-  /* Recording indicator */
-  .recording-indicator {
+  /* ========== Recording bar (waveform + cancel/send) ========== */
+  .recording-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 2px 0;
+  }
+
+  .waveform {
+    flex: 1;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
-    padding: 10px 0;
+    gap: 2px;
+    height: 36px;
+    padding: 0 10px;
+    border-radius: var(--radius-md);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    overflow: hidden;
   }
 
-  .recording-dot {
-    width: 10px;
-    height: 10px;
+  .wave-bar {
+    width: 3px;
+    min-height: 3px;
+    border-radius: 2px;
+    background: var(--accent);
+    opacity: 0.85;
+    transition: height 90ms linear;
+  }
+
+  .rec-btn {
+    width: 36px;
+    height: 36px;
     border-radius: 50%;
-    background: var(--danger);
-    animation: recording-pulse 1.5s ease-in-out infinite;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: background var(--duration-fast) var(--ease-out),
+                transform var(--duration-fast) var(--ease-out);
   }
 
-  .recording-text {
-    font-size: 13px;
+  .rec-btn.cancel {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    color: var(--muted);
+  }
+
+  .rec-btn.cancel:hover {
     color: var(--text);
-    font-weight: 500;
+    background: var(--bg-hover);
   }
 
-  @keyframes recording-pulse {
-    0%, 100% { opacity: 1; transform: scale(1); }
-    50% { opacity: 0.4; transform: scale(0.8); }
+  .rec-btn.send {
+    background: var(--accent);
+    color: var(--accent-contrast, white);
+  }
+
+  .rec-btn.send:hover {
+    background: var(--accent-hover);
+    transform: scale(1.05);
+  }
+
+  .rec-btn:active {
+    transform: scale(0.95);
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .recording-dot {
-      animation: none;
-      opacity: 0.7;
+    .wave-bar {
+      transition: none;
+    }
+
+    .rec-btn:hover,
+    .rec-btn:active {
+      transform: none;
     }
 
     .send-btn:hover:not(:disabled) {

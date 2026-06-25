@@ -28,6 +28,7 @@ use commands::project as project_cmds;
 use commands::workspace_state as ws_state_cmds;
 use commands::mcp as mcp_cmds;
 use commands::onboarding as onboarding_cmds;
+use commands::sandbox as sandbox_cmds;
 
 use providers::manager::AiManager;
 use providers::ProviderEvent;
@@ -308,6 +309,10 @@ pub fn run() {
             window_cmds::show_window,
             window_cmds::quit_app,
             // Screenshot / screen capture
+            sandbox_cmds::sandbox_snapshot,
+            sandbox_cmds::sandbox_click,
+            sandbox_cmds::sandbox_type,
+            sandbox_cmds::sandbox_screenshot,
             screenshot_cmds::take_screenshot,
             screenshot_cmds::list_monitors,
             screenshot_cmds::list_windows,
@@ -327,6 +332,8 @@ pub fn run() {
             voice_cmds::speak_text,
             voice_cmds::ptt_press,
             voice_cmds::ptt_release,
+            voice_cmds::cancel_recording,
+            voice_cmds::clear_inbox,
             voice_cmds::configure_ptt_key,
             voice_cmds::configure_dictation_key,
             voice_cmds::ensure_stt_model,

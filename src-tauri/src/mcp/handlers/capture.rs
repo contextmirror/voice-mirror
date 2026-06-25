@@ -184,6 +184,60 @@ pub async fn handle_capture_window(
     }
 }
 
+/// `capture_browser` -- screenshot the Lens browser preview at its exact viewport.
+pub async fn handle_capture_browser(
+    args: &Value,
+    _data_dir: &Path,
+    pipe: Option<&Arc<PipeRouter>>,
+) -> McpToolResult {
+    let pipe = match require_pipe(pipe) {
+        Ok(p) => p,
+        Err(e) => return e,
+    };
+
+    let request_id = generate_request_id();
+    info!("[capture_browser] Capturing Lens browser viewport");
+
+    match pipe_capture_request(
+        pipe,
+        &request_id,
+        "capture_browser",
+        args.clone(),
+        Duration::from_secs(30),
+    )
+    .await
+    {
+        Ok(response) => {
+            // Response contains base64, contentType, width, height fields
+            if let Some(base64) = response.get("base64").and_then(|v| v.as_str()) {
+                let content_type = response
+                    .get("contentType")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("image/png");
+                let width = response.get("width").and_then(|v| v.as_i64()).unwrap_or(0);
+                let height = response.get("height").and_then(|v| v.as_i64()).unwrap_or(0);
+                let mut result =
+                    McpToolResult::image(base64.to_string(), content_type.to_string());
+                result.content.push(super::McpContent::Text {
+                    text: format!(
+                        "Captured Lens browser viewport at {}x{} (what the user sees).",
+                        width, height
+                    ),
+                });
+                result
+            } else {
+                let text = serde_json::to_string_pretty(&response)
+                    .unwrap_or_else(|_| format!("{:?}", response));
+                McpToolResult::error(format!(
+                    "Browser capture succeeded but no image data returned: {}",
+                    text
+                ))
+            }
+        }
+        Err(e) => McpToolResult::error(e),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

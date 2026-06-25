@@ -17,6 +17,7 @@ pub mod project;
 pub mod workspace_state;
 pub mod mcp;
 pub mod onboarding;
+pub mod sandbox;
 
 use serde_json::Value;
 

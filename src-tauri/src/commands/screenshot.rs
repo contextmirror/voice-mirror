@@ -1130,18 +1130,18 @@ pub async fn capture_window(app: AppHandle, hwnd: i64) -> IpcResponse {
     .await
 }
 
-/// Capture the Lens browser webview content.
+/// Capture the Lens browser viewport (the exact webview rect the user sees) and
+/// return `(base64_png, cropped_width, cropped_height)`.
 ///
-/// Finds the WebView2 rendering surface (child window of the main window)
-/// and uses PrintWindow to capture it. Returns `{ path, thumbnail, dataUrl }`.
+/// Reads `LensState.bounds` + the active tab (errors if there is no active tab),
+/// gets the main window HWND + scale factor, then captures the main window via
+/// PrintWindow (PW_RENDERFULLCONTENT — renders child WebView2 surfaces) and crops
+/// to the webview bounds. Shared by the `lens_capture_browser` command and the
+/// MCP `capture_browser` pipe action.
 ///
 /// Must be called while the webview is still visible (before hiding it).
-#[tauri::command]
-pub async fn lens_capture_browser(
-    app: AppHandle,
-    state: tauri::State<'_, LensState>,
-) -> Result<IpcResponse, String> {
-    tracing::info!("[screenshot] lens_capture_browser called");
+pub async fn capture_lens_viewport(app: &AppHandle) -> Result<(String, i32, i32), String> {
+    let state = app.state::<LensState>();
 
     // Read state synchronously before any .await
     let webview_bounds = {
@@ -1149,33 +1149,18 @@ pub async fn lens_capture_browser(
             .active_tab_id
             .lock()
             .map_err(|e| format!("Lock error: {}", e))?;
-        if active_id.is_none() {
-            tracing::warn!("[screenshot] No active browser tab");
-            return Ok(IpcResponse::err("No active browser tab"));
-        }
-        let active_id_str = match active_id.clone() {
-            Some(id) => id,
-            None => {
-                tracing::warn!("[screenshot] No active browser tab (unexpected)");
-                return Ok(IpcResponse::err("No active browser tab"));
-            }
-        };
+        let active_id_str = active_id
+            .clone()
+            .ok_or_else(|| "No active browser tab".to_string())?;
 
         let tabs = state
             .tabs
             .lock()
             .map_err(|e| format!("Lock error: {}", e))?;
-        let tab = match tabs.get(&active_id_str) {
-            Some(t) => t,
-            None => {
-                tracing::warn!("[screenshot] Active tab not found in tabs map");
-                return Ok(IpcResponse::err("Active tab not found"));
-            }
-        };
-        tracing::info!(
-            "[screenshot] Lens webview label: {}",
-            tab.webview_label
-        );
+        let tab = tabs
+            .get(&active_id_str)
+            .ok_or_else(|| "Active tab not found".to_string())?;
+        tracing::info!("[screenshot] Lens webview label: {}", tab.webview_label);
 
         let bounds_guard = state
             .bounds
@@ -1204,24 +1189,6 @@ pub async fn lens_capture_browser(
         (hwnd_val, scale)
     };
 
-    let screenshots_dir = crate::services::platform::get_data_dir().join("screenshots");
-    if let Err(e) = fs::create_dir_all(&screenshots_dir) {
-        return Ok(IpcResponse::err(format!(
-            "Failed to create screenshots dir: {}",
-            e
-        )));
-    }
-
-    cleanup_old_screenshots(&screenshots_dir, 5);
-
-    let now_ms = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis();
-    let filename = format!("browser-{}.png", now_ms);
-    let filepath = screenshots_dir.join(&filename);
-    let filepath_str = filepath.to_string_lossy().to_string();
-
     // Compute crop bounds in physical pixels (for cropping webview area from window)
     let (crop_x, crop_y, crop_w, crop_h) = if let Some((bx, by, bw, bh)) = webview_bounds {
         (
@@ -1240,8 +1207,7 @@ pub async fn lens_capture_browser(
             // PowerShell script that:
             // 1. Captures the main window via PrintWindow (PW_RENDERFULLCONTENT)
             // 2. Crops to the lens webview bounds
-            // 3. Creates a thumbnail (max 300px wide)
-            // 4. Saves full capture + returns thumbnail as base64
+            // 3. Returns the cropped PNG as base64 + its dimensions ("W H B64")
             let ps_script = format!(
                 r#"
 Add-Type -AssemblyName System.Drawing
@@ -1296,39 +1262,20 @@ if ($cropW -gt 0 -and $cropH -gt 0) {{
         $h = $cropH
     }}
 }}
-# Save capture
-$bmp.Save('{filepath}')
-# Create thumbnail (max 300px wide)
-$maxW = 300
-$thumbB64 = ""
-if ($w -gt $maxW) {{
-    $ratio = $maxW / $w
-    $newH = [int]($h * $ratio)
-    $thumb = New-Object System.Drawing.Bitmap($maxW, $newH)
-    $tg = [System.Drawing.Graphics]::FromImage($thumb)
-    $tg.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
-    $tg.DrawImage($bmp, 0, 0, $maxW, $newH)
-    $tg.Dispose()
-    $ms = New-Object System.IO.MemoryStream
-    $thumb.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)
-    $thumbB64 = [Convert]::ToBase64String($ms.ToArray())
-    $ms.Dispose()
-    $thumb.Dispose()
-}} else {{
-    $ms = New-Object System.IO.MemoryStream
-    $bmp.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)
-    $thumbB64 = [Convert]::ToBase64String($ms.ToArray())
-    $ms.Dispose()
-}}
+# Encode full cropped capture as base64
+$ms = New-Object System.IO.MemoryStream
+$bmp.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)
+$b64 = [Convert]::ToBase64String($ms.ToArray())
+$ms.Dispose()
 $bmp.Dispose()
-Write-Output $thumbB64
+# Output: "<width> <height> <base64>"
+Write-Output ("{{0}} {{1}} {{2}}" -f $w, $h, $b64)
 "#,
                 capture_hwnd = capture_hwnd,
                 crop_x = crop_x,
                 crop_y = crop_y,
                 crop_w = crop_w,
                 crop_h = crop_h,
-                filepath = filepath_str.replace('\'', "''"),
             );
 
             let output = std::process::Command::new("powershell")
@@ -1341,42 +1288,141 @@ Write-Output $thumbB64
                 return Err(format!("Browser capture failed: {}", stderr.trim()));
             }
 
-            let thumbnail = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            Ok(thumbnail)
+            // Parse "<width> <height> <base64>"
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let line = stdout.trim();
+            let mut parts = line.splitn(3, ' ');
+            let width: i32 = parts
+                .next()
+                .and_then(|s| s.parse().ok())
+                .ok_or_else(|| "Browser capture: failed to parse width".to_string())?;
+            let height: i32 = parts
+                .next()
+                .and_then(|s| s.parse().ok())
+                .ok_or_else(|| "Browser capture: failed to parse height".to_string())?;
+            let base64 = parts
+                .next()
+                .ok_or_else(|| "Browser capture: missing base64 data".to_string())?
+                .to_string();
+            Ok((base64, width, height))
         }
 
         #[cfg(not(target_os = "windows"))]
         {
-            Err("Browser capture not yet supported on this platform".into())
+            Err::<(String, i32, i32), String>(
+                "Browser capture not yet supported on this platform".into(),
+            )
         }
     })
     .await;
 
     match result {
-        Ok(Ok(thumbnail)) => {
-            tracing::info!(
-                "[screenshot] Browser capture succeeded, thumbnail len: {}",
-                thumbnail.len()
-            );
-            let data_url = read_as_data_url(&filepath).unwrap_or_default();
-            Ok(IpcResponse::ok(serde_json::json!({
-                "path": filepath.to_string_lossy(),
-                "thumbnail": thumbnail,
-                "dataUrl": data_url
-            })))
-        }
-        Ok(Err(e)) => {
-            tracing::error!("[screenshot] Browser capture error: {}", e);
-            Ok(IpcResponse::err(e))
-        }
-        Err(e) => {
-            tracing::error!("[screenshot] Browser capture task panicked: {}", e);
-            Ok(IpcResponse::err(format!(
-                "Browser capture task panicked: {}",
-                e
-            )))
-        }
+        Ok(Ok(tuple)) => Ok(tuple),
+        Ok(Err(e)) => Err(e),
+        Err(e) => Err(format!("Browser capture task panicked: {}", e)),
     }
+}
+
+/// Capture the Lens browser webview content.
+///
+/// Finds the WebView2 rendering surface (child window of the main window)
+/// and uses PrintWindow to capture it. Returns `{ path, thumbnail, dataUrl }`.
+///
+/// Must be called while the webview is still visible (before hiding it).
+#[tauri::command]
+pub async fn lens_capture_browser(
+    app: AppHandle,
+    _state: tauri::State<'_, LensState>,
+) -> Result<IpcResponse, String> {
+    tracing::info!("[screenshot] lens_capture_browser called");
+
+    let (base64, width, height) = match capture_lens_viewport(&app).await {
+        Ok(t) => t,
+        Err(e) => {
+            tracing::error!("[screenshot] Browser capture error: {}", e);
+            return Ok(IpcResponse::err(e));
+        }
+    };
+
+    tracing::info!(
+        "[screenshot] Browser capture succeeded: {}x{}, base64 len: {}",
+        width,
+        height,
+        base64.len()
+    );
+
+    // Decode the captured PNG so we can save the full file + build a thumbnail.
+    let png_bytes = match decode_base64_png(&base64) {
+        Some(b) => b,
+        None => return Ok(IpcResponse::err("Failed to decode captured PNG")),
+    };
+
+    let screenshots_dir = crate::services::platform::get_data_dir().join("screenshots");
+    if let Err(e) = fs::create_dir_all(&screenshots_dir) {
+        return Ok(IpcResponse::err(format!(
+            "Failed to create screenshots dir: {}",
+            e
+        )));
+    }
+
+    cleanup_old_screenshots(&screenshots_dir, 5);
+
+    let now_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+    let filename = format!("browser-{}.png", now_ms);
+    let filepath = screenshots_dir.join(&filename);
+
+    if let Err(e) = fs::write(&filepath, &png_bytes) {
+        return Ok(IpcResponse::err(format!(
+            "Failed to write screenshot: {}",
+            e
+        )));
+    }
+
+    // Build a thumbnail (max 300px wide), falling back to the full image.
+    let thumbnail = make_thumbnail_base64(&png_bytes, 300);
+    let data_url = read_as_data_url(&filepath).unwrap_or_default();
+
+    Ok(IpcResponse::ok(serde_json::json!({
+        "path": filepath.to_string_lossy(),
+        "thumbnail": thumbnail,
+        "dataUrl": data_url
+    })))
+}
+
+/// Decode a base64 string into PNG bytes.
+fn decode_base64_png(b64: &str) -> Option<Vec<u8>> {
+    use base64::Engine as _;
+    base64::engine::general_purpose::STANDARD.decode(b64).ok()
+}
+
+/// Resize PNG bytes to a thumbnail (max `max_width` wide) and return base64.
+/// Returns the full-size base64 when the image is already narrow enough or on error.
+fn make_thumbnail_base64(png_bytes: &[u8], max_width: u32) -> String {
+    use base64::Engine as _;
+    let encode = |bytes: &[u8]| base64::engine::general_purpose::STANDARD.encode(bytes);
+
+    let img = match image::load_from_memory(png_bytes) {
+        Ok(i) => i,
+        Err(_) => return encode(png_bytes),
+    };
+    if img.width() <= max_width {
+        return encode(png_bytes);
+    }
+    let ratio = max_width as f64 / img.width() as f64;
+    let new_height = (img.height() as f64 * ratio).max(1.0) as u32;
+    let resized = img.resize_exact(max_width, new_height, image::imageops::FilterType::Triangle);
+
+    let mut buf = Vec::new();
+    if resized
+        .write_to(&mut std::io::Cursor::new(&mut buf), image::ImageFormat::Png)
+        .is_err()
+    {
+        return encode(png_bytes);
+    }
+    encode(&buf)
 }
 
 // ── Window streaming ──

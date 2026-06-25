@@ -139,6 +139,10 @@ pub(crate) struct PipelineShared {
     /// Force-stop recording flag (PTT release / Toggle stop).
     /// When set, the processing loop immediately transitions Recording -> Processing.
     force_stop_recording: AtomicBool,
+    /// Cancel recording flag (user discarded the in-progress recording).
+    /// When set, the processing loop drops the recorded audio WITHOUT running
+    /// STT and returns to Idle.
+    force_cancel_recording: AtomicBool,
     /// Tauri app handle for emitting events.
     pub(crate) app_handle: AppHandle,
     /// Audio ring buffer: producer side (written by capture callback).
@@ -264,6 +268,7 @@ impl VoicePipeline {
             tts_cancel: AtomicBool::new(false),
             active_playback_cancel: Mutex::new(None),
             force_stop_recording: AtomicBool::new(false),
+            force_cancel_recording: AtomicBool::new(false),
             app_handle: app_handle.clone(),
             ring_producer: Mutex::new(Some(producer)),
             ring_consumer: Mutex::new(Some(consumer)),
@@ -435,6 +440,7 @@ impl VoicePipeline {
             buf.clear();
         }
         self.shared.force_stop_recording.store(false, Ordering::SeqCst);
+        self.shared.force_cancel_recording.store(false, Ordering::SeqCst);
         self.shared
             .state
             .store(state_to_u8(VoiceState::Recording), Ordering::Release);
@@ -464,6 +470,18 @@ impl VoicePipeline {
             self.shared.force_stop_recording.store(true, Ordering::SeqCst);
         } else {
             tracing::debug!(state = ?current, "Ignoring stop_recording in current state");
+        }
+    }
+
+    /// Cancel the in-progress recording: discard the audio WITHOUT running STT
+    /// and return to Idle. Used by the chat recording bar's cancel (✕) button.
+    pub fn cancel_recording(&self) {
+        let current = state_from_u8(self.shared.state.load(Ordering::Acquire));
+        if current == VoiceState::Recording {
+            tracing::info!("Cancelling recording (user discarded)");
+            self.shared.force_cancel_recording.store(true, Ordering::SeqCst);
+        } else {
+            tracing::debug!(state = ?current, "Ignoring cancel_recording in current state");
         }
     }
 
@@ -818,10 +836,36 @@ async fn audio_processing_loop(shared: Arc<PipelineShared>) {
 
                 // Check for force-stop (PTT release / Toggle stop) OR silence timeout
                 // In toggle mode, only stop on manual press — never on silence
+                let force_cancel = shared.force_cancel_recording.swap(false, Ordering::SeqCst);
                 let force_stop = shared.force_stop_recording.swap(false, Ordering::SeqCst);
                 let current_mode = shared.mode.lock().map(|g| *g).unwrap_or(VoiceMode::PushToTalk);
                 let silence_stop = current_mode != VoiceMode::Toggle && vad.silence_exceeded(silence_timeout);
-                if force_stop || silence_stop {
+                if force_cancel {
+                    // User discarded the recording — drop the audio, no STT.
+                    tracing::info!("Discarding cancelled recording");
+                    if let Ok(guard) = shared.ring_consumer.lock() {
+                        if let Some(ref consumer) = *guard {
+                            if let Ok(mut ring) = consumer.buffer.lock() {
+                                let _ = ring.drain_all();
+                            }
+                        }
+                    }
+                    if let Ok(mut buf) = shared.recording_buf.lock() {
+                        buf.clear();
+                    }
+                    let mode = shared.mode.lock().map(|g| *g).unwrap_or(VoiceMode::PushToTalk);
+                    let next_state = match mode {
+                        VoiceMode::WakeWord => VoiceState::Listening,
+                        VoiceMode::PushToTalk | VoiceMode::Toggle => VoiceState::Idle,
+                    };
+                    shared.state.store(state_to_u8(next_state), Ordering::Release);
+                    let _ = shared.app_handle.emit("voice-event", VoiceEvent::RecordingStop {});
+                    let _ = shared.app_handle.emit(
+                        "voice-event",
+                        VoiceEvent::StateChange { state: next_state.to_string() },
+                    );
+                    vad.reset();
+                } else if force_stop || silence_stop {
                     tracing::info!(
                         reason = if force_stop { "manual" } else { "silence" },
                         "Stopping recording"

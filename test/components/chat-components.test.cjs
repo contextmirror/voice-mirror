@@ -177,9 +177,11 @@ describe('ChatInput.svelte', () => {
     assert.ok(src.includes('autoResize'), 'Should have autoResize function');
   });
 
-  it('has recording indicator', () => {
-    assert.ok(src.includes('recording-indicator'), 'Should have recording indicator');
-    assert.ok(src.includes('recording-dot'), 'Should have recording dot');
+  it('has recording bar with waveform and cancel/send controls', () => {
+    assert.ok(src.includes('recording-bar'), 'Should have recording bar');
+    assert.ok(src.includes('waveform'), 'Should have a live waveform');
+    assert.ok(src.includes('handleVoiceCancel'), 'Should have a cancel control');
+    assert.ok(src.includes('handleVoiceSend'), 'Should have a send control');
   });
 
   it('has .chat-textarea CSS', () => {
