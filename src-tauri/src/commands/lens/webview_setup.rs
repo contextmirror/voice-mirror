@@ -184,6 +184,48 @@ pub(super) const CACHE_SCRIPT: &str = r#"
 })();
 "#;
 
+/// Crash-guard initialization script for child WebView2 instances.
+///
+/// wry's `window.ipc.postMessage` handler (webview2/mod.rs:905) unconditionally
+/// parses the page's origin URL as an `http::Uri` and `.unwrap()`s the result:
+///   `ipc_handler(Request::builder().uri(url).body(js).unwrap())`
+/// For non-http(s) origins (`file://`, `data:`, `about:`) that parse fails with
+/// `InvalidUri(InvalidFormat)`, panicking inside a non-unwinding FFI callback,
+/// which aborts the entire app (STATUS_STACK_BUFFER_OVERRUN). This is what made
+/// Voice Mirror crash when a locally-edited `file://` HTML page was reloaded and
+/// something on it touched the wry IPC channel.
+///
+/// Lens browser tabs never use the wry IPC channel — host<->child comms go
+/// through custom URI schemes (`new Image().src`) and `ExecuteScript`. So we
+/// neutralise `window.chrome.webview.postMessage` (the function wry's
+/// `window.ipc.postMessage` forwards to) on **every** origin a Lens tab can load.
+///
+/// This must include http/https: a Tauri app's dev server (e.g. Blip on
+/// `http://localhost:1430`) ships a frontend that calls `invoke()`/`listen()`
+/// on mount, which drives the same wry IPC channel and aborts the host the same
+/// way `file://` did. An earlier version of this guard early-returned on
+/// http/https and left that case unprotected — editing Blip in Lens (HMR
+/// re-mounting a component that calls `invoke`) crashed the whole app.
+///
+/// No legitimate browsed page uses `window.chrome.webview.postMessage`; only a
+/// WebView2/Tauri frontend embedded in a host it doesn't own does. Neutralising
+/// it is therefore safe for normal browsing and makes such a frontend degrade
+/// gracefully (its IPC calls no-op) instead of taking down Voice Mirror.
+pub(super) const IPC_CRASH_GUARD_SCRIPT: &str = r#"
+(function() {
+    try {
+        var wv = window.chrome && window.chrome.webview;
+        if (!wv || typeof wv.postMessage !== 'function') return;
+        var noop = function() {};
+        try {
+            Object.defineProperty(wv, 'postMessage', { value: noop, writable: true, configurable: true });
+        } catch (e) {
+            try { wv.postMessage = noop; } catch (e2) {}
+        }
+    } catch (e) {}
+})();
+"#;
+
 /// Console hook initialization script for child WebView2 instances.
 ///
 /// Intercepts `console.log/warn/error/info/debug` and sends each call to the
@@ -686,6 +728,7 @@ pub(super) async fn create_tab_webview(
         let tab_id_for_handler = tab_id_clone.clone();
         let builder =
             WebviewBuilder::new(&label_clone, tauri::WebviewUrl::External(parsed_url))
+                .initialization_script(IPC_CRASH_GUARD_SCRIPT)
                 .initialization_script(&shortcut_script)
                 .initialization_script(CACHE_SCRIPT)
                 .initialization_script(CONSOLE_HOOK_SCRIPT)

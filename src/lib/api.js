@@ -125,6 +125,16 @@ export async function pttRelease() {
   return invoke('ptt_release');
 }
 
+/** Cancel the in-progress recording — discard the audio without transcribing. */
+export async function cancelRecording() {
+  return invoke('cancel_recording');
+}
+
+/** Clear the MCP inbox (the user→AI message buffer Claude reads). */
+export async function clearInbox() {
+  return invoke('clear_inbox');
+}
+
 /**
  * Configure the PTT key binding in the native input hook.
  * Formats: "kb:52" (keyboard vkey), "mouse:4" (mouse button), "MouseButton4" (legacy)
@@ -592,6 +602,33 @@ export async function lensSetDeviceEmulation(label, { width, height, deviceScale
  */
 export async function detectDevServers(projectRoot) {
   return invoke('detect_dev_servers', { projectRoot });
+}
+
+// ============ Sandbox (drive an app being built over CDP) ============
+
+/**
+ * Snapshot an external app's UI via its CDP remote-debugging port.
+ * The app must be running with `--remote-debugging-port=<port>`.
+ * @param {number} port
+ * @returns {Promise<{ success: boolean, data?: { pageUrl: string, tree: string, refCount: number } }>}
+ */
+export async function sandboxSnapshot(port) {
+  return invoke('sandbox_snapshot', { port });
+}
+
+/** Click an element in the sandboxed app by its @ref (from the last snapshot). */
+export async function sandboxClick(port, elementRef) {
+  return invoke('sandbox_click', { port, elementRef });
+}
+
+/** Type text into an element in the sandboxed app by its @ref. */
+export async function sandboxType(port, elementRef, text) {
+  return invoke('sandbox_type', { port, elementRef, text });
+}
+
+/** Screenshot the sandboxed app's web contents. Returns { base64, contentType }. */
+export async function sandboxScreenshot(port) {
+  return invoke('sandbox_screenshot', { port });
 }
 
 /**

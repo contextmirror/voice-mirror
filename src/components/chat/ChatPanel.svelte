@@ -10,7 +10,7 @@
   import { chatStore } from '../../lib/stores/chat.svelte.js';
   import { voiceStore } from '../../lib/stores/voice.svelte.js';
   import { attachmentsStore } from '../../lib/stores/attachments.svelte.js';
-  import { chatLoad, chatSave, exportChatToFile, lensCapturePreview } from '../../lib/api.js';
+  import { chatLoad, chatSave, exportChatToFile, lensCapturePreview, clearInbox } from '../../lib/api.js';
   import { lensStore } from '../../lib/stores/lens.svelte.js';
   import { save } from '@tauri-apps/plugin-dialog';
   import { unwrapResult } from '../../lib/utils.js';
@@ -119,6 +119,12 @@
         console.warn('[ChatPanel] Failed to persist clear:', err);
       }
     }
+
+    // Also clear the MCP inbox so the AI doesn't replay buffered messages it
+    // hasn't read yet (otherwise N queued voice messages get answered N times).
+    clearInbox().catch((err) => {
+      console.warn('[ChatPanel] Failed to clear MCP inbox:', err);
+    });
   }
 
   /** Export the current chat via a native Save As dialog. */

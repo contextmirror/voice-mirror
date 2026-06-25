@@ -433,7 +433,7 @@ fn dispatch_message(msg: McpToApp, app_handle: &AppHandle) {
 
 /// Handle a window capture action dispatched from the MCP binary.
 async fn handle_capture_action(
-    _app: &AppHandle,
+    app: &AppHandle,
     action: &str,
     args: &serde_json::Value,
 ) -> Result<serde_json::Value, String> {
@@ -506,6 +506,16 @@ async fn handle_capture_action(
             })
             .await
             .map_err(|e| format!("Task panicked: {}", e))?
+        }
+        "capture_browser" => {
+            let (base64_png, width, height) =
+                crate::commands::screenshot::capture_lens_viewport(app).await?;
+            Ok(serde_json::json!({
+                "base64": base64_png,
+                "contentType": "image/png",
+                "width": width,
+                "height": height
+            }))
         }
         _ => Err(format!("Unknown capture action: {}", action)),
     }

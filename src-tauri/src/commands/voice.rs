@@ -266,6 +266,32 @@ pub fn ptt_release(voice_state: State<'_, VoiceEngineState>) -> IpcResponse {
     }
 }
 
+/// Cancel the in-progress recording — discard the audio without transcribing.
+/// Used by the chat recording bar's cancel (✕) button.
+#[tauri::command]
+pub fn cancel_recording(voice_state: State<'_, VoiceEngineState>) -> IpcResponse {
+    let engine = match voice_state.lock() {
+        Ok(guard) => guard,
+        Err(e) => return IpcResponse::err(format!("Failed to lock voice state: {}", e)),
+    };
+
+    match engine.cancel_recording() {
+        Ok(()) => IpcResponse::ok_empty(),
+        Err(e) => IpcResponse::err(e),
+    }
+}
+
+/// Clear the MCP inbox (the user→AI message buffer).
+///
+/// Used by "Clear chat" so a fresh conversation doesn't replay messages the AI
+/// hasn't read yet — otherwise several buffered voice messages get answered one
+/// after another (the AI sees them all the next time it reads the inbox).
+#[tauri::command]
+pub fn clear_inbox() -> IpcResponse {
+    crate::services::inbox_watcher::clear_inbox();
+    IpcResponse::ok_empty()
+}
+
 /// Configure the PTT key binding in the global input hook.
 ///
 /// Accepts key specs like `"kb:52"` (keyboard vkey 52 = the "4" key),

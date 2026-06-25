@@ -49,7 +49,7 @@ pub enum McpToApp {
     CaptureRequest {
         /// Unique request ID for matching responses.
         request_id: String,
-        /// The capture action: "list_windows" or "capture_window"
+        /// The capture action: "list_windows", "capture_window", or "capture_browser"
         action: String,
         /// Action-specific arguments.
         args: serde_json::Value,

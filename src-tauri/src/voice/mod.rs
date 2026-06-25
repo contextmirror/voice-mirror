@@ -252,6 +252,17 @@ impl VoiceEngine {
         }
     }
 
+    /// Cancel the in-progress recording (discard audio, no transcription).
+    pub fn cancel_recording(&self) -> Result<(), String> {
+        match self.pipeline {
+            Some(ref pipeline) => {
+                pipeline.cancel_recording();
+                Ok(())
+            }
+            None => Err("Voice engine is not running".into()),
+        }
+    }
+
     /// Interrupt any in-progress TTS playback.
     pub fn stop_speaking(&self) {
         if let Some(ref pipeline) = self.pipeline {

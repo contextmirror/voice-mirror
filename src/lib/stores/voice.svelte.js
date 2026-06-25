@@ -52,6 +52,9 @@ function createVoiceStore() {
   let error = $state(null);
   let isDictating = $state(false);     // true when recording for dictation (not AI)
   let stuck = $state(null);            // { state, elapsedSecs } when pipeline is wedged, else null
+  /** Rolling waveform amplitudes (0..1), newest at the end — for the recording bar. */
+  let levels = $state([]);
+  const MAX_LEVELS = 72;
   let lastRoutedText = '';
   let lastRoutedTime = 0;
 
@@ -68,6 +71,8 @@ function createVoiceStore() {
     get isProcessing() { return state === 'processing'; },
     get isDictating() { return isDictating; },
     get stuck() { return stuck; },
+    /** Live waveform amplitudes (0..1) for the recording bar. */
+    get levels() { return levels; },
 
     /** Update state from voice-event payload */
     _handleVoiceEvent(payload) {
@@ -84,7 +89,19 @@ function createVoiceStore() {
           // clear a stale "stuck" indicator. If it wedges again the
           // watchdog will re-emit a fresh 'stuck' event.
           stuck = null;
+          // Clear the waveform once we leave the recording state.
+          if (state !== 'recording') levels = [];
           break;
+        case 'audio_level': {
+          // Append the incoming amplitude bars and keep a fixed rolling window
+          // so the waveform scrolls while recording.
+          const incoming = Array.isArray(data.levels) ? data.levels : [];
+          if (incoming.length) {
+            const next = levels.concat(incoming);
+            levels = next.length > MAX_LEVELS ? next.slice(next.length - MAX_LEVELS) : next;
+          }
+          break;
+        }
         case 'stuck':
           // Watchdog detected the pipeline wedged in a non-idle state.
           stuck = { state: data.state, elapsedSecs: data.elapsed_secs ?? 0 };

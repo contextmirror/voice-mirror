@@ -8,5 +8,6 @@ pub mod input_hook;
 pub mod logger;
 pub mod output;
 pub mod platform;
+pub mod sandbox;
 pub mod text_injector;
 pub mod window_stream;

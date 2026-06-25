@@ -744,7 +744,7 @@ fn build_all_groups() -> HashMap<String, ToolGroupDef> {
         "capture".into(),
         ToolGroupDef {
             name: "capture".into(),
-            description: "Window capture and screenshots (2 tools)".into(),
+            description: "Window capture and screenshots (3 tools)".into(),
             always_loaded: true,
             keywords: vec![
                 "screenshot".into(), "capture".into(), "window".into(),
@@ -781,6 +781,14 @@ fn build_all_groups() -> HashMap<String, ToolGroupDef> {
                                 "description": "Exact window handle (HWND) from capture_list_windows. More precise than title matching."
                             }
                         }
+                    }),
+                },
+                ToolDef {
+                    name: "capture_browser".into(),
+                    description: "Screenshot the Lens browser preview at its exact current viewport size — the web app or site the user is building, as the user sees it. Prefer this over capture_window for previewing localhost apps/sites.".into(),
+                    input_schema: json!({
+                        "type": "object",
+                        "properties": {}
                     }),
                 },
             ],
@@ -848,8 +856,8 @@ mod tests {
     fn test_list_tools_default() {
         let reg = ToolRegistry::new();
         let tools = reg.list_tools();
-        // Should have core (5) + capture (2) = 7 always-loaded tools
-        assert_eq!(tools.len(), 7);
+        // Should have core (5) + capture (3) = 8 always-loaded tools
+        assert_eq!(tools.len(), 8);
     }
 
     #[test]
@@ -916,9 +924,10 @@ mod tests {
     fn test_capture_group() {
         let mut reg = ToolRegistry::new();
         let names = reg.load_group("capture").unwrap();
-        assert_eq!(names.len(), 2);
+        assert_eq!(names.len(), 3);
         assert!(reg.is_tool_loaded("capture_list_windows"));
         assert!(reg.is_tool_loaded("capture_window"));
+        assert!(reg.is_tool_loaded("capture_browser"));
     }
 
     #[test]

@@ -385,6 +385,7 @@ async fn route_tool_call(
         // ---- Capture tools ----
         "capture_list_windows" => handlers::capture::handle_capture_list_windows(args, data_dir, router).await,
         "capture_window" => handlers::capture::handle_capture_window(args, data_dir, router).await,
+        "capture_browser" => handlers::capture::handle_capture_browser(args, data_dir, router).await,
 
         // ---- n8n tools ----
         "n8n_list_workflows" => handlers::n8n::handle_n8n_list_workflows(args, data_dir).await,
@@ -493,8 +494,8 @@ mod tests {
         let resp = handle_tools_list(json!(1), &state);
         let result = resp.result.unwrap();
         let tools = result["tools"].as_array().unwrap();
-        // Default: core (5) + capture (2) = 7 always-loaded tools
-        assert_eq!(tools.len(), 7);
+        // Default: core (5) + capture (3) = 8 always-loaded tools
+        assert_eq!(tools.len(), 8);
     }
 
     #[test]
@@ -509,16 +510,16 @@ mod tests {
     fn test_enabled_groups_loads_tools_at_startup() {
         // BUG-005 Fix 1: ENABLED_GROUPS should pre-load tool groups
         let mut registry = ToolRegistry::new();
-        // Default: always-loaded groups = core (5) + capture (2) = 7
-        assert_eq!(registry.list_tools().len(), 7);
+        // Default: always-loaded groups = core (5) + capture (3) = 8
+        assert_eq!(registry.list_tools().len(), 8);
 
         // Apply enabled groups (simulating ENABLED_GROUPS env var)
         // always_loaded groups (core, capture) are always included
         registry.apply_enabled_groups("core,memory");
         let tools = registry.list_tools();
 
-        // Should have core (5) + memory (6) + capture (2) = 13
-        assert_eq!(tools.len(), 13);
+        // Should have core (5) + memory (6) + capture (3) = 14
+        assert_eq!(tools.len(), 14);
         let tool_names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
         assert!(tool_names.contains(&"memory_search"));
         assert!(tool_names.contains(&"capture_window"));
