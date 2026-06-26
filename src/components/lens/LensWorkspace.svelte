@@ -49,6 +49,7 @@
   let centerRatio = $state(0.75);           // editor/preview vs terminal
   let previewRatio = $state(0.78);          // center column vs file tree
   let devicePreviewRatio = $state(0.5);    // editor vs device preview
+  let appPreviewRatio = $state(0.6);       // editor vs app preview (live app)
 
   // Sync local ratios → layout store (for workspace state persistence)
   $effect(() => { layoutStore.setChatRatio(chatRatio); });
@@ -601,6 +602,8 @@
             <SplitPanel direction="vertical" bind:ratio={centerRatio} minA={200} minB={80} collapseB={!layoutStore.showTerminal}>
               {#snippet panelA()}
                 <div class="preview-area">
+                 <SplitPanel direction="horizontal" bind:ratio={appPreviewRatio} minA={300} minB={240} collapseB={!sandboxPreviewStore.visible}>
+                  {#snippet panelA()}
                   <SplitPanel direction="horizontal" bind:ratio={devicePreviewRatio} minA={300} minB={200} collapseB={!devicePreviewStore.isOpen}>
                     {#snippet panelA()}
                       <div class="editor-with-browser">
@@ -667,14 +670,14 @@
                       <DevicePreview />
                     {/snippet}
                   </SplitPanel>
-                  <!-- App Preview: docked right overlay showing the real app
-                       window at true size (same surface the AI sees via CDP).
-                       Mutually exclusive with the Browser (airspace). -->
-                  {#if sandboxPreviewStore.visible}
-                    <div class="sandbox-dock">
-                      <SandboxPreview />
-                    </div>
-                  {/if}
+                  {/snippet}
+                  {#snippet panelB()}
+                    <!-- App Preview: a real, resizable panel beside the editor
+                         (the live app via WGC). Mutually exclusive with the
+                         Browser, so no airspace conflict. -->
+                    <SandboxPreview />
+                  {/snippet}
+                 </SplitPanel>
                 </div>
               {/snippet}
               {#snippet panelB()}
@@ -736,19 +739,6 @@
     position: relative;
   }
 
-  /* Sandbox live preview — docked over the right of the editor area. */
-  .sandbox-dock {
-    position: absolute;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    width: 45%;
-    min-width: 280px;
-    max-width: 720px;
-    z-index: 20;
-    display: flex;
-    box-shadow: -4px 0 16px rgba(0, 0, 0, 0.4);
-  }
 
   .editor-with-browser {
     display: flex;
