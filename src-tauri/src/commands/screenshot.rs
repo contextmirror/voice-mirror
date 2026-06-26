@@ -891,6 +891,66 @@ fn capture_screen_native(output_path: &str) -> Result<(), String> {
 
 // ── Tauri commands ─────────────────────────────────────────────────────
 
+/// Decode a base64 image and save it to the screenshots temp dir, returning
+/// `{ path }` — an absolute path that Claude Code (in the terminal) can read.
+///
+/// Used by the AI terminal's image drag-drop / paste support: the frontend has
+/// only the image *bytes* (an HTML5 drop or a clipboard image gives content,
+/// not a real path), so it hands them here, we persist them, and the caller
+/// types the returned path into the Claude Code prompt.
+///
+/// `data` may be a bare base64 string or a full `data:<mime>;base64,...` URL.
+/// `ext` is the file extension to use (defaults to "png").
+#[tauri::command]
+pub async fn save_image_to_temp(data: String, ext: Option<String>) -> IpcResponse {
+    let screenshots_dir = crate::services::platform::get_data_dir().join("screenshots");
+    if let Err(e) = fs::create_dir_all(&screenshots_dir) {
+        return IpcResponse::err(format!("Failed to create screenshots dir: {}", e));
+    }
+
+    // Strip a `data:...;base64,` prefix if the caller passed a full data URL.
+    let b64 = match data.split_once(',') {
+        Some((prefix, rest)) if prefix.starts_with("data:") => rest,
+        _ => data.as_str(),
+    };
+
+    let bytes = match crate::voice::tts::crypto::base64_decode(b64) {
+        Ok(b) => b,
+        Err(e) => return IpcResponse::err(format!("Failed to decode image: {}", e)),
+    };
+    if bytes.is_empty() {
+        return IpcResponse::err("Image data was empty");
+    }
+
+    // Normalize the extension (drop a leading dot, keep it filesystem-safe).
+    let ext = ext.unwrap_or_else(|| "png".to_string());
+    let ext: String = ext
+        .trim()
+        .trim_start_matches('.')
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .take(8)
+        .collect::<String>()
+        .to_ascii_lowercase();
+    let ext = if ext.is_empty() { "png".to_string() } else { ext };
+
+    let now_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+    // The screenshots dir lives under %APPDATA% (no spaces), and this name is
+    // space-free, so the resulting path needs no quoting when typed into the
+    // terminal prompt.
+    let filename = format!("dropped-{}.{}", now_ms, ext);
+    let filepath = screenshots_dir.join(&filename);
+
+    if let Err(e) = fs::write(&filepath, &bytes) {
+        return IpcResponse::err(format!("Failed to write image: {}", e));
+    }
+
+    IpcResponse::ok(serde_json::json!({ "path": filepath.to_string_lossy() }))
+}
+
 /// Take a screenshot of the primary display.
 #[tauri::command]
 pub async fn take_screenshot() -> IpcResponse {
