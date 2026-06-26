@@ -1,241 +1,97 @@
-//! Sandbox screencast — a live CDP screencast of an app being built.
+//! Sandbox live preview — mirror the real app WINDOW and serve it as MJPEG.
 //!
-//! A dedicated tokio task owns the CDP WebSocket so it can BOTH receive
-//! `Page.screencastFrame` events AND reply with `Page.screencastFrameAck`
-//! (omitting the ack stops frames). This is the one thing the request/reply
-//! `Cdp::call` in [`crate::services::sandbox`] cannot do, so we open our own
-//! connection here.
+//! Tauri pill apps are TRANSPARENT, borderless windows (`transparent: true`).
+//! CDP `Page.startScreencast` renders such a window as a solid black box — JPEG
+//! has no alpha and the transparent WebView2 GPU surface composites to black.
 //!
-//! Decoded JPEG frames are pushed into a lock-free buffer and served as MJPEG by
-//! the same server the window stream uses, so the preview panel is just an
-//! `<img src="http://127.0.0.1:{mjpegPort}/stream">`.
+//! So we don't screencast the page; we capture the actual on-screen WINDOW via
+//! Windows.Graphics.Capture (the same `window_stream` the window-picker uses),
+//! which mirrors exactly what the user sees — transparency, borderless chrome
+//! and all. We identify the app window by its CDP page title (the same title
+//! Tauri sets on the OS window) matched against the visible window list.
+//!
+//! CDP is still used for the AI's structured tools (snapshot/click/type); this
+//! module is only the human-facing live picture.
 
-use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
-use arc_swap::ArcSwap;
-use futures_util::{SinkExt, StreamExt};
-use serde_json::{json, Value};
-use tokio_tungstenite::{connect_async, tungstenite::Message};
+use serde_json::Value;
 use tracing::{info, warn};
 
-use crate::services::sandbox::discover_page_target;
-use crate::services::window_stream::{find_available_port, run_mjpeg_server};
-
-/// A live screencast session, keyed by the app's CDP port.
-struct Session {
-    stop_flag: Arc<AtomicBool>,
-    mjpeg_port: u16,
-}
-
-static SESSIONS: OnceLock<Mutex<HashMap<u16, Session>>> = OnceLock::new();
-
-fn sessions() -> &'static Mutex<HashMap<u16, Session>> {
-    SESSIONS.get_or_init(|| Mutex::new(HashMap::new()))
-}
-
-/// Start (or reuse) a live screencast of the app on CDP `cdp_port`.
-/// Returns the local MJPEG port to point an `<img src=".../stream">` at.
-///
-/// The MJPEG server starts immediately (serving nothing until frames arrive),
-/// and a background task connects to the app's CDP — retrying for minutes,
-/// because a Tauri app launched via `tauri dev` compiles Rust first and its
-/// window (and CDP port) can appear long after the Vite dev server is up.
+/// Start mirroring the app on CDP `cdp_port`. Returns the local MJPEG port to
+/// point an `<img src="http://127.0.0.1:{port}/stream">` at.
 pub async fn start(cdp_port: u16) -> Result<u16, String> {
-    // Reuse an existing session for this port (idempotent).
-    if let Some(port) = sessions()
-        .lock()
-        .ok()
-        .and_then(|g| g.get(&cdp_port).map(|s| s.mjpeg_port))
-    {
-        return Ok(port);
-    }
+    let hwnd = find_app_hwnd(cdp_port)
+        .await
+        .ok_or_else(|| "Could not find the app window to capture (is it open?)".to_string())?;
+    let port = crate::services::window_stream::start(hwnd, 30)?;
+    info!(
+        "[sandbox_stream] mirroring app window hwnd={} (CDP :{}) -> MJPEG :{}",
+        hwnd, cdp_port, port
+    );
+    Ok(port)
+}
 
-    // Frame buffer + MJPEG server (reused from window_stream) — start serving now.
-    let buffer: Arc<ArcSwap<Vec<u8>>> = Arc::new(ArcSwap::from_pointee(Vec::new()));
-    let stop_flag = Arc::new(AtomicBool::new(false));
-    let mjpeg_port = find_available_port()?;
-    {
-        let s = stop_flag.clone();
-        let b = buffer.clone();
-        std::thread::Builder::new()
-            .name("sandbox-mjpeg".into())
-            .spawn(move || run_mjpeg_server(mjpeg_port, s, b))
-            .map_err(|e| format!("Failed to spawn MJPEG server: {}", e))?;
-    }
+/// Stop mirroring (stops the underlying window stream).
+pub fn stop(_cdp_port: u16) {
+    let _ = crate::services::window_stream::stop();
+}
 
-    // Background task: wait for the app's CDP, then screencast into the buffer.
-    let read_stop = stop_flag.clone();
-    let read_buffer = buffer.clone();
-    tokio::spawn(async move {
-        // Wait for the app to expose its CDP page target (up to ~4 minutes),
-        // bailing early if the session is stopped (dev server stopped/crashed).
-        let mut ws_url = None;
-        for _ in 0..240 {
-            if read_stop.load(Ordering::SeqCst) {
-                return;
-            }
-            match discover_page_target(cdp_port).await {
-                Ok((url, _)) => {
-                    ws_url = Some(url);
-                    break;
-                }
-                Err(_) => tokio::time::sleep(Duration::from_secs(1)).await,
-            }
-        }
-        let ws_url = match ws_url {
-            Some(u) => u,
-            None => {
-                warn!("[sandbox_stream] app never reachable on CDP :{}", cdp_port);
-                if let Ok(mut g) = sessions().lock() {
-                    g.remove(&cdp_port);
-                }
-                return;
-            }
-        };
-
-        let mut ws = match connect_async(&ws_url).await {
-            Ok((ws, _)) => ws,
-            Err(e) => {
-                warn!("[sandbox_stream] CDP connect failed on :{}: {}", cdp_port, e);
-                if let Ok(mut g) = sessions().lock() {
-                    g.remove(&cdp_port);
-                }
-                return;
-            }
-        };
-
-        // Enable the page domain and start the screencast.
-        let mut id: u64 = 1;
-        let _ = ws_send(&mut ws, id, "Page.enable", json!({})).await;
-        id += 1;
-        // Tauri pill apps usually have a TRANSPARENT window. Screencast frames are
-        // JPEG (no alpha), so transparent areas otherwise flatten to black and the
-        // app looks like a black box. Force an opaque default background so the
-        // app's content renders on a known surface.
-        let _ = ws_send(
-            &mut ws,
-            id,
-            "Emulation.setDefaultBackgroundColorOverride",
-            json!({ "color": { "r": 24, "g": 24, "b": 27, "a": 255 } }),
-        )
-        .await;
-        id += 1;
-        let _ = ws_send(
-            &mut ws,
-            id,
-            "Page.startScreencast",
-            json!({
-                "format": "jpeg",
-                "quality": 70,
-                "maxWidth": 1600,
-                "maxHeight": 1200,
-                "everyNthFrame": 1
-            }),
-        )
-        .await;
-        id += 1;
-        info!("[sandbox_stream] screencast connected: CDP :{}", cdp_port);
-
-        let mut ack_id = id;
-        let mut logged_first = false;
-        loop {
-            if read_stop.load(Ordering::SeqCst) {
-                break;
-            }
-            match tokio::time::timeout(Duration::from_secs(30), ws.next()).await {
-                Ok(Some(Ok(Message::Text(txt)))) => {
-                    let v: Value = match serde_json::from_str(&txt) {
-                        Ok(v) => v,
-                        Err(_) => continue,
-                    };
-                    if v.get("method").and_then(|m| m.as_str()) == Some("Page.screencastFrame") {
-                        let params = v.get("params");
-                        let data = params
-                            .and_then(|p| p.get("data"))
-                            .and_then(|d| d.as_str())
-                            .unwrap_or("");
-                        let session_id = params
-                            .and_then(|p| p.get("sessionId"))
-                            .cloned()
-                            .unwrap_or_else(|| Value::from(0));
-                        if !logged_first {
-                            logged_first = true;
-                            let meta = params
-                                .and_then(|p| p.get("metadata"))
-                                .map(|m| m.to_string())
-                                .unwrap_or_default();
-                            info!(
-                                "[sandbox_stream] first frame on CDP :{} — {} b64 chars, metadata={}",
-                                cdp_port,
-                                data.len(),
-                                meta
-                            );
-                        }
-                        if let Ok(bytes) = crate::voice::tts::crypto::base64_decode(data) {
-                            if !bytes.is_empty() {
-                                read_buffer.store(Arc::new(bytes));
-                            }
-                        }
-                        // Ack — without this, Chromium stops sending frames.
-                        let _ = ws_send(
-                            &mut ws,
-                            ack_id,
-                            "Page.screencastFrameAck",
-                            json!({ "sessionId": session_id }),
-                        )
-                        .await;
-                        ack_id += 1;
+/// Find the OS window for the app on `cdp_port`, by matching its CDP page title
+/// against the visible window list. Retries briefly — the window may still be
+/// appearing right after launch.
+async fn find_app_hwnd(cdp_port: u16) -> Option<i64> {
+    for attempt in 0..20 {
+        if let Some(title) = cdp_page_title(cdp_port).await {
+            match crate::commands::screenshot::list_visible_windows_metadata() {
+                Ok(windows) => {
+                    let t = title.trim().to_lowercase();
+                    if let Some(w) = windows.iter().find(|w| {
+                        let wt = w.title.trim().to_lowercase();
+                        !wt.is_empty() && (wt == t || wt.contains(&t) || t.contains(&wt))
+                    }) {
+                        return Some(w.hwnd);
+                    }
+                    if attempt == 0 || attempt == 5 {
+                        let titles: Vec<&str> = windows.iter().map(|w| w.title.as_str()).collect();
+                        warn!(
+                            "[sandbox_stream] app window titled '{}' not found among: {:?}",
+                            title, titles
+                        );
                     }
                 }
-                Ok(Some(Ok(Message::Close(_)))) | Ok(None) => break,
-                Ok(Some(Ok(_))) => {}            // ping/binary/etc — ignore
-                Ok(Some(Err(_))) => break,       // socket error
-                Err(_) => {}                     // read timeout — loop, re-check stop
+                Err(e) => warn!("[sandbox_stream] window enumeration failed: {}", e),
             }
         }
-        // Best-effort stop + registry cleanup so a closed app frees the slot.
-        let _ = ws_send(&mut ws, ack_id, "Page.stopScreencast", json!({})).await;
-        read_stop.store(true, Ordering::SeqCst);
-        if let Ok(mut g) = sessions().lock() {
-            g.remove(&cdp_port);
-        }
-        info!("[sandbox_stream] screencast for CDP :{} ended", cdp_port);
-    });
-
-    sessions()
-        .lock()
-        .map_err(|e| e.to_string())?
-        .insert(cdp_port, Session { stop_flag, mjpeg_port });
-    info!(
-        "[sandbox_stream] screencast started: CDP :{} -> MJPEG :{}",
-        cdp_port, mjpeg_port
-    );
-    Ok(mjpeg_port)
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+    None
 }
 
-/// Stop the screencast for `cdp_port` (no-op if none is running).
-pub fn stop(cdp_port: u16) {
-    if let Ok(mut g) = sessions().lock() {
-        if let Some(s) = g.remove(&cdp_port) {
-            s.stop_flag.store(true, Ordering::SeqCst);
-            info!("[sandbox_stream] screencast for CDP :{} stopped", cdp_port);
+/// Fetch the app's page title from its CDP `/json` endpoint (Tauri sets the same
+/// title on the OS window, so we can match it in the window list).
+async fn cdp_page_title(port: u16) -> Option<String> {
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(3))
+        .build()
+        .ok()?;
+    // WebView2's CDP server can bind IPv4 or IPv6 inconsistently — try both.
+    for host in ["127.0.0.1", "[::1]"] {
+        let url = format!("http://{}:{}/json", host, port);
+        if let Ok(resp) = client.get(&url).send().await {
+            if let Ok(arr) = resp.json::<Vec<Value>>().await {
+                for tgt in arr {
+                    if tgt.get("type").and_then(|v| v.as_str()) == Some("page") {
+                        if let Some(title) = tgt.get("title").and_then(|v| v.as_str()) {
+                            let title = title.trim();
+                            if !title.is_empty() {
+                                return Some(title.to_string());
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
-}
-
-/// Send a CDP command over the WebSocket as a JSON text frame.
-async fn ws_send<S>(ws: &mut S, id: u64, method: &str, params: Value) -> Result<(), String>
-where
-    S: SinkExt<Message> + Unpin,
-    <S as futures_util::Sink<Message>>::Error: std::fmt::Display,
-{
-    let msg = json!({ "id": id, "method": method, "params": params }).to_string();
-    ws.send(Message::Text(msg)).await.map_err(|e| {
-        let m = format!("CDP send {} failed: {}", method, e);
-        warn!("[sandbox_stream] {}", m);
-        m
-    })
+    None
 }
