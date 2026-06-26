@@ -524,8 +524,10 @@ async fn handle_capture_action(
             crate::services::sandbox::snapshot(port).await
         }
         "sandbox_screenshot" => {
-            let port = resolve_sandbox_port(args)?;
-            crate::services::sandbox::screenshot(port).await
+            // Use the WGC window frame (what the live preview shows), not CDP —
+            // CDP renders transparent Tauri windows as black.
+            let _ = resolve_sandbox_port(args)?;
+            crate::services::sandbox_stream::capture_app_window()
         }
         "sandbox_click" => {
             let port = resolve_sandbox_port(args)?;

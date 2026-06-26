@@ -37,6 +37,17 @@ pub fn stop(_cdp_port: u16) {
     let _ = crate::services::window_stream::stop();
 }
 
+/// Screenshot the app window for the AI — the same WGC frame the live preview
+/// shows. Reliable for transparent windows (which CDP captures as black).
+/// Requires the live preview to be streaming (it auto-opens for Tauri apps).
+pub fn capture_app_window() -> Result<Value, String> {
+    let jpeg = crate::services::window_stream::latest_frame().ok_or_else(|| {
+        "No live app frame yet — open the App Preview (it auto-opens for Tauri apps) so the window is being captured.".to_string()
+    })?;
+    let b64 = crate::voice::tts::crypto::base64_encode(&jpeg);
+    Ok(serde_json::json!({ "base64": b64, "contentType": "image/jpeg" }))
+}
+
 /// Find the OS window for the app on `cdp_port`, by matching its CDP page title
 /// against the visible window list. Retries briefly — the window may still be
 /// appearing right after launch.
