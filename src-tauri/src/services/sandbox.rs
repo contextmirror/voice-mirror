@@ -283,32 +283,53 @@ pub async fn snapshot(port: u16, window: Option<&str>) -> Result<Value, String> 
         });
     }
 
-    // Snapshot candidates. With an explicit window, just that one; otherwise try
-    // each until one yields interactive elements (so the default finds the real
-    // UI window, not an empty/hidden overlay).
+    // Snapshot candidates. With an explicit window, just that one. Otherwise pick
+    // the window that (a) has interactive elements and (b) best matches the OS
+    // window the live preview is mirroring — so Claude drives the SAME visible
+    // window the user is watching, not a hidden one.
+    let preview_aspect = if want.is_none() {
+        preview_window_aspect()
+    } else {
+        None
+    };
     let mut chosen_ws = candidates[0].0.clone();
     let mut page_url = candidates[0].1.clone();
     let mut tree = String::new();
     let mut refs: HashMap<String, RefEntry> = HashMap::new();
-    let mut picked = false;
+    let mut have_fallback = false;
+    let mut best_diff = f64::MAX;
     for (ws, url) in &candidates {
-        let (t, r) = snapshot_target(ws).await.unwrap_or_default();
-        if !picked {
-            chosen_ws = ws.clone();
-            page_url = url.clone();
-            tree = t.clone();
-            refs = r.clone();
-            picked = true;
-        }
-        if !r.is_empty() {
+        let (t, r, aspect) = snapshot_target(ws).await.unwrap_or_default();
+        if want.is_some() {
+            // Explicit window: use it as-is.
             chosen_ws = ws.clone();
             page_url = url.clone();
             tree = t;
             refs = r;
             break;
         }
-        if want.is_some() {
-            break;
+        // Keep the first non-empty result as a fallback (in case nothing matches
+        // the preview's aspect).
+        if r.is_empty() {
+            if !have_fallback && tree.is_empty() {
+                chosen_ws = ws.clone();
+                page_url = url.clone();
+                tree = t;
+                refs = r;
+            }
+            continue;
+        }
+        let diff = match (preview_aspect, aspect) {
+            (Some(pa), Some(a)) => (pa - a).abs(),
+            _ => 0.0, // no preview aspect to match — any window with refs is fine
+        };
+        if !have_fallback || diff < best_diff {
+            have_fallback = true;
+            best_diff = diff;
+            chosen_ws = ws.clone();
+            page_url = url.clone();
+            tree = t;
+            refs = r;
         }
     }
 
@@ -320,13 +341,30 @@ pub async fn snapshot(port: u16, window: Option<&str>) -> Result<Value, String> 
     Ok(json!({ "pageUrl": page_url, "tree": tree, "refCount": ref_count, "windows": windows }))
 }
 
-/// Snapshot a single CDP target: the accessibility tree, falling back to a
-/// DOM walk when the AX tree is empty (some WebView2 pages don't expose AX).
-async fn snapshot_target(ws_url: &str) -> Result<(String, HashMap<String, RefEntry>), String> {
+/// Snapshot a single CDP target: the accessibility tree (falling back to a DOM
+/// walk when the AX tree is empty), plus the target window's aspect ratio (w/h)
+/// so we can match it to the OS window the preview is mirroring.
+async fn snapshot_target(
+    ws_url: &str,
+) -> Result<(String, HashMap<String, RefEntry>, Option<f64>), String> {
     let mut cdp = Cdp::connect(ws_url).await?;
     let _ = cdp.call("DOM.enable", json!({})).await;
     // Accessibility is off until enabled; without this the AX tree is empty.
     let _ = cdp.call("Accessibility.enable", json!({})).await;
+    let aspect = cdp
+        .call("Browser.getWindowForTarget", json!({}))
+        .await
+        .ok()
+        .and_then(|w| {
+            let b = w.get("bounds")?;
+            let width = b.get("width")?.as_f64()?;
+            let height = b.get("height")?.as_f64()?;
+            if height > 0.0 {
+                Some(width / height)
+            } else {
+                None
+            }
+        });
     let ax = cdp.call("Accessibility.getFullAXTree", json!({})).await?;
     let (mut tree, mut refs) = parse_ax_tree(&ax, true);
     if refs.is_empty() {
@@ -337,7 +375,20 @@ async fn snapshot_target(ws_url: &str) -> Result<(String, HashMap<String, RefEnt
             }
         }
     }
-    Ok((tree, refs))
+    Ok((tree, refs, aspect))
+}
+
+/// Aspect ratio (w/h) of the OS window the live preview is currently mirroring,
+/// so the default snapshot can target the SAME window the user is watching.
+fn preview_window_aspect() -> Option<f64> {
+    let hwnd = crate::services::window_stream::current_hwnd()?;
+    let windows = crate::commands::screenshot::list_visible_windows_metadata().ok()?;
+    let w = windows.iter().find(|w| w.hwnd == hwnd)?;
+    if w.height > 0 {
+        Some(w.width as f64 / w.height as f64)
+    } else {
+        None
+    }
 }
 
 /// DOM-based snapshot: walk `DOM.getDocument` for interactive elements and build

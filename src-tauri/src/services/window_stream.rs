@@ -30,6 +30,17 @@ fn frame_buffer() -> &'static Arc<ArcSwap<Vec<u8>>> {
     FRAME_BUFFER.get_or_init(|| Arc::new(ArcSwap::from_pointee(Vec::new())))
 }
 
+/// The HWND the live preview is currently mirroring, if a stream is running.
+/// Lets Claude's snapshot target the SAME window the user is watching.
+pub(crate) fn current_hwnd() -> Option<i64> {
+    let st = state().lock().ok()?;
+    if st.running {
+        Some(st.hwnd)
+    } else {
+        None
+    }
+}
+
 /// The most recent captured JPEG frame, if a stream is running and has produced
 /// at least one frame. Lets the sandbox screenshot reuse exactly what the live
 /// preview shows (reliable for transparent windows that CDP can't capture).
