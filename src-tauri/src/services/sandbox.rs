@@ -287,8 +287,8 @@ pub async fn snapshot(port: u16, window: Option<&str>) -> Result<Value, String> 
     // the window that (a) has interactive elements and (b) best matches the OS
     // window the live preview is mirroring — so Claude drives the SAME visible
     // window the user is watching, not a hidden one.
-    let preview_aspect = if want.is_none() {
-        preview_window_aspect()
+    let preview_bounds = if want.is_none() {
+        preview_window_bounds()
     } else {
         None
     };
@@ -299,7 +299,7 @@ pub async fn snapshot(port: u16, window: Option<&str>) -> Result<Value, String> 
     let mut chosen = false;
     let mut best_diff = f64::MAX;
     for (ws, url) in &candidates {
-        let (t, r, aspect, visible) = snapshot_target(ws).await.unwrap_or_default();
+        let (t, r, bounds, visible) = snapshot_target(ws).await.unwrap_or_default();
         if want.is_some() {
             // Explicit window: use it as-is.
             chosen_ws = ws.clone();
@@ -313,12 +313,15 @@ pub async fn snapshot(port: u16, window: Option<&str>) -> Result<Value, String> 
         if !visible {
             continue;
         }
-        // Score each candidate. When we know the previewed window's aspect, match
-        // it STRICTLY (even if its refs are empty) so we stay on the visible
-        // window the user is watching. Without a preview, prefer any visible
-        // window that actually has interactive elements.
-        let diff = match (preview_aspect, aspect) {
-            (Some(pa), Some(a)) => (pa - a).abs(),
+        // Score each visible candidate. When we know the previewed window's rect,
+        // match it by POSITION (+ size) — unique per window — so we lock onto the
+        // exact window the user is watching, even if another window has a similar
+        // shape. Without a preview, prefer any visible window with interactive
+        // elements.
+        let diff = match (preview_bounds, bounds) {
+            (Some((px, py, pw, ph)), Some((cx, cy, cw, ch))) => {
+                (px - cx).abs() + (py - cy).abs() + 0.5 * ((pw - cw).abs() + (ph - ch).abs())
+            }
             (Some(_), None) => f64::MAX, // no window bounds → not the preview window
             (None, _) => {
                 if r.is_empty() {
@@ -351,24 +354,23 @@ pub async fn snapshot(port: u16, window: Option<&str>) -> Result<Value, String> 
 /// so we can match it to the OS window the preview is mirroring.
 async fn snapshot_target(
     ws_url: &str,
-) -> Result<(String, HashMap<String, RefEntry>, Option<f64>, bool), String> {
+) -> Result<(String, HashMap<String, RefEntry>, Option<(f64, f64, f64, f64)>, bool), String> {
     let mut cdp = Cdp::connect(ws_url).await?;
     let _ = cdp.call("DOM.enable", json!({})).await;
     // Accessibility is off until enabled; without this the AX tree is empty.
     let _ = cdp.call("Accessibility.enable", json!({})).await;
-    let aspect = cdp
+    let bounds = cdp
         .call("Browser.getWindowForTarget", json!({}))
         .await
         .ok()
         .and_then(|w| {
             let b = w.get("bounds")?;
-            let width = b.get("width")?.as_f64()?;
-            let height = b.get("height")?.as_f64()?;
-            if height > 0.0 {
-                Some(width / height)
-            } else {
-                None
-            }
+            Some((
+                b.get("left")?.as_f64()?,
+                b.get("top")?.as_f64()?,
+                b.get("width")?.as_f64()?,
+                b.get("height")?.as_f64()?,
+            ))
         });
     // Is this window actually ON SCREEN? Chromium reports document.visibilityState
     // = "hidden" for a hidden window, so we never let Claude act on a window the
@@ -397,20 +399,41 @@ async fn snapshot_target(
             }
         }
     }
-    Ok((tree, refs, aspect, visible))
+    Ok((tree, refs, bounds, visible))
 }
 
-/// Aspect ratio (w/h) of the OS window the live preview is currently mirroring,
-/// so the default snapshot can target the SAME window the user is watching.
-fn preview_window_aspect() -> Option<f64> {
+/// Logical (DIP) screen rect (left, top, width, height) of the OS window the
+/// live preview is currently mirroring, so the default snapshot can target the
+/// SAME window the user is watching — matched by position, which is unique per
+/// window. CDP `Browser.getWindowForTarget` bounds are also in DIP, so they
+/// compare directly once we divide the physical rect by the window's DPI scale.
+#[cfg(windows)]
+fn preview_window_bounds() -> Option<(f64, f64, f64, f64)> {
+    use windows::Win32::Foundation::{HWND, RECT};
+    use windows::Win32::UI::HiDpi::GetDpiForWindow;
+    use windows::Win32::UI::WindowsAndMessaging::GetWindowRect;
+
     let hwnd = crate::services::window_stream::current_hwnd()?;
-    let windows = crate::commands::screenshot::list_visible_windows_metadata().ok()?;
-    let w = windows.iter().find(|w| w.hwnd == hwnd)?;
-    if w.height > 0 {
-        Some(w.width as f64 / w.height as f64)
-    } else {
-        None
+    unsafe {
+        let h = HWND(hwnd as *mut std::ffi::c_void);
+        let mut rect = RECT::default();
+        if GetWindowRect(h, &mut rect).is_err() {
+            return None;
+        }
+        let dpi = GetDpiForWindow(h);
+        let scale = if dpi > 0 { dpi as f64 / 96.0 } else { 1.0 };
+        Some((
+            rect.left as f64 / scale,
+            rect.top as f64 / scale,
+            (rect.right - rect.left) as f64 / scale,
+            (rect.bottom - rect.top) as f64 / scale,
+        ))
     }
+}
+
+#[cfg(not(windows))]
+fn preview_window_bounds() -> Option<(f64, f64, f64, f64)> {
+    None
 }
 
 /// DOM-based snapshot: walk `DOM.getDocument` for interactive elements and build
