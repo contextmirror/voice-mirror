@@ -304,13 +304,17 @@ function createDevServerManager() {
 
       if (ready) {
         updateState(projectPath, { status: 'running', lastActiveTime: Date.now() });
-        await lensNavigate(server.url);
-        // The app is up; if it's a Tauri app with CDP enabled, register its port
-        // as the active sandbox so the AI's sandbox_* tools default to it.
         if (cdpPort) {
+          // Tauri app: the App Preview (the real app via CDP) is the canonical
+          // view. Don't also load the web frontend into the Lens browser — it's
+          // the same app shown stretched, which is confusing. Register the CDP
+          // port so the App Preview + the AI's sandbox_* tools use it.
           sandboxSetActivePort(cdpPort).catch((err) =>
             console.warn('[dev-server-manager] sandboxSetActivePort failed:', err)
           );
+        } else {
+          // Web project: show it in the Lens browser as before.
+          await lensNavigate(server.url);
         }
         toastStore.addToast({
           message: `${server.framework || 'Server'} ready on :${server.port}`,

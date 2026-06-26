@@ -111,6 +111,18 @@ pub async fn start(cdp_port: u16) -> Result<u16, String> {
         let mut id: u64 = 1;
         let _ = ws_send(&mut ws, id, "Page.enable", json!({})).await;
         id += 1;
+        // Tauri pill apps usually have a TRANSPARENT window. Screencast frames are
+        // JPEG (no alpha), so transparent areas otherwise flatten to black and the
+        // app looks like a black box. Force an opaque default background so the
+        // app's content renders on a known surface.
+        let _ = ws_send(
+            &mut ws,
+            id,
+            "Emulation.setDefaultBackgroundColorOverride",
+            json!({ "color": { "r": 24, "g": 24, "b": 27, "a": 255 } }),
+        )
+        .await;
+        id += 1;
         let _ = ws_send(
             &mut ws,
             id,
@@ -128,6 +140,7 @@ pub async fn start(cdp_port: u16) -> Result<u16, String> {
         info!("[sandbox_stream] screencast connected: CDP :{}", cdp_port);
 
         let mut ack_id = id;
+        let mut logged_first = false;
         loop {
             if read_stop.load(Ordering::SeqCst) {
                 break;
@@ -148,6 +161,19 @@ pub async fn start(cdp_port: u16) -> Result<u16, String> {
                             .and_then(|p| p.get("sessionId"))
                             .cloned()
                             .unwrap_or_else(|| Value::from(0));
+                        if !logged_first {
+                            logged_first = true;
+                            let meta = params
+                                .and_then(|p| p.get("metadata"))
+                                .map(|m| m.to_string())
+                                .unwrap_or_default();
+                            info!(
+                                "[sandbox_stream] first frame on CDP :{} — {} b64 chars, metadata={}",
+                                cdp_port,
+                                data.len(),
+                                meta
+                            );
+                        }
                         if let Ok(bytes) = crate::voice::tts::crypto::base64_decode(data) {
                             if !bytes.is_empty() {
                                 read_buffer.store(Arc::new(bytes));
