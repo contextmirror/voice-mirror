@@ -6,7 +6,7 @@
  * to cap concurrent running servers.
  */
 
-import { terminalSpawn, terminalInput, terminalKill, probePort, lensNavigate, killPortProcess } from '../api.js';
+import { terminalSpawn, terminalInput, terminalKill, probePort, lensNavigate, killPortProcess, sandboxSetActivePort, sandboxClearActivePort } from '../api.js';
 import { terminalTabsStore } from './terminal-tabs.svelte.js';
 import { lensStore } from './lens.svelte.js';
 import { toastStore } from './toast.svelte.js';
@@ -33,6 +33,7 @@ const CRASH_LOOP_WINDOW = 300000; // 5 minutes
  * @property {number} lastActiveTime
  * @property {boolean} crashLoopDetected
  * @property {string|null} outputChannel
+ * @property {number|null} cdpPort - CDP remote-debugging port (Tauri apps only), for sandbox preview.
  */
 
 function createDevServerManager() {
@@ -64,6 +65,7 @@ function createDevServerManager() {
         lastActiveTime: Date.now(),
         crashLoopDetected: false,
         outputChannel: null,
+        cdpPort: null,
       });
       // Trigger reactivity by reassigning
       servers = new Map(servers);
@@ -231,9 +233,20 @@ function createDevServerManager() {
     }
     updateState(projectPath, { outputChannel: channelLabel });
 
+    // For Tauri apps, enable CDP remote debugging so the sandbox tools (and the
+    // AI) can see/drive the real app window at its true size. The env var is
+    // inherited down the npm -> cargo -> app.exe chain to the built WebView2 app.
+    // A distinct high port derived from the dev port avoids clashing with it.
+    const isTauri = (server.framework || '').toLowerCase() === 'tauri';
+    const cdpPort = isTauri ? 9222 + (server.port % 1000) : null;
+    const spawnEnv = cdpPort
+      ? { WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${cdpPort}` }
+      : null;
+    if (cdpPort) updateState(projectPath, { cdpPort });
+
     // Spawn PTY
     try {
-      const result = await terminalSpawn({ cwd: projectPath, outputChannel: channelLabel });
+      const result = await terminalSpawn({ cwd: projectPath, outputChannel: channelLabel, env: spawnEnv });
       if (!result?.success || !result?.data?.id) {
         updateState(projectPath, { status: 'stopped' });
         toastStore.addToast({
@@ -292,6 +305,13 @@ function createDevServerManager() {
       if (ready) {
         updateState(projectPath, { status: 'running', lastActiveTime: Date.now() });
         await lensNavigate(server.url);
+        // The app is up; if it's a Tauri app with CDP enabled, register its port
+        // as the active sandbox so the AI's sandbox_* tools default to it.
+        if (cdpPort) {
+          sandboxSetActivePort(cdpPort).catch((err) =>
+            console.warn('[dev-server-manager] sandboxSetActivePort failed:', err)
+          );
+        }
         toastStore.addToast({
           message: `${server.framework || 'Server'} ready on :${server.port}`,
           severity: 'success',
@@ -327,6 +347,11 @@ function createDevServerManager() {
     const framework = state.framework;
     const port = state.port;
 
+    // Drop the sandbox preview's active CDP port if this server owned one.
+    if (state.cdpPort) {
+      sandboxClearActivePort().catch(() => {});
+    }
+
     cancelPoll(projectPath);
     cancelIdleTimer(projectPath);
 
@@ -336,6 +361,7 @@ function createDevServerManager() {
     updateState(projectPath, {
       status: 'stopped',
       shellId: null,
+      cdpPort: null,
     });
 
     try {
@@ -484,6 +510,11 @@ function createDevServerManager() {
 
     const state = servers.get(crashedProject);
     if (!state) return;
+
+    // Drop the sandbox preview's active CDP port if this crashed server owned one.
+    if (state.cdpPort) {
+      sandboxClearActivePort().catch(() => {});
+    }
 
     const wasRunning = state.status === 'running' || state.status === 'starting';
 

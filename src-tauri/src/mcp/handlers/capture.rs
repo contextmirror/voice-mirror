@@ -23,7 +23,7 @@ use crate::mcp::pipe_router::PipeRouter;
 static REQUEST_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 /// Generate a unique request ID using timestamp + atomic counter.
-fn generate_request_id() -> String {
+pub(crate) fn generate_request_id() -> String {
     let ts = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap_or_default()
@@ -33,7 +33,7 @@ fn generate_request_id() -> String {
 }
 
 /// Get the pipe client or return an error result.
-fn require_pipe(pipe: Option<&Arc<PipeRouter>>) -> Result<&Arc<PipeRouter>, McpToolResult> {
+pub(crate) fn require_pipe(pipe: Option<&Arc<PipeRouter>>) -> Result<&Arc<PipeRouter>, McpToolResult> {
     pipe.ok_or_else(|| {
         McpToolResult::error(
             "Capture tools require the named pipe connection to the Voice Mirror app. \
@@ -43,7 +43,7 @@ fn require_pipe(pipe: Option<&Arc<PipeRouter>>) -> Result<&Arc<PipeRouter>, McpT
 }
 
 /// Send a capture request through the named pipe and wait for the response.
-async fn pipe_capture_request(
+pub(crate) async fn pipe_capture_request(
     router: &Arc<PipeRouter>,
     request_id: &str,
     action: &str,

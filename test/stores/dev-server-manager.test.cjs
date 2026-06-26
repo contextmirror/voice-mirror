@@ -543,3 +543,55 @@ describe('dev-server-manager.svelte.js -- setupCommands chaining', () => {
     assert.ok(chainPattern, 'Should chain setupCommands with startCommand');
   });
 });
+
+// -- Sandbox CDP (Tauri apps get remote-debugging for the sandbox preview) --
+
+describe('dev-server-manager.svelte.js -- sandbox CDP', () => {
+  it('imports the sandbox active-port api wrappers', () => {
+    assert.ok(
+      src.includes('sandboxSetActivePort') && src.includes('sandboxClearActivePort'),
+      'Should import sandboxSetActivePort/sandboxClearActivePort'
+    );
+  });
+
+  it('only enables CDP for Tauri apps', () => {
+    assert.ok(
+      src.includes("=== 'tauri'") || src.includes('Tauri'),
+      'Should gate CDP injection on the Tauri framework'
+    );
+  });
+
+  it('injects WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS with --remote-debugging-port', () => {
+    assert.ok(
+      src.includes('WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS'),
+      'Should set the WebView2 browser-args env var'
+    );
+    assert.ok(
+      src.includes('--remote-debugging-port='),
+      'Should pass --remote-debugging-port'
+    );
+  });
+
+  it('passes the env to terminalSpawn', () => {
+    assert.ok(src.includes('env: spawnEnv'), 'Should forward spawnEnv to terminalSpawn');
+  });
+
+  it('tracks cdpPort on server state', () => {
+    assert.ok(src.includes('cdpPort'), 'ServerState should carry cdpPort');
+  });
+
+  it('registers the active sandbox port only once the app is confirmed ready', () => {
+    // sandboxSetActivePort must sit inside the `if (ready)` block, gated on cdpPort.
+    const readyBlock = src.split('if (ready)')[1]?.split('} else {')[0] || '';
+    assert.ok(
+      readyBlock.includes('sandboxSetActivePort'),
+      'Should register the active port after readiness (no connection-refused race)'
+    );
+  });
+
+  it('clears the active sandbox port on stop and on crash', () => {
+    // Appears in stopServer and handleShellExit.
+    const occurrences = (src.match(/sandboxClearActivePort\(\)/g) || []).length;
+    assert.ok(occurrences >= 2, 'Should clear the active port on both stop and crash paths');
+  });
+});

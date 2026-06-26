@@ -642,6 +642,16 @@ export async function sandboxScreenshot(port) {
   return invoke('sandbox_screenshot', { port });
 }
 
+/** Record the active sandbox app's CDP port so the sandbox MCP tools can default to it. */
+export async function sandboxSetActivePort(port) {
+  return invoke('sandbox_set_active_port', { port });
+}
+
+/** Clear the active sandbox CDP port (e.g. when its dev server stops). */
+export async function sandboxClearActivePort() {
+  return invoke('sandbox_clear_active_port');
+}
+
 /**
  * Check if a specific port is accepting TCP connections on localhost.
  * @param {number} port - Port number to probe.
@@ -831,6 +841,7 @@ export async function stopFileWatching() {
  * @param {number} [options.rows] - Terminal rows.
  * @param {string} [options.cwd] - Working directory.
  * @param {string} [options.profileId] - Terminal profile ID (shell).
+ * @param {Object<string,string>} [options.env] - Extra environment variables for the PTY (inherited by child processes).
  * @returns {Promise<Object>}
  */
 export async function terminalSpawn(options = {}) {
@@ -840,6 +851,7 @@ export async function terminalSpawn(options = {}) {
     cwd: options.cwd || null,
     profileId: options.profileId || null,
     outputChannel: options.outputChannel || null,
+    env: options.env || null,
   });
 }
 

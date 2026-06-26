@@ -387,6 +387,12 @@ async fn route_tool_call(
         "capture_window" => handlers::capture::handle_capture_window(args, data_dir, router).await,
         "capture_browser" => handlers::capture::handle_capture_browser(args, data_dir, router).await,
 
+        // ---- Sandbox tools (see/drive an app being built, over CDP) ----
+        "sandbox_snapshot" => handlers::sandbox::handle_sandbox_snapshot(args, data_dir, router).await,
+        "sandbox_screenshot" => handlers::sandbox::handle_sandbox_screenshot(args, data_dir, router).await,
+        "sandbox_click" => handlers::sandbox::handle_sandbox_click(args, data_dir, router).await,
+        "sandbox_type" => handlers::sandbox::handle_sandbox_type(args, data_dir, router).await,
+
         // ---- n8n tools ----
         "n8n_list_workflows" => handlers::n8n::handle_n8n_list_workflows(args, data_dir).await,
         "n8n_get_workflow" => handlers::n8n::handle_n8n_get_workflow(args, data_dir).await,

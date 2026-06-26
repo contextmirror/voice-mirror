@@ -37,6 +37,7 @@ pub fn terminal_spawn(
     cwd: Option<String>,
     profile_id: Option<String>,
     output_channel: Option<String>,
+    env: Option<std::collections::HashMap<String, String>>,
 ) -> IpcResponse {
     let mut manager = lock_terminal!(state);
     let cols = cols.unwrap_or(80);
@@ -55,7 +56,7 @@ pub fn terminal_spawn(
         None
     };
 
-    match manager.spawn(cols, rows, cwd, profile_id, output_channel, store) {
+    match manager.spawn(cols, rows, cwd, profile_id, output_channel, env, store) {
         Ok((id, profile_name)) => IpcResponse::ok(json!({ "id": id, "profileName": profile_name })),
         Err(e) => IpcResponse::err(e),
     }

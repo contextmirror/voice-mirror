@@ -45,3 +45,18 @@ pub async fn sandbox_screenshot(port: u16) -> IpcResponse {
         Err(e) => IpcResponse::err(e),
     }
 }
+
+/// Record the CDP port of the active sandbox app, so the sandbox MCP tools can
+/// default to it when the AI omits an explicit `port`.
+#[tauri::command]
+pub fn sandbox_set_active_port(port: u16) -> IpcResponse {
+    crate::services::sandbox::set_active_cdp_port(Some(port));
+    IpcResponse::ok(serde_json::json!({ "port": port }))
+}
+
+/// Clear the active sandbox CDP port (e.g. when the dev server stops/crashes).
+#[tauri::command]
+pub fn sandbox_clear_active_port() -> IpcResponse {
+    crate::services::sandbox::set_active_cdp_port(None);
+    IpcResponse::ok(serde_json::json!({ "ok": true }))
+}

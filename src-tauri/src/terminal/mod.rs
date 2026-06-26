@@ -300,6 +300,7 @@ impl TerminalManager {
         cwd: Option<String>,
         profile_id: Option<String>,
         output_channel: Option<String>,
+        env: Option<std::collections::HashMap<String, String>>,
         output_store: Option<Arc<crate::services::output::OutputStore>>,
     ) -> Result<(String, Option<String>), String> {
         let id = format!("terminal-{}", self.next_id);
@@ -394,6 +395,16 @@ impl TerminalManager {
             // Set CLAUDE_CODE_GIT_BASH_PATH so Claude Code works inside our shell
             if shell_lower.contains("bash") {
                 cmd.env("CLAUDE_CODE_GIT_BASH_PATH", &shell);
+            }
+        }
+
+        // Caller-provided environment (e.g. WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS
+        // to enable CDP remote debugging on a Tauri app being built). Applied last
+        // so it can override the defaults above; inherited by child processes
+        // (npm -> cargo -> the built app.exe).
+        if let Some(env_vars) = &env {
+            for (k, v) in env_vars {
+                cmd.env(k, v);
             }
         }
 

@@ -313,6 +313,8 @@ pub fn run() {
             sandbox_cmds::sandbox_click,
             sandbox_cmds::sandbox_type,
             sandbox_cmds::sandbox_screenshot,
+            sandbox_cmds::sandbox_set_active_port,
+            sandbox_cmds::sandbox_clear_active_port,
             screenshot_cmds::take_screenshot,
             screenshot_cmds::save_image_to_temp,
             screenshot_cmds::list_monitors,
