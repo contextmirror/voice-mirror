@@ -31,6 +31,10 @@ describe('sandbox-preview: integration', () => {
     assert.ok(src.includes('sandboxStreamStop'), 'Should call sandboxStreamStop');
   });
 
+  it('lists app windows for the switcher / auto-follow', () => {
+    assert.ok(src.includes('sandboxListWindows'), 'Should call sandboxListWindows');
+  });
+
   it('unwraps the IpcResponse to get the stream url', () => {
     assert.ok(src.includes('unwrapResult'), 'Should unwrap the response');
     assert.ok(src.includes('data?.url') || src.includes('data.url'), 'Should read the stream url');
@@ -79,5 +83,25 @@ describe('sandbox-preview: lifecycle', () => {
   it('close stops the screencast for the current port', () => {
     const block = src.split('close()')[1] || '';
     assert.ok(block.includes('sandboxStreamStop'), 'close should stop the screencast');
+  });
+});
+
+describe('sandbox-preview: multi-window', () => {
+  it('tracks the window list and current window', () => {
+    assert.ok(/let\s+windows\s*=\s*\$state\(/.test(src), 'Should hold a windows list in $state');
+    assert.ok(/let\s+currentHwnd\s*=\s*\$state\(/.test(src), 'Should track currentHwnd in $state');
+    assert.ok(src.includes('get windows()'), 'Should expose a windows getter');
+    assert.ok(src.includes('get currentHwnd()'), 'Should expose a currentHwnd getter');
+  });
+
+  it('has a switchTo(hwnd) method', () => {
+    assert.ok(/switchTo\(hwnd\)/.test(src), 'Should expose switchTo(hwnd)');
+  });
+
+  it('polls the window list and auto-follows new windows', () => {
+    assert.ok(src.includes('setInterval'), 'Should poll the window list');
+    assert.ok(src.includes('refreshWindows'), 'Should have a refreshWindows loop');
+    // Auto-follow: a window not previously seen triggers a stream re-target.
+    assert.ok(src.includes('seen.add') && src.includes('startStream('), 'Should auto-follow newly-seen windows');
   });
 });

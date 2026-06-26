@@ -652,14 +652,19 @@ export async function sandboxClearActivePort() {
   return invoke('sandbox_clear_active_port');
 }
 
-/** Start a live CDP screencast of the app on `port`. Returns { mjpegPort, url }. */
-export async function sandboxStreamStart(port) {
-  return invoke('sandbox_stream_start', { port });
+/** Start a live mirror of the app on `port` (optionally a specific window `hwnd`). Returns { mjpegPort, url }. */
+export async function sandboxStreamStart(port, hwnd) {
+  return invoke('sandbox_stream_start', { port, hwnd: hwnd ?? null });
 }
 
 /** Stop the live screencast for the app on `port`. */
 export async function sandboxStreamStop(port) {
   return invoke('sandbox_stream_stop', { port });
+}
+
+/** List the app's visible windows (pill, settings, dialogs). Returns [{ hwnd, title }]. */
+export async function sandboxListWindows(port) {
+  return invoke('sandbox_list_windows', { port });
 }
 
 /**

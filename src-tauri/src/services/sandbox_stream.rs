@@ -18,18 +18,62 @@ use std::time::Duration;
 use serde_json::Value;
 use tracing::{info, warn};
 
-/// Start mirroring the app on CDP `cdp_port`. Returns the local MJPEG port to
-/// point an `<img src="http://127.0.0.1:{port}/stream">` at.
-pub async fn start(cdp_port: u16) -> Result<u16, String> {
-    let hwnd = find_app_hwnd(cdp_port)
-        .await
-        .ok_or_else(|| "Could not find the app window to capture (is it open?)".to_string())?;
+/// One of the app's visible windows (pill, settings, a dialog, …).
+#[derive(serde::Serialize)]
+pub struct AppWindow {
+    pub hwnd: i64,
+    pub title: String,
+}
+
+/// Start mirroring the app on CDP `cdp_port`. If `hwnd` is given, mirror that
+/// specific window; otherwise mirror the main window. Returns the local MJPEG
+/// port to point an `<img src="http://127.0.0.1:{port}/stream">` at.
+pub async fn start(cdp_port: u16, hwnd: Option<i64>) -> Result<(u16, i64), String> {
+    let hwnd = match hwnd {
+        Some(h) => h,
+        None => find_app_hwnd(cdp_port)
+            .await
+            .ok_or_else(|| "Could not find the app window to capture (is it open?)".to_string())?,
+    };
     let port = crate::services::window_stream::start(hwnd, 30)?;
     info!(
         "[sandbox_stream] mirroring app window hwnd={} (CDP :{}) -> MJPEG :{}",
         hwnd, cdp_port, port
     );
-    Ok(port)
+    Ok((port, hwnd))
+}
+
+/// List the app's visible top-level windows (pill, settings, dialogs), so the
+/// preview can offer a switcher and auto-follow newly-opened ones. Identifies
+/// the app's process via its main window (matched by CDP page title), then
+/// returns every visible window of that process.
+pub async fn list_windows(cdp_port: u16) -> Result<Vec<AppWindow>, String> {
+    let windows = crate::commands::screenshot::list_visible_windows_metadata()?;
+    let main_proc = match cdp_page_title(cdp_port).await {
+        Some(title) => {
+            let t = title.trim().to_lowercase();
+            windows
+                .iter()
+                .find(|w| {
+                    let wt = w.title.trim().to_lowercase();
+                    !wt.is_empty() && (wt == t || wt.contains(&t) || t.contains(&wt))
+                })
+                .map(|w| w.process_name.clone())
+        }
+        None => None,
+    };
+    let result = match main_proc {
+        Some(proc) if !proc.is_empty() => windows
+            .into_iter()
+            .filter(|w| w.process_name == proc && !w.title.trim().is_empty())
+            .map(|w| AppWindow {
+                hwnd: w.hwnd,
+                title: w.title,
+            })
+            .collect(),
+        _ => Vec::new(),
+    };
+    Ok(result)
 }
 
 /// Stop mirroring (stops the underlying window stream).

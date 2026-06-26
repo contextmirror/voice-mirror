@@ -13,6 +13,8 @@
   const url = $derived(sandboxPreviewStore.streamUrl);
   const loading = $derived(sandboxPreviewStore.loading);
   const error = $derived(sandboxPreviewStore.error);
+  const windows = $derived(sandboxPreviewStore.windows);
+  const currentHwnd = $derived(sandboxPreviewStore.currentHwnd);
 
   // The MJPEG stream serves immediately but is empty until the app window exists
   // (a `tauri dev` app compiles Rust first, so its window can appear minutes
@@ -34,6 +36,20 @@
         <span class="port">CDP :{sandboxPreviewStore.cdpPort}</span>
       {/if}
     </span>
+    {#if windows.length > 1}
+      <!-- Window switcher: pick which app window to mirror (auto-follows new ones). -->
+      <select
+        class="window-switcher"
+        value={currentHwnd}
+        onchange={(e) => sandboxPreviewStore.switchTo(e.currentTarget.value)}
+        title="Switch which app window is shown"
+        aria-label="App window"
+      >
+        {#each windows as w (w.hwnd)}
+          <option value={w.hwnd}>{w.title}</option>
+        {/each}
+      </select>
+    {/if}
     <button
       class="close-btn"
       onclick={() => sandboxPreviewStore.hide()}
@@ -122,6 +138,24 @@
     color: var(--muted);
     font-family: var(--font-mono);
     font-size: 11px;
+  }
+
+  .window-switcher {
+    margin-left: auto;
+    max-width: 160px;
+    height: 22px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg-elevated);
+    color: var(--text);
+    font-size: 11px;
+    font-family: var(--font-mono);
+    outline: none;
+    cursor: pointer;
+    padding: 0 4px;
+  }
+  .window-switcher:focus {
+    border-color: var(--accent);
   }
 
   .close-btn {
