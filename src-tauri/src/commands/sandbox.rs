@@ -12,8 +12,8 @@ use super::IpcResponse;
 /// Returns `{ pageUrl, tree, refCount }` where `tree` is the accessibility tree
 /// rendered to `@ref` element refs (the same format the AI uses for the browser).
 #[tauri::command]
-pub async fn sandbox_snapshot(port: u16) -> IpcResponse {
-    match crate::services::sandbox::snapshot(port).await {
+pub async fn sandbox_snapshot(port: u16, window: Option<String>) -> IpcResponse {
+    match crate::services::sandbox::snapshot(port, window.as_deref()).await {
         Ok(v) => IpcResponse::ok(v),
         Err(e) => IpcResponse::err(e),
     }

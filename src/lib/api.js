@@ -623,8 +623,8 @@ export async function detectDevServers(projectRoot) {
  * @param {number} port
  * @returns {Promise<{ success: boolean, data?: { pageUrl: string, tree: string, refCount: number } }>}
  */
-export async function sandboxSnapshot(port) {
-  return invoke('sandbox_snapshot', { port });
+export async function sandboxSnapshot(port, window) {
+  return invoke('sandbox_snapshot', { port, window: window ?? null });
 }
 
 /** Click an element in the sandboxed app by its @ref (from the last snapshot). */

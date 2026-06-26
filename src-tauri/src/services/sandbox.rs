@@ -81,9 +81,8 @@ pub fn active_cdp_port() -> Option<u16> {
 
 // ── CDP discovery + session ──────────────────────────────────────────────────
 
-/// Discover the primary page target on a CDP remote-debugging port.
-/// Returns `(webSocketDebuggerUrl, page_url)`.
-pub(crate) async fn discover_page_target(port: u16) -> Result<(String, String), String> {
+/// Fetch the debuggable `page` targets from a CDP port's `/json` endpoint.
+async fn fetch_page_targets(port: u16) -> Result<Vec<Value>, String> {
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(3))
         .build()
@@ -95,18 +94,11 @@ pub(crate) async fn discover_page_target(port: u16) -> Result<(String, String), 
         match client.get(&list_url).send().await {
             Ok(resp) => match resp.json::<Vec<Value>>().await {
                 Ok(targets) => {
-                    for t in &targets {
-                        if t.get("type").and_then(|v| v.as_str()) == Some("page") {
-                            if let Some(ws) =
-                                t.get("webSocketDebuggerUrl").and_then(|v| v.as_str())
-                            {
-                                let page_url =
-                                    t.get("url").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                                return Ok((ws.to_string(), page_url));
-                            }
-                        }
-                    }
-                    last_err = "no debuggable page target found".to_string();
+                    let pages: Vec<Value> = targets
+                        .into_iter()
+                        .filter(|t| t.get("type").and_then(|v| v.as_str()) == Some("page"))
+                        .collect();
+                    return Ok(pages);
                 }
                 Err(e) => last_err = format!("CDP /json parse failed: {}", e),
             },
@@ -117,6 +109,89 @@ pub(crate) async fn discover_page_target(port: u16) -> Result<(String, String), 
         "CDP port {} not reachable (is the app running with --remote-debugging-port={}?): {}",
         port, port, last_err
     ))
+}
+
+/// Discover a page target on a CDP port. With `title`, match the window whose
+/// title contains/equals it (so the AI can target e.g. "Yap Settings"); without,
+/// return the first page target. Returns `(webSocketDebuggerUrl, page_url)`.
+pub(crate) async fn discover_page_target(
+    port: u16,
+    title: Option<&str>,
+) -> Result<(String, String), String> {
+    let targets = fetch_page_targets(port).await?;
+    let want = title.map(|t| t.trim().to_lowercase());
+    let mut first: Option<(String, String)> = None;
+    for t in &targets {
+        let ws = match t.get("webSocketDebuggerUrl").and_then(|v| v.as_str()) {
+            Some(w) => w.to_string(),
+            None => continue,
+        };
+        let url = t.get("url").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        if let Some(w) = &want {
+            let ttl = t
+                .get("title")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim()
+                .to_lowercase();
+            if !ttl.is_empty() && (ttl == *w || ttl.contains(w) || w.contains(&ttl)) {
+                return Ok((ws, url));
+            }
+        }
+        if first.is_none() {
+            first = Some((ws, url));
+        }
+    }
+    if let Some(w) = title {
+        return Err(format!(
+            "No app window matching '{}'. Call sandbox_snapshot without `window` to see the available windows.",
+            w
+        ));
+    }
+    first.ok_or_else(|| "no debuggable page target found".to_string())
+}
+
+/// Titles of the app's debuggable windows (for the AI to target by name).
+pub(crate) async fn list_window_titles(port: u16) -> Vec<String> {
+    match fetch_page_targets(port).await {
+        Ok(targets) => targets
+            .iter()
+            .filter_map(|t| t.get("title").and_then(|v| v.as_str()))
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect(),
+        Err(_) => Vec::new(),
+    }
+}
+
+// ── Last-snapshot target per port ────────────────────────────────────────────
+// snapshot() records which window's CDP target it used, so a follow-up
+// click/type acts on the SAME window (the refs' backend node ids are only valid
+// for that target). No window arg needed on click/type — they follow snapshot.
+
+static TARGET_STORE: OnceLock<Mutex<HashMap<u16, String>>> = OnceLock::new();
+
+fn target_store() -> &'static Mutex<HashMap<u16, String>> {
+    TARGET_STORE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn set_target(port: u16, ws_url: &str) {
+    if let Ok(mut g) = target_store().lock() {
+        g.insert(port, ws_url.to_string());
+    }
+}
+
+fn get_target(port: u16) -> Option<String> {
+    target_store().lock().ok().and_then(|g| g.get(&port).cloned())
+}
+
+/// Resolve the CDP target for a follow-up action: the window the last snapshot
+/// used, falling back to the first page target.
+async fn action_target(port: u16) -> Result<String, String> {
+    match get_target(port) {
+        Some(ws) => Ok(ws),
+        None => Ok(discover_page_target(port, None).await?.0),
+    }
 }
 
 /// A minimal CDP session over a single WebSocket. Commands are sequential:
@@ -172,15 +247,18 @@ impl Cdp {
 /// Snapshot the external app's UI: its accessibility tree rendered to the same
 /// `@ref` element model the AI uses for the Lens browser. Stores the ref map so
 /// a follow-up `click`/`type` can resolve refs.
-pub async fn snapshot(port: u16) -> Result<Value, String> {
-    let (ws_url, page_url) = discover_page_target(port).await?;
+pub async fn snapshot(port: u16, window: Option<&str>) -> Result<Value, String> {
+    let (ws_url, page_url) = discover_page_target(port, window).await?;
+    // Remember this target so click/type act on the same window.
+    set_target(port, &ws_url);
     let mut cdp = Cdp::connect(&ws_url).await?;
     let _ = cdp.call("DOM.enable", json!({})).await;
     let ax = cdp.call("Accessibility.getFullAXTree", json!({})).await?;
     let (tree, refs) = parse_ax_tree(&ax, true);
     let ref_count = refs.len();
     store_refs(port, refs);
-    Ok(json!({ "pageUrl": page_url, "tree": tree, "refCount": ref_count }))
+    let windows = list_window_titles(port).await;
+    Ok(json!({ "pageUrl": page_url, "tree": tree, "refCount": ref_count, "windows": windows }))
 }
 
 /// Compute the center of the first non-degenerate quad from `DOM.getContentQuads`.
@@ -209,7 +287,7 @@ fn quad_center(quads_result: &Value) -> Option<(f64, f64)> {
 /// falling back to `element.click()` when geometry is unavailable.
 pub async fn click(port: u16, ref_str: &str) -> Result<Value, String> {
     let backend = lookup_backend(port, ref_str)?;
-    let (ws_url, _) = discover_page_target(port).await?;
+    let ws_url = action_target(port).await?;
     let mut cdp = Cdp::connect(&ws_url).await?;
     let _ = cdp.call("DOM.enable", json!({})).await;
     let _ = cdp
@@ -264,7 +342,7 @@ pub async fn click(port: u16, ref_str: &str) -> Result<Value, String> {
 /// Type text into an element (by `@ref`) after focusing it.
 pub async fn type_text(port: u16, ref_str: &str, text: &str) -> Result<Value, String> {
     let backend = lookup_backend(port, ref_str)?;
-    let (ws_url, _) = discover_page_target(port).await?;
+    let ws_url = action_target(port).await?;
     let mut cdp = Cdp::connect(&ws_url).await?;
     let _ = cdp.call("DOM.enable", json!({})).await;
     let _ = cdp.call("DOM.focus", json!({ "backendNodeId": backend })).await;
@@ -274,7 +352,7 @@ pub async fn type_text(port: u16, ref_str: &str, text: &str) -> Result<Value, St
 
 /// Screenshot the external app's web contents (JPEG) for the AI's eyes.
 pub async fn screenshot(port: u16) -> Result<Value, String> {
-    let (ws_url, _) = discover_page_target(port).await?;
+    let ws_url = action_target(port).await?;
     let mut cdp = Cdp::connect(&ws_url).await?;
     let _ = cdp.call("Page.enable", json!({})).await;
     let r = cdp

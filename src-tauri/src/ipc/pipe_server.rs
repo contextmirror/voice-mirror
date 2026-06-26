@@ -521,7 +521,8 @@ async fn handle_capture_action(
         // app process) so services::sandbox's @ref store is shared across calls.
         "sandbox_snapshot" => {
             let port = resolve_sandbox_port(args)?;
-            crate::services::sandbox::snapshot(port).await
+            let window = args.get("window").and_then(|v| v.as_str());
+            crate::services::sandbox::snapshot(port, window).await
         }
         "sandbox_screenshot" => {
             // Use the WGC window frame (what the live preview shows), not CDP —
