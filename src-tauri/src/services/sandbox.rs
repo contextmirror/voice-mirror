@@ -79,6 +79,30 @@ pub fn active_cdp_port() -> Option<u16> {
     active_port_cell().lock().ok().and_then(|g| *g)
 }
 
+// ── Active sandbox WINDOW (the unified source of truth) ───────────────────────
+// snapshot() records the OS window (HWND) it acted on. The live preview polls
+// this and mirrors the SAME window — so the human watches exactly the window
+// Claude is driving, by construction, not by guessing. This is what replaced the
+// fragile auto-follow.
+
+static ACTIVE_HWND: OnceLock<Mutex<Option<i64>>> = OnceLock::new();
+
+fn active_hwnd_cell() -> &'static Mutex<Option<i64>> {
+    ACTIVE_HWND.get_or_init(|| Mutex::new(None))
+}
+
+/// Record the OS window Claude is currently driving (so the preview can follow).
+pub fn set_active_hwnd(hwnd: Option<i64>) {
+    if let Ok(mut g) = active_hwnd_cell().lock() {
+        *g = hwnd;
+    }
+}
+
+/// The OS window Claude is currently driving, for the live preview to mirror.
+pub fn active_hwnd() -> Option<i64> {
+    active_hwnd_cell().lock().ok().and_then(|g| *g)
+}
+
 // ── CDP discovery + session ──────────────────────────────────────────────────
 
 /// Fetch the debuggable `page` targets from a CDP port's `/json` endpoint.
@@ -249,104 +273,113 @@ impl Cdp {
 /// a follow-up `click`/`type` can resolve refs.
 pub async fn snapshot(port: u16, window: Option<&str>) -> Result<Value, String> {
     let targets = fetch_page_targets(port).await?;
+    if targets.is_empty() {
+        return Err("no debuggable page target found".to_string());
+    }
     let want = window.map(|t| t.trim().to_lowercase());
 
-    // Candidate targets to snapshot: the requested window, else all of them.
-    let mut candidates: Vec<(String, String)> = Vec::new(); // (ws_url, page_url)
+    // Real OS windows (DISTINCT titles + screen positions) to correlate the CDP
+    // page targets against — the CDP titles all collide ("Yap"), but the OS
+    // windows ("Yap", "Yap Settings", …) don't, and their positions are unique.
+    let os_windows = app_windows_with_rects(port).await;
+    let foreground = foreground_hwnd();
+
+    // Snapshot every page target and correlate each to a real OS window so we
+    // know its distinct title + HWND.
+    struct Cand {
+        ws: String,
+        page_url: String,
+        tree: String,
+        refs: HashMap<String, RefEntry>,
+        visible: bool,
+        hwnd: Option<i64>,
+        os_title: String,
+    }
+    let mut cands: Vec<Cand> = Vec::new();
     for t in &targets {
         let ws = match t.get("webSocketDebuggerUrl").and_then(|v| v.as_str()) {
             Some(w) => w.to_string(),
             None => continue,
         };
-        let url = t.get("url").and_then(|v| v.as_str()).unwrap_or("").to_string();
-        if let Some(w) = &want {
-            let ttl = t
-                .get("title")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .trim()
-                .to_lowercase();
-            if !ttl.is_empty() && (ttl == *w || ttl.contains(w) || w.contains(&ttl)) {
-                candidates.push((ws, url));
-            }
-        } else {
-            candidates.push((ws, url));
-        }
-    }
-    if candidates.is_empty() {
-        return Err(match window {
-            Some(w) => format!(
-                "No app window matching '{}'. Call sandbox_snapshot without `window` to see the windows.",
-                w
-            ),
-            None => "no debuggable page target found".to_string(),
-        });
-    }
-
-    // Snapshot candidates. With an explicit window, just that one. Otherwise pick
-    // the window that (a) has interactive elements and (b) best matches the OS
-    // window the live preview is mirroring — so Claude drives the SAME visible
-    // window the user is watching, not a hidden one.
-    let preview_bounds = if want.is_none() {
-        preview_window_bounds()
-    } else {
-        None
-    };
-    let mut chosen_ws = candidates[0].0.clone();
-    let mut page_url = candidates[0].1.clone();
-    let mut tree = String::new();
-    let mut refs: HashMap<String, RefEntry> = HashMap::new();
-    let mut chosen = false;
-    let mut best_diff = f64::MAX;
-    for (ws, url) in &candidates {
-        let (t, r, bounds, visible) = snapshot_target(ws).await.unwrap_or_default();
-        if want.is_some() {
-            // Explicit window: use it as-is.
-            chosen_ws = ws.clone();
-            page_url = url.clone();
-            tree = t;
-            refs = r;
-            break;
-        }
-        // Only ever act on a window that's actually ON SCREEN — never a hidden
-        // one the user can't see.
-        if !visible {
-            continue;
-        }
-        // Score each visible candidate. When we know the previewed window's rect,
-        // match it by POSITION (+ size) — unique per window — so we lock onto the
-        // exact window the user is watching, even if another window has a similar
-        // shape. Without a preview, prefer any visible window with interactive
-        // elements.
-        let diff = match (preview_bounds, bounds) {
-            (Some((px, py, pw, ph)), Some((cx, cy, cw, ch))) => {
-                (px - cx).abs() + (py - cy).abs() + 0.5 * ((pw - cw).abs() + (ph - ch).abs())
-            }
-            (Some(_), None) => f64::MAX, // no window bounds → not the preview window
-            (None, _) => {
-                if r.is_empty() {
-                    f64::MAX
-                } else {
-                    0.0
-                }
-            }
+        let page_url = t.get("url").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let (tree, refs, bounds, visible) = snapshot_target(&ws).await.unwrap_or_default();
+        // Correlate to the closest OS window by position (+ size).
+        let (hwnd, os_title) = match bounds {
+            Some((cx, cy, cw, ch)) => os_windows
+                .iter()
+                .map(|(h, title, x, y, w, hh)| {
+                    let d =
+                        (cx - x).abs() + (cy - y).abs() + 0.5 * ((cw - w).abs() + (ch - hh).abs());
+                    (d, *h, title.clone())
+                })
+                .min_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal))
+                .map(|(_, h, title)| (Some(h), title))
+                .unwrap_or((None, String::new())),
+            None => (None, String::new()),
         };
-        if !chosen || diff < best_diff {
-            chosen = true;
-            best_diff = diff;
-            chosen_ws = ws.clone();
-            page_url = url.clone();
-            tree = t;
-            refs = r;
-        }
+        cands.push(Cand { ws, page_url, tree, refs, visible, hwnd, os_title });
+    }
+    if cands.is_empty() {
+        return Err("no debuggable page target found".to_string());
     }
 
-    // Remember the chosen target so click/type act on the same window.
-    set_target(port, &chosen_ws);
-    let ref_count = refs.len();
-    store_refs(port, refs);
-    let windows = list_window_titles(port).await;
-    Ok(json!({ "pageUrl": page_url, "tree": tree, "refCount": ref_count, "windows": windows }))
+    // Pick the target.
+    let chosen_idx = if let Some(w) = &want {
+        // Explicit window: match the DISTINCT OS title (falls back to page title).
+        cands
+            .iter()
+            .position(|c| {
+                let ot = c.os_title.trim().to_lowercase();
+                !ot.is_empty() && (ot == *w || ot.contains(w) || w.contains(&ot))
+            })
+            .ok_or_else(|| {
+                let names: Vec<&str> = os_windows.iter().map(|(_, t, ..)| t.as_str()).collect();
+                format!(
+                    "No app window matching '{}'. Open windows: {}. Snapshot without `window` to list them.",
+                    w,
+                    names.join(", ")
+                )
+            })?
+    } else {
+        // Default: the FOREGROUND app window (what's in focus), else the first
+        // visible window with interactive elements, else any visible one.
+        cands
+            .iter()
+            .position(|c| c.visible && c.hwnd.is_some() && c.hwnd == foreground)
+            .or_else(|| cands.iter().position(|c| c.visible && !c.refs.is_empty()))
+            .or_else(|| cands.iter().position(|c| c.visible))
+            .unwrap_or(0)
+    };
+
+    let chosen = &cands[chosen_idx];
+    // Remember the chosen target so click/type act on the same window…
+    set_target(port, &chosen.ws);
+    // …and publish the OS window so the live preview mirrors exactly what Claude
+    // is driving (the unified active-window source of truth).
+    if let Some(h) = chosen.hwnd {
+        set_active_hwnd(Some(h));
+    }
+
+    let tree = chosen.tree.clone();
+    let page_url = chosen.page_url.clone();
+    let active_window = chosen.os_title.clone();
+    let ref_count = chosen.refs.len();
+    store_refs(port, chosen.refs.clone());
+
+    // Distinct OS window titles for the AI to target by name.
+    let windows: Vec<String> = if os_windows.is_empty() {
+        list_window_titles(port).await
+    } else {
+        os_windows.iter().map(|(_, t, ..)| t.clone()).collect()
+    };
+
+    Ok(json!({
+        "pageUrl": page_url,
+        "tree": tree,
+        "refCount": ref_count,
+        "windows": windows,
+        "activeWindow": active_window,
+    }))
 }
 
 /// Snapshot a single CDP target: the accessibility tree (falling back to a DOM
@@ -402,18 +435,16 @@ async fn snapshot_target(
     Ok((tree, refs, bounds, visible))
 }
 
-/// Logical (DIP) screen rect (left, top, width, height) of the OS window the
-/// live preview is currently mirroring, so the default snapshot can target the
-/// SAME window the user is watching — matched by position, which is unique per
-/// window. CDP `Browser.getWindowForTarget` bounds are also in DIP, so they
-/// compare directly once we divide the physical rect by the window's DPI scale.
+/// Logical (DIP) screen rect (left, top, width, height) of an OS window. CDP
+/// `Browser.getWindowForTarget` bounds are also in DIP, so they compare directly
+/// once we divide the physical rect by the window's DPI scale. Used to correlate
+/// CDP page targets to real OS windows by position (unique per window).
 #[cfg(windows)]
-fn preview_window_bounds() -> Option<(f64, f64, f64, f64)> {
+fn window_dip_rect(hwnd: i64) -> Option<(f64, f64, f64, f64)> {
     use windows::Win32::Foundation::{HWND, RECT};
     use windows::Win32::UI::HiDpi::GetDpiForWindow;
     use windows::Win32::UI::WindowsAndMessaging::GetWindowRect;
 
-    let hwnd = crate::services::window_stream::current_hwnd()?;
     unsafe {
         let h = HWND(hwnd as *mut std::ffi::c_void);
         let mut rect = RECT::default();
@@ -431,8 +462,44 @@ fn preview_window_bounds() -> Option<(f64, f64, f64, f64)> {
     }
 }
 
+/// The app's visible windows with their DISTINCT OS titles + DIP rects, to
+/// correlate CDP page targets to real OS windows. Returns
+/// `(hwnd, title, left, top, width, height)`.
+#[cfg(windows)]
+async fn app_windows_with_rects(port: u16) -> Vec<(i64, String, f64, f64, f64, f64)> {
+    let wins = crate::services::sandbox_stream::list_windows(port)
+        .await
+        .unwrap_or_default();
+    wins.into_iter()
+        .filter_map(|w| {
+            let (x, y, ww, hh) = window_dip_rect(w.hwnd)?;
+            Some((w.hwnd, w.title, x, y, ww, hh))
+        })
+        .collect()
+}
+
+/// The foreground OS window's HWND, if any — used to default the snapshot to the
+/// window currently in focus (e.g. Settings right after it opens).
+#[cfg(windows)]
+fn foreground_hwnd() -> Option<i64> {
+    use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
+    unsafe {
+        let h = GetForegroundWindow();
+        if h.0.is_null() {
+            None
+        } else {
+            Some(h.0 as i64)
+        }
+    }
+}
+
 #[cfg(not(windows))]
-fn preview_window_bounds() -> Option<(f64, f64, f64, f64)> {
+async fn app_windows_with_rects(_port: u16) -> Vec<(i64, String, f64, f64, f64, f64)> {
+    Vec::new()
+}
+
+#[cfg(not(windows))]
+fn foreground_hwnd() -> Option<i64> {
     None
 }
 

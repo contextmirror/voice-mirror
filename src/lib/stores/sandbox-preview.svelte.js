@@ -6,17 +6,24 @@
  * REAL app window at true size, the same surface the AI sees via sandbox_*.
  *
  * Multi-window: a Tauri app has several windows (the pill, a settings window, a
- * dialog…). This store tracks them all (`windows`), lets you switch which one is
- * mirrored (`switchTo`), and AUTO-FOLLOWS a newly-opened window so e.g. a
- * settings window appears the moment it opens.
+ * dialog…). This store tracks them all (`windows`) and FOLLOWS THE WINDOW CLAUDE
+ * IS DRIVING: every snapshot publishes the OS window it acted on
+ * (`sandbox_active_hwnd`), and the preview mirrors exactly that — so the human
+ * watches precisely what Claude is doing, by construction, not by guessing. You
+ * can still override manually via the switcher (`switchTo`).
  *
  * State split: `active` (a session is running) vs `visible` (the panel is shown).
  * Hiding keeps the session alive so toggling vs the Browser is instant.
  */
-import { sandboxStreamStart, sandboxStreamStop, sandboxListWindows } from '../api.js';
+import {
+  sandboxStreamStart,
+  sandboxStreamStop,
+  sandboxListWindows,
+  sandboxActiveHwnd,
+} from '../api.js';
 import { unwrapResult } from '../utils.js';
 
-const POLL_INTERVAL = 1500;
+const POLL_INTERVAL = 1000;
 
 function createSandboxPreviewStore() {
   let active = $state(false);
@@ -29,12 +36,11 @@ function createSandboxPreviewStore() {
   let windows = $state([]);
   let currentHwnd = $state(null);
 
-  // Non-reactive bookkeeping for auto-follow + polling.
-  let seen = new Set();
-  let missing = new Map(); // hwnd -> consecutive polls it's been absent
-  let initialized = false;
+  // Non-reactive bookkeeping for polling.
   let pollTimer = null;
-  const CLOSE_AFTER = 2; // a window must be absent this many polls to count as closed
+  // When the user manually picks a window from the switcher, stop auto-following
+  // Claude until they go back to a session/window or reopen the preview.
+  let userPinned = false;
 
   function setStreamUrl(url) {
     // Cache-bust so the <img> reconnects when we re-target the stream to a
@@ -63,12 +69,11 @@ function createSandboxPreviewStore() {
   }
 
   /**
-   * Poll the app's window list; auto-follow a newly-opened window. Window
-   * appearance/disappearance is DEBOUNCED: a window must be absent for
-   * CLOSE_AFTER consecutive polls before we treat it as closed. Otherwise a
-   * single transient miss in the OS window enumeration makes the preview thrash
-   * (follow Settings -> snap back to the pill -> follow Settings…), which is why
-   * you couldn't see Claude work inside Settings.
+   * Follow the window CLAUDE is driving. Every sandbox_snapshot publishes the OS
+   * window it acted on (`sandbox_active_hwnd`); we mirror exactly that. This is
+   * the unified model that replaced the fragile auto-follow/snap-back: the
+   * preview and Claude reference the SAME window, so they can't diverge. We also
+   * refresh the window list for the switcher.
    */
   async function refreshWindows() {
     if (!active || cdpPort == null) return;
@@ -76,46 +81,17 @@ function createSandboxPreviewStore() {
       const res = await sandboxListWindows(cdpPort);
       const list = unwrapResult(res);
       windows = Array.isArray(list) ? list : [];
+
+      // Don't fight a manual switcher choice — only auto-follow Claude when not
+      // explicitly pinned by the user.
+      if (userPinned) return;
+
+      const activeRes = await sandboxActiveHwnd(cdpPort);
+      const activeHwnd = unwrapResult(activeRes)?.hwnd ?? null;
       const present = new Set(windows.map((w) => w.hwnd));
-
-      // Update consecutive-missing counts for every window we know about.
-      for (const h of seen) {
-        missing.set(h, present.has(h) ? 0 : (missing.get(h) || 0) + 1);
-      }
-
-      if (!initialized) {
-        // First poll — seed the seen-set; don't switch (main is already shown).
-        initialized = true;
-        for (const w of windows) {
-          seen.add(w.hwnd);
-          missing.set(w.hwnd, 0);
-        }
-      } else {
-        for (const w of windows) {
-          if (!seen.has(w.hwnd)) {
-            seen.add(w.hwnd);
-            missing.set(w.hwnd, 0);
-            startStream(w.hwnd); // auto-follow the newly-opened window
-          }
-        }
-      }
-
-      // Forget windows that have been gone for CLOSE_AFTER polls.
-      for (const h of [...seen]) {
-        if ((missing.get(h) || 0) >= CLOSE_AFTER) {
-          seen.delete(h);
-          missing.delete(h);
-        }
-      }
-
-      // Snap back to the main window only when the mirrored window has been
-      // genuinely gone (not a one-poll flicker).
-      if (
-        currentHwnd != null &&
-        (missing.get(currentHwnd) || 0) >= CLOSE_AFTER &&
-        windows.length > 0
-      ) {
-        startStream(null);
+      // Mirror Claude's window once it's a real, currently-open window.
+      if (activeHwnd != null && activeHwnd !== currentHwnd && present.has(activeHwnd)) {
+        startStream(activeHwnd);
       }
     } catch {
       // transient — try again next tick
@@ -154,9 +130,7 @@ function createSandboxPreviewStore() {
       cdpPort = port;
       active = true;
       visible = true;
-      seen = new Set();
-      missing = new Map();
-      initialized = false;
+      userPinned = false;
       currentHwnd = null;
       windows = [];
       await startStream(null); // main window
@@ -173,9 +147,13 @@ function createSandboxPreviewStore() {
       visible = false;
     },
 
-    /** Switch the mirror to a specific window (from the switcher dropdown). */
+    /**
+     * Switch the mirror to a specific window (from the switcher dropdown). Pins
+     * the choice so we stop auto-following Claude until the preview is reopened.
+     */
     switchTo(hwnd) {
       if (hwnd == null) return;
+      userPinned = true;
       startStream(Number(hwnd));
     },
 
@@ -191,9 +169,7 @@ function createSandboxPreviewStore() {
       cdpPort = null;
       windows = [];
       currentHwnd = null;
-      seen = new Set();
-      missing = new Map();
-      initialized = false;
+      userPinned = false;
       if (port) {
         sandboxStreamStop(port).catch(() => {});
       }

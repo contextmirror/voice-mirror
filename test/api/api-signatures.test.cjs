@@ -307,6 +307,7 @@ describe('api.js -- exported async functions', () => {
     'sandboxStreamStart',
     'sandboxStreamStop',
     'sandboxListWindows',
+    'sandboxActiveHwnd',
     // Design Overlay
     'designCommand',
     'designExpandTreeNode',

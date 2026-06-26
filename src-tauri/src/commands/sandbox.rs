@@ -75,6 +75,14 @@ pub async fn sandbox_stream_start(port: u16, hwnd: Option<i64>) -> IpcResponse {
     }
 }
 
+/// The OS window (HWND) Claude is currently driving — the live preview mirrors
+/// this so the human watches exactly the window Claude acts on. `null` until the
+/// first snapshot. Returns `{ hwnd }`.
+#[tauri::command]
+pub fn sandbox_active_hwnd() -> IpcResponse {
+    IpcResponse::ok(serde_json::json!({ "hwnd": crate::services::sandbox::active_hwnd() }))
+}
+
 /// List the app's visible windows (pill, settings, dialogs) for the preview
 /// switcher / auto-follow. Returns `[{ hwnd, title }]`.
 #[tauri::command]

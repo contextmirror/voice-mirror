@@ -668,6 +668,14 @@ export async function sandboxListWindows(port) {
 }
 
 /**
+ * The OS window (HWND) Claude is currently driving — the live preview mirrors
+ * this so the human watches exactly the window Claude acts on. Returns { hwnd }.
+ */
+export async function sandboxActiveHwnd() {
+  return invoke('sandbox_active_hwnd');
+}
+
+/**
  * Check if a specific port is accepting TCP connections on localhost.
  * @param {number} port - Port number to probe.
  * @returns {Promise<{success: boolean, data?: {listening: boolean}}>}
