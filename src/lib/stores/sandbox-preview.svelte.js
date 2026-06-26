@@ -82,6 +82,12 @@ function createSandboxPreviewStore() {
       }
       // Forget windows that have closed.
       for (const h of [...seen]) if (!present.has(h)) seen.delete(h);
+
+      // If the window we're mirroring has closed (e.g. you closed Settings),
+      // snap back to the app's main window.
+      if (currentHwnd != null && !present.has(currentHwnd) && windows.length > 0) {
+        startStream(null);
+      }
     } catch {
       // transient — try again next tick
     }
