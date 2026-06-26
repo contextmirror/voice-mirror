@@ -48,6 +48,27 @@ describe('tabs.svelte.js', () => {
   });
 });
 
+describe('tabs.svelte.js: empty editor group cleanup', () => {
+  it('has closeEmptyGroups method', () => {
+    assert.ok(src.includes('closeEmptyGroups('), 'Should have closeEmptyGroups method');
+  });
+
+  it('closeEmptyGroups keeps at least one group', () => {
+    const start = src.indexOf('closeEmptyGroups(');
+    const chunk = src.slice(start, start + 600);
+    assert.ok(chunk.includes('groupCount <= 1'), 'Should guard against removing the last group');
+  });
+
+  it('closeEmptyGroups removes groups with no tabs', () => {
+    const start = src.indexOf('closeEmptyGroups(');
+    const chunk = src.slice(start, start + 600);
+    assert.ok(
+      chunk.includes('hasTabs') && chunk.includes('editorGroupsStore.closeGroup('),
+      'Should close groups that have no tabs'
+    );
+  });
+});
+
 describe('tabs.svelte.js: methods', () => {
   it('has openFile method', () => {
     assert.ok(src.includes('openFile('), 'Should have openFile method');

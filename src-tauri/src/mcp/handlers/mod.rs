@@ -11,6 +11,7 @@ pub mod core;
 pub mod memory;
 pub mod browser;
 pub mod capture;
+pub mod sandbox;
 pub mod n8n;
 
 use serde::{Deserialize, Serialize};

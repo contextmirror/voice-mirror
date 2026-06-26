@@ -33,7 +33,13 @@ pub(super) fn detect_from_tauri_conf(root: &Path, pkg_manager: &str) -> Option<D
         framework: "Tauri".to_string(),
         port,
         url: dev_url.to_string(),
-        start_command: make_start_command(pkg_manager, "dev"),
+        // Run the actual Tauri app (`tauri dev`), not just the web frontend.
+        // `tauri dev` runs the `beforeDevCommand` (the frontend) itself AND
+        // compiles + launches the native app window — the window that exposes
+        // CDP for the sandbox live preview. Running only the frontend (the old
+        // `npm run dev`) served the web part but never started the app, so its
+        // CDP port had nothing to connect to. One command = no port clash.
+        start_command: make_start_command(pkg_manager, "tauri dev"),
         source: "tauri.conf.json".to_string(),
         running: false,
         ..Default::default()

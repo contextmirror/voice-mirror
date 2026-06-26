@@ -15,6 +15,7 @@
   import DiffViewer from './DiffViewer.svelte';
   import EditorPane from './EditorPane.svelte';
   import DevicePreview from './DevicePreview.svelte';
+  import SandboxPreview from './SandboxPreview.svelte';
   import SplitPanel from '../shared/SplitPanel.svelte';
   import ChatPanel from '../chat/ChatPanel.svelte';
   import TerminalTabs from '../terminal/TerminalTabs.svelte';
@@ -31,6 +32,8 @@
   import { projectStore } from '../../lib/stores/project.svelte.js';
   import { lspDiagnosticsStore } from '../../lib/stores/lsp-diagnostics.svelte.js';
   import { devicePreviewStore } from '../../lib/stores/device-preview.svelte.js';
+  import { sandboxPreviewStore } from '../../lib/stores/sandbox-preview.svelte.js';
+  import { devServerManager } from '../../lib/stores/dev-server-manager.svelte.js';
   import { LSP_EXTENSIONS } from '../../lib/editor-lsp.svelte.js';
   import { setActionHandler } from '../../lib/stores/shortcuts.svelte.js';
 
@@ -46,6 +49,7 @@
   let centerRatio = $state(0.75);           // editor/preview vs terminal
   let previewRatio = $state(0.78);          // center column vs file tree
   let devicePreviewRatio = $state(0.5);    // editor vs device preview
+  let appPreviewRatio = $state(0.6);       // editor vs app preview (live app)
 
   // Sync local ratios → layout store (for workspace state persistence)
   $effect(() => { layoutStore.setChatRatio(chatRatio); });
@@ -387,6 +391,47 @@
     lensSetVisible(showBrowser).catch(() => {});
   });
 
+  // ── Sandbox live preview auto-open ──
+  // When Voice Mirror has a running Tauri app with CDP enabled, auto-open the
+  // live preview ONCE (per launch) so you see the real app window at true size.
+  // `lastSandboxPort` guards re-opening after a manual close.
+  let lastSandboxPort = null;
+  $effect(() => {
+    let activeCdp = null;
+    for (const [, s] of devServerManager.servers) {
+      if (s?.cdpPort && (s.status === 'running' || s.status === 'idle')) {
+        activeCdp = s.cdpPort;
+        break;
+      }
+    }
+    if (activeCdp && activeCdp !== lastSandboxPort) {
+      lastSandboxPort = activeCdp;
+      sandboxPreviewStore.open(activeCdp);
+    } else if (!activeCdp) {
+      lastSandboxPort = null;
+      if (sandboxPreviewStore.active) sandboxPreviewStore.close();
+    }
+  });
+
+  // The App Preview is a DOM panel; the native Lens browser WebView2 would paint
+  // OVER it (airspace). So they're mutually exclusive: while the App Preview is
+  // visible, hide the browser — editor on the left, live app on the right.
+  $effect(() => {
+    if (sandboxPreviewStore.visible) {
+      showBrowser = false;
+    }
+  });
+
+  // Toggle the App Preview, making it mutually exclusive with the Browser.
+  function toggleAppPreview() {
+    if (sandboxPreviewStore.visible) {
+      sandboxPreviewStore.hide();
+    } else {
+      showBrowser = false;
+      sandboxPreviewStore.show();
+    }
+  }
+
   // Start/stop file watcher when entering Lens mode or switching projects.
   // Uses memoized projectRoot so unrelated entry mutations don't churn the watcher.
   $effect(() => {
@@ -505,7 +550,7 @@
 
 {#snippet renderNode(node)}
   {#if node.type === 'leaf'}
-    <EditorPane groupId={node.groupId} showBrowser={node.groupId === firstGroupId ? showBrowser : false} onBrowserClick={node.groupId === firstGroupId ? () => { showBrowser = !showBrowser; } : null} onDevicePreviewClick={node.groupId === firstGroupId ? () => { devicePreviewStore.toggle(); } : null} showDevicePreview={node.groupId === firstGroupId ? devicePreviewStore.isOpen : false} />
+    <EditorPane groupId={node.groupId} showBrowser={node.groupId === firstGroupId ? showBrowser : false} onBrowserClick={node.groupId === firstGroupId ? () => { showBrowser = !showBrowser; if (showBrowser) sandboxPreviewStore.hide(); } : null} onDevicePreviewClick={node.groupId === firstGroupId ? () => { devicePreviewStore.toggle(); } : null} showDevicePreview={node.groupId === firstGroupId ? devicePreviewStore.isOpen : false} onAppPreviewClick={node.groupId === firstGroupId && sandboxPreviewStore.active ? toggleAppPreview : null} showAppPreview={node.groupId === firstGroupId ? sandboxPreviewStore.visible : false} />
   {:else}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div class="grid-branch" class:horizontal={node.direction === 'horizontal'} class:vertical={node.direction === 'vertical'}>
@@ -557,13 +602,15 @@
             <SplitPanel direction="vertical" bind:ratio={centerRatio} minA={200} minB={80} collapseB={!layoutStore.showTerminal}>
               {#snippet panelA()}
                 <div class="preview-area">
+                 <SplitPanel direction="horizontal" bind:ratio={appPreviewRatio} minA={300} minB={240} collapseB={!sandboxPreviewStore.visible}>
+                  {#snippet panelA()}
                   <SplitPanel direction="horizontal" bind:ratio={devicePreviewRatio} minA={300} minB={200} collapseB={!devicePreviewStore.isOpen}>
                     {#snippet panelA()}
                       <div class="editor-with-browser">
                         <!-- Editor Grid: always visible so GroupTabBar stays accessible -->
                         <div class="editor-grid">
                           {#if editorGroupsStore.maximizedGroupId !== null}
-                            <EditorPane groupId={editorGroupsStore.maximizedGroupId} showBrowser={editorGroupsStore.maximizedGroupId === firstGroupId ? showBrowser : false} onBrowserClick={editorGroupsStore.maximizedGroupId === firstGroupId ? () => { showBrowser = !showBrowser; } : null} onDevicePreviewClick={editorGroupsStore.maximizedGroupId === firstGroupId ? () => { devicePreviewStore.toggle(); } : null} showDevicePreview={editorGroupsStore.maximizedGroupId === firstGroupId ? devicePreviewStore.isOpen : false} />
+                            <EditorPane groupId={editorGroupsStore.maximizedGroupId} showBrowser={editorGroupsStore.maximizedGroupId === firstGroupId ? showBrowser : false} onBrowserClick={editorGroupsStore.maximizedGroupId === firstGroupId ? () => { showBrowser = !showBrowser; if (showBrowser) sandboxPreviewStore.hide(); } : null} onDevicePreviewClick={editorGroupsStore.maximizedGroupId === firstGroupId ? () => { devicePreviewStore.toggle(); } : null} showDevicePreview={editorGroupsStore.maximizedGroupId === firstGroupId ? devicePreviewStore.isOpen : false} onAppPreviewClick={editorGroupsStore.maximizedGroupId === firstGroupId && sandboxPreviewStore.active ? toggleAppPreview : null} showAppPreview={editorGroupsStore.maximizedGroupId === firstGroupId ? sandboxPreviewStore.visible : false} />
                           {:else}
                             {@render renderNode(editorGroupsStore.gridRoot)}
                           {/if}
@@ -623,6 +670,14 @@
                       <DevicePreview />
                     {/snippet}
                   </SplitPanel>
+                  {/snippet}
+                  {#snippet panelB()}
+                    <!-- App Preview: a real, resizable panel beside the editor
+                         (the live app via WGC). Mutually exclusive with the
+                         Browser, so no airspace conflict. -->
+                    <SandboxPreview />
+                  {/snippet}
+                 </SplitPanel>
                 </div>
               {/snippet}
               {#snippet panelB()}
@@ -683,6 +738,7 @@
     overflow: hidden;
     position: relative;
   }
+
 
   .editor-with-browser {
     display: flex;

@@ -55,11 +55,35 @@ fn lookup_backend(port: u16, ref_str: &str) -> Result<u32, String> {
         .ok_or_else(|| format!("Ref '{}' has no backend node id", ref_str))
 }
 
+// ── Active sandbox CDP port registry ─────────────────────────────────────────
+// The dev-server-manager records here the CDP remote-debugging port of the Tauri
+// app it launched, so the sandbox MCP tools can default to it when the AI omits
+// an explicit `port`. v1 tracks a single active sandbox app; a project-keyed
+// registry is the later generalization.
+
+static ACTIVE_CDP_PORT: OnceLock<Mutex<Option<u16>>> = OnceLock::new();
+
+fn active_port_cell() -> &'static Mutex<Option<u16>> {
+    ACTIVE_CDP_PORT.get_or_init(|| Mutex::new(None))
+}
+
+/// Record (or clear) the active sandbox app's CDP port.
+pub fn set_active_cdp_port(port: Option<u16>) {
+    if let Ok(mut g) = active_port_cell().lock() {
+        *g = port;
+    }
+}
+
+/// The active sandbox app's CDP port, if one is registered.
+pub fn active_cdp_port() -> Option<u16> {
+    active_port_cell().lock().ok().and_then(|g| *g)
+}
+
 // ── CDP discovery + session ──────────────────────────────────────────────────
 
 /// Discover the primary page target on a CDP remote-debugging port.
 /// Returns `(webSocketDebuggerUrl, page_url)`.
-async fn discover_page_target(port: u16) -> Result<(String, String), String> {
+pub(crate) async fn discover_page_target(port: u16) -> Result<(String, String), String> {
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(3))
         .build()

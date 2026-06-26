@@ -543,6 +543,33 @@ function createTabsStore() {
     },
 
     /**
+     * Close any editor groups that have no tabs (blank panes), keeping at least
+     * one group.
+     *
+     * Empty editor groups can appear when a group is split while its pane is
+     * blank, or when a group's last tab is closed while other blank panes exist.
+     * Without this, those empty panes linger forever: "Close All" only closes
+     * tabs (a no-op on an empty group) and `closeTab` only removes a group as a
+     * side effect of closing its *last tab* — an already-empty group has no tab
+     * to close, so it can never be removed. The result is a row of blank editor
+     * groups that won't go away.
+     */
+    closeEmptyGroups() {
+      // allGroupIds is a fresh snapshot; closing a group that's already gone is
+      // a safe no-op (closeGroup returns null when the leaf isn't found).
+      for (const groupId of editorGroupsStore.allGroupIds) {
+        if (editorGroupsStore.groupCount <= 1) break; // always keep one group
+        const hasTabs = tabs.some(t => t.groupId === groupId);
+        if (!hasTabs) {
+          const siblingGroupId = editorGroupsStore.closeGroup(groupId);
+          if (siblingGroupId !== null) {
+            activeTabId = editorGroupsStore.getActiveTabForGroup(siblingGroupId);
+          }
+        }
+      }
+    },
+
+    /**
      * Toggle preview mode. When disabled, all new tabs open as pinned (permanent).
      */
     togglePreviewMode() {

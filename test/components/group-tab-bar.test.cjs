@@ -268,10 +268,32 @@ describe('GroupTabBar.svelte: save prompt on close', () => {
 
   it('handleCloseAll breaks on cancel', () => {
     const closeAllStart = src.indexOf('async function handleCloseAll');
-    const chunk = src.slice(closeAllStart, closeAllStart + 300);
+    const chunk = src.slice(closeAllStart, closeAllStart + 600);
     assert.ok(
       chunk.includes('if (!closed) break'),
       'Should stop closing remaining tabs if user cancels'
+    );
+  });
+
+  it('handleCloseAll disposes empty editor groups afterwards', () => {
+    const closeAllStart = src.indexOf('async function handleCloseAll');
+    const chunk = src.slice(closeAllStart, closeAllStart + 600);
+    assert.ok(
+      chunk.includes('closeEmptyGroups'),
+      'Should call closeEmptyGroups so closing does not leave lingering blank panes'
+    );
+  });
+});
+
+// ============ Split guards (no empty editor groups) ============
+
+describe('GroupTabBar.svelte: split guards', () => {
+  it('doSplit does not split an empty pane', () => {
+    const start = src.indexOf('function doSplit');
+    const chunk = src.slice(start, start + 400);
+    assert.ok(
+      chunk.includes('if (!activeTab) return'),
+      'Should bail out of split when there is no active editor (avoids blank groups)'
     );
   });
 });

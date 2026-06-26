@@ -30,6 +30,21 @@ fn frame_buffer() -> &'static Arc<ArcSwap<Vec<u8>>> {
     FRAME_BUFFER.get_or_init(|| Arc::new(ArcSwap::from_pointee(Vec::new())))
 }
 
+/// The most recent captured JPEG frame, if a stream is running and has produced
+/// at least one frame. Lets the sandbox screenshot reuse exactly what the live
+/// preview shows (reliable for transparent windows that CDP can't capture).
+pub(crate) fn latest_frame() -> Option<Vec<u8>> {
+    if !state().lock().map(|s| s.running).unwrap_or(false) {
+        return None;
+    }
+    let buf = frame_buffer().load();
+    if buf.is_empty() {
+        None
+    } else {
+        Some(buf.as_ref().clone())
+    }
+}
+
 /// Start streaming a window. Returns the port number on success.
 pub fn start(hwnd: i64, fps: u32) -> Result<u16, String> {
     // Stop any existing stream
@@ -357,7 +372,7 @@ fn run_capture(
 
 // ── MJPEG server ────────────────────────────────────────────────────────
 
-fn run_mjpeg_server(port: u16, stop_flag: Arc<AtomicBool>, buffer: Arc<ArcSwap<Vec<u8>>>) {
+pub(crate) fn run_mjpeg_server(port: u16, stop_flag: Arc<AtomicBool>, buffer: Arc<ArcSwap<Vec<u8>>>) {
     use std::net::TcpListener;
 
     let addr = format!("127.0.0.1:{}", port);
@@ -483,7 +498,7 @@ fn handle_client(
 
 // ── Helpers ─────────────────────────────────────────────────────────────
 
-fn find_available_port() -> Result<u16, String> {
+pub(crate) fn find_available_port() -> Result<u16, String> {
     for port in 9876..=9886 {
         if std::net::TcpListener::bind(format!("127.0.0.1:{}", port)).is_ok() {
             return Ok(port);

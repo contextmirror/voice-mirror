@@ -45,3 +45,49 @@ pub async fn sandbox_screenshot(port: u16) -> IpcResponse {
         Err(e) => IpcResponse::err(e),
     }
 }
+
+/// Record the CDP port of the active sandbox app, so the sandbox MCP tools can
+/// default to it when the AI omits an explicit `port`.
+#[tauri::command]
+pub fn sandbox_set_active_port(port: u16) -> IpcResponse {
+    crate::services::sandbox::set_active_cdp_port(Some(port));
+    IpcResponse::ok(serde_json::json!({ "port": port }))
+}
+
+/// Clear the active sandbox CDP port (e.g. when the dev server stops/crashes).
+#[tauri::command]
+pub fn sandbox_clear_active_port() -> IpcResponse {
+    crate::services::sandbox::set_active_cdp_port(None);
+    IpcResponse::ok(serde_json::json!({ "ok": true }))
+}
+
+/// Start a live mirror of the app on `port` (optionally a specific window
+/// `hwnd`). Returns `{ mjpegPort, url }` — point an `<img>` at `url`.
+#[tauri::command]
+pub async fn sandbox_stream_start(port: u16, hwnd: Option<i64>) -> IpcResponse {
+    match crate::services::sandbox_stream::start(port, hwnd).await {
+        Ok((mjpeg_port, chosen_hwnd)) => IpcResponse::ok(serde_json::json!({
+            "mjpegPort": mjpeg_port,
+            "url": format!("http://127.0.0.1:{}/stream", mjpeg_port),
+            "hwnd": chosen_hwnd,
+        })),
+        Err(e) => IpcResponse::err(e),
+    }
+}
+
+/// List the app's visible windows (pill, settings, dialogs) for the preview
+/// switcher / auto-follow. Returns `[{ hwnd, title }]`.
+#[tauri::command]
+pub async fn sandbox_list_windows(port: u16) -> IpcResponse {
+    match crate::services::sandbox_stream::list_windows(port).await {
+        Ok(windows) => IpcResponse::ok(serde_json::to_value(windows).unwrap_or_default()),
+        Err(e) => IpcResponse::err(e),
+    }
+}
+
+/// Stop the live screencast for the app on `port`.
+#[tauri::command]
+pub fn sandbox_stream_stop(port: u16) -> IpcResponse {
+    crate::services::sandbox_stream::stop(port);
+    IpcResponse::ok(serde_json::json!({ "ok": true }))
+}

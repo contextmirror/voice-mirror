@@ -517,8 +517,50 @@ async fn handle_capture_action(
                 "height": height
             }))
         }
+        // Sandbox tools: drive an app being built over CDP. These run here (in the
+        // app process) so services::sandbox's @ref store is shared across calls.
+        "sandbox_snapshot" => {
+            let port = resolve_sandbox_port(args)?;
+            crate::services::sandbox::snapshot(port).await
+        }
+        "sandbox_screenshot" => {
+            // Use the WGC window frame (what the live preview shows), not CDP —
+            // CDP renders transparent Tauri windows as black.
+            let _ = resolve_sandbox_port(args)?;
+            crate::services::sandbox_stream::capture_app_window()
+        }
+        "sandbox_click" => {
+            let port = resolve_sandbox_port(args)?;
+            let element_ref = args
+                .get("element_ref")
+                .and_then(|v| v.as_str())
+                .ok_or("element_ref parameter required")?;
+            crate::services::sandbox::click(port, element_ref).await
+        }
+        "sandbox_type" => {
+            let port = resolve_sandbox_port(args)?;
+            let element_ref = args
+                .get("element_ref")
+                .and_then(|v| v.as_str())
+                .ok_or("element_ref parameter required")?;
+            let text = args.get("text").and_then(|v| v.as_str()).unwrap_or("");
+            crate::services::sandbox::type_text(port, element_ref, text).await
+        }
         _ => Err(format!("Unknown capture action: {}", action)),
     }
+}
+
+/// Resolve the CDP port for a sandbox action: the explicit `port` arg, else the
+/// active sandbox app Voice Mirror launched.
+fn resolve_sandbox_port(args: &serde_json::Value) -> Result<u16, String> {
+    if let Some(p) = args.get("port").and_then(|v| v.as_u64()) {
+        return Ok(p as u16);
+    }
+    crate::services::sandbox::active_cdp_port().ok_or_else(|| {
+        "No sandbox app is running. Start a Tauri dev server in Voice Mirror first, \
+         or pass an explicit `port`."
+            .to_string()
+    })
 }
 
 // ---------------------------------------------------------------------------

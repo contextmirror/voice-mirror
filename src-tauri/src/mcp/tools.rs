@@ -744,12 +744,13 @@ fn build_all_groups() -> HashMap<String, ToolGroupDef> {
         "capture".into(),
         ToolGroupDef {
             name: "capture".into(),
-            description: "Window capture and screenshots (3 tools)".into(),
+            description: "Window capture, screenshots, and sandbox app preview (7 tools)".into(),
             always_loaded: true,
             keywords: vec![
                 "screenshot".into(), "capture".into(), "window".into(),
                 "screen".into(), "game".into(), "application".into(),
                 "look at".into(), "show me".into(),
+                "sandbox".into(), "preview".into(), "see the app".into(),
             ],
             dependencies: vec![],
             tools: vec![
@@ -789,6 +790,51 @@ fn build_all_groups() -> HashMap<String, ToolGroupDef> {
                     input_schema: json!({
                         "type": "object",
                         "properties": {}
+                    }),
+                },
+                ToolDef {
+                    name: "sandbox_snapshot".into(),
+                    description: "See the structure of the app you're building (a desktop/Tauri app running with CDP). Returns the accessibility tree as @ref element handles. Call this FIRST, then use the @refs with sandbox_click / sandbox_type. `port` is optional — defaults to the app Voice Mirror launched.".into(),
+                    input_schema: json!({
+                        "type": "object",
+                        "properties": {
+                            "port": { "type": "number", "description": "CDP remote-debugging port. Omit to use the active sandbox app launched by Voice Mirror." }
+                        }
+                    }),
+                },
+                ToolDef {
+                    name: "sandbox_screenshot".into(),
+                    description: "See the app you're building, rendered at its TRUE window size (the real running app window, not a stretched web preview). Use this to visually verify your changes. `port` is optional — defaults to the active sandbox app.".into(),
+                    input_schema: json!({
+                        "type": "object",
+                        "properties": {
+                            "port": { "type": "number", "description": "CDP remote-debugging port. Omit to use the active sandbox app launched by Voice Mirror." }
+                        }
+                    }),
+                },
+                ToolDef {
+                    name: "sandbox_click".into(),
+                    description: "Click an element in the running app you're building, to test it. Use an @ref from sandbox_snapshot. `port` is optional — defaults to the active sandbox app.".into(),
+                    input_schema: json!({
+                        "type": "object",
+                        "properties": {
+                            "port": { "type": "number", "description": "CDP remote-debugging port. Omit to use the active sandbox app." },
+                            "element_ref": { "type": "string", "description": "Element @ref from the last sandbox_snapshot (e.g. '@e7')." }
+                        },
+                        "required": ["element_ref"]
+                    }),
+                },
+                ToolDef {
+                    name: "sandbox_type".into(),
+                    description: "Type text into an element in the running app you're building, to test input. Use an @ref from sandbox_snapshot. `port` is optional — defaults to the active sandbox app.".into(),
+                    input_schema: json!({
+                        "type": "object",
+                        "properties": {
+                            "port": { "type": "number", "description": "CDP remote-debugging port. Omit to use the active sandbox app." },
+                            "element_ref": { "type": "string", "description": "Element @ref from the last sandbox_snapshot (e.g. '@e7')." },
+                            "text": { "type": "string", "description": "Text to type into the element." }
+                        },
+                        "required": ["element_ref", "text"]
                     }),
                 },
             ],
@@ -856,8 +902,8 @@ mod tests {
     fn test_list_tools_default() {
         let reg = ToolRegistry::new();
         let tools = reg.list_tools();
-        // Should have core (5) + capture (3) = 8 always-loaded tools
-        assert_eq!(tools.len(), 8);
+        // Should have core (5) + capture (7) = 12 always-loaded tools
+        assert_eq!(tools.len(), 12);
     }
 
     #[test]
@@ -924,10 +970,14 @@ mod tests {
     fn test_capture_group() {
         let mut reg = ToolRegistry::new();
         let names = reg.load_group("capture").unwrap();
-        assert_eq!(names.len(), 3);
+        assert_eq!(names.len(), 7);
         assert!(reg.is_tool_loaded("capture_list_windows"));
         assert!(reg.is_tool_loaded("capture_window"));
         assert!(reg.is_tool_loaded("capture_browser"));
+        assert!(reg.is_tool_loaded("sandbox_snapshot"));
+        assert!(reg.is_tool_loaded("sandbox_screenshot"));
+        assert!(reg.is_tool_loaded("sandbox_click"));
+        assert!(reg.is_tool_loaded("sandbox_type"));
     }
 
     #[test]

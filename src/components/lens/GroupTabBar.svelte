@@ -8,7 +8,7 @@
   import TabContextMenu from './TabContextMenu.svelte';
   import TabDiffBadge from './TabDiffBadge.svelte';
 
-  let { groupId = 1, onBrowserClick = null, showBrowser = false, onDevicePreviewClick = null, showDevicePreview = false } = $props();
+  let { groupId = 1, onBrowserClick = null, showBrowser = false, onDevicePreviewClick = null, showDevicePreview = false, onAppPreviewClick = null, showAppPreview = false } = $props();
 
   let tabMenu = $state({ visible: false, x: 0, y: 0, tab: null });
   let splitMenu = $state({ visible: false, x: 0, y: 0 });
@@ -36,10 +36,12 @@
 
   function doSplit(direction) {
     const activeTab = activeTabId ? tabsStore.tabs.find(t => t.id === activeTabId) : null;
+    // Don't split an empty pane — that just spawns blank editor groups that
+    // can't be dismissed (Close All closes tabs, not empty groups), so repeated
+    // clicks pile up a row of unclosable blank panes.
+    if (!activeTab) return;
     const newGroupId = editorGroupsStore.splitGroup(groupId, direction);
-    if (activeTab) {
-      tabsStore.openFile({ name: activeTab.title, path: activeTab.path }, newGroupId);
-    }
+    tabsStore.openFile({ name: activeTab.title, path: activeTab.path }, newGroupId);
   }
 
   function handleSplitEditor() {
@@ -124,6 +126,9 @@
       const closed = await tabsStore.requestClose(tab.id);
       if (!closed) break; // User cancelled — stop closing remaining tabs
     }
+    // Dispose any now-empty editor groups (this one, plus any other blank panes)
+    // so closing doesn't leave behind unclosable empty groups.
+    tabsStore.closeEmptyGroups();
   }
 
   function handleCloseSaved() {
@@ -220,6 +225,19 @@
       </svg>
       <span>Browser</span>
     </button>
+  {/if}
+  <!-- App Preview: live view of the running app (CDP). Mutually exclusive with
+       the Browser. Shown only when a sandbox app is running. -->
+  {#if onAppPreviewClick}
+    <button class="browser-tab app-preview-tab" class:active={showAppPreview} onclick={onAppPreviewClick} title="Live app preview — the running app at true size (via CDP)">
+      <svg class="tab-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/>
+      </svg>
+      <span>App</span>
+      <span class="app-live-dot" aria-hidden="true"></span>
+    </button>
+  {/if}
+  {#if onBrowserClick || onAppPreviewClick}
     <div class="tab-separator"></div>
   {/if}
 
@@ -466,6 +484,26 @@
     color: var(--text-strong);
     background: color-mix(in srgb, var(--text) 12%, transparent);
     font-weight: 500;
+  }
+
+  /* App Preview tab: a small "live" dot signals the running app stream. */
+  .app-preview-tab {
+    margin-left: 2px;
+  }
+  .app-live-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--ok, #0072b2);
+    flex-shrink: 0;
+    animation: app-live-pulse 2s ease-in-out infinite;
+  }
+  @keyframes app-live-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .app-live-dot { animation: none; }
   }
 
   .tab-separator {
