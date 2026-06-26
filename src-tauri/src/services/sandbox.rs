@@ -253,8 +253,22 @@ pub async fn snapshot(port: u16, window: Option<&str>) -> Result<Value, String> 
     set_target(port, &ws_url);
     let mut cdp = Cdp::connect(&ws_url).await?;
     let _ = cdp.call("DOM.enable", json!({})).await;
-    let ax = cdp.call("Accessibility.getFullAXTree", json!({})).await?;
-    let (tree, refs) = parse_ax_tree(&ax, true);
+    // CRITICAL: Accessibility.getFullAXTree returns an EMPTY tree unless the
+    // Accessibility domain is enabled first — WebView2 keeps accessibility off
+    // until something turns it on (no screen reader running). Enabling it makes
+    // Chromium compute the AX tree so the elements actually show up.
+    let _ = cdp.call("Accessibility.enable", json!({})).await;
+
+    let mut ax = cdp.call("Accessibility.getFullAXTree", json!({})).await?;
+    let (mut tree, mut refs) = parse_ax_tree(&ax, true);
+    // The tree can lag right after enabling — retry once if it came back empty.
+    if refs.is_empty() {
+        tokio::time::sleep(Duration::from_millis(350)).await;
+        ax = cdp.call("Accessibility.getFullAXTree", json!({})).await?;
+        let (t, r) = parse_ax_tree(&ax, true);
+        tree = t;
+        refs = r;
+    }
     let ref_count = refs.len();
     store_refs(port, refs);
     let windows = list_window_titles(port).await;
