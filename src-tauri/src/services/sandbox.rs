@@ -299,7 +299,7 @@ pub async fn snapshot(port: u16, window: Option<&str>) -> Result<Value, String> 
     let mut chosen = false;
     let mut best_diff = f64::MAX;
     for (ws, url) in &candidates {
-        let (t, r, aspect) = snapshot_target(ws).await.unwrap_or_default();
+        let (t, r, aspect, visible) = snapshot_target(ws).await.unwrap_or_default();
         if want.is_some() {
             // Explicit window: use it as-is.
             chosen_ws = ws.clone();
@@ -308,10 +308,15 @@ pub async fn snapshot(port: u16, window: Option<&str>) -> Result<Value, String> 
             refs = r;
             break;
         }
+        // Only ever act on a window that's actually ON SCREEN — never a hidden
+        // one the user can't see.
+        if !visible {
+            continue;
+        }
         // Score each candidate. When we know the previewed window's aspect, match
         // it STRICTLY (even if its refs are empty) so we stay on the visible
-        // window the user is watching — never a hidden one. Without a preview,
-        // prefer any window that actually has interactive elements.
+        // window the user is watching. Without a preview, prefer any visible
+        // window that actually has interactive elements.
         let diff = match (preview_aspect, aspect) {
             (Some(pa), Some(a)) => (pa - a).abs(),
             (Some(_), None) => f64::MAX, // no window bounds → not the preview window
@@ -346,7 +351,7 @@ pub async fn snapshot(port: u16, window: Option<&str>) -> Result<Value, String> 
 /// so we can match it to the OS window the preview is mirroring.
 async fn snapshot_target(
     ws_url: &str,
-) -> Result<(String, HashMap<String, RefEntry>, Option<f64>), String> {
+) -> Result<(String, HashMap<String, RefEntry>, Option<f64>, bool), String> {
     let mut cdp = Cdp::connect(ws_url).await?;
     let _ = cdp.call("DOM.enable", json!({})).await;
     // Accessibility is off until enabled; without this the AX tree is empty.
@@ -365,6 +370,23 @@ async fn snapshot_target(
                 None
             }
         });
+    // Is this window actually ON SCREEN? Chromium reports document.visibilityState
+    // = "hidden" for a hidden window, so we never let Claude act on a window the
+    // user can't see.
+    let visible = cdp
+        .call(
+            "Runtime.evaluate",
+            json!({ "expression": "document.visibilityState", "returnByValue": true }),
+        )
+        .await
+        .ok()
+        .and_then(|r| {
+            r.get("result")
+                .and_then(|res| res.get("value"))
+                .and_then(|v| v.as_str())
+                .map(|s| s == "visible")
+        })
+        .unwrap_or(true);
     let ax = cdp.call("Accessibility.getFullAXTree", json!({})).await?;
     let (mut tree, mut refs) = parse_ax_tree(&ax, true);
     if refs.is_empty() {
@@ -375,7 +397,7 @@ async fn snapshot_target(
             }
         }
     }
-    Ok((tree, refs, aspect))
+    Ok((tree, refs, aspect, visible))
 }
 
 /// Aspect ratio (w/h) of the OS window the live preview is currently mirroring,
