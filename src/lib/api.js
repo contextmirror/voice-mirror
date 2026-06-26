@@ -652,6 +652,16 @@ export async function sandboxClearActivePort() {
   return invoke('sandbox_clear_active_port');
 }
 
+/** Start a live CDP screencast of the app on `port`. Returns { mjpegPort, url }. */
+export async function sandboxStreamStart(port) {
+  return invoke('sandbox_stream_start', { port });
+}
+
+/** Stop the live screencast for the app on `port`. */
+export async function sandboxStreamStop(port) {
+  return invoke('sandbox_stream_stop', { port });
+}
+
 /**
  * Check if a specific port is accepting TCP connections on localhost.
  * @param {number} port - Port number to probe.

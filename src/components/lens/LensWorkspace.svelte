@@ -15,6 +15,7 @@
   import DiffViewer from './DiffViewer.svelte';
   import EditorPane from './EditorPane.svelte';
   import DevicePreview from './DevicePreview.svelte';
+  import SandboxPreview from './SandboxPreview.svelte';
   import SplitPanel from '../shared/SplitPanel.svelte';
   import ChatPanel from '../chat/ChatPanel.svelte';
   import TerminalTabs from '../terminal/TerminalTabs.svelte';
@@ -31,6 +32,8 @@
   import { projectStore } from '../../lib/stores/project.svelte.js';
   import { lspDiagnosticsStore } from '../../lib/stores/lsp-diagnostics.svelte.js';
   import { devicePreviewStore } from '../../lib/stores/device-preview.svelte.js';
+  import { sandboxPreviewStore } from '../../lib/stores/sandbox-preview.svelte.js';
+  import { devServerManager } from '../../lib/stores/dev-server-manager.svelte.js';
   import { LSP_EXTENSIONS } from '../../lib/editor-lsp.svelte.js';
   import { setActionHandler } from '../../lib/stores/shortcuts.svelte.js';
 
@@ -387,6 +390,28 @@
     lensSetVisible(showBrowser).catch(() => {});
   });
 
+  // ── Sandbox live preview auto-open ──
+  // When Voice Mirror has a running Tauri app with CDP enabled, auto-open the
+  // live preview ONCE (per launch) so you see the real app window at true size.
+  // `lastSandboxPort` guards re-opening after a manual close.
+  let lastSandboxPort = null;
+  $effect(() => {
+    let activeCdp = null;
+    for (const [, s] of devServerManager.servers) {
+      if (s?.cdpPort && (s.status === 'running' || s.status === 'idle')) {
+        activeCdp = s.cdpPort;
+        break;
+      }
+    }
+    if (activeCdp && activeCdp !== lastSandboxPort) {
+      lastSandboxPort = activeCdp;
+      sandboxPreviewStore.open(activeCdp);
+    } else if (!activeCdp) {
+      lastSandboxPort = null;
+      if (sandboxPreviewStore.isOpen) sandboxPreviewStore.close();
+    }
+  });
+
   // Start/stop file watcher when entering Lens mode or switching projects.
   // Uses memoized projectRoot so unrelated entry mutations don't churn the watcher.
   $effect(() => {
@@ -623,6 +648,13 @@
                       <DevicePreview />
                     {/snippet}
                   </SplitPanel>
+                  <!-- Sandbox live preview: docked right overlay showing the real
+                       app window at true size (same surface the AI sees via CDP). -->
+                  {#if sandboxPreviewStore.isOpen}
+                    <div class="sandbox-dock">
+                      <SandboxPreview />
+                    </div>
+                  {/if}
                 </div>
               {/snippet}
               {#snippet panelB()}
@@ -682,6 +714,20 @@
     height: 100%;
     overflow: hidden;
     position: relative;
+  }
+
+  /* Sandbox live preview — docked over the right of the editor area. */
+  .sandbox-dock {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 45%;
+    min-width: 280px;
+    max-width: 720px;
+    z-index: 20;
+    display: flex;
+    box-shadow: -4px 0 16px rgba(0, 0, 0, 0.4);
   }
 
   .editor-with-browser {

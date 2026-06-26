@@ -357,7 +357,7 @@ fn run_capture(
 
 // ── MJPEG server ────────────────────────────────────────────────────────
 
-fn run_mjpeg_server(port: u16, stop_flag: Arc<AtomicBool>, buffer: Arc<ArcSwap<Vec<u8>>>) {
+pub(crate) fn run_mjpeg_server(port: u16, stop_flag: Arc<AtomicBool>, buffer: Arc<ArcSwap<Vec<u8>>>) {
     use std::net::TcpListener;
 
     let addr = format!("127.0.0.1:{}", port);
@@ -483,7 +483,7 @@ fn handle_client(
 
 // ── Helpers ─────────────────────────────────────────────────────────────
 
-fn find_available_port() -> Result<u16, String> {
+pub(crate) fn find_available_port() -> Result<u16, String> {
     for port in 9876..=9886 {
         if std::net::TcpListener::bind(format!("127.0.0.1:{}", port)).is_ok() {
             return Ok(port);

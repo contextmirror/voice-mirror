@@ -315,6 +315,8 @@ pub fn run() {
             sandbox_cmds::sandbox_screenshot,
             sandbox_cmds::sandbox_set_active_port,
             sandbox_cmds::sandbox_clear_active_port,
+            sandbox_cmds::sandbox_stream_start,
+            sandbox_cmds::sandbox_stream_stop,
             screenshot_cmds::take_screenshot,
             screenshot_cmds::save_image_to_temp,
             screenshot_cmds::list_monitors,

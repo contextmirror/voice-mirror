@@ -83,7 +83,7 @@ pub fn active_cdp_port() -> Option<u16> {
 
 /// Discover the primary page target on a CDP remote-debugging port.
 /// Returns `(webSocketDebuggerUrl, page_url)`.
-async fn discover_page_target(port: u16) -> Result<(String, String), String> {
+pub(crate) async fn discover_page_target(port: u16) -> Result<(String, String), String> {
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(3))
         .build()

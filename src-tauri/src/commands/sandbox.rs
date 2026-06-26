@@ -60,3 +60,23 @@ pub fn sandbox_clear_active_port() -> IpcResponse {
     crate::services::sandbox::set_active_cdp_port(None);
     IpcResponse::ok(serde_json::json!({ "ok": true }))
 }
+
+/// Start a live CDP screencast of the app on `port`. Returns `{ mjpegPort, url }`
+/// — point an `<img>` at `url` to show the app live at its true window size.
+#[tauri::command]
+pub async fn sandbox_stream_start(port: u16) -> IpcResponse {
+    match crate::services::sandbox_stream::start(port).await {
+        Ok(mjpeg_port) => IpcResponse::ok(serde_json::json!({
+            "mjpegPort": mjpeg_port,
+            "url": format!("http://127.0.0.1:{}/stream", mjpeg_port),
+        })),
+        Err(e) => IpcResponse::err(e),
+    }
+}
+
+/// Stop the live screencast for the app on `port`.
+#[tauri::command]
+pub fn sandbox_stream_stop(port: u16) -> IpcResponse {
+    crate::services::sandbox_stream::stop(port);
+    IpcResponse::ok(serde_json::json!({ "ok": true }))
+}
