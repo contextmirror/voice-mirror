@@ -13,6 +13,16 @@
   const url = $derived(sandboxPreviewStore.streamUrl);
   const loading = $derived(sandboxPreviewStore.loading);
   const error = $derived(sandboxPreviewStore.error);
+
+  // The MJPEG stream serves immediately but is empty until the app window exists
+  // (a `tauri dev` app compiles Rust first, so its window can appear minutes
+  // later). Track the first painted frame so we can show a clear waiting state.
+  let hasFrame = $state(false);
+  // Reset the frame flag whenever the stream URL changes (new session).
+  $effect(() => {
+    url;
+    hasFrame = false;
+  });
 </script>
 
 <div class="sandbox-preview">
@@ -41,7 +51,21 @@
     {:else if loading || !url}
       <div class="sandbox-msg">Starting live preview…</div>
     {:else}
-      <img class="sandbox-frame" src={url} alt="Live preview of the app being built" />
+      {#if !hasFrame}
+        <div class="sandbox-msg waiting">
+          <span class="spinner" aria-hidden="true"></span>
+          Waiting for the app window…
+          <small>The app builds &amp; launches before it appears here.</small>
+        </div>
+      {/if}
+      <!-- MJPEG stream of the real app window; onload fires on the first frame. -->
+      <img
+        class="sandbox-frame"
+        class:visible={hasFrame}
+        src={url}
+        alt="Live preview of the app being built"
+        onload={() => { hasFrame = true; }}
+      />
     {/if}
   </div>
 </div>
@@ -133,21 +157,50 @@
     max-width: 100%;
     max-height: 100%;
     object-fit: contain;
+    /* Hidden until the first frame paints, so no broken-image icon shows. */
+    display: none;
+  }
+
+  .sandbox-frame.visible {
     display: block;
   }
 
   .sandbox-msg {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
     color: var(--muted);
     font-size: 13px;
     padding: 16px;
     text-align: center;
   }
 
+  .sandbox-msg small {
+    color: var(--muted);
+    opacity: 0.7;
+    font-size: 11px;
+  }
+
   .sandbox-msg.error {
     color: var(--danger);
   }
 
+  .spinner {
+    width: 18px;
+    height: 18px;
+    border: 2px solid color-mix(in srgb, var(--muted) 40%, transparent);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: sandbox-spin 0.8s linear infinite;
+  }
+
+  @keyframes sandbox-spin {
+    to { transform: rotate(360deg); }
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .live-dot { animation: none; }
+    .spinner { animation: none; }
   }
 </style>

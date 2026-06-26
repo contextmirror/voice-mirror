@@ -412,6 +412,17 @@
     }
   });
 
+  // The sandbox preview is a DOM panel; the native Lens browser WebView2 would
+  // paint OVER it (airspace). So while the sandbox preview is open, hide the
+  // browser — you get the editor on the left and the live app on the right.
+  // (The sandbox preview shows the real app at true size, so the stretched
+  //  localhost browser preview is redundant while it's up.)
+  $effect(() => {
+    if (sandboxPreviewStore.isOpen) {
+      showBrowser = false;
+    }
+  });
+
   // Start/stop file watcher when entering Lens mode or switching projects.
   // Uses memoized projectRoot so unrelated entry mutations don't churn the watcher.
   $effect(() => {

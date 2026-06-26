@@ -38,6 +38,11 @@ fn sessions() -> &'static Mutex<HashMap<u16, Session>> {
 
 /// Start (or reuse) a live screencast of the app on CDP `cdp_port`.
 /// Returns the local MJPEG port to point an `<img src=".../stream">` at.
+///
+/// The MJPEG server starts immediately (serving nothing until frames arrive),
+/// and a background task connects to the app's CDP — retrying for minutes,
+/// because a Tauri app launched via `tauri dev` compiles Rust first and its
+/// window (and CDP port) can appear long after the Vite dev server is up.
 pub async fn start(cdp_port: u16) -> Result<u16, String> {
     // Reuse an existing session for this port (idempotent).
     if let Some(port) = sessions()
@@ -48,51 +53,7 @@ pub async fn start(cdp_port: u16) -> Result<u16, String> {
         return Ok(port);
     }
 
-    // Discover the page target, retrying — the app may not be listening yet.
-    let ws_url = {
-        let mut last_err = String::from("no attempt");
-        let mut found = None;
-        for _ in 0..10 {
-            match discover_page_target(cdp_port).await {
-                Ok((url, _)) => {
-                    found = Some(url);
-                    break;
-                }
-                Err(e) => {
-                    last_err = e;
-                    tokio::time::sleep(Duration::from_millis(500)).await;
-                }
-            }
-        }
-        found.ok_or_else(|| {
-            format!("Sandbox app not reachable on CDP port {}: {}", cdp_port, last_err)
-        })?
-    };
-
-    let (mut ws, _) = connect_async(&ws_url)
-        .await
-        .map_err(|e| format!("CDP screencast connect failed: {}", e))?;
-
-    // Enable the page domain and start the screencast.
-    let mut id: u64 = 1;
-    ws_send(&mut ws, id, "Page.enable", json!({})).await?;
-    id += 1;
-    ws_send(
-        &mut ws,
-        id,
-        "Page.startScreencast",
-        json!({
-            "format": "jpeg",
-            "quality": 70,
-            "maxWidth": 1600,
-            "maxHeight": 1200,
-            "everyNthFrame": 1
-        }),
-    )
-    .await?;
-    id += 1;
-
-    // Frame buffer + MJPEG server (reused from window_stream).
+    // Frame buffer + MJPEG server (reused from window_stream) — start serving now.
     let buffer: Arc<ArcSwap<Vec<u8>>> = Arc::new(ArcSwap::from_pointee(Vec::new()));
     let stop_flag = Arc::new(AtomicBool::new(false));
     let mjpeg_port = find_available_port()?;
@@ -105,10 +66,67 @@ pub async fn start(cdp_port: u16) -> Result<u16, String> {
             .map_err(|e| format!("Failed to spawn MJPEG server: {}", e))?;
     }
 
-    // Read-loop task: owns the WS, stores frames, acks each one.
+    // Background task: wait for the app's CDP, then screencast into the buffer.
     let read_stop = stop_flag.clone();
     let read_buffer = buffer.clone();
     tokio::spawn(async move {
+        // Wait for the app to expose its CDP page target (up to ~4 minutes),
+        // bailing early if the session is stopped (dev server stopped/crashed).
+        let mut ws_url = None;
+        for _ in 0..240 {
+            if read_stop.load(Ordering::SeqCst) {
+                return;
+            }
+            match discover_page_target(cdp_port).await {
+                Ok((url, _)) => {
+                    ws_url = Some(url);
+                    break;
+                }
+                Err(_) => tokio::time::sleep(Duration::from_secs(1)).await,
+            }
+        }
+        let ws_url = match ws_url {
+            Some(u) => u,
+            None => {
+                warn!("[sandbox_stream] app never reachable on CDP :{}", cdp_port);
+                if let Ok(mut g) = sessions().lock() {
+                    g.remove(&cdp_port);
+                }
+                return;
+            }
+        };
+
+        let mut ws = match connect_async(&ws_url).await {
+            Ok((ws, _)) => ws,
+            Err(e) => {
+                warn!("[sandbox_stream] CDP connect failed on :{}: {}", cdp_port, e);
+                if let Ok(mut g) = sessions().lock() {
+                    g.remove(&cdp_port);
+                }
+                return;
+            }
+        };
+
+        // Enable the page domain and start the screencast.
+        let mut id: u64 = 1;
+        let _ = ws_send(&mut ws, id, "Page.enable", json!({})).await;
+        id += 1;
+        let _ = ws_send(
+            &mut ws,
+            id,
+            "Page.startScreencast",
+            json!({
+                "format": "jpeg",
+                "quality": 70,
+                "maxWidth": 1600,
+                "maxHeight": 1200,
+                "everyNthFrame": 1
+            }),
+        )
+        .await;
+        id += 1;
+        info!("[sandbox_stream] screencast connected: CDP :{}", cdp_port);
+
         let mut ack_id = id;
         loop {
             if read_stop.load(Ordering::SeqCst) {
