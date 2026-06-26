@@ -36,10 +36,12 @@
 
   function doSplit(direction) {
     const activeTab = activeTabId ? tabsStore.tabs.find(t => t.id === activeTabId) : null;
+    // Don't split an empty pane — that just spawns blank editor groups that
+    // can't be dismissed (Close All closes tabs, not empty groups), so repeated
+    // clicks pile up a row of unclosable blank panes.
+    if (!activeTab) return;
     const newGroupId = editorGroupsStore.splitGroup(groupId, direction);
-    if (activeTab) {
-      tabsStore.openFile({ name: activeTab.title, path: activeTab.path }, newGroupId);
-    }
+    tabsStore.openFile({ name: activeTab.title, path: activeTab.path }, newGroupId);
   }
 
   function handleSplitEditor() {
@@ -124,6 +126,9 @@
       const closed = await tabsStore.requestClose(tab.id);
       if (!closed) break; // User cancelled — stop closing remaining tabs
     }
+    // Dispose any now-empty editor groups (this one, plus any other blank panes)
+    // so closing doesn't leave behind unclosable empty groups.
+    tabsStore.closeEmptyGroups();
   }
 
   function handleCloseSaved() {

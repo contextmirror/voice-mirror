@@ -287,7 +287,12 @@ commandRegistry.registerMany([
     category: 'Editor',
     execute: () => {
       const gid = editorGroupsStore.focusedGroupId;
-      editorGroupsStore.splitGroup(gid, 'vertical');
+      const activeId = editorGroupsStore.groups.get(gid)?.activeTabId;
+      const activeTab = activeId ? tabsStore.tabs.find(t => t.id === activeId) : null;
+      // Don't split a blank pane into another blank pane (unclosable empty group).
+      if (!activeTab) return;
+      const newGroupId = editorGroupsStore.splitGroup(gid, 'vertical');
+      tabsStore.openFile({ name: activeTab.title, path: activeTab.path }, newGroupId);
     },
   },
   {
