@@ -248,31 +248,223 @@ impl Cdp {
 /// `@ref` element model the AI uses for the Lens browser. Stores the ref map so
 /// a follow-up `click`/`type` can resolve refs.
 pub async fn snapshot(port: u16, window: Option<&str>) -> Result<Value, String> {
-    let (ws_url, page_url) = discover_page_target(port, window).await?;
-    // Remember this target so click/type act on the same window.
-    set_target(port, &ws_url);
-    let mut cdp = Cdp::connect(&ws_url).await?;
-    let _ = cdp.call("DOM.enable", json!({})).await;
-    // CRITICAL: Accessibility.getFullAXTree returns an EMPTY tree unless the
-    // Accessibility domain is enabled first — WebView2 keeps accessibility off
-    // until something turns it on (no screen reader running). Enabling it makes
-    // Chromium compute the AX tree so the elements actually show up.
-    let _ = cdp.call("Accessibility.enable", json!({})).await;
+    let targets = fetch_page_targets(port).await?;
+    let want = window.map(|t| t.trim().to_lowercase());
 
-    let mut ax = cdp.call("Accessibility.getFullAXTree", json!({})).await?;
-    let (mut tree, mut refs) = parse_ax_tree(&ax, true);
-    // The tree can lag right after enabling — retry once if it came back empty.
-    if refs.is_empty() {
-        tokio::time::sleep(Duration::from_millis(350)).await;
-        ax = cdp.call("Accessibility.getFullAXTree", json!({})).await?;
-        let (t, r) = parse_ax_tree(&ax, true);
-        tree = t;
-        refs = r;
+    // Candidate targets to snapshot: the requested window, else all of them.
+    let mut candidates: Vec<(String, String)> = Vec::new(); // (ws_url, page_url)
+    for t in &targets {
+        let ws = match t.get("webSocketDebuggerUrl").and_then(|v| v.as_str()) {
+            Some(w) => w.to_string(),
+            None => continue,
+        };
+        let url = t.get("url").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        if let Some(w) = &want {
+            let ttl = t
+                .get("title")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim()
+                .to_lowercase();
+            if !ttl.is_empty() && (ttl == *w || ttl.contains(w) || w.contains(&ttl)) {
+                candidates.push((ws, url));
+            }
+        } else {
+            candidates.push((ws, url));
+        }
     }
+    if candidates.is_empty() {
+        return Err(match window {
+            Some(w) => format!(
+                "No app window matching '{}'. Call sandbox_snapshot without `window` to see the windows.",
+                w
+            ),
+            None => "no debuggable page target found".to_string(),
+        });
+    }
+
+    // Snapshot candidates. With an explicit window, just that one; otherwise try
+    // each until one yields interactive elements (so the default finds the real
+    // UI window, not an empty/hidden overlay).
+    let mut chosen_ws = candidates[0].0.clone();
+    let mut page_url = candidates[0].1.clone();
+    let mut tree = String::new();
+    let mut refs: HashMap<String, RefEntry> = HashMap::new();
+    let mut picked = false;
+    for (ws, url) in &candidates {
+        let (t, r) = snapshot_target(ws).await.unwrap_or_default();
+        if !picked {
+            chosen_ws = ws.clone();
+            page_url = url.clone();
+            tree = t.clone();
+            refs = r.clone();
+            picked = true;
+        }
+        if !r.is_empty() {
+            chosen_ws = ws.clone();
+            page_url = url.clone();
+            tree = t;
+            refs = r;
+            break;
+        }
+        if want.is_some() {
+            break;
+        }
+    }
+
+    // Remember the chosen target so click/type act on the same window.
+    set_target(port, &chosen_ws);
     let ref_count = refs.len();
     store_refs(port, refs);
     let windows = list_window_titles(port).await;
     Ok(json!({ "pageUrl": page_url, "tree": tree, "refCount": ref_count, "windows": windows }))
+}
+
+/// Snapshot a single CDP target: the accessibility tree, falling back to a
+/// DOM walk when the AX tree is empty (some WebView2 pages don't expose AX).
+async fn snapshot_target(ws_url: &str) -> Result<(String, HashMap<String, RefEntry>), String> {
+    let mut cdp = Cdp::connect(ws_url).await?;
+    let _ = cdp.call("DOM.enable", json!({})).await;
+    // Accessibility is off until enabled; without this the AX tree is empty.
+    let _ = cdp.call("Accessibility.enable", json!({})).await;
+    let ax = cdp.call("Accessibility.getFullAXTree", json!({})).await?;
+    let (mut tree, mut refs) = parse_ax_tree(&ax, true);
+    if refs.is_empty() {
+        if let Ok((dtree, drefs)) = dom_snapshot(&mut cdp).await {
+            if !drefs.is_empty() {
+                tree = dtree;
+                refs = drefs;
+            }
+        }
+    }
+    Ok((tree, refs))
+}
+
+/// DOM-based snapshot: walk `DOM.getDocument` for interactive elements and build
+/// `@ref`s from their backend node ids (the same model the AX snapshot uses, so
+/// click/type work unchanged). Used when the accessibility tree is empty.
+async fn dom_snapshot(cdp: &mut Cdp) -> Result<(String, HashMap<String, RefEntry>), String> {
+    let doc = cdp
+        .call("DOM.getDocument", json!({ "depth": -1, "pierce": true }))
+        .await?;
+    let root = doc.get("root").ok_or("DOM.getDocument: no root")?;
+    let mut refs: HashMap<String, RefEntry> = HashMap::new();
+    let mut lines: Vec<String> = Vec::new();
+    let mut counter: u32 = 1;
+    walk_dom_interactive(root, &mut refs, &mut lines, &mut counter);
+    Ok((lines.join("\n"), refs))
+}
+
+/// Parse a CDP node's flat `[name, value, name, value, …]` attributes array.
+fn dom_attrs(node: &Value) -> HashMap<String, String> {
+    let mut map = HashMap::new();
+    if let Some(arr) = node.get("attributes").and_then(|v| v.as_array()) {
+        let mut i = 0;
+        while i + 1 < arr.len() {
+            if let (Some(k), Some(v)) = (arr[i].as_str(), arr[i + 1].as_str()) {
+                map.insert(k.to_lowercase(), v.to_string());
+            }
+            i += 2;
+        }
+    }
+    map
+}
+
+/// Concatenate descendant text-node values (for an element's visible label).
+fn collect_dom_text(node: &Value, out: &mut String) {
+    if out.chars().count() >= 80 {
+        return;
+    }
+    if node.get("nodeType").and_then(|v| v.as_u64()) == Some(3) {
+        if let Some(t) = node.get("nodeValue").and_then(|v| v.as_str()) {
+            let t = t.trim();
+            if !t.is_empty() {
+                if !out.is_empty() {
+                    out.push(' ');
+                }
+                out.push_str(t);
+            }
+        }
+    }
+    if let Some(children) = node.get("children").and_then(|v| v.as_array()) {
+        for c in children {
+            collect_dom_text(c, out);
+        }
+    }
+}
+
+/// Recursively collect interactive elements (buttons, links, inputs, anything
+/// with a role / onclick / focusable) into `@ref`s, piercing shadow DOM + iframes.
+fn walk_dom_interactive(
+    node: &Value,
+    refs: &mut HashMap<String, RefEntry>,
+    lines: &mut Vec<String>,
+    counter: &mut u32,
+) {
+    if node.get("nodeType").and_then(|v| v.as_u64()) == Some(1) {
+        let node_name = node
+            .get("nodeName")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_uppercase();
+        let attrs = dom_attrs(node);
+        let interactive = matches!(
+            node_name.as_str(),
+            "BUTTON" | "A" | "INPUT" | "SELECT" | "TEXTAREA" | "OPTION" | "SUMMARY"
+        ) || attrs.contains_key("role")
+            || attrs.contains_key("onclick")
+            || attrs.get("tabindex").map(|t| t != "-1").unwrap_or(false)
+            || attrs
+                .get("contenteditable")
+                .map(|c| c != "false")
+                .unwrap_or(false);
+        if interactive {
+            if let Some(b) = node.get("backendNodeId").and_then(|v| v.as_u64()) {
+                let role = attrs
+                    .get("role")
+                    .cloned()
+                    .unwrap_or_else(|| node_name.to_lowercase());
+                let mut name = attrs
+                    .get("aria-label")
+                    .or_else(|| attrs.get("title"))
+                    .or_else(|| attrs.get("value"))
+                    .or_else(|| attrs.get("placeholder"))
+                    .cloned()
+                    .unwrap_or_default();
+                if name.trim().is_empty() {
+                    let mut txt = String::new();
+                    collect_dom_text(node, &mut txt);
+                    name = txt;
+                }
+                let name: String = name.trim().chars().take(60).collect();
+                let ref_key = format!("e{}", *counter);
+                *counter += 1;
+                lines.push(format!("- {} \"{}\" @{}", role, name, ref_key));
+                refs.insert(
+                    ref_key,
+                    RefEntry {
+                        role,
+                        name,
+                        backend_node_id: Some(b as u32),
+                        nth: None,
+                    },
+                );
+            }
+        }
+    }
+    if let Some(children) = node.get("children").and_then(|v| v.as_array()) {
+        for c in children {
+            walk_dom_interactive(c, refs, lines, counter);
+        }
+    }
+    if let Some(shadows) = node.get("shadowRoots").and_then(|v| v.as_array()) {
+        for s in shadows {
+            walk_dom_interactive(s, refs, lines, counter);
+        }
+    }
+    if let Some(cd) = node.get("contentDocument") {
+        walk_dom_interactive(cd, refs, lines, counter);
+    }
 }
 
 /// Compute the center of the first non-degenerate quad from `DOM.getContentQuads`.
