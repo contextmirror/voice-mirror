@@ -6,7 +6,7 @@
   import DiffViewer from './DiffViewer.svelte';
   import DropZoneOverlay from './DropZoneOverlay.svelte';
 
-  let { groupId = 1, showBrowser = false, onBrowserClick = null, onDevicePreviewClick = null, showDevicePreview = false } = $props();
+  let { groupId = 1, showBrowser = false, onBrowserClick = null, onDevicePreviewClick = null, showDevicePreview = false, onAppPreviewClick = null, showAppPreview = false } = $props();
 
   let activeTabId = $derived(editorGroupsStore.groups.get(groupId)?.activeTabId);
   let activeTab = $derived(activeTabId ? tabsStore.tabs.find(t => t.id === activeTabId) : null);
@@ -154,7 +154,7 @@
      ondragleave={handleDragLeave}
      ondrop={handleDrop}>
 
-  <GroupTabBar {groupId} {onBrowserClick} {showBrowser} {onDevicePreviewClick} {showDevicePreview} />
+  <GroupTabBar {groupId} {onBrowserClick} {showBrowser} {onDevicePreviewClick} {showDevicePreview} {onAppPreviewClick} {showAppPreview} />
 
   <div class="pane-content" class:hidden={showBrowser}>
     {#if activeTab?.type === 'file'}

@@ -38,7 +38,7 @@ describe('sandbox-preview: integration', () => {
 });
 
 describe('sandbox-preview: state', () => {
-  for (const field of ['isOpen', 'cdpPort', 'streamUrl', 'loading', 'error']) {
+  for (const field of ['active', 'visible', 'cdpPort', 'streamUrl', 'loading', 'error']) {
     it(`uses $state for ${field}`, () => {
       assert.ok(
         new RegExp(`let\\s+${field}\\s*=\\s*\\$state\\(`).test(src),
@@ -47,7 +47,7 @@ describe('sandbox-preview: state', () => {
     });
   }
 
-  for (const getter of ['isOpen', 'cdpPort', 'streamUrl', 'loading', 'error']) {
+  for (const getter of ['active', 'visible', 'cdpPort', 'streamUrl', 'loading', 'error']) {
     it(`has getter ${getter}`, () => {
       assert.ok(src.includes(`get ${getter}()`), `Should expose getter ${getter}`);
     });
@@ -55,17 +55,25 @@ describe('sandbox-preview: state', () => {
 });
 
 describe('sandbox-preview: lifecycle', () => {
-  it('has open and close methods', () => {
+  it('has open/show/hide/close methods', () => {
     assert.ok(/async open\(port\)/.test(src), 'Should have async open(port)');
+    assert.ok(/show\(\)/.test(src), 'Should have show()');
+    assert.ok(/hide\(\)/.test(src), 'Should have hide()');
     assert.ok(/close\(\)/.test(src), 'Should have close()');
   });
 
   it('open is idempotent per port', () => {
-    const block = src.split('async open(port)')[1]?.split('close()')[0] || '';
+    const block = src.split('async open(port)')[1]?.split('show()')[0] || '';
     assert.ok(
       block.includes('cdpPort === port'),
-      'open should no-op when already open on the same port'
+      'open should no-op when already active on the same port'
     );
+  });
+
+  it('hide keeps the session (does not stop the screencast)', () => {
+    const block = src.split('hide()')[1]?.split('close()')[0] || '';
+    assert.ok(!block.includes('sandboxStreamStop'), 'hide should NOT stop the screencast');
+    assert.ok(block.includes('visible = false'), 'hide should just clear visibility');
   });
 
   it('close stops the screencast for the current port', () => {
