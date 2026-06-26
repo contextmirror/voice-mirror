@@ -296,7 +296,7 @@ pub async fn snapshot(port: u16, window: Option<&str>) -> Result<Value, String> 
     let mut page_url = candidates[0].1.clone();
     let mut tree = String::new();
     let mut refs: HashMap<String, RefEntry> = HashMap::new();
-    let mut have_fallback = false;
+    let mut chosen = false;
     let mut best_diff = f64::MAX;
     for (ws, url) in &candidates {
         let (t, r, aspect) = snapshot_target(ws).await.unwrap_or_default();
@@ -308,23 +308,23 @@ pub async fn snapshot(port: u16, window: Option<&str>) -> Result<Value, String> 
             refs = r;
             break;
         }
-        // Keep the first non-empty result as a fallback (in case nothing matches
-        // the preview's aspect).
-        if r.is_empty() {
-            if !have_fallback && tree.is_empty() {
-                chosen_ws = ws.clone();
-                page_url = url.clone();
-                tree = t;
-                refs = r;
-            }
-            continue;
-        }
+        // Score each candidate. When we know the previewed window's aspect, match
+        // it STRICTLY (even if its refs are empty) so we stay on the visible
+        // window the user is watching — never a hidden one. Without a preview,
+        // prefer any window that actually has interactive elements.
         let diff = match (preview_aspect, aspect) {
             (Some(pa), Some(a)) => (pa - a).abs(),
-            _ => 0.0, // no preview aspect to match — any window with refs is fine
+            (Some(_), None) => f64::MAX, // no window bounds → not the preview window
+            (None, _) => {
+                if r.is_empty() {
+                    f64::MAX
+                } else {
+                    0.0
+                }
+            }
         };
-        if !have_fallback || diff < best_diff {
-            have_fallback = true;
+        if !chosen || diff < best_diff {
+            chosen = true;
             best_diff = diff;
             chosen_ws = ws.clone();
             page_url = url.clone();
