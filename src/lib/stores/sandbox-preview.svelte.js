@@ -31,8 +31,10 @@ function createSandboxPreviewStore() {
 
   // Non-reactive bookkeeping for auto-follow + polling.
   let seen = new Set();
+  let missing = new Map(); // hwnd -> consecutive polls it's been absent
   let initialized = false;
   let pollTimer = null;
+  const CLOSE_AFTER = 2; // a window must be absent this many polls to count as closed
 
   function setStreamUrl(url) {
     // Cache-bust so the <img> reconnects when we re-target the stream to a
@@ -60,7 +62,14 @@ function createSandboxPreviewStore() {
     }
   }
 
-  /** Poll the app's window list; auto-follow any newly-opened window. */
+  /**
+   * Poll the app's window list; auto-follow a newly-opened window. Window
+   * appearance/disappearance is DEBOUNCED: a window must be absent for
+   * CLOSE_AFTER consecutive polls before we treat it as closed. Otherwise a
+   * single transient miss in the OS window enumeration makes the preview thrash
+   * (follow Settings -> snap back to the pill -> follow Settings…), which is why
+   * you couldn't see Claude work inside Settings.
+   */
   async function refreshWindows() {
     if (!active || cdpPort == null) return;
     try {
@@ -68,24 +77,44 @@ function createSandboxPreviewStore() {
       const list = unwrapResult(res);
       windows = Array.isArray(list) ? list : [];
       const present = new Set(windows.map((w) => w.hwnd));
+
+      // Update consecutive-missing counts for every window we know about.
+      for (const h of seen) {
+        missing.set(h, present.has(h) ? 0 : (missing.get(h) || 0) + 1);
+      }
+
       if (!initialized) {
         // First poll — seed the seen-set; don't switch (main is already shown).
         initialized = true;
-        for (const w of windows) seen.add(w.hwnd);
+        for (const w of windows) {
+          seen.add(w.hwnd);
+          missing.set(w.hwnd, 0);
+        }
       } else {
         for (const w of windows) {
           if (!seen.has(w.hwnd)) {
             seen.add(w.hwnd);
+            missing.set(w.hwnd, 0);
             startStream(w.hwnd); // auto-follow the newly-opened window
           }
         }
       }
-      // Forget windows that have closed.
-      for (const h of [...seen]) if (!present.has(h)) seen.delete(h);
 
-      // If the window we're mirroring has closed (e.g. you closed Settings),
-      // snap back to the app's main window.
-      if (currentHwnd != null && !present.has(currentHwnd) && windows.length > 0) {
+      // Forget windows that have been gone for CLOSE_AFTER polls.
+      for (const h of [...seen]) {
+        if ((missing.get(h) || 0) >= CLOSE_AFTER) {
+          seen.delete(h);
+          missing.delete(h);
+        }
+      }
+
+      // Snap back to the main window only when the mirrored window has been
+      // genuinely gone (not a one-poll flicker).
+      if (
+        currentHwnd != null &&
+        (missing.get(currentHwnd) || 0) >= CLOSE_AFTER &&
+        windows.length > 0
+      ) {
         startStream(null);
       }
     } catch {
@@ -126,6 +155,7 @@ function createSandboxPreviewStore() {
       active = true;
       visible = true;
       seen = new Set();
+      missing = new Map();
       initialized = false;
       currentHwnd = null;
       windows = [];
@@ -162,6 +192,7 @@ function createSandboxPreviewStore() {
       windows = [];
       currentHwnd = null;
       seen = new Set();
+      missing = new Map();
       initialized = false;
       if (port) {
         sandboxStreamStop(port).catch(() => {});
