@@ -23,7 +23,8 @@
   import { WebglAddon } from '@xterm/addon-webgl';
   import '@xterm/xterm/css/xterm.css';
   import { listen } from '@tauri-apps/api/event';
-  import { aiRawInput, aiPtyResize } from '../../lib/api.js';
+  import { aiRawInput, aiPtyResize, saveImageToTemp } from '../../lib/api.js';
+  import { unwrapResult } from '../../lib/utils.js';
   import { currentThemeName } from '../../lib/stores/theme.svelte.js';
   import { aiStatusStore } from '../../lib/stores/ai-status.svelte.js';
 
@@ -187,6 +188,27 @@
 
   async function handlePaste() {
     if (!term) return;
+    // Image-aware paste: if the clipboard holds an image (e.g. a Win+Shift+S
+    // screenshot or a copied picture), save it to disk and type its path into
+    // the Claude Code prompt — the terminal-native way to hand Claude an image.
+    // Otherwise fall back to the usual text paste.
+    try {
+      if (navigator.clipboard?.read) {
+        const items = await navigator.clipboard.read();
+        for (const item of items) {
+          const imgType = item.types.find((t) => t.startsWith('image/'));
+          if (imgType) {
+            const blob = await item.getType(imgType);
+            const dataUrl = await blobToDataUrl(blob);
+            await injectImageFromDataUrl(dataUrl, imgType);
+            return; // Handled as an image — don't also paste text.
+          }
+        }
+      }
+    } catch {
+      // clipboard.read() can throw (no permission / no readable data) — fall
+      // through to the text path, which is the common case anyway.
+    }
     try {
       const text = await navigator.clipboard.readText();
       if (text) {
@@ -196,6 +218,104 @@
       }
     } catch (err) {
       console.warn('[Terminal] Paste failed:', err);
+    }
+  }
+
+  // ---- Image drop / paste → file-path injection ----
+  // The terminal hands Claude Code an image by typing the image's file path
+  // into the prompt (just like dragging a file into a real terminal). We only
+  // have the image *bytes* (HTML5 drops and clipboard images give content, not
+  // a real path), so we persist them via save_image_to_temp and inject the
+  // returned path. Claude Code reads the image from that path.
+
+  /** Whether an image file is currently being dragged over the terminal. */
+  let dragActive = $state(false);
+  /** Ref-count enter/leave so the overlay doesn't flicker over child elements. */
+  let dragDepth = 0;
+
+  /** Read a File/Blob as a base64 data URL. */
+  function blobToDataUrl(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  /** Type a file path into the Claude Code prompt, then refocus the terminal.
+   *  A trailing space is appended so the user can keep typing their question. */
+  function injectImagePath(path) {
+    if (!path) return;
+    aiRawInput(path + ' ').catch((err) => {
+      console.warn('[Terminal] Image path injection failed:', err);
+    });
+    term?.focus();
+  }
+
+  /** Persist a data-URL image and inject its temp path into the prompt. */
+  async function injectImageFromDataUrl(dataUrl, mime) {
+    const ext = (mime && mime.split('/')[1]) || 'png';
+    const res = await saveImageToTemp(dataUrl, ext);
+    const data = unwrapResult(res);
+    if (data?.path) injectImagePath(data.path);
+    else console.warn('[Terminal] save_image_to_temp returned no path:', res);
+  }
+
+  /** True only when the drag carries OS files (not an internal app drag). */
+  function isFileDrag(e) {
+    const types = e.dataTransfer?.types;
+    return !!types && Array.from(types).includes('Files');
+  }
+
+  function handleDragEnter(e) {
+    if (!isFileDrag(e)) return;
+    e.preventDefault();
+    dragDepth += 1;
+    dragActive = true;
+  }
+
+  function handleDragOver(e) {
+    if (!isFileDrag(e)) return;
+    // preventDefault marks this as a valid drop target and stops WebView2 from
+    // navigating to the dropped file.
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+  }
+
+  function handleDragLeave(e) {
+    if (!isFileDrag(e)) return;
+    dragDepth -= 1;
+    if (dragDepth <= 0) {
+      dragDepth = 0;
+      dragActive = false;
+    }
+  }
+
+  async function handleDrop(e) {
+    if (!isFileDrag(e)) return;
+    e.preventDefault();
+    dragDepth = 0;
+    dragActive = false;
+
+    const files = Array.from(e.dataTransfer?.files ?? []);
+    const images = files.filter((f) => f.type.startsWith('image/'));
+    if (images.length === 0) return;
+
+    // Inject sequentially so multiple dropped images land in prompt order.
+    for (const file of images) {
+      try {
+        const dataUrl = await blobToDataUrl(file);
+        const ext =
+          (file.type && file.type.split('/')[1]) ||
+          file.name.split('.').pop() ||
+          'png';
+        const res = await saveImageToTemp(dataUrl, ext);
+        const data = unwrapResult(res);
+        if (data?.path) injectImagePath(data.path);
+      } catch (err) {
+        console.warn('[Terminal] Failed to handle dropped image:', err);
+      }
     }
   }
 
@@ -604,10 +724,29 @@
   });
 </script>
 
-<div class="terminal-view">
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div
+  class="terminal-view"
+  ondragenter={handleDragEnter}
+  ondragover={handleDragOver}
+  ondragleave={handleDragLeave}
+  ondrop={handleDrop}
+>
   <div class="terminal-container" class:ready={initialized} bind:this={containerEl}></div>
   {#if showEmptyCover}
     <div class="terminal-empty-cover"></div>
+  {/if}
+  {#if dragActive}
+    <div class="terminal-drop-overlay">
+      <div class="drop-overlay-inner">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="40" height="40">
+          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+          <circle cx="8.5" cy="8.5" r="1.5"/>
+          <polyline points="21 15 16 10 5 21"/>
+        </svg>
+        <p class="drop-overlay-text">Drop image to add its path to the prompt</p>
+      </div>
+    </div>
   {/if}
 </div>
 
@@ -631,6 +770,37 @@
     inset: 0;
     background: var(--bg);
     pointer-events: none;
+  }
+
+  /* Drag-and-drop overlay shown while an image is dragged over the terminal.
+     pointer-events: none so it never intercepts the drop (which must reach the
+     .terminal-view handler). */
+  .terminal-drop-overlay {
+    position: absolute;
+    inset: 6px;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    background: color-mix(in srgb, var(--bg) 72%, transparent);
+    border: 2px dashed var(--accent);
+    border-radius: var(--radius-md);
+  }
+
+  .drop-overlay-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    color: var(--accent);
+  }
+
+  .drop-overlay-text {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-strong);
   }
 
   .terminal-container {

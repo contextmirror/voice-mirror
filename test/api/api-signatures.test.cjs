@@ -269,6 +269,7 @@ describe('api.js -- exported async functions', () => {
     'exportChatToFile',
     // Screenshot
     'takeScreenshot',
+    'saveImageToTemp',
     'listMonitors',
     'listWindows',
     'captureMonitor',

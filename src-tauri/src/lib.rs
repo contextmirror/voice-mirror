@@ -314,6 +314,7 @@ pub fn run() {
             sandbox_cmds::sandbox_type,
             sandbox_cmds::sandbox_screenshot,
             screenshot_cmds::take_screenshot,
+            screenshot_cmds::save_image_to_temp,
             screenshot_cmds::list_monitors,
             screenshot_cmds::list_windows,
             screenshot_cmds::capture_monitor,

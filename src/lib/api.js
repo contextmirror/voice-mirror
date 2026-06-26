@@ -320,6 +320,17 @@ export async function takeScreenshot() {
   return invoke('take_screenshot');
 }
 
+/**
+ * Save a base64/data-URL image to a temp file and get back its absolute path.
+ * Used by the AI terminal to turn a dropped/pasted image into a readable path
+ * it can type into the Claude Code prompt. Returns IpcResponse `{ data: { path } }`.
+ * @param {string} data - base64 string or `data:<mime>;base64,...` URL
+ * @param {string} [ext] - file extension (defaults to png)
+ */
+export async function saveImageToTemp(data, ext) {
+  return invoke('save_image_to_temp', { data, ext: ext || null });
+}
+
 export async function listMonitors() {
   return invoke('list_monitors');
 }
