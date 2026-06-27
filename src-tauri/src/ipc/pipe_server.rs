@@ -547,6 +547,10 @@ async fn handle_capture_action(
             let text = args.get("text").and_then(|v| v.as_str()).unwrap_or("");
             crate::services::sandbox::type_text(port, element_ref, text).await
         }
+        "sandbox_close" => {
+            let _ = resolve_sandbox_port(args)?;
+            crate::services::sandbox::close_active_window()
+        }
         _ => Err(format!("Unknown capture action: {}", action)),
     }
 }

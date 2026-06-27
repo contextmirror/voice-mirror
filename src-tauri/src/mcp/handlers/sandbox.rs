@@ -130,6 +130,23 @@ pub async fn handle_sandbox_click(
     }
 }
 
+/// `sandbox_close_window` -- close the window Claude is currently driving (the
+/// native title-bar X that DOM/CDP can't click).
+pub async fn handle_sandbox_close_window(
+    args: &Value,
+    _data_dir: &Path,
+    pipe: Option<&Arc<PipeRouter>>,
+) -> McpToolResult {
+    info!("[sandbox_close_window] closing the active app window");
+    match run(pipe, "sandbox_close", args, Duration::from_secs(10)).await {
+        Err(e) => e,
+        Ok(resp) => McpToolResult::text(format!(
+            "Closed the active window. {}",
+            serde_json::to_string(&resp).unwrap_or_default()
+        )),
+    }
+}
+
 /// `sandbox_type` -- type text into an element by its `@ref`.
 pub async fn handle_sandbox_type(
     args: &Value,

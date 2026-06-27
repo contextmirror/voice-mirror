@@ -737,6 +737,31 @@ pub async fn type_text(port: u16, ref_str: &str, text: &str) -> Result<Value, St
     Ok(json!({ "ok": true, "length": text.len() }))
 }
 
+/// Close the window Claude is currently driving (the last snapshot's window) by
+/// posting `WM_CLOSE` — the graceful close you'd get from the title-bar X, which
+/// is native OS chrome that CDP/DOM can't reach. Clears the active window so the
+/// live preview snaps back to the app's main window.
+#[cfg(windows)]
+pub fn close_active_window() -> Result<Value, String> {
+    use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
+    use windows::Win32::UI::WindowsAndMessaging::{PostMessageW, WM_CLOSE};
+
+    let hwnd =
+        active_hwnd().ok_or("No active window — call sandbox_snapshot first to choose a window")?;
+    unsafe {
+        let h = HWND(hwnd as *mut std::ffi::c_void);
+        PostMessageW(Some(h), WM_CLOSE, WPARAM(0), LPARAM(0))
+            .map_err(|e| format!("Failed to close window: {}", e))?;
+    }
+    set_active_hwnd(None);
+    Ok(json!({ "ok": true, "closedHwnd": hwnd }))
+}
+
+#[cfg(not(windows))]
+pub fn close_active_window() -> Result<Value, String> {
+    Err("Closing a window is Windows-only".to_string())
+}
+
 /// Screenshot the external app's web contents (JPEG) for the AI's eyes.
 pub async fn screenshot(port: u16) -> Result<Value, String> {
     let ws_url = action_target(port).await?;
