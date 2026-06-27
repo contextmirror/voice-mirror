@@ -26,7 +26,8 @@
   import { browserTabsStore } from '../../lib/stores/browser-tabs.svelte.js';
   import { browserHistoryStore } from '../../lib/stores/browser-history.svelte.js';
   import { downloadsStore } from '../../lib/stores/downloads.svelte.js';
-  import { lensSetVisible, startFileWatching, stopFileWatching, lensCapturePreview, lspShutdown, lensSetZoom, lensGetZoom, designGetElement, lensOpenDevtools, lensCloseDevtools, lensResizeDevtools, lensSetDevtoolsVisible, findDevtoolsUrl } from '../../lib/api.js';
+  import { lensSetVisible, startFileWatching, stopFileWatching, lensCapturePreview, lspShutdown, lensSetZoom, lensGetZoom, designGetElement, lensOpenDevtools, lensCloseDevtools, lensResizeDevtools, lensSetDevtoolsVisible, findDevtoolsUrl, detectDevServers } from '../../lib/api.js';
+  import { unwrapResult } from '../../lib/utils.js';
   import { navigationStore } from '../../lib/stores/navigation.svelte.js';
   import { attachmentsStore } from '../../lib/stores/attachments.svelte.js';
   import { projectStore } from '../../lib/stores/project.svelte.js';
@@ -279,6 +280,56 @@
     }
   });
 
+  // ── Sandbox start/attach (MCP tools sandbox_start / sandbox_attach) ──
+  // The backend emits these after the in-app agent calls the tool. `start`
+  // launches the agent's project with a safe CDP port (we run detection + the
+  // dev-server lifecycle here, which injects the debug port + registers the
+  // active sandbox; the syncAuto effect then opens the preview). `attached`
+  // opens the preview directly for an app the agent launched itself.
+  $effect(() => {
+    let unlistenStart;
+    let unlistenAttached;
+
+    (async () => {
+      unlistenStart = await listen('sandbox-start-request', async (e) => {
+        const path = e?.payload?.path || projectStore.root || projectStore.activeProject?.path;
+        if (!path) {
+          console.warn('[sandbox] start requested but no project path available');
+          return;
+        }
+        try {
+          const result = await detectDevServers(path);
+          /** @type {{ servers?: any[], packageManager?: string }} */
+          const data = unwrapResult(result) || {};
+          const servers = Array.isArray(data.servers) ? data.servers : [];
+          // Prefer a Tauri app (CDP-driveable); else the first detected server.
+          const target =
+            servers.find((s) => (s.framework || '').toLowerCase() === 'tauri') || servers[0];
+          if (target) {
+            devServerManager.startServer(target, path, data.packageManager);
+          } else {
+            console.warn('[sandbox] start: no dev server detected in', path);
+          }
+        } catch (err) {
+          console.warn('[sandbox] start failed:', err);
+        }
+      });
+
+      unlistenAttached = await listen('sandbox-attached', (e) => {
+        const port = e?.payload?.port;
+        if (port) {
+          showBrowser = false;
+          sandboxPreviewStore.open(port, { attached: true });
+        }
+      });
+    })();
+
+    return () => {
+      unlistenStart?.();
+      unlistenAttached?.();
+    };
+  });
+
   // Track drag state to suppress stop-sign cursor across the workspace
   let fileTreeDragging = $state(false);
   let tabDragging = $state(false);
@@ -394,8 +445,9 @@
   // ── Sandbox live preview auto-open ──
   // When Voice Mirror has a running Tauri app with CDP enabled, auto-open the
   // live preview ONCE (per launch) so you see the real app window at true size.
-  // `lastSandboxPort` guards re-opening after a manual close.
-  let lastSandboxPort = null;
+  // The dedupe guard + user-hide handling live INSIDE the store (syncAuto), so a
+  // remount of this component can't re-fire open() and pop the panel back up
+  // after the user hid it (the old component-local `lastSandboxPort` bug).
   $effect(() => {
     let activeCdp = null;
     for (const [, s] of devServerManager.servers) {
@@ -404,13 +456,7 @@
         break;
       }
     }
-    if (activeCdp && activeCdp !== lastSandboxPort) {
-      lastSandboxPort = activeCdp;
-      sandboxPreviewStore.open(activeCdp);
-    } else if (!activeCdp) {
-      lastSandboxPort = null;
-      if (sandboxPreviewStore.active) sandboxPreviewStore.close();
-    }
+    sandboxPreviewStore.syncAuto(activeCdp);
   });
 
   // The App Preview is a DOM panel; the native Lens browser WebView2 would paint

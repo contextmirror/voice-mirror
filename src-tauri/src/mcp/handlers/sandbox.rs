@@ -57,6 +57,27 @@ pub async fn handle_sandbox_snapshot(
                         .join(", ")
                 })
                 .unwrap_or_default();
+            // Echo the resolved target so a wrong-app attach is instantly visible.
+            let active_window = resp.get("activeWindow").and_then(|v| v.as_str()).unwrap_or("");
+            let port = resp.get("port").and_then(|v| v.as_i64());
+            let pid = resp.get("pid").and_then(|v| v.as_i64());
+            let target_line = {
+                let mut parts: Vec<String> = Vec::new();
+                if !active_window.is_empty() {
+                    parts.push(format!("window \"{}\"", active_window));
+                }
+                if let Some(p) = port {
+                    parts.push(format!("port {}", p));
+                }
+                if let Some(p) = pid {
+                    parts.push(format!("pid {}", p));
+                }
+                if parts.is_empty() {
+                    String::new()
+                } else {
+                    format!("\nResolved target: {} — {}.", parts.join(", "), page_url)
+                }
+            };
             if tree.is_empty() {
                 McpToolResult::text(
                     serde_json::to_string_pretty(&resp).unwrap_or_else(|_| format!("{:?}", resp)),
@@ -71,9 +92,9 @@ pub async fn handle_sandbox_snapshot(
                     )
                 };
                 McpToolResult::text(format!(
-                    "Sandbox snapshot of {} ({} interactive refs).{}\n\
+                    "Sandbox snapshot of {} ({} interactive refs).{}{}\n\
                      Use these @refs with sandbox_click / sandbox_type.\n\n{}",
-                    page_url, ref_count, windows_line, tree
+                    page_url, ref_count, target_line, windows_line, tree
                 ))
             }
         }
@@ -144,6 +165,69 @@ pub async fn handle_sandbox_close_window(
             "Closed the active window. {}",
             serde_json::to_string(&resp).unwrap_or_default()
         )),
+    }
+}
+
+/// `sandbox_start` -- launch the app being built with a SAFE CDP port + open the
+/// live preview. The agent's FIRST port of call.
+pub async fn handle_sandbox_start(
+    args: &Value,
+    _data_dir: &Path,
+    pipe: Option<&Arc<PipeRouter>>,
+) -> McpToolResult {
+    info!("[sandbox_start] launching the app + live preview");
+    match run(pipe, "sandbox_start", args, Duration::from_secs(15)).await {
+        Err(e) => e,
+        Ok(resp) => {
+            let msg = resp
+                .get("message")
+                .and_then(|v| v.as_str())
+                .unwrap_or("Launching the app with the live App Preview.");
+            let detected = resp
+                .get("detected")
+                .and_then(|v| v.as_array())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|d| d.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                })
+                .unwrap_or_default();
+            let detected_line = if detected.is_empty() {
+                String::new()
+            } else {
+                format!("\nDetected: {}.", detected)
+            };
+            McpToolResult::text(format!("{}{}", msg, detected_line))
+        }
+    }
+}
+
+/// `sandbox_attach` -- register an already-running CDP app (the agent launched it
+/// with the debug port) as the active sandbox + open the live preview.
+pub async fn handle_sandbox_attach(
+    args: &Value,
+    _data_dir: &Path,
+    pipe: Option<&Arc<PipeRouter>>,
+) -> McpToolResult {
+    if args.get("port").and_then(|v| v.as_u64()).is_none() {
+        return McpToolResult::error(
+            "sandbox_attach requires `port` (the app's --remote-debugging-port).",
+        );
+    }
+    info!("[sandbox_attach] attaching to a running CDP app");
+    match run(pipe, "sandbox_attach", args, Duration::from_secs(15)).await {
+        Err(e) => e,
+        Ok(resp) => {
+            let port = resp.get("port").and_then(|v| v.as_i64()).unwrap_or(0);
+            let url = resp.get("url").and_then(|v| v.as_str()).unwrap_or("");
+            let title = resp.get("title").and_then(|v| v.as_str()).unwrap_or("");
+            McpToolResult::text(format!(
+                "Attached to the app on port {} (\"{}\" — {}) and opened the live App Preview. \
+                 Call sandbox_snapshot / sandbox_screenshot to see and drive it.",
+                port, title, url
+            ))
+        }
     }
 }
 

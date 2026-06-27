@@ -79,6 +79,47 @@ pub fn active_cdp_port() -> Option<u16> {
     active_port_cell().lock().ok().and_then(|g| *g)
 }
 
+// ── Host identity (so the sandbox NEVER targets Voice Mirror itself) ──────────
+// Voice Mirror's own renderer is a CDP server on HOST_CDP_PORT and both the host
+// and a dev app can serve on localhost:1420 — so URL/title can't disambiguate.
+// The reliable signal is the owning PROCESS: the host's PID. Any CDP target whose
+// OS window belongs to host_pid() is the IDE itself and must be dropped.
+
+/// Voice Mirror's own process id — the host. A sandbox candidate whose window
+/// belongs to this PID is the IDE's own renderer and must never be driven.
+pub fn host_pid() -> u32 {
+    std::process::id()
+}
+
+/// The CDP port Voice Mirror's own WebView2 host listens on. The sandbox tools
+/// must refuse to operate on this port.
+pub fn host_cdp_port() -> u16 {
+    crate::HOST_CDP_PORT
+}
+
+/// The owning process id of an OS window, via `GetWindowThreadProcessId`. Used to
+/// drop any sandbox candidate that belongs to Voice Mirror itself.
+#[cfg(windows)]
+fn pid_of_hwnd(hwnd: i64) -> Option<u32> {
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId;
+    unsafe {
+        let h = HWND(hwnd as *mut std::ffi::c_void);
+        let mut pid: u32 = 0;
+        let tid = GetWindowThreadProcessId(h, Some(&mut pid));
+        if tid == 0 || pid == 0 {
+            None
+        } else {
+            Some(pid)
+        }
+    }
+}
+
+#[cfg(not(windows))]
+fn pid_of_hwnd(_hwnd: i64) -> Option<u32> {
+    None
+}
+
 // ── Active sandbox WINDOW (the unified source of truth) ───────────────────────
 // snapshot() records the OS window (HWND) it acted on. The live preview polls
 // this and mirrors the SAME window — so the human watches exactly the window
@@ -272,6 +313,16 @@ impl Cdp {
 /// `@ref` element model the AI uses for the Lens browser. Stores the ref map so
 /// a follow-up `click`/`type` can resolve refs.
 pub async fn snapshot(port: u16, window: Option<&str>) -> Result<Value, String> {
+    // Authoritative host guard: HOST_CDP_PORT is Voice Mirror's OWN renderer.
+    // Snapshotting it would have Claude drive the IDE itself, not the app.
+    if port == host_cdp_port() {
+        return Err(format!(
+            "Port {} is Voice Mirror's own renderer — not the app you're building. \
+             Launch your app with a different --remote-debugging-port (e.g. via sandbox_start), \
+             or pass the correct `port`.",
+            port
+        ));
+    }
     let targets = fetch_page_targets(port).await?;
     if targets.is_empty() {
         return Err("no debuggable page target found".to_string());
@@ -289,6 +340,7 @@ pub async fn snapshot(port: u16, window: Option<&str>) -> Result<Value, String> 
     struct Cand {
         ws: String,
         page_url: String,
+        page_title: String,
         tree: String,
         refs: HashMap<String, RefEntry>,
         visible: bool,
@@ -308,6 +360,7 @@ pub async fn snapshot(port: u16, window: Option<&str>) -> Result<Value, String> 
             None => continue,
         };
         let page_url = t.get("url").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let page_title = t.get("title").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
         let (tree, refs, bounds, visible) = snapshot_target(&ws).await.unwrap_or_default();
         // Correlate to the closest OS window by position (+ size) — but only if
         // it's actually CLOSE (a real, mirrorable window).
@@ -325,20 +378,42 @@ pub async fn snapshot(port: u16, window: Option<&str>) -> Result<Value, String> 
                 .unwrap_or((None, String::new())),
             None => (None, String::new()),
         };
-        cands.push(Cand { ws, page_url, tree, refs, visible, hwnd, os_title });
+        cands.push(Cand { ws, page_url, page_title, tree, refs, visible, hwnd, os_title });
     }
     if cands.is_empty() {
         return Err("no debuggable page target found".to_string());
     }
 
+    // HOST EXCLUSION (authoritative): drop any candidate whose OS window belongs
+    // to Voice Mirror's own process. URL/title can collide with the host (both
+    // can be on localhost:1420) — the owning PID is the reliable signal.
+    let host = host_pid();
+    cands.retain(|c| match c.hwnd {
+        Some(h) => pid_of_hwnd(h) != Some(host),
+        // No correlated window: can't be the host here (host only listens on
+        // HOST_CDP_PORT, already rejected above), so keep it.
+        None => true,
+    });
+    if cands.is_empty() {
+        return Err(format!(
+            "No app window found on CDP port {} that isn't Voice Mirror itself. \
+             Launch your app with its own --remote-debugging-port (try sandbox_start).",
+            port
+        ));
+    }
+
     // Pick the target.
     let chosen_idx = if let Some(w) = &want {
-        // Explicit window: match the DISTINCT OS title (falls back to page title).
+        // Explicit window: match the DISTINCT OS title OR the CDP page title
+        // (case-insensitive substring either way), so `window:"TaskDeck"` works
+        // even when OS-window correlation was unavailable.
         cands
             .iter()
             .position(|c| {
                 let ot = c.os_title.trim().to_lowercase();
-                !ot.is_empty() && (ot == *w || ot.contains(w) || w.contains(&ot))
+                let pt = c.page_title.trim().to_lowercase();
+                let matches = |s: &str| !s.is_empty() && (s == *w || s.contains(w) || w.contains(s));
+                matches(&ot) || matches(&pt)
             })
             .ok_or_else(|| {
                 let names: Vec<&str> = os_windows.iter().map(|(_, t, ..)| t.as_str()).collect();
@@ -380,7 +455,13 @@ pub async fn snapshot(port: u16, window: Option<&str>) -> Result<Value, String> 
 
     let tree = chosen.tree.clone();
     let page_url = chosen.page_url.clone();
-    let active_window = chosen.os_title.clone();
+    // Prefer the distinct OS title; fall back to the CDP page title.
+    let active_window = if chosen.os_title.trim().is_empty() {
+        chosen.page_title.clone()
+    } else {
+        chosen.os_title.clone()
+    };
+    let resolved_pid = chosen.hwnd.and_then(pid_of_hwnd);
     let ref_count = chosen.refs.len();
     store_refs(port, chosen.refs.clone());
 
@@ -397,6 +478,9 @@ pub async fn snapshot(port: u16, window: Option<&str>) -> Result<Value, String> 
         "refCount": ref_count,
         "windows": windows,
         "activeWindow": active_window,
+        // Echo the resolved target so a wrong-app attach is instantly visible.
+        "port": port,
+        "pid": resolved_pid,
     }))
 }
 
@@ -748,6 +832,14 @@ pub fn close_active_window() -> Result<Value, String> {
 
     let hwnd =
         active_hwnd().ok_or("No active window — call sandbox_snapshot first to choose a window")?;
+    // Never close Voice Mirror's own window.
+    if pid_of_hwnd(hwnd) == Some(host_pid()) {
+        return Err(
+            "Refusing to close Voice Mirror's own window — the active window is the IDE itself, \
+             not the app you're building."
+                .to_string(),
+        );
+    }
     unsafe {
         let h = HWND(hwnd as *mut std::ffi::c_void);
         PostMessageW(Some(h), WM_CLOSE, WPARAM(0), LPARAM(0))
@@ -760,6 +852,31 @@ pub fn close_active_window() -> Result<Value, String> {
 #[cfg(not(windows))]
 pub fn close_active_window() -> Result<Value, String> {
     Err("Closing a window is Windows-only".to_string())
+}
+
+/// Register an ALREADY-running CDP app (one the agent launched itself with a
+/// debug port) as the active sandbox. Validates the port is reachable and is NOT
+/// Voice Mirror's own renderer. The caller (pipe arm) then opens the live preview.
+/// Returns the resolved `{ port, url, title }` so a wrong attach is visible.
+pub async fn attach(port: u16) -> Result<Value, String> {
+    if port == host_cdp_port() {
+        return Err(format!(
+            "Port {} is Voice Mirror's own renderer — not an app you're building. \
+             Relaunch your app with a different --remote-debugging-port and attach to that.",
+            port
+        ));
+    }
+    // Reachability check: discover the first page target (also gives us a URL).
+    let (_ws, url) = discover_page_target(port, None).await.map_err(|e| {
+        format!(
+            "Could not reach a CDP app on port {} ({}). Launch your app with \
+             --remote-debugging-port={} first.",
+            port, e, port
+        )
+    })?;
+    let title = list_window_titles(port).await.into_iter().next().unwrap_or_default();
+    set_active_cdp_port(Some(port));
+    Ok(json!({ "ok": true, "port": port, "url": url, "title": title }))
 }
 
 /// Screenshot the external app's web contents (JPEG) for the AI's eyes.

@@ -237,8 +237,12 @@ function createDevServerManager() {
     // AI) can see/drive the real app window at its true size. The env var is
     // inherited down the npm -> cargo -> app.exe chain to the built WebView2 app.
     // A distinct high port derived from the dev port avoids clashing with it.
+    // CRITICAL: 9222 is Voice Mirror's OWN host CDP port (see HOST_CDP_PORT in
+    // lib.rs). Base 9223 guarantees the dev app NEVER lands on the host port
+    // (which would make the sandbox tools snapshot the IDE itself). Old math
+    // `9222 + (port % 1000)` hit 9222 for any port%1000==0 (3000/4000/5000/8000…).
     const isTauri = (server.framework || '').toLowerCase() === 'tauri';
-    const cdpPort = isTauri ? 9222 + (server.port % 1000) : null;
+    const cdpPort = isTauri ? 9223 + (server.port % 1000) : null;
     const spawnEnv = cdpPort
       ? { WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${cdpPort}` }
       : null;

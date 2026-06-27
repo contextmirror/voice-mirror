@@ -551,6 +551,56 @@ async fn handle_capture_action(
             let _ = resolve_sandbox_port(args)?;
             crate::services::sandbox::close_active_window()
         }
+        "sandbox_start" => {
+            // The agent's FIRST port of call: launch the app it's building with a
+            // SAFE (non-host) CDP port and open the live preview. The actual start
+            // is done by the frontend's devServerManager (it injects the safe
+            // debug-port env var + registers the active sandbox port); we detect
+            // the dev server to enrich the response and emit an event the frontend
+            // handles.
+            let path = args
+                .get("path")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            let detected = {
+                let path = path.clone();
+                tokio::task::spawn_blocking(move || match path {
+                    Some(p) => crate::services::dev_server::detect_dev_servers(&p),
+                    None => Vec::new(),
+                })
+                .await
+                .map_err(|e| format!("Detection task panicked: {}", e))?
+            };
+            // Frontend resolves the active project when `path` is None, starts the
+            // dev server, and opens the App Preview.
+            app.emit("sandbox-start-request", serde_json::json!({ "path": path }))
+                .map_err(|e| format!("Failed to emit sandbox-start-request: {}", e))?;
+            let frameworks: Vec<String> = detected
+                .iter()
+                .map(|d| format!("{} :{}", d.framework, d.port))
+                .collect();
+            Ok(serde_json::json!({
+                "launching": true,
+                "path": path,
+                "detected": frameworks,
+                "message": "Launching the app with the live App Preview. Give it a few seconds to \
+                            start, then call sandbox_snapshot / sandbox_screenshot to see and drive it."
+            }))
+        }
+        "sandbox_attach" => {
+            // Register an already-running CDP app (the agent launched it with the
+            // debug port) as the active sandbox + open the preview.
+            let port = args
+                .get("port")
+                .and_then(|v| v.as_u64())
+                .map(|p| p as u16)
+                .ok_or("sandbox_attach requires a `port` (the app's --remote-debugging-port)")?;
+            let result = crate::services::sandbox::attach(port).await?;
+            // Tell the frontend to open the live preview for this port.
+            app.emit("sandbox-attached", serde_json::json!({ "port": port }))
+                .map_err(|e| format!("Failed to emit sandbox-attached: {}", e))?;
+            Ok(result)
+        }
         _ => Err(format!("Unknown capture action: {}", action)),
     }
 }
@@ -558,14 +608,25 @@ async fn handle_capture_action(
 /// Resolve the CDP port for a sandbox action: the explicit `port` arg, else the
 /// active sandbox app Voice Mirror launched.
 fn resolve_sandbox_port(args: &serde_json::Value) -> Result<u16, String> {
-    if let Some(p) = args.get("port").and_then(|v| v.as_u64()) {
-        return Ok(p as u16);
+    let port = if let Some(p) = args.get("port").and_then(|v| v.as_u64()) {
+        p as u16
+    } else {
+        crate::services::sandbox::active_cdp_port().ok_or_else(|| {
+            "No sandbox app is running. Call sandbox_start to launch the app you're building, \
+             or pass an explicit `port`."
+                .to_string()
+        })?
+    };
+    // Never let a sandbox action target Voice Mirror's own renderer.
+    if port == crate::services::sandbox::host_cdp_port() {
+        return Err(format!(
+            "Port {} is Voice Mirror's own renderer — not the app you're building. \
+             Launch your app with a different --remote-debugging-port (use sandbox_start), \
+             then retry.",
+            port
+        ));
     }
-    crate::services::sandbox::active_cdp_port().ok_or_else(|| {
-        "No sandbox app is running. Start a Tauri dev server in Voice Mirror first, \
-         or pass an explicit `port`."
-            .to_string()
-    })
+    Ok(port)
 }
 
 // ---------------------------------------------------------------------------

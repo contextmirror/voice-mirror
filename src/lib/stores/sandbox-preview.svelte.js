@@ -43,6 +43,17 @@ function createSandboxPreviewStore() {
   let userPinned = false;
   // Consecutive polls the mirrored window has been gone (debounce for snap-back).
   let goneCount = 0;
+  // The last dev-server CDP port we auto-opened for. Lives in the store (not a
+  // component) so a LensWorkspace remount / status-flap can't re-fire open() and
+  // pop the panel back up after the user hid it. Persists for the app lifetime.
+  let lastAutoPort = null;
+  // The user explicitly hid the panel (toggle/X) — don't let auto-open re-show it
+  // for the same port until they reopen it or a different app launches.
+  let userHidden = false;
+  // True when this session was opened by sandbox_attach (an external app the agent
+  // launched), not by a Voice Mirror dev server — so the auto-sync must NOT close
+  // it when no dev-server CDP port is active.
+  let attached = false;
 
   function setStreamUrl(url) {
     // Cache-bust so the <img> reconnects when we re-target the stream to a
@@ -135,16 +146,25 @@ function createSandboxPreviewStore() {
     get windows() { return windows; },
     get currentHwnd() { return currentHwnd; },
 
-    /** Begin a live preview for the app on `port` (CDP) and show it. */
-    async open(port) {
+    /**
+     * Begin a live preview for the app on `port` (CDP) and show it. Idempotent:
+     * re-opening the same active port just re-shows the panel (no stream churn).
+     * @param {number} port
+     * @param {{ attached?: boolean }} [opts] - `attached` marks an external app
+     *   (from sandbox_attach) so the dev-server auto-sync won't tear it down.
+     */
+    async open(port, opts = {}) {
       if (!port) return;
+      userHidden = false; // an explicit open clears any prior user-hide
       if (active && cdpPort === port) {
+        attached = opts.attached ?? attached;
         visible = true;
         return;
       }
       cdpPort = port;
       active = true;
       visible = true;
+      attached = opts.attached ?? false;
       userPinned = false;
       goneCount = 0;
       currentHwnd = null;
@@ -153,13 +173,38 @@ function createSandboxPreviewStore() {
       startPolling();
     },
 
+    /**
+     * Reconcile the auto-open state with the active dev-server CDP port (called
+     * reactively from LensWorkspace). Opens once per new port, respects an
+     * explicit user-hide, and tears down only its OWN auto session (never an
+     * attached external app). The guard lives here so a component remount can't
+     * re-trigger it.
+     * @param {number|null} port - active dev-server CDP port, or null if none.
+     */
+    syncAuto(port) {
+      if (port) {
+        if (port === lastAutoPort) return; // already reacted to this port
+        lastAutoPort = port;
+        if (userHidden && port === cdpPort) return; // user hid this one — leave it
+        this.open(port);
+      } else {
+        lastAutoPort = null;
+        // Only close an auto (dev-server) session; an attached external app stays.
+        if (active && !attached) this.close();
+      }
+    },
+
     /** Show the panel (session must already be active). */
     show() {
-      if (active) visible = true;
+      if (active) {
+        userHidden = false;
+        visible = true;
+      }
     },
 
     /** Hide the panel but keep the screencast running (instant to re-show). */
     hide() {
+      userHidden = true;
       visible = false;
     },
 
@@ -187,6 +232,8 @@ function createSandboxPreviewStore() {
       currentHwnd = null;
       userPinned = false;
       goneCount = 0;
+      attached = false;
+      userHidden = false;
       if (port) {
         sandboxStreamStop(port).catch(() => {});
       }

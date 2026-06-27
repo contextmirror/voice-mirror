@@ -60,14 +60,14 @@ describe('sandbox-preview: state', () => {
 
 describe('sandbox-preview: lifecycle', () => {
   it('has open/show/hide/close methods', () => {
-    assert.ok(/async open\(port\)/.test(src), 'Should have async open(port)');
+    assert.ok(/async open\(port/.test(src), 'Should have async open(port, ...)');
     assert.ok(/show\(\)/.test(src), 'Should have show()');
     assert.ok(/hide\(\)/.test(src), 'Should have hide()');
-    assert.ok(/close\(\)/.test(src), 'Should have close()');
+    assert.ok(/close\(\)\s*\{/.test(src), 'Should have close()');
   });
 
   it('open is idempotent per port', () => {
-    const block = src.split('async open(port)')[1]?.split('show()')[0] || '';
+    const block = src.split('async open(port')[1]?.split('syncAuto(')[0] || '';
     assert.ok(
       block.includes('cdpPort === port'),
       'open should no-op when already active on the same port'
@@ -75,14 +75,31 @@ describe('sandbox-preview: lifecycle', () => {
   });
 
   it('hide keeps the session (does not stop the screencast)', () => {
-    const block = src.split('hide()')[1]?.split('close()')[0] || '';
+    const block = src.split('hide()')[1]?.split('switchTo(')[0] || '';
     assert.ok(!block.includes('sandboxStreamStop'), 'hide should NOT stop the screencast');
     assert.ok(block.includes('visible = false'), 'hide should just clear visibility');
   });
 
   it('close stops the screencast for the current port', () => {
-    const block = src.split('close()')[1] || '';
+    // Inspect the close() METHOD body (the last `close()` — syncAuto also calls
+    // `this.close()`), which must stop the screencast.
+    const block = src.slice(src.lastIndexOf('close()'));
     assert.ok(block.includes('sandboxStreamStop'), 'close should stop the screencast');
+  });
+});
+
+describe('sandbox-preview: auto-open guard (remount-proof)', () => {
+  it('keeps the auto-open dedupe guard in the store (not the component)', () => {
+    assert.ok(src.includes('lastAutoPort'), 'Should track lastAutoPort in the store');
+    assert.ok(/syncAuto\(port\)/.test(src), 'Should expose syncAuto(port)');
+  });
+
+  it('respects an explicit user-hide', () => {
+    assert.ok(src.includes('userHidden'), 'Should track userHidden');
+  });
+
+  it('does not tear down an attached external app on auto-sync', () => {
+    assert.ok(src.includes('attached'), 'Should track attached sessions');
   });
 });
 

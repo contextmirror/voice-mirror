@@ -41,6 +41,15 @@ use tracing::{info, warn};
 /// task so the voice pipeline can use it immediately without cold-start delay.
 pub type PreloadedTtsState = std::sync::Mutex<Option<Box<dyn voice::tts::TtsEngine>>>;
 
+/// CDP remote-debugging port for Voice Mirror's OWN WebView2 host process.
+///
+/// The host enables CDP on this port (for embedded DevTools panels). The sandbox
+/// tools must NEVER target this port — it's the IDE's own renderer, not the app
+/// being built. Dev apps are launched on a DIFFERENT port (see
+/// `dev-server-manager.svelte.js`), and the host is identifiable by its PID
+/// ([`services::sandbox::host_pid`]).
+pub const HOST_CDP_PORT: u16 = 9222;
+
 
 /// Rotate the current log session directory to a timestamped archive,
 /// then prune archives beyond the retention limit.
@@ -129,7 +138,10 @@ pub fn run() {
     unsafe {
         std::env::set_var(
             "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
-            "--remote-debugging-port=9222 --remote-allow-origins=*",
+            format!(
+                "--remote-debugging-port={} --remote-allow-origins=*",
+                HOST_CDP_PORT
+            ),
         );
     }
 

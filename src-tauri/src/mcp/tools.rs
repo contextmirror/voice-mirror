@@ -744,7 +744,7 @@ fn build_all_groups() -> HashMap<String, ToolGroupDef> {
         "capture".into(),
         ToolGroupDef {
             name: "capture".into(),
-            description: "Window capture, screenshots, and sandbox app preview (8 tools)".into(),
+            description: "Window capture, screenshots, and sandbox app preview (10 tools)".into(),
             always_loaded: true,
             keywords: vec![
                 "screenshot".into(), "capture".into(), "window".into(),
@@ -790,6 +790,27 @@ fn build_all_groups() -> HashMap<String, ToolGroupDef> {
                     input_schema: json!({
                         "type": "object",
                         "properties": {}
+                    }),
+                },
+                ToolDef {
+                    name: "sandbox_start".into(),
+                    description: "Call this FIRST when you start working on a desktop app (e.g. a Tauri app) — it launches the app you're building with remote debugging on a safe port and opens the live App Preview so you (and the user) see it running. After it starts, use sandbox_snapshot / sandbox_screenshot / sandbox_click / sandbox_type to see and drive it. `path` is optional — omit to launch Voice Mirror's active project.".into(),
+                    input_schema: json!({
+                        "type": "object",
+                        "properties": {
+                            "path": { "type": "string", "description": "Project directory of the app to launch. Omit to use Voice Mirror's active project." }
+                        }
+                    }),
+                },
+                ToolDef {
+                    name: "sandbox_attach".into(),
+                    description: "Register an app you ALREADY launched yourself (with --remote-debugging-port=PORT) as the active sandbox, and open the live App Preview for it. Use this when you started the app in a terminal instead of via sandbox_start. Then use sandbox_snapshot / sandbox_screenshot / sandbox_click / sandbox_type.".into(),
+                    input_schema: json!({
+                        "type": "object",
+                        "properties": {
+                            "port": { "type": "number", "description": "The --remote-debugging-port the app is running on (must NOT be Voice Mirror's own port 9222)." }
+                        },
+                        "required": ["port"]
                     }),
                 },
                 ToolDef {
@@ -913,8 +934,8 @@ mod tests {
     fn test_list_tools_default() {
         let reg = ToolRegistry::new();
         let tools = reg.list_tools();
-        // Should have core (5) + capture (8) = 13 always-loaded tools
-        assert_eq!(tools.len(), 13);
+        // Should have core (5) + capture (10) = 15 always-loaded tools
+        assert_eq!(tools.len(), 15);
     }
 
     #[test]
@@ -981,10 +1002,12 @@ mod tests {
     fn test_capture_group() {
         let mut reg = ToolRegistry::new();
         let names = reg.load_group("capture").unwrap();
-        assert_eq!(names.len(), 8);
+        assert_eq!(names.len(), 10);
         assert!(reg.is_tool_loaded("capture_list_windows"));
         assert!(reg.is_tool_loaded("capture_window"));
         assert!(reg.is_tool_loaded("capture_browser"));
+        assert!(reg.is_tool_loaded("sandbox_start"));
+        assert!(reg.is_tool_loaded("sandbox_attach"));
         assert!(reg.is_tool_loaded("sandbox_snapshot"));
         assert!(reg.is_tool_loaded("sandbox_screenshot"));
         assert!(reg.is_tool_loaded("sandbox_click"));
