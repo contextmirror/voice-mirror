@@ -69,21 +69,57 @@
   // Cache CodeMirror modules after first load
   let cmCache = null;
 
+  /**
+   * Detect Vite's "outdated optimized dependency" failure, which manifests as a
+   * dynamic import() rejecting with "Failed to fetch dynamically imported module"
+   * (often pointing at a /node_modules/.vite/deps/<dep>.js?v=<hash> chunk). This
+   * happens when Vite re-optimizes deps mid-session and the in-flight chunk hash
+   * is invalidated. The only reliable recovery is a full page reload so the import
+   * map resolves to the freshly-optimized chunk.
+   */
+  function isOutdatedDepError(err) {
+    const msg = String(err?.message || err || '');
+    return /Failed to fetch dynamically imported module/i.test(msg)
+      || /\/\.vite\/deps\//i.test(msg)
+      || /Importing a module script failed/i.test(msg);
+  }
+
   async function loadCM() {
     if (cmCache) return cmCache;
+    let mods;
+    try {
+      mods = await Promise.all([
+        import('codemirror'),
+        import('@codemirror/state'),
+        import('@codemirror/view'),
+        import('@codemirror/autocomplete'),
+        import('@codemirror/lint'),
+      ]);
+    } catch (err) {
+      // One-shot reload recovery for Vite's stale-optimized-dep race. Guard with
+      // sessionStorage so a genuinely broken dep can't trap us in a reload loop —
+      // on the second consecutive failure we surface the error to the caller.
+      if (isOutdatedDepError(err)) {
+        const RELOAD_KEY = 'vm:cm-dep-reload';
+        if (!sessionStorage.getItem(RELOAD_KEY)) {
+          sessionStorage.setItem(RELOAD_KEY, String(Date.now()));
+          console.warn('[FileEditor] CodeMirror dynamic import failed (stale Vite dep) — reloading once to recover:', err?.message || err);
+          window.location.reload();
+          // Park this call; the reload tears down the page before it resolves.
+          await new Promise(() => {});
+        }
+      }
+      throw err;
+    }
+    // Successful load — clear any recovery breadcrumb so future races can reload again.
+    try { sessionStorage.removeItem('vm:cm-dep-reload'); } catch {}
     const [
       { EditorView, basicSetup },
       { EditorState, EditorSelection, StateEffect, StateField, RangeSet, Annotation },
       { keymap, hoverTooltip, ViewPlugin, Decoration, WidgetType, gutter, GutterMarker },
       { autocompletion },
       { setDiagnostics, lintGutter },
-    ] = await Promise.all([
-      import('codemirror'),
-      import('@codemirror/state'),
-      import('@codemirror/view'),
-      import('@codemirror/autocomplete'),
-      import('@codemirror/lint'),
-    ]);
+    ] = mods;
     cmCache = { EditorView, basicSetup, EditorState, EditorSelection, StateEffect, StateField, RangeSet, Annotation, keymap, hoverTooltip, ViewPlugin, Decoration, WidgetType, gutter, GutterMarker, autocompletion, setDiagnostics, lintGutter };
     return cmCache;
   }
@@ -623,8 +659,17 @@
       }
     } catch (err) {
       if (filePath !== currentPath) return;
-      console.error('[FileEditor] Load failed:', err);
-      error = err.message || 'Failed to load editor';
+      // Build a concrete message: Error objects JSON.stringify to "{}", which is
+      // why the Frontend log channel previously recorded "Load failed: {}" and hid
+      // the real cause. Serialize message + stack explicitly so failures surface.
+      const detail = err?.message || err?.toString?.() || 'Failed to load editor';
+      const stack = err?.stack ? ` | ${err.stack.split('\n').slice(0, 3).join(' ')}` : '';
+      console.error(`[FileEditor] Load failed for ${filePath}: ${detail}${stack}`);
+      if (isOutdatedDepError(err)) {
+        error = 'Editor failed to load (stale build cache). Reloading…';
+      } else {
+        error = detail;
+      }
       loading = false;
     }
   }

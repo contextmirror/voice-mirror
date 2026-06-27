@@ -61,9 +61,42 @@ export default defineConfig(async ({ mode }) => ({
   // Prevent Vite from obscuring Rust errors
   clearScreen: false,
 
-  // Exclude ghostty-web from dep optimization so WASM resolves correctly
+  // Dependency pre-bundling (esbuild optimize step).
+  // - exclude ghostty-web so its WASM fetch('/ghostty-vt.wasm') resolves correctly.
+  // - include every CodeMirror/Lezer package the editor pulls in, INCLUDING the
+  //   ones that are only reached via lazy dynamic import() (codemirror, autocomplete,
+  //   lint, merge, lang-*). The dev launcher wipes node_modules/.vite on every start,
+  //   so Vite cold-optimizes each run. If a dynamic-only dep isn't pre-bundled up
+  //   front, the first file-open triggers an on-the-fly re-optimization + full page
+  //   reload, which invalidates the in-flight `.vite/deps/<dep>.js?v=<hash>` chunk and
+  //   surfaces as "Failed to fetch dynamically imported module". Listing them here
+  //   forces deterministic pre-bundling during cold start, before any file is opened.
   optimizeDeps: {
     exclude: ['ghostty-web'],
+    include: [
+      'codemirror',
+      '@codemirror/state',
+      '@codemirror/view',
+      '@codemirror/language',
+      '@codemirror/commands',
+      '@codemirror/autocomplete',
+      '@codemirror/lint',
+      '@codemirror/search',
+      '@codemirror/merge',
+      '@codemirror/lang-javascript',
+      '@codemirror/lang-json',
+      '@codemirror/lang-css',
+      '@codemirror/lang-html',
+      '@codemirror/lang-markdown',
+      '@codemirror/lang-python',
+      '@codemirror/lang-rust',
+      '@codemirror/theme-one-dark',
+      '@replit/codemirror-minimap',
+      '@replit/codemirror-vscode-keymap',
+      '@replit/codemirror-indentation-markers',
+      '@lezer/common',
+      '@lezer/highlight',
+    ],
   },
   assetsInclude: ['**/*.wasm'],
 
