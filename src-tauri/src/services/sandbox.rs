@@ -295,6 +295,12 @@ pub async fn snapshot(port: u16, window: Option<&str>) -> Result<Value, String> 
         hwnd: Option<i64>,
         os_title: String,
     }
+    // Max DIP distance for a CDP target to count as "the same window" as a
+    // visible OS window. Beyond this, the target has no real mirrorable window
+    // (e.g. a hidden leftover onboarding page) and must NOT mis-correlate to the
+    // one visible window — else Claude reads a ghost the preview can't show.
+    const MATCH_THRESHOLD: f64 = 140.0;
+
     let mut cands: Vec<Cand> = Vec::new();
     for t in &targets {
         let ws = match t.get("webSocketDebuggerUrl").and_then(|v| v.as_str()) {
@@ -303,7 +309,8 @@ pub async fn snapshot(port: u16, window: Option<&str>) -> Result<Value, String> 
         };
         let page_url = t.get("url").and_then(|v| v.as_str()).unwrap_or("").to_string();
         let (tree, refs, bounds, visible) = snapshot_target(&ws).await.unwrap_or_default();
-        // Correlate to the closest OS window by position (+ size).
+        // Correlate to the closest OS window by position (+ size) — but only if
+        // it's actually CLOSE (a real, mirrorable window).
         let (hwnd, os_title) = match bounds {
             Some((cx, cy, cw, ch)) => os_windows
                 .iter()
@@ -313,6 +320,7 @@ pub async fn snapshot(port: u16, window: Option<&str>) -> Result<Value, String> 
                     (d, *h, title.clone())
                 })
                 .min_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal))
+                .filter(|(d, ..)| *d <= MATCH_THRESHOLD)
                 .map(|(_, h, title)| (Some(h), title))
                 .unwrap_or((None, String::new())),
             None => (None, String::new()),
@@ -341,11 +349,21 @@ pub async fn snapshot(port: u16, window: Option<&str>) -> Result<Value, String> 
                 )
             })?
     } else {
-        // Default: the FOREGROUND app window (what's in focus), else the first
-        // visible window with interactive elements, else any visible one.
+        // Default: prefer a window that's actually MIRRORABLE (correlates to a
+        // real visible OS window) so Claude and the preview stay on the same
+        // window. The foreground app window wins; then a mirrorable visible
+        // window with interactive elements; then any mirrorable window. Only as
+        // a last resort fall back to a non-mirrorable target.
         cands
             .iter()
             .position(|c| c.visible && c.hwnd.is_some() && c.hwnd == foreground)
+            .or_else(|| {
+                cands
+                    .iter()
+                    .position(|c| c.visible && c.hwnd.is_some() && !c.refs.is_empty())
+            })
+            .or_else(|| cands.iter().position(|c| c.visible && c.hwnd.is_some()))
+            .or_else(|| cands.iter().position(|c| c.hwnd.is_some()))
             .or_else(|| cands.iter().position(|c| c.visible && !c.refs.is_empty()))
             .or_else(|| cands.iter().position(|c| c.visible))
             .unwrap_or(0)
