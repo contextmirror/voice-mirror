@@ -2,7 +2,7 @@
 //! and streams MJPEG to localhost for Claude to screenshot on demand.
 
 use arc_swap::ArcSwap;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use tracing::{error, info, warn};
 
@@ -13,9 +13,20 @@ fn state() -> &'static std::sync::Mutex<StreamState> {
     STREAM_STATE.get_or_init(|| std::sync::Mutex::new(StreamState::default()))
 }
 
+/// Monotonic stream generation. Each `start()` bumps it and stamps the new
+/// stream + its capture thread. A previous stream's thread (still winding down
+/// after a re-target) must NOT clobber the current stream's `running` flag or
+/// its frame buffer — it checks this generation and bails if it's stale. This is
+/// what makes a close→re-target (e.g. Settings closed, snap back to main) recover
+/// reliably instead of the old thread's late teardown leaving running=false / an
+/// empty buffer permanently.
+static STREAM_GENERATION: AtomicU64 = AtomicU64::new(0);
+
 #[derive(Default)]
 struct StreamState {
     running: bool,
+    /// Generation of the stream currently owning the global state + buffer.
+    generation: u64,
     port: u16,
     hwnd: i64,
     title: String,
@@ -58,6 +69,11 @@ pub fn start(hwnd: i64, fps: u32) -> Result<u16, String> {
     // stale picture before the new window's first frame arrives.
     buffer.store(Arc::new(Vec::new()));
 
+    // Claim a fresh generation for THIS stream. Any older capture thread still
+    // tearing down will see a newer generation and refuse to touch the shared
+    // state/buffer, so it can't wedge us at running=false / empty.
+    let generation = STREAM_GENERATION.fetch_add(1, Ordering::SeqCst) + 1;
+
     // Get window title for display
     let title = get_window_title(hwnd);
 
@@ -65,6 +81,7 @@ pub fn start(hwnd: i64, fps: u32) -> Result<u16, String> {
     {
         let mut st = state().lock().unwrap();
         st.running = true;
+        st.generation = generation;
         st.port = port;
         st.hwnd = hwnd;
         st.title = title.clone();
@@ -78,10 +95,14 @@ pub fn start(hwnd: i64, fps: u32) -> Result<u16, String> {
     std::thread::Builder::new()
         .name("wgc-capture".into())
         .spawn(move || {
-            if let Err(e) = run_capture(hwnd, fps, capture_stop, capture_buffer) {
+            if let Err(e) = run_capture(hwnd, fps, capture_stop, capture_buffer, generation) {
                 error!("WGC capture failed: {}", e);
+                // Only fail the stream if we're still the current generation —
+                // a superseded thread must not clear a newer stream's running flag.
                 let mut st = state().lock().unwrap();
-                st.running = false;
+                if st.generation == generation {
+                    st.running = false;
+                }
             }
         })
         .map_err(|e| format!("Failed to spawn capture thread: {}", e))?;
@@ -136,6 +157,7 @@ fn run_capture(
     fps: u32,
     stop_flag: Arc<AtomicBool>,
     buffer: Arc<ArcSwap<Vec<u8>>>,
+    generation: u64,
 ) -> Result<(), String> {
     use windows::core::*;
     use windows::Graphics::Capture::*;
@@ -213,8 +235,18 @@ fn run_capture(
             warn!("WGC: target window closed");
             closed_flag.store(true, Ordering::SeqCst);
             // Drop the last frame so the preview doesn't keep serving the closed
-            // window's stale picture while the frontend re-targets a live window.
-            closed_buffer.store(Arc::new(Vec::new()));
+            // window's stale picture while the frontend re-targets a live window —
+            // but ONLY if we're still the current stream. If a newer stream has
+            // already taken over (the re-target raced ahead of this Closed event),
+            // clearing the shared buffer would wipe the new window's frames and
+            // wedge the preview at empty. The generation check prevents that.
+            if state()
+                .lock()
+                .map(|s| s.generation == generation)
+                .unwrap_or(false)
+            {
+                closed_buffer.store(Arc::new(Vec::new()));
+            }
             Ok(())
         }),
     )
@@ -362,9 +394,14 @@ fn run_capture(
     // Cleanup
     session.Close().ok();
     pool.Close().ok();
-    // Update state to reflect stream ended
+    // Update state to reflect stream ended — but only if WE are still the current
+    // stream. A superseded thread (the previous window, winding down after a
+    // re-target) must not flip the new stream's running flag to false, which would
+    // make latest_frame() return None forever even though frames are flowing.
     if let Ok(mut st) = state().lock() {
-        st.running = false;
+        if st.generation == generation {
+            st.running = false;
+        }
     }
     info!("WGC capture loop ended");
     Ok(())
@@ -376,6 +413,7 @@ fn run_capture(
     _fps: u32,
     _stop_flag: Arc<AtomicBool>,
     _buffer: Arc<ArcSwap<Vec<u8>>>,
+    _generation: u64,
 ) -> Result<(), String> {
     Err("Window streaming is only supported on Windows".to_string())
 }

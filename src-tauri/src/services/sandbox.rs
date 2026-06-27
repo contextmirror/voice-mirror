@@ -505,15 +505,26 @@ pub async fn snapshot(port: u16, window: Option<&str>) -> Result<Value, String> 
     // Pick the target.
     let chosen_idx = if let Some(w) = &want {
         // Explicit window: match the DISTINCT OS title OR the CDP page title
-        // (case-insensitive substring either way), so `window:"TaskDeck"` works
-        // even when OS-window correlation was unavailable.
+        // (case-insensitive), so `window:"TaskDeck"` works even when OS-window
+        // correlation was unavailable. Prefer an EXACT title match before falling
+        // back to substring, so a parent window stays selectable by its exact name
+        // even when a child window's title extends it (e.g. `window:"TaskDeck"`
+        // must resolve to "TaskDeck", not the prefix-matching "TaskDeck Settings").
+        let exact = |s: &str| !s.is_empty() && s == *w;
+        let loose = |s: &str| !s.is_empty() && (s == *w || s.contains(w) || w.contains(s));
         cands
             .iter()
             .position(|c| {
                 let ot = c.os_title.trim().to_lowercase();
                 let pt = c.page_title.trim().to_lowercase();
-                let matches = |s: &str| !s.is_empty() && (s == *w || s.contains(w) || w.contains(s));
-                matches(&ot) || matches(&pt)
+                exact(&ot) || exact(&pt)
+            })
+            .or_else(|| {
+                cands.iter().position(|c| {
+                    let ot = c.os_title.trim().to_lowercase();
+                    let pt = c.page_title.trim().to_lowercase();
+                    loose(&ot) || loose(&pt)
+                })
             })
             .ok_or_else(|| {
                 // Echo the REAL targetable candidates (the resolved port's page +
@@ -1009,10 +1020,36 @@ pub async fn type_text(port: u16, ref_str: &str, text: &str) -> Result<Value, St
     Ok(json!({ "ok": true, "length": text.len() }))
 }
 
+/// Find the app's SURVIVING main window after `closing` is closed: another visible
+/// top-level window of the SAME process that isn't the one being closed and isn't
+/// Voice Mirror itself. Resolved BEFORE the WM_CLOSE so the closing window is still
+/// alive (its process is resolvable). Lets the live preview re-point deterministically
+/// to a live window instead of nulling the target (which races the WGC teardown).
+#[cfg(windows)]
+fn surviving_app_window(closing: i64) -> Option<i64> {
+    let windows = crate::commands::screenshot::list_visible_windows_metadata().ok()?;
+    let proc = windows
+        .iter()
+        .find(|w| w.hwnd == closing)
+        .map(|w| w.process_name.clone())?;
+    windows
+        .into_iter()
+        .find(|w| {
+            w.hwnd != closing
+                && !w.process_name.is_empty()
+                && w.process_name == proc
+                && !w.title.trim().is_empty()
+                && !is_host_window(w.hwnd, &w.title)
+        })
+        .map(|w| w.hwnd)
+}
+
 /// Close the window Claude is currently driving (the last snapshot's window) by
 /// posting `WM_CLOSE` — the graceful close you'd get from the title-bar X, which
-/// is native OS chrome that CDP/DOM can't reach. Clears the active window so the
-/// live preview snaps back to the app's main window.
+/// is native OS chrome that CDP/DOM can't reach. Re-points the active window to the
+/// app's surviving main window so the live preview follows to a live window
+/// deterministically (rather than nulling the target, which left the preview
+/// relying on a snap-back that raced the WGC teardown and could wedge it).
 #[cfg(windows)]
 pub fn close_active_window() -> Result<Value, String> {
     use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
@@ -1028,13 +1065,18 @@ pub fn close_active_window() -> Result<Value, String> {
                 .to_string(),
         );
     }
+    // Resolve the surviving sibling BEFORE closing (the window is still alive now,
+    // so its process is resolvable and the sibling list is accurate).
+    let surviving = surviving_app_window(hwnd);
     unsafe {
         let h = HWND(hwnd as *mut std::ffi::c_void);
         PostMessageW(Some(h), WM_CLOSE, WPARAM(0), LPARAM(0))
             .map_err(|e| format!("Failed to close window: {}", e))?;
     }
-    set_active_hwnd(None);
-    Ok(json!({ "ok": true, "closedHwnd": hwnd }))
+    // Point the preview at the surviving window (or None — find_app_hwnd then
+    // title-matches the main window — if no sibling was found).
+    set_active_hwnd(surviving);
+    Ok(json!({ "ok": true, "closedHwnd": hwnd, "activeHwnd": surviving }))
 }
 
 #[cfg(not(windows))]
