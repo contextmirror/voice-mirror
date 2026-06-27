@@ -47,9 +47,20 @@ pub async fn sandbox_screenshot(port: u16) -> IpcResponse {
 }
 
 /// Record the CDP port of the active sandbox app, so the sandbox MCP tools can
-/// default to it when the AI omits an explicit `port`.
+/// default to it when the AI omits an explicit `port`. Refuses to register a port
+/// whose page is Voice Mirror itself (e.g. a dev app that collided on the host's
+/// own dev port and ended up showing the host frontend) — best-effort: if the
+/// app's CDP isn't up yet the check is skipped and snapshot-time exclusion still
+/// guards driving.
 #[tauri::command]
-pub fn sandbox_set_active_port(port: u16) -> IpcResponse {
+pub async fn sandbox_set_active_port(port: u16) -> IpcResponse {
+    if crate::services::sandbox::port_is_host(port).await {
+        return IpcResponse::err(format!(
+            "Refusing to register port {} as the sandbox — it's showing Voice Mirror itself, \
+             not the app being built.",
+            port
+        ));
+    }
     crate::services::sandbox::set_active_cdp_port(Some(port));
     IpcResponse::ok(serde_json::json!({ "port": port }))
 }

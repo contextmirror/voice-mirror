@@ -120,6 +120,94 @@ fn pid_of_hwnd(_hwnd: i64) -> Option<u32> {
     None
 }
 
+// ── Host identity by HWND + title (port-agnostic exclusion) ───────────────────
+// HOST_CDP_PORT alone is not enough: the host can surface on OTHER CDP ports too
+// (e.g. a dev app that collides on the dev frontend port ends up showing Voice
+// Mirror's own 1420 page, titled "Voice Mirror"), and uncorrelated CDP targets
+// have `hwnd=None` so a PID check can't reach them. So we record the host's own
+// top-level window + page title at startup and treat ANY target that matches by
+// HWND, owning-PID, OR page title as the host — on every port.
+
+static HOST_HWND: OnceLock<Mutex<Option<i64>>> = OnceLock::new();
+static HOST_TITLE: OnceLock<Mutex<Option<String>>> = OnceLock::new();
+
+fn host_hwnd_cell() -> &'static Mutex<Option<i64>> {
+    HOST_HWND.get_or_init(|| Mutex::new(None))
+}
+
+fn host_title_cell() -> &'static Mutex<Option<String>> {
+    HOST_TITLE.get_or_init(|| Mutex::new(None))
+}
+
+/// Record Voice Mirror's OWN top-level window + title (called once at startup).
+/// Used to exclude the IDE itself from every sandbox candidate list, regardless
+/// of which CDP port it happens to be reachable on.
+pub fn set_host_identity(hwnd: Option<i64>, title: Option<String>) {
+    if let Ok(mut g) = host_hwnd_cell().lock() {
+        *g = hwnd;
+    }
+    if let Ok(mut g) = host_title_cell().lock() {
+        *g = title.map(|t| t.trim().to_string()).filter(|t| !t.is_empty());
+    }
+}
+
+/// The host's own top-level window HWND, if recorded.
+pub fn host_hwnd() -> Option<i64> {
+    host_hwnd_cell().lock().ok().and_then(|g| *g)
+}
+
+/// The host's own window/page title, if recorded.
+pub fn host_title() -> Option<String> {
+    host_title_cell().lock().ok().and_then(|g| g.clone())
+}
+
+/// True if a sandbox candidate is actually Voice Mirror itself. Matches by:
+///   1. correlated window == the host window, or its owning PID == the host PID;
+///   2. CDP page title == the host title (covers UNCORRELATED targets where
+///      `hwnd` is None, and "ghost" dev-app windows that loaded the host's own
+///      1420 frontend and are therefore titled "Voice Mirror").
+fn is_host_candidate(hwnd: Option<i64>, page_title: &str) -> bool {
+    if let Some(h) = hwnd {
+        if Some(h) == host_hwnd() {
+            return true;
+        }
+        if pid_of_hwnd(h) == Some(host_pid()) {
+            return true;
+        }
+    }
+    let pt = page_title.trim().to_lowercase();
+    if pt.len() >= 4 {
+        if let Some(ht) = host_title() {
+            let ht = ht.trim().to_lowercase();
+            if ht.len() >= 4 && (pt == ht || pt.contains(&ht) || ht.contains(&pt)) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// True if a real OS window (by HWND + title) is Voice Mirror's own window — used
+/// by the live-preview stream so it never mirrors the IDE itself.
+pub(crate) fn is_host_window(hwnd: i64, title: &str) -> bool {
+    is_host_candidate(Some(hwnd), title)
+}
+
+/// True if the first page target on `port` is Voice Mirror's own renderer — used
+/// to refuse registering the host as the active sandbox port.
+pub(crate) async fn port_is_host(port: u16) -> bool {
+    if port == host_cdp_port() {
+        return true;
+    }
+    match fetch_page_targets(port).await {
+        Ok(targets) => targets.iter().any(|t| {
+            let title = t.get("title").and_then(|v| v.as_str()).unwrap_or("");
+            is_host_candidate(None, title)
+        }),
+        Err(_) => false,
+    }
+}
+
 // ── Active sandbox WINDOW (the unified source of truth) ───────────────────────
 // snapshot() records the OS window (HWND) it acted on. The live preview polls
 // this and mirrors the SAME window — so the human watches exactly the window
@@ -384,20 +472,17 @@ pub async fn snapshot(port: u16, window: Option<&str>) -> Result<Value, String> 
         return Err("no debuggable page target found".to_string());
     }
 
-    // HOST EXCLUSION (authoritative): drop any candidate whose OS window belongs
-    // to Voice Mirror's own process. URL/title can collide with the host (both
-    // can be on localhost:1420) — the owning PID is the reliable signal.
-    let host = host_pid();
-    cands.retain(|c| match c.hwnd {
-        Some(h) => pid_of_hwnd(h) != Some(host),
-        // No correlated window: can't be the host here (host only listens on
-        // HOST_CDP_PORT, already rejected above), so keep it.
-        None => true,
-    });
+    // HOST EXCLUSION (authoritative, port-agnostic): drop any candidate that is
+    // Voice Mirror itself — by HWND/PID when correlated, OR by page title when
+    // uncorrelated (hwnd=None) or a "ghost" dev window that loaded the host's own
+    // 1420 frontend (titled "Voice Mirror"). PID alone misses both of those.
+    cands.retain(|c| !is_host_candidate(c.hwnd, &c.page_title));
     if cands.is_empty() {
         return Err(format!(
             "No app window found on CDP port {} that isn't Voice Mirror itself. \
-             Launch your app with its own --remote-debugging-port (try sandbox_start).",
+             (A dev app that collides on the host's dev port can end up showing \
+             Voice Mirror's own page.) Launch your app with its own \
+             --remote-debugging-port on a FREE dev port (try sandbox_start).",
             port
         ));
     }
@@ -416,11 +501,31 @@ pub async fn snapshot(port: u16, window: Option<&str>) -> Result<Value, String> 
                 matches(&ot) || matches(&pt)
             })
             .ok_or_else(|| {
-                let names: Vec<&str> = os_windows.iter().map(|(_, t, ..)| t.as_str()).collect();
-                format!(
-                    "No app window matching '{}'. Open windows: {}. Snapshot without `window` to list them.",
-                    w,
+                // Echo the REAL targetable candidates (the resolved port's page +
+                // OS titles), not the OS-window list — which can be empty when
+                // process correlation fails, leaving the agent blind.
+                let mut names: Vec<String> = cands
+                    .iter()
+                    .map(|c| {
+                        if !c.os_title.trim().is_empty() {
+                            c.os_title.trim().to_string()
+                        } else {
+                            c.page_title.trim().to_string()
+                        }
+                    })
+                    .filter(|s| !s.is_empty())
+                    .collect();
+                names.sort();
+                names.dedup();
+                let listed = if names.is_empty() {
+                    "(none)".to_string()
+                } else {
                     names.join(", ")
+                };
+                format!(
+                    "No app window matching '{}'. Available windows on port {}: {}. \
+                     Snapshot without `window` to target the default.",
+                    w, port, listed
                 )
             })?
     } else {
@@ -874,6 +979,18 @@ pub async fn attach(port: u16) -> Result<Value, String> {
             port, e, port
         )
     })?;
+    // Identity guard: refuse if this port is actually Voice Mirror itself (e.g. a
+    // dev app that collided on the host's 1420 frontend and now shows the host's
+    // own page). Never register the IDE as the active sandbox.
+    if port_is_host(port).await {
+        return Err(format!(
+            "Port {} is showing Voice Mirror itself, not the app you're building \
+             (it likely collided on Voice Mirror's own dev port and loaded the \
+             host frontend). Relaunch your app on a FREE dev port with its own \
+             --remote-debugging-port and attach to that.",
+            port
+        ));
+    }
     let title = list_window_titles(port).await.into_iter().next().unwrap_or_default();
     set_active_cdp_port(Some(port));
     Ok(json!({ "ok": true, "port": port, "url": url, "title": title }))

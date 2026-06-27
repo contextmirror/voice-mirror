@@ -778,6 +778,18 @@ pub fn run() {
                 use tauri::window::Color;
                 let _ = window.set_background_color(Some(Color(0, 0, 0, 0)));
 
+                // Record the host's OWN window + title so the sandbox tools can
+                // exclude the IDE itself from every CDP candidate list, on ANY
+                // port (not just HOST_CDP_PORT). Port-agnostic identity beats a
+                // hardcoded port — the host can surface on a dev app's CDP port
+                // when that app collides on Voice Mirror's own 1420 frontend.
+                #[cfg(windows)]
+                {
+                    let host_hwnd = window.hwnd().ok().map(|h| h.0 as i64);
+                    let host_title = window.title().ok();
+                    services::sandbox::set_host_identity(host_hwnd, host_title);
+                }
+
                 // Create native overlay titlebar (Windows: native min/max/close buttons)
                 #[cfg(windows)]
                 {

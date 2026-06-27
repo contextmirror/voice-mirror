@@ -66,6 +66,8 @@ pub async fn list_windows(cdp_port: u16) -> Result<Vec<AppWindow>, String> {
         Some(proc) if !proc.is_empty() => windows
             .into_iter()
             .filter(|w| w.process_name == proc && !w.title.trim().is_empty())
+            // Never list Voice Mirror's own windows as app targets.
+            .filter(|w| !crate::services::sandbox::is_host_window(w.hwnd, &w.title))
             .map(|w| AppWindow {
                 hwnd: w.hwnd,
                 title: w.title,
@@ -92,25 +94,36 @@ pub fn capture_app_window() -> Result<Value, String> {
     Ok(serde_json::json!({ "base64": b64, "contentType": "image/jpeg" }))
 }
 
-/// Find the OS window for the app on `cdp_port`, by matching its CDP page title
-/// against the visible window list. Retries briefly — the window may still be
-/// appearing right after launch.
+/// Find the OS window for the app on `cdp_port`. Prefers the RESOLVED sandbox
+/// target — the window the last snapshot acted on (`active_hwnd`) — so the
+/// preview mirrors exactly what Claude drives. Falls back to matching the CDP
+/// page title against the visible window list. NEVER returns Voice Mirror's own
+/// window. Retries briefly — the window may still be appearing right after launch.
 async fn find_app_hwnd(cdp_port: u16) -> Option<i64> {
     for attempt in 0..20 {
+        // 1. Prefer the window the snapshot resolved to (unless it's the host).
+        if let Some(h) = crate::services::sandbox::active_hwnd() {
+            if !window_is_host(h) {
+                return Some(h);
+            }
+        }
+        // 2. Fall back to matching the CDP page title, skipping host windows.
         if let Some(title) = cdp_page_title(cdp_port).await {
             match crate::commands::screenshot::list_visible_windows_metadata() {
                 Ok(windows) => {
                     let t = title.trim().to_lowercase();
                     if let Some(w) = windows.iter().find(|w| {
                         let wt = w.title.trim().to_lowercase();
-                        !wt.is_empty() && (wt == t || wt.contains(&t) || t.contains(&wt))
+                        !wt.is_empty()
+                            && (wt == t || wt.contains(&t) || t.contains(&wt))
+                            && !crate::services::sandbox::is_host_window(w.hwnd, &w.title)
                     }) {
                         return Some(w.hwnd);
                     }
                     if attempt == 0 || attempt == 5 {
                         let titles: Vec<&str> = windows.iter().map(|w| w.title.as_str()).collect();
                         warn!(
-                            "[sandbox_stream] app window titled '{}' not found among: {:?}",
+                            "[sandbox_stream] app window titled '{}' not found (excluding host) among: {:?}",
                             title, titles
                         );
                     }
@@ -121,6 +134,21 @@ async fn find_app_hwnd(cdp_port: u16) -> Option<i64> {
         tokio::time::sleep(Duration::from_secs(1)).await;
     }
     None
+}
+
+/// True if an HWND is Voice Mirror's own window (looks up its title for the check).
+fn window_is_host(hwnd: i64) -> bool {
+    if crate::services::sandbox::host_hwnd() == Some(hwnd) {
+        return true;
+    }
+    match crate::commands::screenshot::list_visible_windows_metadata() {
+        Ok(windows) => windows
+            .iter()
+            .find(|w| w.hwnd == hwnd)
+            .map(|w| crate::services::sandbox::is_host_window(w.hwnd, &w.title))
+            .unwrap_or(false),
+        Err(_) => false,
+    }
 }
 
 /// Fetch the app's page title from its CDP `/json` endpoint (Tauri sets the same

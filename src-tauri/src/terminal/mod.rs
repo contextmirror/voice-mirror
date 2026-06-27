@@ -398,6 +398,23 @@ impl TerminalManager {
             }
         }
 
+        // Neutralize Voice Mirror's OWN WebView2 debug args before they leak into
+        // child shells. The host sets
+        //   WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222
+        // process-wide (lib.rs) for its embedded DevTools. That env is inherited
+        // by every PTY child, so a Tauri app launched in a terminal would try to
+        // bind Voice Mirror's OWN CDP port (9222) — which is already taken, so the
+        // app gets NO debuggable port at all and the sandbox tools can't drive it.
+        // Clear it unless the caller (dev-server-manager) supplies a dedicated,
+        // per-app debug port below.
+        let caller_sets_webview2 = env
+            .as_ref()
+            .map(|e| e.contains_key("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"))
+            .unwrap_or(false);
+        if !caller_sets_webview2 {
+            cmd.env("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", "");
+        }
+
         // Caller-provided environment (e.g. WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS
         // to enable CDP remote debugging on a Tauri app being built). Applied last
         // so it can override the defaults above; inherited by child processes

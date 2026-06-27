@@ -556,35 +556,150 @@ async fn handle_capture_action(
             // SAFE (non-host) CDP port and open the live preview. The actual start
             // is done by the frontend's devServerManager (it injects the safe
             // debug-port env var + registers the active sandbox port); we detect
-            // the dev server to enrich the response and emit an event the frontend
-            // handles.
+            // the dev server here, REFUSE to claim a launch on a port conflict, and
+            // briefly poll the derived CDP port so the response tells the truth.
             let path = args
                 .get("path")
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string());
-            let detected = {
-                let path = path.clone();
-                tokio::task::spawn_blocking(move || match path {
-                    Some(p) => crate::services::dev_server::detect_dev_servers(&p),
-                    None => Vec::new(),
-                })
-                .await
-                .map_err(|e| format!("Detection task panicked: {}", e))?
+
+            // No explicit path: the frontend resolves the active project. We can't
+            // pre-check ports here, so emit and report HONESTLY that it's unconfirmed.
+            let Some(path) = path else {
+                app.emit("sandbox-start-request", serde_json::json!({ "path": null }))
+                    .map_err(|e| format!("Failed to emit sandbox-start-request: {}", e))?;
+                return Ok(serde_json::json!({
+                    "launching": true,
+                    "detected": Vec::<String>::new(),
+                    "message": "Kicked off a launch for the active project. A native Tauri build can \
+                                take a few minutes — call sandbox_snapshot once the App Preview appears. \
+                                If nothing shows, pass an explicit `path`, make sure Voice Mirror is on \
+                                the Lens workspace, or launch the app yourself and use sandbox_attach."
+                }));
             };
-            // Frontend resolves the active project when `path` is None, starts the
-            // dev server, and opens the App Preview.
-            app.emit("sandbox-start-request", serde_json::json!({ "path": path }))
-                .map_err(|e| format!("Failed to emit sandbox-start-request: {}", e))?;
+
+            let detected = {
+                let p = path.clone();
+                tokio::task::spawn_blocking(move || crate::services::dev_server::detect_dev_servers(&p))
+                    .await
+                    .map_err(|e| format!("Detection task panicked: {}", e))?
+            };
+
             let frameworks: Vec<String> = detected
                 .iter()
                 .map(|d| format!("{} :{}", d.framework, d.port))
                 .collect();
+
+            // Nothing to launch — say so instead of faking success.
+            let Some(target) = detected
+                .iter()
+                .find(|d| d.framework.eq_ignore_ascii_case("tauri"))
+                .or_else(|| detected.first())
+            else {
+                return Ok(serde_json::json!({
+                    "launching": false,
+                    "detected": frameworks,
+                    "message": format!(
+                        "No dev server detected in {}. Nothing was launched. Check the path or add a \
+                         dev script (e.g. a Tauri/Vite project with `npm run dev`).",
+                        path
+                    )
+                }));
+            };
+
+            let dev_port = target.port;
+            let is_tauri = target.framework.eq_ignore_ascii_case("tauri");
+            // Mirror the frontend's CDP-port math (dev-server-manager.svelte.js).
+            let cdp_port: Option<u16> = if is_tauri { Some(9223 + (dev_port % 1000)) } else { None };
+
+            // Port-in-use conflict: do NOT claim a launch. The dev server can't bind
+            // and `beforeDevCommand` will terminate non-zero. (In dev, Voice Mirror
+            // itself occupies its own dev port — same symptom.)
+            let dev_busy = {
+                let p = dev_port;
+                tokio::task::spawn_blocking(move || crate::services::dev_server::is_port_listening(p))
+                    .await
+                    .unwrap_or(false)
+            };
+            if dev_busy {
+                return Ok(serde_json::json!({
+                    "launching": false,
+                    "detected": frameworks,
+                    "message": format!(
+                        "Port {} is already in use, so {} can't start there — its dev server would \
+                         fail with 'Port {} is already in use' and beforeDevCommand would exit non-zero. \
+                         Nothing was launched. If your app is ALREADY running on :{} with a debug port, \
+                         call sandbox_attach with that --remote-debugging-port. Otherwise stop whatever \
+                         is holding :{} (a stale dev server) and retry sandbox_start.",
+                        dev_port, target.framework, dev_port, dev_port, dev_port
+                    )
+                }));
+            }
+
+            // Port is free — kick off the real launch via the frontend.
+            app.emit(
+                "sandbox-start-request",
+                serde_json::json!({ "path": path.clone() }),
+            )
+            .map_err(|e| format!("Failed to emit sandbox-start-request: {}", e))?;
+
+            // Briefly poll for a real signal. A cold Tauri build usually exceeds
+            // this window (we say so), but a warm rebuild / immediate bind shows up.
+            let mut cdp_up = false;
+            let mut dev_up = false;
+            for _ in 0..20 {
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                if let Some(cp) = cdp_port {
+                    let up = tokio::task::spawn_blocking(move || {
+                        crate::services::dev_server::is_port_listening(cp)
+                    })
+                    .await
+                    .unwrap_or(false);
+                    if up {
+                        cdp_up = true;
+                        break;
+                    }
+                }
+                if !dev_up {
+                    let p = dev_port;
+                    dev_up = tokio::task::spawn_blocking(move || {
+                        crate::services::dev_server::is_port_listening(p)
+                    })
+                    .await
+                    .unwrap_or(false);
+                }
+            }
+
+            let message = if cdp_up {
+                format!(
+                    "Launched {} — its debug port (:{}) is up. Call sandbox_snapshot / \
+                     sandbox_screenshot to see and drive it.",
+                    target.framework,
+                    cdp_port.unwrap_or(0)
+                )
+            } else if dev_up {
+                format!(
+                    "Launched {} — the dev server is up on :{}. The app window/debug port is still \
+                     coming up; call sandbox_snapshot in a few seconds.",
+                    target.framework, dev_port
+                )
+            } else {
+                format!(
+                    "Kicked off {}. The dev server hasn't bound :{} yet — a native Tauri build can take \
+                     a few minutes. Call sandbox_snapshot once the App Preview appears. If nothing happens \
+                     after a minute, check the project's dev-server terminal for build errors, or launch \
+                     the app yourself and use sandbox_attach.",
+                    target.framework, dev_port
+                )
+            };
+
             Ok(serde_json::json!({
                 "launching": true,
-                "path": path,
+                "ready": cdp_up,
                 "detected": frameworks,
-                "message": "Launching the app with the live App Preview. Give it a few seconds to \
-                            start, then call sandbox_snapshot / sandbox_screenshot to see and drive it."
+                "cdpPort": cdp_port,
+                "devPort": dev_port,
+                "message": message,
             }))
         }
         "sandbox_attach" => {
