@@ -41,6 +41,8 @@ function createSandboxPreviewStore() {
   // When the user manually picks a window from the switcher, stop auto-following
   // Claude until they go back to a session/window or reopen the preview.
   let userPinned = false;
+  // Consecutive polls the mirrored window has been gone (debounce for snap-back).
+  let goneCount = 0;
 
   function setStreamUrl(url) {
     // Cache-bust so the <img> reconnects when we re-target the stream to a
@@ -92,6 +94,19 @@ function createSandboxPreviewStore() {
       // Mirror Claude's window once it's a real, currently-open window.
       if (activeHwnd != null && activeHwnd !== currentHwnd && present.has(activeHwnd)) {
         startStream(activeHwnd);
+        goneCount = 0;
+        return;
+      }
+      // Snap back to the main window when the one we're mirroring has CLOSED
+      // (e.g. you closed Settings). Debounced so a single transient miss in the
+      // OS window enumeration can't thrash the stream.
+      if (currentHwnd != null && !present.has(currentHwnd) && windows.length > 0) {
+        if (++goneCount >= 2) {
+          goneCount = 0;
+          startStream(null);
+        }
+      } else {
+        goneCount = 0;
       }
     } catch {
       // transient — try again next tick
@@ -131,6 +146,7 @@ function createSandboxPreviewStore() {
       active = true;
       visible = true;
       userPinned = false;
+      goneCount = 0;
       currentHwnd = null;
       windows = [];
       await startStream(null); // main window
@@ -170,6 +186,7 @@ function createSandboxPreviewStore() {
       windows = [];
       currentHwnd = null;
       userPinned = false;
+      goneCount = 0;
       if (port) {
         sandboxStreamStop(port).catch(() => {});
       }
