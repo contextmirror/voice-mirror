@@ -386,6 +386,7 @@ async fn route_tool_call(
         "capture_list_windows" => handlers::capture::handle_capture_list_windows(args, data_dir, router).await,
         "capture_window" => handlers::capture::handle_capture_window(args, data_dir, router).await,
         "capture_browser" => handlers::capture::handle_capture_browser(args, data_dir, router).await,
+        "list_ports" => handlers::capture::handle_list_ports(args, data_dir).await,
 
         // ---- Sandbox tools (see/drive an app being built, over CDP) ----
         "sandbox_start" => handlers::sandbox::handle_sandbox_start(args, data_dir, router).await,
@@ -503,8 +504,8 @@ mod tests {
         let resp = handle_tools_list(json!(1), &state);
         let result = resp.result.unwrap();
         let tools = result["tools"].as_array().unwrap();
-        // Default: core (5) + capture (10) = 15 always-loaded tools
-        assert_eq!(tools.len(), 15);
+        // Default: core (5) + capture (11) = 16 always-loaded tools
+        assert_eq!(tools.len(), 16);
     }
 
     #[test]
@@ -519,16 +520,16 @@ mod tests {
     fn test_enabled_groups_loads_tools_at_startup() {
         // BUG-005 Fix 1: ENABLED_GROUPS should pre-load tool groups
         let mut registry = ToolRegistry::new();
-        // Default: always-loaded groups = core (5) + capture (10) = 15
-        assert_eq!(registry.list_tools().len(), 15);
+        // Default: always-loaded groups = core (5) + capture (11) = 16
+        assert_eq!(registry.list_tools().len(), 16);
 
         // Apply enabled groups (simulating ENABLED_GROUPS env var)
         // always_loaded groups (core, capture) are always included
         registry.apply_enabled_groups("core,memory");
         let tools = registry.list_tools();
 
-        // Should have core (5) + memory (6) + capture (10) = 21
-        assert_eq!(tools.len(), 21);
+        // Should have core (5) + memory (6) + capture (11) = 22
+        assert_eq!(tools.len(), 22);
         let tool_names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
         assert!(tool_names.contains(&"memory_search"));
         assert!(tool_names.contains(&"capture_window"));
@@ -549,7 +550,7 @@ mod tests {
         let resp = handle_tools_list(json!(1), &state);
         let result = resp.result.unwrap();
         let tools = result["tools"].as_array().unwrap();
-        // core (5) + capture (10) + browser (1) = 16
+        // core (5) + capture (11) + browser (1) = 17
         assert!(tools.len() > 7, "Should have more than default 7 tools");
         let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
         assert!(names.contains(&"browser_action"));

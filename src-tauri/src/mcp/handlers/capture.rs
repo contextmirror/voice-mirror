@@ -238,6 +238,30 @@ pub async fn handle_capture_browser(
     }
 }
 
+/// `list_ports` -- list which process holds each listening TCP port. A
+/// system-wide query needing no app state, so it runs directly in the MCP binary
+/// (no pipe round-trip / running app required).
+pub async fn handle_list_ports(args: &Value, _data_dir: &Path) -> McpToolResult {
+    let filter = args
+        .get("port")
+        .and_then(|v| v.as_u64())
+        .map(|p| p as u16);
+    match crate::services::ports::list_ports(filter) {
+        Ok(rows) => {
+            let header = match filter {
+                Some(p) => format!("Listening TCP ports matching :{}\n\n", p),
+                None => "Listening TCP ports\n\n".to_string(),
+            };
+            McpToolResult::text(format!(
+                "{}{}",
+                header,
+                crate::services::ports::format_table(&rows)
+            ))
+        }
+        Err(e) => McpToolResult::error(e),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

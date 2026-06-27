@@ -53,6 +53,10 @@ pub fn start(hwnd: i64, fps: u32) -> Result<u16, String> {
     let port = find_available_port()?;
     let stop_flag = Arc::new(AtomicBool::new(false));
     let buffer = frame_buffer().clone();
+    // Drop the previous window's last frame so a re-target (e.g. snapping back
+    // after a Settings window closed) never momentarily shows the OLD window's
+    // stale picture before the new window's first frame arrives.
+    buffer.store(Arc::new(Vec::new()));
 
     // Get window title for display
     let title = get_window_title(hwnd);
@@ -106,6 +110,8 @@ pub fn stop() -> Result<(), String> {
         flag.store(true, Ordering::SeqCst);
     }
     st.running = false;
+    // Drop the last frame so a stopped stream can't serve a stale picture.
+    frame_buffer().store(Arc::new(Vec::new()));
     info!("Window stream stopped");
     Ok(())
 }
@@ -201,10 +207,14 @@ fn run_capture(
 
     // 4. Register Closed handler to detect window closure
     let closed_flag = stop_flag.clone();
+    let closed_buffer = buffer.clone();
     item.Closed(
         &windows::Foundation::TypedEventHandler::new(move |_, _| {
             warn!("WGC: target window closed");
             closed_flag.store(true, Ordering::SeqCst);
+            // Drop the last frame so the preview doesn't keep serving the closed
+            // window's stale picture while the frontend re-targets a live window.
+            closed_buffer.store(Arc::new(Vec::new()));
             Ok(())
         }),
     )

@@ -120,6 +120,21 @@ fn pid_of_hwnd(_hwnd: i64) -> Option<u32> {
     None
 }
 
+/// True if `hwnd` is still a real, existing OS window. Used by the live preview
+/// so it never re-targets (or lingers on) a window that has been CLOSED — a
+/// closed window's HWND is stale and `CreateForWindow` on it captures nothing.
+#[cfg(windows)]
+pub(crate) fn is_window_alive(hwnd: i64) -> bool {
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::UI::WindowsAndMessaging::IsWindow;
+    unsafe { IsWindow(Some(HWND(hwnd as *mut std::ffi::c_void))).as_bool() }
+}
+
+#[cfg(not(windows))]
+pub(crate) fn is_window_alive(_hwnd: i64) -> bool {
+    true
+}
+
 // ── Host identity by HWND + title (port-agnostic exclusion) ───────────────────
 // HOST_CDP_PORT alone is not enough: the host can surface on OTHER CDP ports too
 // (e.g. a dev app that collides on the dev frontend port ends up showing Voice
@@ -866,6 +881,29 @@ pub async fn click(port: u16, ref_str: &str) -> Result<Value, String> {
     let ws_url = action_target(port).await?;
     let mut cdp = Cdp::connect(&ws_url).await?;
     let _ = cdp.call("DOM.enable", json!({})).await;
+
+    // Native <select>: a synthetic mouse click can't change a native dropdown's
+    // value (the OS renders the popup, and Input.dispatchMouseEvent never lands
+    // on an option). For a <select> or an <option>, set the select's value and
+    // fire a bubbling `change` (and `input`) event via JS instead — the same
+    // result a real selection produces. Everything else clicks normally.
+    let node_name = cdp
+        .call("DOM.describeNode", json!({ "backendNodeId": backend }))
+        .await
+        .ok()
+        .and_then(|v| {
+            v.get("node")
+                .and_then(|n| n.get("nodeName"))
+                .and_then(|s| s.as_str())
+                .map(|s| s.to_uppercase())
+        });
+    if matches!(node_name.as_deref(), Some("SELECT") | Some("OPTION")) {
+        if let Ok(v) = drive_select(&mut cdp, backend).await {
+            return Ok(v);
+        }
+        // If the JS path failed, fall through to a normal click.
+    }
+
     let _ = cdp
         .call("DOM.scrollIntoViewIfNeeded", json!({ "backendNodeId": backend }))
         .await;
@@ -913,6 +951,51 @@ pub async fn click(port: u16, ref_str: &str) -> Result<Value, String> {
         .await?;
         Ok(json!({ "ok": true, "method": "js" }))
     }
+}
+
+/// Drive a native `<select>` (or an `<option>`): set the owning select's value
+/// to the chosen option and dispatch bubbling `input` + `change` events, which a
+/// synthetic mouse click can't do for a native dropdown. The `@ref` may point at
+/// either the `<select>` or one of its `<option>`s.
+async fn drive_select(cdp: &mut Cdp, backend: u32) -> Result<Value, String> {
+    let resolved = cdp
+        .call("DOM.resolveNode", json!({ "backendNodeId": backend }))
+        .await?;
+    let obj_id = resolved
+        .get("object")
+        .and_then(|o| o.get("objectId"))
+        .and_then(|v| v.as_str())
+        .ok_or("could not resolve the select/option to a JS handle")?;
+    let func = r#"function(){
+        var el = this;
+        var select = el.tagName === 'OPTION' ? el.closest('select') : (el.tagName === 'SELECT' ? el : null);
+        if (!select) { el.click(); return { handled: false }; }
+        if (el.tagName === 'OPTION') {
+            var idx = Array.prototype.indexOf.call(select.options, el);
+            if (idx >= 0) select.selectedIndex = idx; else select.value = el.value;
+        }
+        select.dispatchEvent(new Event('input', { bubbles: true }));
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        var sel = select.options[select.selectedIndex];
+        return { handled: true, value: select.value, label: sel ? sel.textContent.trim() : null };
+    }"#;
+    let r = cdp
+        .call(
+            "Runtime.callFunctionOn",
+            json!({
+                "objectId": obj_id,
+                "functionDeclaration": func,
+                "returnByValue": true,
+                "userGesture": true
+            }),
+        )
+        .await?;
+    let result = r
+        .get("result")
+        .and_then(|res| res.get("value"))
+        .cloned()
+        .unwrap_or(Value::Null);
+    Ok(json!({ "ok": true, "method": "select", "result": result }))
 }
 
 /// Type text into an element (by `@ref`) after focusing it.

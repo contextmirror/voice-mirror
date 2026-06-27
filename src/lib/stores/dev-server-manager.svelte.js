@@ -243,8 +243,21 @@ function createDevServerManager() {
     // `9222 + (port % 1000)` hit 9222 for any port%1000==0 (3000/4000/5000/8000…).
     const isTauri = (server.framework || '').toLowerCase() === 'tauri';
     const cdpPort = isTauri ? 9223 + (server.port % 1000) : null;
+    // WebView2 browser args (one env var, SPACE-SEPARATED). Alongside the CDP
+    // remote-debugging port we disable Chromium's occlusion/background throttling:
+    // when the dev app sits behind Voice Mirror it is "occluded", and Chromium
+    // throttles (or stops) its rendering — which froze the WGC live preview on a
+    // STALE frame (it only repainted when the window regained focus). Turning the
+    // throttling off keeps the app painting while occluded, so WGC stays live.
     const spawnEnv = cdpPort
-      ? { WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${cdpPort}` }
+      ? {
+          WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS:
+            `--remote-debugging-port=${cdpPort}` +
+            ' --disable-features=CalculateNativeWinOcclusion' +
+            ' --disable-backgrounding-occluded-windows' +
+            ' --disable-renderer-backgrounding' +
+            ' --disable-background-timer-throttling',
+        }
       : null;
     if (cdpPort) updateState(projectPath, { cdpPort });
 

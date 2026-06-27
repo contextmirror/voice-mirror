@@ -83,6 +83,36 @@ pub(super) fn detect_from_env(root: &Path, filename: &str, pkg_manager: &str) ->
     })
 }
 
+/// Resolve the project's ACTUALLY-configured frontend port (vite.config
+/// `server.port`, else the Tauri `build.devUrl` port). A bare `vite` script has
+/// no port on the command line and otherwise defaults to 5173 — but the project
+/// usually pins a different port in config (e.g. a Tauri app on 1430), so report
+/// the real one instead of the misleading default.
+fn configured_frontend_port(root: &Path) -> Option<u16> {
+    for filename in &["vite.config.js", "vite.config.ts", "vite.config.mjs", "vite.config.mts"] {
+        if let Ok(content) = std::fs::read_to_string(root.join(filename)) {
+            if let Some(port) = extract_vite_port(&content) {
+                return Some(port);
+            }
+        }
+    }
+    let conf = root.join("src-tauri").join("tauri.conf.json");
+    if let Ok(content) = std::fs::read_to_string(&conf) {
+        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+            if let Some(url) = json
+                .get("build")
+                .and_then(|b| b.get("devUrl"))
+                .and_then(|v| v.as_str())
+            {
+                if let Some(port) = extract_port_from_url(url) {
+                    return Some(port);
+                }
+            }
+        }
+    }
+    None
+}
+
 /// Detect dev servers from `package.json` scripts (`dev`, `start`, `serve`).
 pub(super) fn detect_from_package_json(root: &Path, pkg_manager: &str) -> Vec<DetectedDevServer> {
     let mut results = Vec::new();
@@ -99,12 +129,23 @@ pub(super) fn detect_from_package_json(root: &Path, pkg_manager: &str) -> Vec<De
         Some(s) => s,
         None => return results,
     };
+    let configured_port = configured_frontend_port(root);
     let script_keys = ["dev", "start", "serve"];
     for key in &script_keys {
         if let Some(cmd) = scripts.get(*key).and_then(|v| v.as_str()) {
             if let Some(mut server) = match_script_pattern(cmd, key, pkg_manager) {
                 if server.framework == "Bun" {
                     if let Some(port) = extract_bun_port_from_script(cmd, root) {
+                        server.port = port;
+                        server.url = format!("http://localhost:{}", port);
+                    }
+                }
+                // A bare `vite` script (no explicit --port) defaults to 5173, but
+                // the project may pin a different port in config — use the REAL
+                // configured port so sandbox_start doesn't report "Vite :5173"
+                // when it's actually on e.g. :1430.
+                if server.framework == "Vite" && extract_port_flag(cmd).is_none() {
+                    if let Some(port) = configured_port {
                         server.port = port;
                         server.url = format!("http://localhost:{}", port);
                     }

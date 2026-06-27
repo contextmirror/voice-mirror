@@ -622,16 +622,24 @@ async fn handle_capture_action(
                     .unwrap_or(false)
             };
             if dev_busy {
+                // Name the process holding the port so the agent doesn't have to
+                // shell out to PowerShell/netstat to find it.
+                let holder = {
+                    let p = dev_port;
+                    tokio::task::spawn_blocking(move || crate::services::ports::describe_port_holder(p))
+                        .await
+                        .unwrap_or_default()
+                };
                 return Ok(serde_json::json!({
                     "launching": false,
                     "detected": frameworks,
                     "message": format!(
-                        "Port {} is already in use, so {} can't start there — its dev server would \
+                        "Port {} is already in use{}, so {} can't start there — its dev server would \
                          fail with 'Port {} is already in use' and beforeDevCommand would exit non-zero. \
                          Nothing was launched. If your app is ALREADY running on :{} with a debug port, \
                          call sandbox_attach with that --remote-debugging-port. Otherwise stop whatever \
-                         is holding :{} (a stale dev server) and retry sandbox_start.",
-                        dev_port, target.framework, dev_port, dev_port, dev_port
+                         is holding :{} (use list_ports to see it) and retry sandbox_start.",
+                        dev_port, holder, target.framework, dev_port, dev_port, dev_port
                     )
                 }));
             }

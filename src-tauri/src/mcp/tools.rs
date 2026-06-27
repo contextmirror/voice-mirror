@@ -744,7 +744,7 @@ fn build_all_groups() -> HashMap<String, ToolGroupDef> {
         "capture".into(),
         ToolGroupDef {
             name: "capture".into(),
-            description: "Window capture, screenshots, and sandbox app preview (10 tools)".into(),
+            description: "Window capture, screenshots, sandbox app preview, and port lookup (11 tools)".into(),
             always_loaded: true,
             keywords: vec![
                 "screenshot".into(), "capture".into(), "window".into(),
@@ -869,6 +869,16 @@ fn build_all_groups() -> HashMap<String, ToolGroupDef> {
                         }
                     }),
                 },
+                ToolDef {
+                    name: "list_ports".into(),
+                    description: "List which process holds each listening TCP port (port, PID, process name, state) — instantly see what's running on a port without shelling out to PowerShell/netstat. Pass `port` to filter to a single port (e.g. to find what's already on a dev port before sandbox_start).".into(),
+                    input_schema: json!({
+                        "type": "object",
+                        "properties": {
+                            "port": { "type": "number", "description": "Filter to a single TCP port. Omit to list all listening ports." }
+                        }
+                    }),
+                },
             ],
         },
     );
@@ -934,8 +944,8 @@ mod tests {
     fn test_list_tools_default() {
         let reg = ToolRegistry::new();
         let tools = reg.list_tools();
-        // Should have core (5) + capture (10) = 15 always-loaded tools
-        assert_eq!(tools.len(), 15);
+        // Should have core (5) + capture (11) = 16 always-loaded tools
+        assert_eq!(tools.len(), 16);
     }
 
     #[test]
@@ -1002,7 +1012,7 @@ mod tests {
     fn test_capture_group() {
         let mut reg = ToolRegistry::new();
         let names = reg.load_group("capture").unwrap();
-        assert_eq!(names.len(), 10);
+        assert_eq!(names.len(), 11);
         assert!(reg.is_tool_loaded("capture_list_windows"));
         assert!(reg.is_tool_loaded("capture_window"));
         assert!(reg.is_tool_loaded("capture_browser"));
@@ -1013,6 +1023,7 @@ mod tests {
         assert!(reg.is_tool_loaded("sandbox_click"));
         assert!(reg.is_tool_loaded("sandbox_type"));
         assert!(reg.is_tool_loaded("sandbox_close_window"));
+        assert!(reg.is_tool_loaded("list_ports"));
     }
 
     #[test]

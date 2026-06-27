@@ -103,7 +103,13 @@ async fn find_app_hwnd(cdp_port: u16) -> Option<i64> {
     for attempt in 0..20 {
         // 1. Prefer the window the snapshot resolved to (unless it's the host).
         if let Some(h) = crate::services::sandbox::active_hwnd() {
-            if !window_is_host(h) {
+            // …but only if it's still a LIVE window. If Claude's last active
+            // window has since CLOSED (e.g. a Settings panel), its HWND is stale
+            // — clear it and fall through so we re-target a real window instead
+            // of capturing a dead one (which froze the preview on Settings).
+            if !crate::services::sandbox::is_window_alive(h) {
+                crate::services::sandbox::set_active_hwnd(None);
+            } else if !window_is_host(h) {
                 return Some(h);
             }
         }

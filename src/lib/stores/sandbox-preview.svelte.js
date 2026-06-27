@@ -41,8 +41,6 @@ function createSandboxPreviewStore() {
   // When the user manually picks a window from the switcher, stop auto-following
   // Claude until they go back to a session/window or reopen the preview.
   let userPinned = false;
-  // Consecutive polls the mirrored window has been gone (debounce for snap-back).
-  let goneCount = 0;
   // The last dev-server CDP port we auto-opened for. Lives in the store (not a
   // component) so a LensWorkspace remount / status-flap can't re-fire open() and
   // pop the panel back up after the user hid it. Persists for the app lifetime.
@@ -105,19 +103,15 @@ function createSandboxPreviewStore() {
       // Mirror Claude's window once it's a real, currently-open window.
       if (activeHwnd != null && activeHwnd !== currentHwnd && present.has(activeHwnd)) {
         startStream(activeHwnd);
-        goneCount = 0;
         return;
       }
-      // Snap back to the main window when the one we're mirroring has CLOSED
-      // (e.g. you closed Settings). Debounced so a single transient miss in the
-      // OS window enumeration can't thrash the stream.
+      // Snap back to the main window the instant the one we're mirroring has
+      // CLOSED (e.g. you closed Settings). `windows` is the authoritative LIVE
+      // window list for the app's process — if currentHwnd isn't in it, the
+      // window is genuinely gone, so re-target now rather than freezing on its
+      // last (stale) frame. The backend also refuses to re-target a dead HWND.
       if (currentHwnd != null && !present.has(currentHwnd) && windows.length > 0) {
-        if (++goneCount >= 2) {
-          goneCount = 0;
-          startStream(null);
-        }
-      } else {
-        goneCount = 0;
+        startStream(null);
       }
     } catch {
       // transient — try again next tick
@@ -166,7 +160,6 @@ function createSandboxPreviewStore() {
       visible = true;
       attached = opts.attached ?? false;
       userPinned = false;
-      goneCount = 0;
       currentHwnd = null;
       windows = [];
       await startStream(null); // main window
@@ -231,7 +224,6 @@ function createSandboxPreviewStore() {
       windows = [];
       currentHwnd = null;
       userPinned = false;
-      goneCount = 0;
       attached = false;
       userHidden = false;
       if (port) {
