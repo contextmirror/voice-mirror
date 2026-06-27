@@ -98,10 +98,15 @@ describe('sandbox-preview: multi-window', () => {
     assert.ok(/switchTo\(hwnd\)/.test(src), 'Should expose switchTo(hwnd)');
   });
 
-  it('polls the window list and auto-follows new windows', () => {
-    assert.ok(src.includes('setInterval'), 'Should poll the window list');
+  it('follows the window Claude is driving (active-window model)', () => {
+    assert.ok(src.includes('setInterval'), 'Should poll on an interval');
     assert.ok(src.includes('refreshWindows'), 'Should have a refreshWindows loop');
-    // Auto-follow: a window not previously seen triggers a stream re-target.
-    assert.ok(src.includes('seen.add') && src.includes('startStream('), 'Should auto-follow newly-seen windows');
+    // Unified model: mirror whatever window Claude's snapshot published as active.
+    assert.ok(
+      src.includes('sandboxActiveHwnd') && src.includes('startStream('),
+      'Should follow the active window (sandbox_active_hwnd) by re-targeting the stream',
+    );
+    // Manual switcher choice pins the view so it stops auto-following.
+    assert.ok(src.includes('userPinned'), 'Switcher choice should pin via userPinned');
   });
 });

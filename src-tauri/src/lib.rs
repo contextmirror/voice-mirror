@@ -318,6 +318,7 @@ pub fn run() {
             sandbox_cmds::sandbox_stream_start,
             sandbox_cmds::sandbox_stream_stop,
             sandbox_cmds::sandbox_list_windows,
+            sandbox_cmds::sandbox_active_hwnd,
             screenshot_cmds::take_screenshot,
             screenshot_cmds::save_image_to_temp,
             screenshot_cmds::list_monitors,

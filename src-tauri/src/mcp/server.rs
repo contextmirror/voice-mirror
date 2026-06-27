@@ -392,6 +392,7 @@ async fn route_tool_call(
         "sandbox_screenshot" => handlers::sandbox::handle_sandbox_screenshot(args, data_dir, router).await,
         "sandbox_click" => handlers::sandbox::handle_sandbox_click(args, data_dir, router).await,
         "sandbox_type" => handlers::sandbox::handle_sandbox_type(args, data_dir, router).await,
+        "sandbox_close_window" => handlers::sandbox::handle_sandbox_close_window(args, data_dir, router).await,
 
         // ---- n8n tools ----
         "n8n_list_workflows" => handlers::n8n::handle_n8n_list_workflows(args, data_dir).await,

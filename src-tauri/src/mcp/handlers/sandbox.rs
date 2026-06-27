@@ -47,15 +47,33 @@ pub async fn handle_sandbox_snapshot(
             let tree = resp.get("tree").and_then(|v| v.as_str()).unwrap_or("");
             let page_url = resp.get("pageUrl").and_then(|v| v.as_str()).unwrap_or("");
             let ref_count = resp.get("refCount").and_then(|v| v.as_i64()).unwrap_or(0);
+            let windows = resp
+                .get("windows")
+                .and_then(|v| v.as_array())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|w| w.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                })
+                .unwrap_or_default();
             if tree.is_empty() {
                 McpToolResult::text(
                     serde_json::to_string_pretty(&resp).unwrap_or_else(|_| format!("{:?}", resp)),
                 )
             } else {
+                let windows_line = if windows.is_empty() {
+                    String::new()
+                } else {
+                    format!(
+                        "\nApp windows (snapshot again with `window` to target one): {}",
+                        windows
+                    )
+                };
                 McpToolResult::text(format!(
-                    "Sandbox snapshot of {} ({} interactive refs).\n\
+                    "Sandbox snapshot of {} ({} interactive refs).{}\n\
                      Use these @refs with sandbox_click / sandbox_type.\n\n{}",
-                    page_url, ref_count, tree
+                    page_url, ref_count, windows_line, tree
                 ))
             }
         }
@@ -107,6 +125,23 @@ pub async fn handle_sandbox_click(
         Err(e) => e,
         Ok(resp) => McpToolResult::text(format!(
             "Clicked. {}",
+            serde_json::to_string(&resp).unwrap_or_default()
+        )),
+    }
+}
+
+/// `sandbox_close_window` -- close the window Claude is currently driving (the
+/// native title-bar X that DOM/CDP can't click).
+pub async fn handle_sandbox_close_window(
+    args: &Value,
+    _data_dir: &Path,
+    pipe: Option<&Arc<PipeRouter>>,
+) -> McpToolResult {
+    info!("[sandbox_close_window] closing the active app window");
+    match run(pipe, "sandbox_close", args, Duration::from_secs(10)).await {
+        Err(e) => e,
+        Ok(resp) => McpToolResult::text(format!(
+            "Closed the active window. {}",
             serde_json::to_string(&resp).unwrap_or_default()
         )),
     }

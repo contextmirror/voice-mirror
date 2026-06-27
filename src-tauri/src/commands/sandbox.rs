@@ -12,8 +12,8 @@ use super::IpcResponse;
 /// Returns `{ pageUrl, tree, refCount }` where `tree` is the accessibility tree
 /// rendered to `@ref` element refs (the same format the AI uses for the browser).
 #[tauri::command]
-pub async fn sandbox_snapshot(port: u16) -> IpcResponse {
-    match crate::services::sandbox::snapshot(port).await {
+pub async fn sandbox_snapshot(port: u16, window: Option<String>) -> IpcResponse {
+    match crate::services::sandbox::snapshot(port, window.as_deref()).await {
         Ok(v) => IpcResponse::ok(v),
         Err(e) => IpcResponse::err(e),
     }
@@ -73,6 +73,14 @@ pub async fn sandbox_stream_start(port: u16, hwnd: Option<i64>) -> IpcResponse {
         })),
         Err(e) => IpcResponse::err(e),
     }
+}
+
+/// The OS window (HWND) Claude is currently driving — the live preview mirrors
+/// this so the human watches exactly the window Claude acts on. `null` until the
+/// first snapshot. Returns `{ hwnd }`.
+#[tauri::command]
+pub fn sandbox_active_hwnd() -> IpcResponse {
+    IpcResponse::ok(serde_json::json!({ "hwnd": crate::services::sandbox::active_hwnd() }))
 }
 
 /// List the app's visible windows (pill, settings, dialogs) for the preview

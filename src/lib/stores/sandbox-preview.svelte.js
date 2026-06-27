@@ -6,17 +6,24 @@
  * REAL app window at true size, the same surface the AI sees via sandbox_*.
  *
  * Multi-window: a Tauri app has several windows (the pill, a settings window, a
- * dialog…). This store tracks them all (`windows`), lets you switch which one is
- * mirrored (`switchTo`), and AUTO-FOLLOWS a newly-opened window so e.g. a
- * settings window appears the moment it opens.
+ * dialog…). This store tracks them all (`windows`) and FOLLOWS THE WINDOW CLAUDE
+ * IS DRIVING: every snapshot publishes the OS window it acted on
+ * (`sandbox_active_hwnd`), and the preview mirrors exactly that — so the human
+ * watches precisely what Claude is doing, by construction, not by guessing. You
+ * can still override manually via the switcher (`switchTo`).
  *
  * State split: `active` (a session is running) vs `visible` (the panel is shown).
  * Hiding keeps the session alive so toggling vs the Browser is instant.
  */
-import { sandboxStreamStart, sandboxStreamStop, sandboxListWindows } from '../api.js';
+import {
+  sandboxStreamStart,
+  sandboxStreamStop,
+  sandboxListWindows,
+  sandboxActiveHwnd,
+} from '../api.js';
 import { unwrapResult } from '../utils.js';
 
-const POLL_INTERVAL = 1500;
+const POLL_INTERVAL = 1000;
 
 function createSandboxPreviewStore() {
   let active = $state(false);
@@ -29,10 +36,13 @@ function createSandboxPreviewStore() {
   let windows = $state([]);
   let currentHwnd = $state(null);
 
-  // Non-reactive bookkeeping for auto-follow + polling.
-  let seen = new Set();
-  let initialized = false;
+  // Non-reactive bookkeeping for polling.
   let pollTimer = null;
+  // When the user manually picks a window from the switcher, stop auto-following
+  // Claude until they go back to a session/window or reopen the preview.
+  let userPinned = false;
+  // Consecutive polls the mirrored window has been gone (debounce for snap-back).
+  let goneCount = 0;
 
   function setStreamUrl(url) {
     // Cache-bust so the <img> reconnects when we re-target the stream to a
@@ -60,33 +70,43 @@ function createSandboxPreviewStore() {
     }
   }
 
-  /** Poll the app's window list; auto-follow any newly-opened window. */
+  /**
+   * Follow the window CLAUDE is driving. Every sandbox_snapshot publishes the OS
+   * window it acted on (`sandbox_active_hwnd`); we mirror exactly that. This is
+   * the unified model that replaced the fragile auto-follow/snap-back: the
+   * preview and Claude reference the SAME window, so they can't diverge. We also
+   * refresh the window list for the switcher.
+   */
   async function refreshWindows() {
     if (!active || cdpPort == null) return;
     try {
       const res = await sandboxListWindows(cdpPort);
       const list = unwrapResult(res);
       windows = Array.isArray(list) ? list : [];
-      const present = new Set(windows.map((w) => w.hwnd));
-      if (!initialized) {
-        // First poll — seed the seen-set; don't switch (main is already shown).
-        initialized = true;
-        for (const w of windows) seen.add(w.hwnd);
-      } else {
-        for (const w of windows) {
-          if (!seen.has(w.hwnd)) {
-            seen.add(w.hwnd);
-            startStream(w.hwnd); // auto-follow the newly-opened window
-          }
-        }
-      }
-      // Forget windows that have closed.
-      for (const h of [...seen]) if (!present.has(h)) seen.delete(h);
 
-      // If the window we're mirroring has closed (e.g. you closed Settings),
-      // snap back to the app's main window.
+      // Don't fight a manual switcher choice — only auto-follow Claude when not
+      // explicitly pinned by the user.
+      if (userPinned) return;
+
+      const activeRes = await sandboxActiveHwnd(cdpPort);
+      const activeHwnd = unwrapResult(activeRes)?.hwnd ?? null;
+      const present = new Set(windows.map((w) => w.hwnd));
+      // Mirror Claude's window once it's a real, currently-open window.
+      if (activeHwnd != null && activeHwnd !== currentHwnd && present.has(activeHwnd)) {
+        startStream(activeHwnd);
+        goneCount = 0;
+        return;
+      }
+      // Snap back to the main window when the one we're mirroring has CLOSED
+      // (e.g. you closed Settings). Debounced so a single transient miss in the
+      // OS window enumeration can't thrash the stream.
       if (currentHwnd != null && !present.has(currentHwnd) && windows.length > 0) {
-        startStream(null);
+        if (++goneCount >= 2) {
+          goneCount = 0;
+          startStream(null);
+        }
+      } else {
+        goneCount = 0;
       }
     } catch {
       // transient — try again next tick
@@ -125,8 +145,8 @@ function createSandboxPreviewStore() {
       cdpPort = port;
       active = true;
       visible = true;
-      seen = new Set();
-      initialized = false;
+      userPinned = false;
+      goneCount = 0;
       currentHwnd = null;
       windows = [];
       await startStream(null); // main window
@@ -143,9 +163,13 @@ function createSandboxPreviewStore() {
       visible = false;
     },
 
-    /** Switch the mirror to a specific window (from the switcher dropdown). */
+    /**
+     * Switch the mirror to a specific window (from the switcher dropdown). Pins
+     * the choice so we stop auto-following Claude until the preview is reopened.
+     */
     switchTo(hwnd) {
       if (hwnd == null) return;
+      userPinned = true;
       startStream(Number(hwnd));
     },
 
@@ -161,8 +185,8 @@ function createSandboxPreviewStore() {
       cdpPort = null;
       windows = [];
       currentHwnd = null;
-      seen = new Set();
-      initialized = false;
+      userPinned = false;
+      goneCount = 0;
       if (port) {
         sandboxStreamStop(port).catch(() => {});
       }

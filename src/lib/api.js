@@ -623,8 +623,8 @@ export async function detectDevServers(projectRoot) {
  * @param {number} port
  * @returns {Promise<{ success: boolean, data?: { pageUrl: string, tree: string, refCount: number } }>}
  */
-export async function sandboxSnapshot(port) {
-  return invoke('sandbox_snapshot', { port });
+export async function sandboxSnapshot(port, window) {
+  return invoke('sandbox_snapshot', { port, window: window ?? null });
 }
 
 /** Click an element in the sandboxed app by its @ref (from the last snapshot). */
@@ -665,6 +665,14 @@ export async function sandboxStreamStop(port) {
 /** List the app's visible windows (pill, settings, dialogs). Returns [{ hwnd, title }]. */
 export async function sandboxListWindows(port) {
   return invoke('sandbox_list_windows', { port });
+}
+
+/**
+ * The OS window (HWND) Claude is currently driving — the live preview mirrors
+ * this so the human watches exactly the window Claude acts on. Returns { hwnd }.
+ */
+export async function sandboxActiveHwnd() {
+  return invoke('sandbox_active_hwnd');
 }
 
 /**

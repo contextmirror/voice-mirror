@@ -744,7 +744,7 @@ fn build_all_groups() -> HashMap<String, ToolGroupDef> {
         "capture".into(),
         ToolGroupDef {
             name: "capture".into(),
-            description: "Window capture, screenshots, and sandbox app preview (7 tools)".into(),
+            description: "Window capture, screenshots, and sandbox app preview (8 tools)".into(),
             always_loaded: true,
             keywords: vec![
                 "screenshot".into(), "capture".into(), "window".into(),
@@ -794,11 +794,12 @@ fn build_all_groups() -> HashMap<String, ToolGroupDef> {
                 },
                 ToolDef {
                     name: "sandbox_snapshot".into(),
-                    description: "See the structure of the app you're building (a desktop/Tauri app running with CDP). Returns the accessibility tree as @ref element handles. Call this FIRST, then use the @refs with sandbox_click / sandbox_type. `port` is optional — defaults to the app Voice Mirror launched.".into(),
+                    description: "See the structure of the app you're building (a desktop/Tauri app running with CDP). Returns the accessibility tree as @ref element handles, plus a `windows` list of the app's open windows. Call this FIRST, then use the @refs with sandbox_click / sandbox_type. To work in a secondary window (e.g. a settings window), call sandbox_snapshot again with `window` set to that window's title — subsequent sandbox_click / sandbox_type act on whichever window you last snapshotted. `port` is optional.".into(),
                     input_schema: json!({
                         "type": "object",
                         "properties": {
-                            "port": { "type": "number", "description": "CDP remote-debugging port. Omit to use the active sandbox app launched by Voice Mirror." }
+                            "port": { "type": "number", "description": "CDP remote-debugging port. Omit to use the active sandbox app launched by Voice Mirror." },
+                            "window": { "type": "string", "description": "Title (or part of it) of the app window to snapshot, from a previous snapshot's `windows` list. Omit for the main window. click/type then target this window." }
                         }
                     }),
                 },
@@ -814,7 +815,7 @@ fn build_all_groups() -> HashMap<String, ToolGroupDef> {
                 },
                 ToolDef {
                     name: "sandbox_click".into(),
-                    description: "Click an element in the running app you're building, to test it. Use an @ref from sandbox_snapshot. `port` is optional — defaults to the active sandbox app.".into(),
+                    description: "Click an element in the running app you're building, to test it. Use an @ref from the most recent sandbox_snapshot — it acts on whichever window that snapshot targeted. `port` is optional.".into(),
                     input_schema: json!({
                         "type": "object",
                         "properties": {
@@ -826,7 +827,7 @@ fn build_all_groups() -> HashMap<String, ToolGroupDef> {
                 },
                 ToolDef {
                     name: "sandbox_type".into(),
-                    description: "Type text into an element in the running app you're building, to test input. Use an @ref from sandbox_snapshot. `port` is optional — defaults to the active sandbox app.".into(),
+                    description: "Type text into an element in the running app you're building, to test input. Use an @ref from the most recent sandbox_snapshot — it acts on whichever window that snapshot targeted. `port` is optional.".into(),
                     input_schema: json!({
                         "type": "object",
                         "properties": {
@@ -835,6 +836,16 @@ fn build_all_groups() -> HashMap<String, ToolGroupDef> {
                             "text": { "type": "string", "description": "Text to type into the element." }
                         },
                         "required": ["element_ref", "text"]
+                    }),
+                },
+                ToolDef {
+                    name: "sandbox_close_window".into(),
+                    description: "Close the app window you're currently driving (the one your last sandbox_snapshot targeted) — e.g. close a Settings window you opened. Does the graceful close of the native title-bar X, which you can't reach with sandbox_click. `port` is optional.".into(),
+                    input_schema: json!({
+                        "type": "object",
+                        "properties": {
+                            "port": { "type": "number", "description": "CDP remote-debugging port. Omit to use the active sandbox app." }
+                        }
                     }),
                 },
             ],
@@ -902,8 +913,8 @@ mod tests {
     fn test_list_tools_default() {
         let reg = ToolRegistry::new();
         let tools = reg.list_tools();
-        // Should have core (5) + capture (7) = 12 always-loaded tools
-        assert_eq!(tools.len(), 12);
+        // Should have core (5) + capture (8) = 13 always-loaded tools
+        assert_eq!(tools.len(), 13);
     }
 
     #[test]
@@ -970,7 +981,7 @@ mod tests {
     fn test_capture_group() {
         let mut reg = ToolRegistry::new();
         let names = reg.load_group("capture").unwrap();
-        assert_eq!(names.len(), 7);
+        assert_eq!(names.len(), 8);
         assert!(reg.is_tool_loaded("capture_list_windows"));
         assert!(reg.is_tool_loaded("capture_window"));
         assert!(reg.is_tool_loaded("capture_browser"));
@@ -978,6 +989,7 @@ mod tests {
         assert!(reg.is_tool_loaded("sandbox_screenshot"));
         assert!(reg.is_tool_loaded("sandbox_click"));
         assert!(reg.is_tool_loaded("sandbox_type"));
+        assert!(reg.is_tool_loaded("sandbox_close_window"));
     }
 
     #[test]
