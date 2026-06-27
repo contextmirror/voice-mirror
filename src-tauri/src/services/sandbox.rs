@@ -247,6 +247,36 @@ pub fn active_hwnd() -> Option<i64> {
     active_hwnd_cell().lock().ok().and_then(|g| *g)
 }
 
+// ── Active target METADATA (url + title + index) ──────────────────────────────
+// snapshot() also records the resolved target's CDP url, title and index so the
+// screenshot path can ECHO exactly which window it is showing — a wrong-window
+// attach is then instantly visible, and screenshot + snapshot provably agree.
+
+#[derive(Clone, Default)]
+pub struct ActiveMeta {
+    pub url: String,
+    pub title: String,
+    pub index: i64,
+}
+
+static ACTIVE_META: OnceLock<Mutex<ActiveMeta>> = OnceLock::new();
+
+fn active_meta_cell() -> &'static Mutex<ActiveMeta> {
+    ACTIVE_META.get_or_init(|| Mutex::new(ActiveMeta::default()))
+}
+
+/// Record the resolved active target's url/title/index (for the screenshot echo).
+pub fn set_active_meta(url: String, title: String, index: i64) {
+    if let Ok(mut g) = active_meta_cell().lock() {
+        *g = ActiveMeta { url, title, index };
+    }
+}
+
+/// The resolved active target's url/title/index, for the screenshot to echo.
+pub fn active_meta() -> ActiveMeta {
+    active_meta_cell().lock().ok().map(|g| g.clone()).unwrap_or_default()
+}
+
 // ── CDP discovery + session ──────────────────────────────────────────────────
 
 /// Fetch the debuggable `page` targets from a CDP port's `/json` endpoint.
@@ -502,67 +532,85 @@ pub async fn snapshot(port: u16, window: Option<&str>) -> Result<Value, String> 
         ));
     }
 
+    // The OS window the live preview is currently mirroring (what the USER sees).
+    // Unique even when every window shares a title, so it's the reliable signal
+    // for "drive what's on screen" — and it keeps the screenshot (which mirrors
+    // this same window) from ever diverging from snapshot/click.
+    let preview_hwnd = crate::services::window_stream::current_hwnd();
+
     // Pick the target.
     let chosen_idx = if let Some(w) = &want {
-        // Explicit window: match the DISTINCT OS title OR the CDP page title
-        // (case-insensitive), so `window:"TaskDeck"` works even when OS-window
-        // correlation was unavailable. Prefer an EXACT title match before falling
-        // back to substring, so a parent window stays selectable by its exact name
-        // even when a child window's title extends it (e.g. `window:"TaskDeck"`
-        // must resolve to "TaskDeck", not the prefix-matching "TaskDeck Settings").
-        let exact = |s: &str| !s.is_empty() && s == *w;
-        let loose = |s: &str| !s.is_empty() && (s == *w || s.contains(w) || w.contains(s));
-        cands
-            .iter()
-            .position(|c| {
-                let ot = c.os_title.trim().to_lowercase();
-                let pt = c.page_title.trim().to_lowercase();
-                exact(&ot) || exact(&pt)
-            })
+        // Explicit window: identical titles (e.g. all "Yap") make a title match
+        // ambiguous or impossible, so we match by — in priority order — a numeric
+        // INDEX (from the `windows` list), an EXACT title, a URL/route substring
+        // (`window:"settings"` → settings.html), then a loose title substring.
+        // This makes selection title-INDEPENDENT for any app.
+        let by_index = w.parse::<usize>().ok().filter(|i| *i < cands.len());
+        by_index
+            // Exact title (OS or CDP page) — a parent stays selectable by its exact
+            // name even when a child window's title extends it.
             .or_else(|| {
                 cands.iter().position(|c| {
                     let ot = c.os_title.trim().to_lowercase();
                     let pt = c.page_title.trim().to_lowercase();
-                    loose(&ot) || loose(&pt)
+                    (!ot.is_empty() && ot == *w) || (!pt.is_empty() && pt == *w)
+                })
+            })
+            // URL / route substring — the disambiguator when titles collide.
+            .or_else(|| {
+                cands.iter().position(|c| {
+                    let url = c.page_url.to_lowercase();
+                    !url.is_empty() && url.contains(w.as_str())
+                })
+            })
+            // Loose title substring (last resort).
+            .or_else(|| {
+                cands.iter().position(|c| {
+                    let ot = c.os_title.trim().to_lowercase();
+                    let pt = c.page_title.trim().to_lowercase();
+                    (!ot.is_empty() && (ot.contains(w.as_str()) || w.contains(&ot)))
+                        || (!pt.is_empty() && (pt.contains(w.as_str()) || w.contains(&pt)))
                 })
             })
             .ok_or_else(|| {
-                // Echo the REAL targetable candidates (the resolved port's page +
-                // OS titles), not the OS-window list — which can be empty when
-                // process correlation fails, leaving the agent blind.
-                let mut names: Vec<String> = cands
+                // Echo the REAL targetable candidates with their index + URL, so an
+                // agent facing identical titles can disambiguate by route/index.
+                let listed = cands
                     .iter()
-                    .map(|c| {
-                        if !c.os_title.trim().is_empty() {
-                            c.os_title.trim().to_string()
+                    .enumerate()
+                    .map(|(i, c)| {
+                        let t = if !c.os_title.trim().is_empty() {
+                            c.os_title.trim()
                         } else {
-                            c.page_title.trim().to_string()
-                        }
+                            c.page_title.trim()
+                        };
+                        format!("[{}] {} — {}", i, t, c.page_url)
                     })
-                    .filter(|s| !s.is_empty())
-                    .collect();
-                names.sort();
-                names.dedup();
-                let listed = if names.is_empty() {
-                    "(none)".to_string()
-                } else {
-                    names.join(", ")
-                };
+                    .collect::<Vec<_>>()
+                    .join("; ");
+                let listed = if listed.is_empty() { "(none)".to_string() } else { listed };
                 format!(
                     "No app window matching '{}'. Available windows on port {}: {}. \
-                     Snapshot without `window` to target the default.",
+                     Target one by its route/URL substring, its index, or its title — \
+                     or snapshot without `window` for the default.",
                     w, port, listed
                 )
             })?
     } else {
-        // Default: prefer a window that's actually MIRRORABLE (correlates to a
-        // real visible OS window) so Claude and the preview stay on the same
-        // window. The foreground app window wins; then a mirrorable visible
-        // window with interactive elements; then any mirrorable window. Only as
-        // a last resort fall back to a non-mirrorable target.
+        // Default: drive what the USER is watching. Prefer the window the live
+        // preview is currently mirroring (unique even with identical titles), so
+        // screenshot + snapshot + click can't diverge. Then the foreground app
+        // window; then a mirrorable visible window with interactive elements; then
+        // any mirrorable window. Only as a last resort fall back to a
+        // non-mirrorable target.
         cands
             .iter()
-            .position(|c| c.visible && c.hwnd.is_some() && c.hwnd == foreground)
+            .position(|c| c.visible && c.hwnd.is_some() && c.hwnd == preview_hwnd)
+            .or_else(|| {
+                cands
+                    .iter()
+                    .position(|c| c.visible && c.hwnd.is_some() && c.hwnd == foreground)
+            })
             .or_else(|| {
                 cands
                     .iter()
@@ -596,12 +644,26 @@ pub async fn snapshot(port: u16, window: Option<&str>) -> Result<Value, String> 
     let ref_count = chosen.refs.len();
     store_refs(port, chosen.refs.clone());
 
-    // Distinct OS window titles for the AI to target by name.
-    let windows: Vec<String> = if os_windows.is_empty() {
-        list_window_titles(port).await
-    } else {
-        os_windows.iter().map(|(_, t, ..)| t.clone()).collect()
-    };
+    // Record the resolved target's url/title/index so the screenshot path echoes
+    // the SAME window — and so a wrong-window attach is instantly visible.
+    set_active_meta(page_url.clone(), active_window.clone(), chosen_idx as i64);
+
+    // The drivable windows, each with a stable INDEX and its CDP URL/route so
+    // identical titles ("Yap, Yap, Yap") stop blocking selection — the agent can
+    // target by route or index. Built from the real candidates (post host
+    // exclusion), so the index lines up with the explicit-`window` matcher.
+    let windows: Vec<Value> = cands
+        .iter()
+        .enumerate()
+        .map(|(i, c)| {
+            let title = if c.os_title.trim().is_empty() {
+                c.page_title.trim().to_string()
+            } else {
+                c.os_title.trim().to_string()
+            };
+            json!({ "index": i, "title": title, "url": c.page_url })
+        })
+        .collect();
 
     Ok(json!({
         "pageUrl": page_url,
@@ -609,6 +671,7 @@ pub async fn snapshot(port: u16, window: Option<&str>) -> Result<Value, String> 
         "refCount": ref_count,
         "windows": windows,
         "activeWindow": active_window,
+        "activeIndex": chosen_idx,
         // Echo the resolved target so a wrong-app attach is instantly visible.
         "port": port,
         "pid": resolved_pid,
@@ -714,7 +777,7 @@ async fn app_windows_with_rects(port: u16) -> Vec<(i64, String, f64, f64, f64, f
 /// The foreground OS window's HWND, if any — used to default the snapshot to the
 /// window currently in focus (e.g. Settings right after it opens).
 #[cfg(windows)]
-fn foreground_hwnd() -> Option<i64> {
+pub(crate) fn foreground_hwnd() -> Option<i64> {
     use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
     unsafe {
         let h = GetForegroundWindow();
@@ -732,7 +795,7 @@ async fn app_windows_with_rects(_port: u16) -> Vec<(i64, String, f64, f64, f64, 
 }
 
 #[cfg(not(windows))]
-fn foreground_hwnd() -> Option<i64> {
+pub(crate) fn foreground_hwnd() -> Option<i64> {
     None
 }
 

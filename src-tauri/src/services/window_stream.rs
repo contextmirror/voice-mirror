@@ -24,14 +24,24 @@ static STREAM_GENERATION: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Default)]
 struct StreamState {
+    /// A capture thread is running (some window is being mirrored).
     running: bool,
     /// Generation of the stream currently owning the global state + buffer.
     generation: u64,
+    /// The STABLE MJPEG port. The server (and this port) live ACROSS re-targets —
+    /// only the capture thread's target HWND is swapped — so the live preview
+    /// `<img>` keeps the same `/stream` URL and shows the new window seamlessly.
     port: u16,
     hwnd: i64,
     title: String,
     fps: u32,
-    stop_flag: Option<Arc<AtomicBool>>,
+    /// True once the MJPEG server thread is up and its port is bound.
+    server_running: bool,
+    /// Stops ONLY the capture thread (swapped on every re-target).
+    capture_stop: Option<Arc<AtomicBool>>,
+    /// Stops the MJPEG server (only on a full `stop()`), keeping the port stable
+    /// while we re-point the captured window.
+    server_stop: Option<Arc<AtomicBool>>,
 }
 
 /// Shared frame buffer — latest JPEG bytes, lock-free.
@@ -39,6 +49,17 @@ static FRAME_BUFFER: std::sync::OnceLock<Arc<ArcSwap<Vec<u8>>>> = std::sync::Onc
 
 fn frame_buffer() -> &'static Arc<ArcSwap<Vec<u8>>> {
     FRAME_BUFFER.get_or_init(|| Arc::new(ArcSwap::from_pointee(Vec::new())))
+}
+
+/// The HWND the live stream is currently capturing, if one is running. Lets the
+/// sandbox screenshot verify it is mirroring the SAME window snapshot/click is
+/// driving (the unified active-window model) and re-target it when it isn't.
+pub(crate) fn current_hwnd() -> Option<i64> {
+    state()
+        .lock()
+        .ok()
+        .filter(|s| s.running)
+        .map(|s| s.hwnd)
 }
 
 /// The most recent captured JPEG frame, if a stream is running and has produced
@@ -56,41 +77,66 @@ pub(crate) fn latest_frame() -> Option<Vec<u8>> {
     }
 }
 
-/// Start streaming a window. Returns the port number on success.
+/// Start (or RE-TARGET) the window mirror. Returns the (stable) MJPEG port.
+///
+/// PORT-PRESERVING retarget: if the MJPEG server is already running we REUSE its
+/// port + server thread and only swap the capture thread's target HWND. The live
+/// preview `<img>` is pinned to `/stream` on that port, so re-pointing the
+/// captured window (from `capture_app_window` OR the frontend switcher) shows the
+/// new window with no flicker and no port churn. Only `stop()` tears the server
+/// down. The capture thread and server now have SEPARATE stop flags.
 pub fn start(hwnd: i64, fps: u32) -> Result<u16, String> {
-    // Stop any existing stream
-    let _ = stop();
-
-    let port = find_available_port()?;
-    let stop_flag = Arc::new(AtomicBool::new(false));
     let buffer = frame_buffer().clone();
-    // Drop the previous window's last frame so a re-target (e.g. snapping back
-    // after a Settings window closed) never momentarily shows the OLD window's
-    // stale picture before the new window's first frame arrives.
-    buffer.store(Arc::new(Vec::new()));
 
-    // Claim a fresh generation for THIS stream. Any older capture thread still
-    // tearing down will see a newer generation and refuse to touch the shared
-    // state/buffer, so it can't wedge us at running=false / empty.
+    // Claim a fresh generation for THIS capture thread. Any older capture thread
+    // still tearing down will see a newer generation and refuse to touch the
+    // shared state/buffer, so it can't wedge us at running=false / empty.
     let generation = STREAM_GENERATION.fetch_add(1, Ordering::SeqCst) + 1;
 
     // Get window title for display
     let title = get_window_title(hwnd);
 
-    // Update state
-    {
+    // Stop flag for THIS capture thread only (the server's is independent).
+    let capture_stop = Arc::new(AtomicBool::new(false));
+
+    // Decide: reuse the existing server (port-preserving retarget) or start one.
+    let (port, start_server, server_stop) = {
         let mut st = state().lock().unwrap();
+
+        // Stop ONLY the previous capture thread; leave the MJPEG server running.
+        if let Some(flag) = st.capture_stop.take() {
+            flag.store(true, Ordering::SeqCst);
+        }
+
+        // Drop the previous window's last frame so a re-target never momentarily
+        // shows the OLD window's stale picture before the new window's first frame.
+        buffer.store(Arc::new(Vec::new()));
+
+        let (port, start_server, server_stop) =
+            if st.server_running && st.port != 0 && st.server_stop.is_some() {
+                // Reuse the live server + its port. No find_available_port, no
+                // server restart — the /stream URL stays identical.
+                (st.port, false, st.server_stop.clone().unwrap())
+            } else {
+                let p = find_available_port()?;
+                (p, true, Arc::new(AtomicBool::new(false)))
+            };
+
         st.running = true;
         st.generation = generation;
         st.port = port;
         st.hwnd = hwnd;
         st.title = title.clone();
         st.fps = fps;
-        st.stop_flag = Some(stop_flag.clone());
-    }
+        st.capture_stop = Some(capture_stop.clone());
+        if start_server {
+            st.server_running = true;
+            st.server_stop = Some(server_stop.clone());
+        }
+        (port, start_server, server_stop)
+    };
 
-    // Start capture thread (WGC + JPEG encoding)
-    let capture_stop = stop_flag.clone();
+    // Start capture thread (WGC + JPEG encoding) on the (new) target window.
     let capture_buffer = buffer.clone();
     std::thread::Builder::new()
         .name("wgc-capture".into())
@@ -107,30 +153,42 @@ pub fn start(hwnd: i64, fps: u32) -> Result<u16, String> {
         })
         .map_err(|e| format!("Failed to spawn capture thread: {}", e))?;
 
-    // Start MJPEG server thread
-    let server_stop = stop_flag.clone();
-    let server_buffer = buffer;
-    std::thread::Builder::new()
-        .name("mjpeg-server".into())
-        .spawn(move || {
-            run_mjpeg_server(port, server_stop, server_buffer);
-        })
-        .map_err(|e| format!("Failed to spawn MJPEG server: {}", e))?;
+    // Start the MJPEG server ONLY if one isn't already serving this port. On a
+    // retarget the existing server keeps streaming from the same FRAME_BUFFER.
+    if start_server {
+        let server_buffer = buffer;
+        std::thread::Builder::new()
+            .name("mjpeg-server".into())
+            .spawn(move || {
+                run_mjpeg_server(port, server_stop, server_buffer);
+            })
+            .map_err(|e| format!("Failed to spawn MJPEG server: {}", e))?;
+    }
 
     info!(
-        "Started window stream: '{}' (hwnd={}) on port {}",
-        title, hwnd, port
+        "{} window stream: '{}' (hwnd={}) on port {}",
+        if start_server { "Started" } else { "Re-targeted" },
+        title,
+        hwnd,
+        port
     );
     Ok(port)
 }
 
-/// Stop the current stream.
+/// Stop the current stream — tears down BOTH the capture thread and the MJPEG
+/// server (releasing the port), and clears the buffer. A subsequent `start()`
+/// allocates a fresh port.
 pub fn stop() -> Result<(), String> {
     let mut st = state().lock().unwrap();
-    if let Some(flag) = st.stop_flag.take() {
+    if let Some(flag) = st.capture_stop.take() {
+        flag.store(true, Ordering::SeqCst);
+    }
+    if let Some(flag) = st.server_stop.take() {
         flag.store(true, Ordering::SeqCst);
     }
     st.running = false;
+    st.server_running = false;
+    st.port = 0;
     // Drop the last frame so a stopped stream can't serve a stale picture.
     frame_buffer().store(Arc::new(Vec::new()));
     info!("Window stream stopped");
@@ -382,7 +440,17 @@ fn run_capture(
                 image::ExtendedColorType::Rgb8,
             ) {
                 Ok(()) => {
-                    buffer.store(Arc::new(jpeg_buf.into_inner()));
+                    // Only the CURRENT generation may publish frames. A superseded
+                    // capture thread (the old window, winding down after a
+                    // port-preserving retarget) must not overwrite the new window's
+                    // frames in the shared buffer the live server reads.
+                    if state()
+                        .lock()
+                        .map(|s| s.generation == generation)
+                        .unwrap_or(false)
+                    {
+                        buffer.store(Arc::new(jpeg_buf.into_inner()));
+                    }
                 }
                 Err(e) => {
                     warn!("JPEG encode failed: {}", e);
@@ -428,6 +496,15 @@ pub(crate) fn run_mjpeg_server(port: u16, stop_flag: Arc<AtomicBool>, buffer: Ar
         Ok(l) => l,
         Err(e) => {
             error!("Failed to bind MJPEG server on {}: {}", addr, e);
+            // Mark the server as down so a later start() re-allocates a port + server
+            // instead of reusing this dead one in a port-preserving retarget.
+            if let Ok(mut st) = state().lock() {
+                if st.port == port {
+                    st.server_running = false;
+                    st.port = 0;
+                    st.server_stop = None;
+                }
+            }
             return;
         }
     };

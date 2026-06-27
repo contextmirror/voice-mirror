@@ -47,22 +47,33 @@ pub async fn handle_sandbox_snapshot(
             let tree = resp.get("tree").and_then(|v| v.as_str()).unwrap_or("");
             let page_url = resp.get("pageUrl").and_then(|v| v.as_str()).unwrap_or("");
             let ref_count = resp.get("refCount").and_then(|v| v.as_i64()).unwrap_or(0);
+            // `windows` is now a list of { index, title, url } so identical titles
+            // ("Yap, Yap, Yap") can be disambiguated by route or index.
             let windows = resp
                 .get("windows")
                 .and_then(|v| v.as_array())
                 .map(|a| {
                     a.iter()
-                        .filter_map(|w| w.as_str())
+                        .map(|w| {
+                            let idx = w.get("index").and_then(|v| v.as_i64()).unwrap_or(0);
+                            let title = w.get("title").and_then(|v| v.as_str()).unwrap_or("");
+                            let url = w.get("url").and_then(|v| v.as_str()).unwrap_or("");
+                            format!("[{}] {} — {}", idx, title, url)
+                        })
                         .collect::<Vec<_>>()
-                        .join(", ")
+                        .join("\n  ")
                 })
                 .unwrap_or_default();
             // Echo the resolved target so a wrong-app attach is instantly visible.
             let active_window = resp.get("activeWindow").and_then(|v| v.as_str()).unwrap_or("");
+            let active_index = resp.get("activeIndex").and_then(|v| v.as_i64());
             let port = resp.get("port").and_then(|v| v.as_i64());
             let pid = resp.get("pid").and_then(|v| v.as_i64());
             let target_line = {
                 let mut parts: Vec<String> = Vec::new();
+                if let Some(i) = active_index {
+                    parts.push(format!("[{}]", i));
+                }
                 if !active_window.is_empty() {
                     parts.push(format!("window \"{}\"", active_window));
                 }
@@ -87,7 +98,8 @@ pub async fn handle_sandbox_snapshot(
                     String::new()
                 } else {
                     format!(
-                        "\nApp windows (snapshot again with `window` to target one): {}",
+                        "\nApp windows (snapshot again with `window` set to a route/URL substring, \
+                         an index, or a title to target one):\n  {}",
                         windows
                     )
                 };
@@ -118,9 +130,28 @@ pub async fn handle_sandbox_screenshot(
                     .unwrap_or("image/jpeg");
                 let mut result =
                     McpToolResult::image(base64.to_string(), content_type.to_string());
-                result.content.push(McpContent::Text {
-                    text: "The app you are building, at its true window size.".into(),
-                });
+                // Echo the SAME window/route snapshot resolved, so it's instantly
+                // visible that the screenshot and snapshot/click agree (they now
+                // share one active window by construction).
+                let active_window = resp.get("activeWindow").and_then(|v| v.as_str()).unwrap_or("");
+                let active_url = resp.get("activeUrl").and_then(|v| v.as_str()).unwrap_or("");
+                let active_index = resp.get("activeIndex").and_then(|v| v.as_i64());
+                let mut caption =
+                    "The app you are building, at its true window size.".to_string();
+                let mut parts: Vec<String> = Vec::new();
+                if let Some(i) = active_index {
+                    parts.push(format!("[{}]", i));
+                }
+                if !active_window.is_empty() {
+                    parts.push(format!("window \"{}\"", active_window));
+                }
+                if !active_url.is_empty() {
+                    parts.push(active_url.to_string());
+                }
+                if !parts.is_empty() {
+                    caption.push_str(&format!(" Showing {}.", parts.join(" — ")));
+                }
+                result.content.push(McpContent::Text { text: caption });
                 result
             } else {
                 McpToolResult::error(format!(

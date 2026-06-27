@@ -815,12 +815,12 @@ fn build_all_groups() -> HashMap<String, ToolGroupDef> {
                 },
                 ToolDef {
                     name: "sandbox_snapshot".into(),
-                    description: "See the structure of the app you're building (a desktop/Tauri app running with CDP). Returns the accessibility tree as @ref element handles, plus a `windows` list of the app's open windows. Call this FIRST, then use the @refs with sandbox_click / sandbox_type. To work in a secondary window (e.g. a settings window), call sandbox_snapshot again with `window` set to that window's title — subsequent sandbox_click / sandbox_type act on whichever window you last snapshotted. `port` is optional.".into(),
+                    description: "See the structure of the app you're building (a desktop/Tauri app running with CDP). Returns the accessibility tree as @ref element handles, plus a `windows` list of the app's open windows (each as `[index] title — url`). Call this FIRST, then use the @refs with sandbox_click / sandbox_type. To work in a secondary window (e.g. a settings window), call sandbox_snapshot again with `window` — subsequent sandbox_click / sandbox_type act on whichever window you last snapshotted. `port` is optional.".into(),
                     input_schema: json!({
                         "type": "object",
                         "properties": {
                             "port": { "type": "number", "description": "CDP remote-debugging port. Omit to use the active sandbox app launched by Voice Mirror." },
-                            "window": { "type": "string", "description": "Title (or part of it) of the app window to snapshot, from a previous snapshot's `windows` list. Omit for the main window. click/type then target this window." }
+                            "window": { "type": "string", "description": "Which window to snapshot, from a previous snapshot's `windows` list. Apps often give every window the SAME title (e.g. all 'Yap'), so prefer a URL/route substring (e.g. 'settings' → settings.html) or the index number (e.g. '1'); a title (or part of it) also works. Omit for the window currently shown in the live preview. click/type then target this window." }
                         }
                     }),
                 },

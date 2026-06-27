@@ -86,12 +86,44 @@ pub fn stop(_cdp_port: u16) {
 /// Screenshot the app window for the AI — the same WGC frame the live preview
 /// shows. Reliable for transparent windows (which CDP captures as black).
 /// Requires the live preview to be streaming (it auto-opens for Tauri apps).
-pub fn capture_app_window() -> Result<Value, String> {
+///
+/// UNIFIED ACTIVE WINDOW: the screenshot MUST be of the same window
+/// snapshot/click is driving (`active_hwnd`), never "the frontmost OS window".
+/// If the live stream is lagging on a different window (e.g. the preview poll
+/// hasn't caught up after a snapshot re-pointed the active window), we re-target
+/// the WGC stream to the active window HERE and wait for its first frame, so the
+/// screenshot can never diverge from snapshot/click. The resolved url/title/index
+/// are echoed so a wrong-window attach is instantly visible.
+pub async fn capture_app_window() -> Result<Value, String> {
+    if let Some(target) = crate::services::sandbox::active_hwnd() {
+        if crate::services::sandbox::is_window_alive(target)
+            && crate::services::window_stream::current_hwnd() != Some(target)
+        {
+            // Re-point the single global WGC stream onto the active window. It
+            // re-acquires the same MJPEG port after stopping, so the live preview
+            // <img> keeps working; the preview store's next poll re-syncs anyway.
+            crate::services::window_stream::start(target, 30)?;
+            // Wait for the re-pointed window's first frame (≤3s).
+            for _ in 0..60 {
+                if crate::services::window_stream::latest_frame().is_some() {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+        }
+    }
     let jpeg = crate::services::window_stream::latest_frame().ok_or_else(|| {
         "No live app frame yet — open the App Preview (it auto-opens for Tauri apps) so the window is being captured.".to_string()
     })?;
     let b64 = crate::voice::tts::crypto::base64_encode(&jpeg);
-    Ok(serde_json::json!({ "base64": b64, "contentType": "image/jpeg" }))
+    let meta = crate::services::sandbox::active_meta();
+    Ok(serde_json::json!({
+        "base64": b64,
+        "contentType": "image/jpeg",
+        "activeWindow": meta.title,
+        "activeUrl": meta.url,
+        "activeIndex": meta.index,
+    }))
 }
 
 /// Find the OS window for the app on `cdp_port`. Prefers the RESOLVED sandbox
@@ -118,13 +150,26 @@ async fn find_app_hwnd(cdp_port: u16) -> Option<i64> {
             match crate::commands::screenshot::list_visible_windows_metadata() {
                 Ok(windows) => {
                     let t = title.trim().to_lowercase();
-                    if let Some(w) = windows.iter().find(|w| {
-                        let wt = w.title.trim().to_lowercase();
-                        !wt.is_empty()
-                            && (wt == t || wt.contains(&t) || t.contains(&wt))
-                            && !crate::services::sandbox::is_host_window(w.hwnd, &w.title)
-                    }) {
-                        return Some(w.hwnd);
+                    let matches: Vec<&_> = windows
+                        .iter()
+                        .filter(|w| {
+                            let wt = w.title.trim().to_lowercase();
+                            !wt.is_empty()
+                                && (wt == t || wt.contains(&t) || t.contains(&wt))
+                                && !crate::services::sandbox::is_host_window(w.hwnd, &w.title)
+                        })
+                        .collect();
+                    if !matches.is_empty() {
+                        // When several windows share the title (e.g. all "Yap"),
+                        // prefer the FOREGROUND one — what the user is looking at —
+                        // so the very first preview mirrors what's on screen rather
+                        // than an arbitrary same-titled window. snapshot then keys
+                        // off this preview window, keeping them aligned.
+                        let fg = crate::services::sandbox::foreground_hwnd();
+                        if let Some(w) = matches.iter().find(|w| Some(w.hwnd) == fg) {
+                            return Some(w.hwnd);
+                        }
+                        return Some(matches[0].hwnd);
                     }
                     if attempt == 0 || attempt == 5 {
                         let titles: Vec<&str> = windows.iter().map(|w| w.title.as_str()).collect();
