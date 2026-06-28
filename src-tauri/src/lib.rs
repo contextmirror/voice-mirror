@@ -174,6 +174,7 @@ pub fn run() {
     // Initialize structured logging (file + console + output ring buffers)
     let output_store = services::logger::init();
     install_panic_hook();
+    services::crash_handler::install();
     rotate_log_sessions();
 
     // Enable Chrome DevTools Protocol remote debugging on the WebView2 browser

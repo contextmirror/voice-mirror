@@ -5,6 +5,7 @@ pub mod dev_server;
 pub mod file_watcher;
 pub mod inbox_watcher;
 pub mod input_hook;
+pub mod crash_handler;
 pub mod logger;
 pub mod output;
 pub mod platform;
