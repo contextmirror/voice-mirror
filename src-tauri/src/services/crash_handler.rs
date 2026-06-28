@@ -110,7 +110,7 @@ mod imp {
             Ok(h) => h,
             Err(_) => return false,
         };
-        let mut mei = MINIDUMP_EXCEPTION_INFORMATION {
+        let mei = MINIDUMP_EXCEPTION_INFORMATION {
             ThreadId: GetCurrentThreadId(),
             ExceptionPointers: info as *mut _,
             ClientPointers: FALSE,

@@ -127,6 +127,48 @@ describe('sandbox-preview: auto-open guard (remount-proof)', () => {
   });
 });
 
+describe('sandbox-preview: closed-window recovery', () => {
+  it('tracks a noWindow empty-state flag in $state with a getter', () => {
+    assert.ok(
+      /let\s+noWindow\s*=\s*\$state\(false\)/.test(src),
+      'Should hold noWindow in $state(false)'
+    );
+    assert.ok(src.includes('get noWindow()'), 'Should expose a noWindow getter');
+  });
+
+  it('prefers re-targeting to a VISIBLE window when the followed one closes', () => {
+    // The retarget block filters the live window list by the backend `visible`
+    // flag and starts the stream on a surviving window.
+    assert.ok(src.includes('w.visible'), 'Should filter windows by the visible flag');
+    assert.ok(
+      /startStream\(visible\[0\]\.hwnd\)/.test(src),
+      'Should re-target to the first visible window'
+    );
+  });
+
+  it('sets noWindow (not an endless spinner) when nothing is mirrorable', () => {
+    assert.ok(/noWindow\s*=\s*true/.test(src), 'Should set noWindow = true when no visible window');
+  });
+
+  it('clears noWindow when a window is shown / on open / on show', () => {
+    assert.ok(/noWindow\s*=\s*false/.test(src), 'Should reset noWindow = false somewhere');
+    const openBlock = src.split('async open(port')[1]?.split('syncAuto(')[0] || '';
+    assert.ok(openBlock.includes('noWindow = false'), 'open() should clear noWindow');
+  });
+
+  it('exposes an async openApp() that re-launches via sandbox-start-request', () => {
+    assert.ok(/async openApp\(\)/.test(src), 'Should expose async openApp()');
+    assert.ok(
+      src.includes("emit('sandbox-start-request'") || src.includes('emit("sandbox-start-request"'),
+      'openApp should emit sandbox-start-request'
+    );
+    assert.ok(
+      src.includes("from '@tauri-apps/api/event'"),
+      'Should import emit from @tauri-apps/api/event'
+    );
+  });
+});
+
 describe('sandbox-preview: multi-window', () => {
   it('tracks the window list and current window', () => {
     assert.ok(/let\s+windows\s*=\s*\$state\(/.test(src), 'Should hold a windows list in $state');

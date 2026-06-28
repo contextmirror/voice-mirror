@@ -15,6 +15,7 @@
  * State split: `active` (a session is running) vs `visible` (the panel is shown).
  * Hiding keeps the session alive so toggling vs the Browser is instant.
  */
+import { emit } from '@tauri-apps/api/event';
 import {
   sandboxStreamStart,
   sandboxStreamStop,
@@ -36,9 +37,13 @@ function createSandboxPreviewStore() {
   let streamUrl = $state('');
   let loading = $state(false);
   let error = $state('');
-  /** @type {Array<{hwnd:number,title:string}>} */
+  /** @type {Array<{hwnd:number,title:string,visible?:boolean}>} */
   let windows = $state([]);
   let currentHwnd = $state(null);
+  // True when the followed app window closed and NO other VISIBLE window remains
+  // to mirror — drives a clear "App window closed" empty state instead of an
+  // infinite "Waiting…" spinner. Cleared whenever a real window is shown again.
+  let noWindow = $state(false);
 
   // Non-reactive bookkeeping for polling.
   let pollTimer = null;
@@ -73,6 +78,8 @@ function createSandboxPreviewStore() {
       if (data?.url) {
         setStreamUrl(data.url);
         if (data.hwnd != null) currentHwnd = data.hwnd;
+        // We're mirroring a window again — leave the "no window" empty state.
+        noWindow = false;
       } else {
         error = 'Failed to start the live preview.';
       }
@@ -109,13 +116,22 @@ function createSandboxPreviewStore() {
         startStream(activeHwnd);
         return;
       }
-      // Snap back to the main window the instant the one we're mirroring has
-      // CLOSED (e.g. you closed Settings). `windows` is the authoritative LIVE
-      // window list for the app's process — if currentHwnd isn't in it, the
-      // window is genuinely gone, so re-target now rather than freezing on its
-      // last (stale) frame. The backend also refuses to re-target a dead HWND.
-      if (currentHwnd != null && !present.has(currentHwnd) && windows.length > 0) {
-        startStream(null);
+      // The window we're mirroring has CLOSED (e.g. you closed Settings).
+      // `windows` is the authoritative LIVE window list for the app's process —
+      // if currentHwnd isn't in it, the window is genuinely gone. Re-target to
+      // another VISIBLE window rather than freezing on its last (stale) frame or
+      // hanging on a non-presentable one (a multi-window pill app can be left
+      // with only a hidden pill + transparent overlay, neither mirrorable).
+      if (currentHwnd != null && !present.has(currentHwnd)) {
+        const visible = windows.filter((w) => w.visible && w.hwnd !== currentHwnd);
+        if (visible.length > 0) {
+          // Prefer a real, presentable window — pick the first one.
+          startStream(visible[0].hwnd);
+        } else {
+          // Nothing presentable to mirror — show a clear empty state instead of
+          // spinning forever. (Cleared the moment any window is shown again.)
+          noWindow = true;
+        }
       }
     } catch {
       // transient — try again next tick
@@ -144,6 +160,7 @@ function createSandboxPreviewStore() {
     get error() { return error; },
     get windows() { return windows; },
     get currentHwnd() { return currentHwnd; },
+    get noWindow() { return noWindow; },
 
     /**
      * Begin a live preview for the app on `port` (CDP) and show it. Idempotent:
@@ -170,6 +187,7 @@ function createSandboxPreviewStore() {
       userPinned = false;
       currentHwnd = null;
       windows = [];
+      noWindow = false;
       await startStream(null); // main window
       startPolling();
     },
@@ -200,7 +218,18 @@ function createSandboxPreviewStore() {
       if (active) {
         userHidden = false;
         visible = true;
+        noWindow = false;
       }
+    },
+
+    /**
+     * (Re)launch the current project's app so a closed/missing app window comes
+     * back. Reuses the existing dev-server launch flow: LensWorkspace listens for
+     * `sandbox-start-request` and runs detectDevServers → devServerManager.start.
+     * Frontend-emitted events ARE caught by that `listen`, so this is all it needs.
+     */
+    async openApp() {
+      await emit('sandbox-start-request', {});
     },
 
     /** Hide the panel but keep the screencast running (instant to re-show). */
@@ -244,6 +273,7 @@ function createSandboxPreviewStore() {
       cdpPort = null;
       windows = [];
       currentHwnd = null;
+      noWindow = false;
       userPinned = false;
       attached = false;
       userHidden = false;

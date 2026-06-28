@@ -39,6 +39,36 @@ use tracing::{info, warn};
 pub struct AppWindow {
     pub hwnd: i64,
     pub title: String,
+    /// Whether the window is actually PRESENTABLE right now: shown
+    /// (`IsWindowVisible`) AND has a non-zero size. A multi-window pill app can
+    /// leave behind hidden/zero-size windows (the hidden pill, a transparent
+    /// overlay) once its real window (e.g. Settings) closes — those can't be
+    /// mirrored, so the preview uses this flag to re-target to a real window (or
+    /// show a clear empty state) instead of hanging on a blank stream.
+    pub visible: bool,
+}
+
+/// True when `hwnd` is presentable: shown (`IsWindowVisible`) and non-zero size.
+#[cfg(windows)]
+fn is_hwnd_presentable(hwnd: i64) -> bool {
+    use windows::Win32::Foundation::{HWND, RECT};
+    use windows::Win32::UI::WindowsAndMessaging::{GetWindowRect, IsWindowVisible};
+    unsafe {
+        let h = HWND(hwnd as *mut std::ffi::c_void);
+        if !IsWindowVisible(h).as_bool() {
+            return false;
+        }
+        let mut rect = RECT::default();
+        if GetWindowRect(h, &mut rect).is_err() {
+            return false;
+        }
+        (rect.right - rect.left) > 0 && (rect.bottom - rect.top) > 0
+    }
+}
+
+#[cfg(not(windows))]
+fn is_hwnd_presentable(_hwnd: i64) -> bool {
+    true
 }
 
 /// Start the live preview for the app on CDP `cdp_port`. Returns
@@ -269,6 +299,7 @@ pub async fn list_windows(cdp_port: u16) -> Result<Vec<AppWindow>, String> {
             // Never list Voice Mirror's own windows as app targets.
             .filter(|w| !crate::services::sandbox::is_host_window(w.hwnd, &w.title))
             .map(|w| AppWindow {
+                visible: is_hwnd_presentable(w.hwnd),
                 hwnd: w.hwnd,
                 title: w.title,
             })
