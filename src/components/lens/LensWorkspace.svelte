@@ -468,6 +468,28 @@
     }
   });
 
+  // The MAXIMIZED App Preview is a full overlay over the editor. So when the user
+  // focuses a different editor tab (opening a file from the tree/search, or clicking
+  // an open tab), surface the editor by dropping the overlay (re-openable via the App
+  // button). Only acts on a real tab CHANGE — not on mount, and not when toggling the
+  // App/maximize buttons (those don't change the active tab), so it never fights them.
+  let lastFocusedTabId;
+  let tabRevealArmed = false;
+  $effect(() => {
+    const id = focusedActiveTabId;
+    if (!tabRevealArmed) {
+      tabRevealArmed = true;
+      lastFocusedTabId = id;
+      return;
+    }
+    if (id !== lastFocusedTabId) {
+      lastFocusedTabId = id;
+      if (id && sandboxPreviewStore.visible && sandboxPreviewStore.maximized) {
+        sandboxPreviewStore.hide();
+      }
+    }
+  });
+
   // Toggle the App Preview, making it mutually exclusive with the Browser.
   function toggleAppPreview() {
     if (sandboxPreviewStore.visible) {
