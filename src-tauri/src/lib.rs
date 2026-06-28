@@ -125,10 +125,55 @@ fn position_fits_monitor(window: &tauri::WebviewWindow, x: i32, y: i32, w: u32, 
     })
 }
 
+/// Install a panic hook that captures panics (especially main-thread ones, which
+/// otherwise kill the app and vanish into the terminal) into the `app` log channel
+/// AND a dedicated crash file, with a forced backtrace. Chains to the default hook
+/// so the panic still prints to stderr. Makes the next crash self-diagnosing.
+fn install_panic_hook() {
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let backtrace = std::backtrace::Backtrace::force_capture();
+        let thread = std::thread::current();
+        let thread_name = thread.name().unwrap_or("<unnamed>").to_string();
+        let location = info
+            .location()
+            .map(|l| format!("{}:{}:{}", l.file(), l.line(), l.column()))
+            .unwrap_or_else(|| "<unknown>".to_string());
+        let payload = info.to_string();
+
+        // Best-effort structured log (may not flush if the process is exiting).
+        tracing::error!(target: "app", thread = %thread_name, location = %location, "PANIC: {}", payload);
+
+        // Reliable: synchronous crash file write (survives an exiting process).
+        let epoch = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let text = format!(
+            "==== Voice Mirror PANIC ====\nepoch: {epoch}\nthread: {thread_name}\nlocation: {location}\nmessage: {payload}\n\nbacktrace:\n{backtrace}\n============================\n\n"
+        );
+        let dir = services::platform::get_log_dir();
+        let _ = std::fs::create_dir_all(&dir);
+        let _ = std::fs::write(dir.join(format!("panic-{epoch}.log")), &text);
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(dir.join("crashes.log"))
+        {
+            use std::io::Write;
+            let _ = f.write_all(text.as_bytes());
+        }
+
+        // Chain to the default hook (prints to stderr / the dev terminal).
+        default_hook(info);
+    }));
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Initialize structured logging (file + console + output ring buffers)
     let output_store = services::logger::init();
+    install_panic_hook();
     rotate_log_sessions();
 
     // Enable Chrome DevTools Protocol remote debugging on the WebView2 browser
