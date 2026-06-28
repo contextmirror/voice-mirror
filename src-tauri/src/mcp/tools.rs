@@ -815,18 +815,19 @@ fn build_all_groups() -> HashMap<String, ToolGroupDef> {
                 },
                 ToolDef {
                     name: "sandbox_snapshot".into(),
-                    description: "See the structure of the app you're building (a desktop/Tauri app running with CDP). Returns the accessibility tree as @ref element handles, plus a `windows` list of the app's open windows (each as `[index] title — url`). Call this FIRST, then use the @refs with sandbox_click / sandbox_type. To work in a secondary window (e.g. a settings window), call sandbox_snapshot again with `window` — subsequent sandbox_click / sandbox_type act on whichever window you last snapshotted. `port` is optional.".into(),
+                    description: "See the structure of the app you're building. Returns the accessibility tree as @ref element handles, plus a `windows` list of the app's open windows (each as `[index] title — url`). Call this FIRST, then use the @refs with sandbox_click / sandbox_type. Works for BOTH a CDP/Tauri/WebView2 app (default, via `port`) AND any NATIVE Windows app — Calculator, Notepad, Settings, Win32/WinForms/WPF/Qt — by passing `hwnd` (drives it via UI Automation; same @refs, same tools). To work in a secondary window (e.g. a settings window), call sandbox_snapshot again with `window` — subsequent sandbox_click / sandbox_type act on whichever window you last snapshotted. `port`/`hwnd` are optional.".into(),
                     input_schema: json!({
                         "type": "object",
                         "properties": {
                             "port": { "type": "number", "description": "CDP remote-debugging port. Omit to use the active sandbox app launched by Voice Mirror." },
-                            "window": { "type": "string", "description": "Which window to snapshot, from a previous snapshot's `windows` list. Apps often give every window the SAME title (e.g. all 'Yap'), so prefer a URL/route substring (e.g. 'settings' → settings.html) or the index number (e.g. '1'); a title (or part of it) also works. Omit for the window currently shown in the live preview. click/type then target this window." }
+                            "hwnd": { "type": "number", "description": "Exact window handle from capture_list_windows — drive a NATIVE (non-CDP) app like Notepad/Calculator/Settings via UI Automation. Mutually exclusive with `port`." },
+                            "window": { "type": "string", "description": "Which window to snapshot, from a previous snapshot's `windows` list. Apps often give every window the SAME title (e.g. all 'Yap'), so prefer a URL/route substring (e.g. 'settings' → settings.html) or the index number (e.g. '1'); a title (or part of it) also works. With no active CDP app, a `window` title resolves a native window by name (e.g. 'Calculator'). Omit for the window currently shown in the live preview. click/type then target this window." }
                         }
                     }),
                 },
                 ToolDef {
                     name: "sandbox_screenshot".into(),
-                    description: "See the app you're building, rendered at its TRUE window size (the real running app window, not a stretched web preview). Use this to visually verify your changes. `port` is optional — defaults to the active sandbox app.".into(),
+                    description: "See the app you're building, rendered at its TRUE window size (the real running app window, not a stretched web preview). Use this to visually verify your changes. Works for CDP/Tauri apps and for NATIVE apps you snapshotted by `hwnd` (Notepad/Calculator/Settings). `port` is optional — defaults to the active sandbox app (or the native window from the last sandbox_snapshot).".into(),
                     input_schema: json!({
                         "type": "object",
                         "properties": {
@@ -836,7 +837,7 @@ fn build_all_groups() -> HashMap<String, ToolGroupDef> {
                 },
                 ToolDef {
                     name: "sandbox_click".into(),
-                    description: "Click an element in the running app you're building, to test it. Use an @ref from the most recent sandbox_snapshot — it acts on whichever window that snapshot targeted. `port` is optional.".into(),
+                    description: "Click an element in the running app you're building, to test it. Use an @ref from the most recent sandbox_snapshot — it acts on whichever window that snapshot targeted (CDP/Tauri app OR a native app like Notepad/Calculator/Settings). `port` is optional.".into(),
                     input_schema: json!({
                         "type": "object",
                         "properties": {
@@ -848,7 +849,7 @@ fn build_all_groups() -> HashMap<String, ToolGroupDef> {
                 },
                 ToolDef {
                     name: "sandbox_type".into(),
-                    description: "Type text into an element in the running app you're building, to test input. Use an @ref from the most recent sandbox_snapshot — it acts on whichever window that snapshot targeted. `port` is optional.".into(),
+                    description: "Type text into an element in the running app you're building, to test input. Use an @ref from the most recent sandbox_snapshot — it acts on whichever window that snapshot targeted (CDP/Tauri app OR a native app like Notepad/Calculator/Settings). `port` is optional.".into(),
                     input_schema: json!({
                         "type": "object",
                         "properties": {

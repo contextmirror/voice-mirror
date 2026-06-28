@@ -12,4 +12,5 @@ pub mod ports;
 pub mod sandbox;
 pub mod sandbox_stream;
 pub mod text_injector;
+pub mod uia;
 pub mod window_stream;

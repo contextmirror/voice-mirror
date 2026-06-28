@@ -79,6 +79,40 @@ pub fn active_cdp_port() -> Option<u16> {
     active_port_cell().lock().ok().and_then(|g| *g)
 }
 
+// ── Active backend marker (CDP vs UIA) ────────────────────────────────────────
+// The sandbox tools can drive TWO kinds of app: a CDP/WebView2 app (this module)
+// or a NATIVE window over UI Automation (`crate::services::uia`). The active
+// backend is recorded by whichever `snapshot` ran last, so a follow-up
+// click/type/screenshot with no explicit `port`/`hwnd` routes to the SAME engine.
+
+/// Which engine the active sandbox target is driven through.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ActiveBackend {
+    /// A CDP/WebView2 app on this remote-debugging port.
+    Cdp(u16),
+    /// A native window (Win32/WinForms/WPF/Qt/UWP) driven via UI Automation.
+    Uia(i64),
+}
+
+static ACTIVE_BACKEND: OnceLock<Mutex<Option<ActiveBackend>>> = OnceLock::new();
+
+fn active_backend_cell() -> &'static Mutex<Option<ActiveBackend>> {
+    ACTIVE_BACKEND.get_or_init(|| Mutex::new(None))
+}
+
+/// Record (or clear) the active sandbox backend (CDP port or UIA window).
+pub fn set_active_backend(backend: Option<ActiveBackend>) {
+    if let Ok(mut g) = active_backend_cell().lock() {
+        *g = backend;
+    }
+}
+
+/// The active sandbox backend, if any — lets click/type/screenshot follow the
+/// engine the last snapshot used.
+pub fn active_backend() -> Option<ActiveBackend> {
+    active_backend_cell().lock().ok().and_then(|g| *g)
+}
+
 // ── Host identity (so the sandbox NEVER targets Voice Mirror itself) ──────────
 // Voice Mirror's own renderer is a CDP server on HOST_CDP_PORT and both the host
 // and a dev app can serve on localhost:1420 — so URL/title can't disambiguate.
@@ -100,7 +134,7 @@ pub fn host_cdp_port() -> u16 {
 /// The owning process id of an OS window, via `GetWindowThreadProcessId`. Used to
 /// drop any sandbox candidate that belongs to Voice Mirror itself.
 #[cfg(windows)]
-fn pid_of_hwnd(hwnd: i64) -> Option<u32> {
+pub(crate) fn pid_of_hwnd(hwnd: i64) -> Option<u32> {
     use windows::Win32::Foundation::HWND;
     use windows::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId;
     unsafe {
@@ -116,7 +150,19 @@ fn pid_of_hwnd(hwnd: i64) -> Option<u32> {
 }
 
 #[cfg(not(windows))]
-fn pid_of_hwnd(_hwnd: i64) -> Option<u32> {
+pub(crate) fn pid_of_hwnd(_hwnd: i64) -> Option<u32> {
+    None
+}
+
+/// An OS window's logical (DIP) size `(width, height)` — used by the UIA backend
+/// to fill the `activeWidth`/`activeHeight` echo for a native window.
+#[cfg(windows)]
+pub(crate) fn window_logical_size(hwnd: i64) -> Option<(i64, i64)> {
+    window_geom(hwnd).map(|g| (g.w.round() as i64, g.h.round() as i64))
+}
+
+#[cfg(not(windows))]
+pub(crate) fn window_logical_size(_hwnd: i64) -> Option<(i64, i64)> {
     None
 }
 
@@ -667,6 +713,9 @@ pub async fn snapshot(port: u16, window: Option<&str>) -> Result<Value, String> 
     if let Some(h) = chosen.hwnd {
         set_active_hwnd(Some(h));
     }
+    // Mark CDP as the active backend so a follow-up click/type/screenshot with no
+    // explicit target routes back here (and not to the UIA engine).
+    set_active_backend(Some(ActiveBackend::Cdp(port)));
 
     let tree = chosen.tree.clone();
     let page_url = chosen.page_url.clone();
