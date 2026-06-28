@@ -50,6 +50,9 @@ function createSandboxPreviewStore() {
   // When the user manually picks a window from the switcher, stop auto-following
   // Claude until they go back to a session/window or reopen the preview.
   let userPinned = false;
+  // Consecutive failures to list windows = the CDP debug port is unreachable
+  // (the app / its dev server stopped). A few in a row → surface "disconnected".
+  let listFailCount = 0;
   // The last dev-server CDP port we auto-opened for. Lives in the store (not a
   // component) so a LensWorkspace remount / status-flap can't re-fire open() and
   // pop the panel back up after the user hid it. Persists for the app lifetime.
@@ -80,6 +83,7 @@ function createSandboxPreviewStore() {
         if (data.hwnd != null) currentHwnd = data.hwnd;
         // We're mirroring a window again — leave the "no window" empty state.
         noWindow = false;
+        listFailCount = 0;
       } else {
         error = 'Failed to start the live preview.';
       }
@@ -99,15 +103,39 @@ function createSandboxPreviewStore() {
    */
   async function refreshWindows() {
     if (!active || cdpPort == null) return;
+
+    // Fetch the live window list. A THROW or non-array result means the CDP debug
+    // port is unreachable — i.e. the app (or its dev server) on that port has
+    // STOPPED (e.g. you closed TaskDeck, then opened a different app).
+    let list = null;
     try {
       const res = await sandboxListWindows(cdpPort);
-      const list = unwrapResult(res);
-      windows = Array.isArray(list) ? list : [];
+      const data = unwrapResult(res);
+      if (Array.isArray(data)) list = data;
+    } catch {
+      list = null;
+    }
 
-      // Don't fight a manual switcher choice — only auto-follow Claude when not
-      // explicitly pinned by the user.
-      if (userPinned) return;
+    if (list == null) {
+      // After a few consecutive misses (ignore a one-off blip), drop the STALE
+      // frame and surface the disconnected state — never keep lying with the last
+      // app's picture. The "Open app" button relaunches the current project.
+      listFailCount += 1;
+      if (listFailCount >= 3 && !noWindow) {
+        noWindow = true;
+        currentHwnd = null;
+        streamUrl = ''; // clears the stale frame → component resets hasFrame
+      }
+      return;
+    }
+    listFailCount = 0;
+    windows = list;
 
+    // Don't fight a manual switcher choice — only auto-follow Claude when not
+    // explicitly pinned by the user.
+    if (userPinned) return;
+
+    try {
       const activeRes = await sandboxActiveHwnd(cdpPort);
       const activeHwnd = unwrapResult(activeRes)?.hwnd ?? null;
       const present = new Set(windows.map((w) => w.hwnd));
@@ -188,6 +216,7 @@ function createSandboxPreviewStore() {
       currentHwnd = null;
       windows = [];
       noWindow = false;
+      listFailCount = 0;
       await startStream(null); // main window
       startPolling();
     },
@@ -219,6 +248,7 @@ function createSandboxPreviewStore() {
         userHidden = false;
         visible = true;
         noWindow = false;
+        listFailCount = 0;
       }
     },
 
@@ -274,6 +304,7 @@ function createSandboxPreviewStore() {
       windows = [];
       currentHwnd = null;
       noWindow = false;
+      listFailCount = 0;
       userPinned = false;
       attached = false;
       userHidden = false;
