@@ -42,6 +42,11 @@ struct StreamState {
     /// Stops the MJPEG server (only on a full `stop()`), keeping the port stable
     /// while we re-point the captured window.
     server_stop: Option<Arc<AtomicBool>>,
+    /// True when the frame source is an EXTERNAL CDP screencast task
+    /// (`start_external`) rather than the WGC capture thread. Used so the screenshot
+    /// path doesn't try to re-point a (non-existent) WGC window, and so `current_hwnd`
+    /// reports "no real OS window" for a CDP-backed preview.
+    external: bool,
 }
 
 /// Shared frame buffer — latest JPEG bytes, lock-free.
@@ -58,8 +63,16 @@ pub(crate) fn current_hwnd() -> Option<i64> {
     state()
         .lock()
         .ok()
-        .filter(|s| s.running)
+        // A CDP-backed (external) stream has no single WGC OS window — report None
+        // so the screenshot/snapshot "mirror the preview window" logic stays dormant.
+        .filter(|s| s.running && !s.external)
         .map(|s| s.hwnd)
+}
+
+/// True when the live stream is currently fed by an EXTERNAL CDP screencast task
+/// (an opaque window WGC couldn't capture) rather than the WGC capture thread.
+pub(crate) fn is_external() -> bool {
+    state().lock().map(|s| s.running && s.external).unwrap_or(false)
 }
 
 /// The most recent captured JPEG frame, if a stream is running and has produced
@@ -128,6 +141,7 @@ pub fn start(hwnd: i64, fps: u32) -> Result<u16, String> {
         st.hwnd = hwnd;
         st.title = title.clone();
         st.fps = fps;
+        st.external = false;
         st.capture_stop = Some(capture_stop.clone());
         if start_server {
             st.server_running = true;
@@ -175,6 +189,101 @@ pub fn start(hwnd: i64, fps: u32) -> Result<u16, String> {
     Ok(port)
 }
 
+/// Set up the stream to be fed by an EXTERNAL frame source (a CDP screencast
+/// task) instead of the WGC capture thread — for an OPAQUE window WGC can't
+/// capture (hidden/occluded/not-presenting). Like [`start`], this is a
+/// PORT-PRESERVING retarget: it stops any running WGC capture thread, REUSES the
+/// MJPEG server + port if one is up, and bumps the stream generation. The caller
+/// owns a task that publishes frames via [`publish_external_frame`] until either
+/// `stop_flag` is set (a later `start`/`start_external`/`stop` supersedes it) or
+/// `publish_external_frame` returns `false` (its generation was superseded).
+///
+/// Returns `(port, generation, stop_flag)`.
+pub(crate) fn start_external(
+    title: String,
+    fps: u32,
+) -> Result<(u16, u64, Arc<AtomicBool>), String> {
+    let buffer = frame_buffer().clone();
+
+    // Same generation discipline as the WGC path: claim a fresh generation so an
+    // older capture thread / CDP task can't clobber this source's frames.
+    let generation = STREAM_GENERATION.fetch_add(1, Ordering::SeqCst) + 1;
+
+    // Stop flag for THIS external source (stored as the capture_stop, so a later
+    // WGC start()/another start_external()/stop() flips it true to retire us).
+    let capture_stop = Arc::new(AtomicBool::new(false));
+
+    let (port, start_server, server_stop) = {
+        let mut st = state().lock().unwrap();
+
+        // Stop ONLY the previous capture source (WGC thread or prior CDP task);
+        // leave the MJPEG server running for a seamless port-preserving retarget.
+        if let Some(flag) = st.capture_stop.take() {
+            flag.store(true, Ordering::SeqCst);
+        }
+
+        // Drop the previous source's last frame so we never momentarily show its
+        // stale picture before the new source's first frame.
+        buffer.store(Arc::new(Vec::new()));
+
+        let (port, start_server, server_stop) =
+            if st.server_running && st.port != 0 && st.server_stop.is_some() {
+                (st.port, false, st.server_stop.clone().unwrap())
+            } else {
+                let p = find_available_port()?;
+                (p, true, Arc::new(AtomicBool::new(false)))
+            };
+
+        st.running = true;
+        st.generation = generation;
+        st.port = port;
+        // No single WGC OS window for a CDP-backed source.
+        st.hwnd = 0;
+        st.title = title;
+        st.fps = fps;
+        st.external = true;
+        st.capture_stop = Some(capture_stop.clone());
+        if start_server {
+            st.server_running = true;
+            st.server_stop = Some(server_stop.clone());
+        }
+        (port, start_server, server_stop)
+    };
+
+    if start_server {
+        let server_buffer = buffer;
+        std::thread::Builder::new()
+            .name("mjpeg-server".into())
+            .spawn(move || {
+                run_mjpeg_server(port, server_stop, server_buffer);
+            })
+            .map_err(|e| format!("Failed to spawn MJPEG server: {}", e))?;
+    }
+
+    info!(
+        "{} CDP screencast source on port {} (gen {})",
+        if start_server { "Started" } else { "Re-targeted to" },
+        port,
+        generation
+    );
+    Ok((port, generation, capture_stop))
+}
+
+/// Publish one JPEG frame from an EXTERNAL source (CDP screencast) into the shared
+/// buffer the MJPEG server reads. Returns `false` if a newer stream generation has
+/// superseded `generation` — the caller's task must then stop. Mirrors the
+/// generation guard the WGC capture thread uses, so a superseded CDP task can't
+/// overwrite a newer source's frames.
+pub(crate) fn publish_external_frame(generation: u64, jpeg: Vec<u8>) -> bool {
+    match state().lock() {
+        Ok(s) if s.generation == generation => {
+            frame_buffer().store(Arc::new(jpeg));
+            true
+        }
+        _ => false,
+    }
+}
+
 /// Stop the current stream — tears down BOTH the capture thread and the MJPEG
 /// server (releasing the port), and clears the buffer. A subsequent `start()`
 /// allocates a fresh port.
@@ -188,6 +297,7 @@ pub fn stop() -> Result<(), String> {
     }
     st.running = false;
     st.server_running = false;
+    st.external = false;
     st.port = 0;
     // Drop the last frame so a stopped stream can't serve a stale picture.
     frame_buffer().store(Arc::new(Vec::new()));

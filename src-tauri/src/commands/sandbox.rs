@@ -73,7 +73,11 @@ pub fn sandbox_clear_active_port() -> IpcResponse {
 }
 
 /// Start a live mirror of the app on `port` (optionally a specific window
-/// `hwnd`). Returns `{ mjpegPort, url }` — point an `<img>` at `url`.
+/// `hwnd`). Returns `{ mjpegPort, url, hwnd }` — point an `<img>` at `url`.
+/// `hwnd` is the captured OS window for the WGC source, or `null` for the CDP
+/// screencast fallback (an opaque window WGC can't capture — it has no single OS
+/// window). A `null` hwnd leaves the frontend's `currentHwnd` untouched, so its
+/// auto-follow stays dormant until a real, capturable window appears.
 #[tauri::command]
 pub async fn sandbox_stream_start(port: u16, hwnd: Option<i64>) -> IpcResponse {
     match crate::services::sandbox_stream::start(port, hwnd).await {

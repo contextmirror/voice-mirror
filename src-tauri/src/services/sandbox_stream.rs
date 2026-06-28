@@ -1,21 +1,37 @@
-//! Sandbox live preview — mirror the real app WINDOW and serve it as MJPEG.
+//! Sandbox live preview — mirror the active app WINDOW and serve it as MJPEG.
 //!
-//! Tauri pill apps are TRANSPARENT, borderless windows (`transparent: true`).
-//! CDP `Page.startScreencast` renders such a window as a solid black box — JPEG
-//! has no alpha and the transparent WebView2 GPU surface composites to black.
+//! TWO frame sources feed the SAME MJPEG endpoint (`window_stream`'s FRAME_BUFFER
+//! + `/stream` server), chosen automatically so the preview NEVER errors when the
+//! app has a reachable CDP target:
 //!
-//! So we don't screencast the page; we capture the actual on-screen WINDOW via
-//! Windows.Graphics.Capture (the same `window_stream` the window-picker uses),
-//! which mirrors exactly what the user sees — transparency, borderless chrome
-//! and all. We identify the app window by its CDP page title (the same title
-//! Tauri sets on the OS window) matched against the visible window list.
+//!   1. WGC (`window_stream`, Windows.Graphics.Capture) — the DEFAULT. It mirrors
+//!      the actual on-screen window, TRANSPARENCY included, so it's the only source
+//!      that works for the transparent pill/overlay (CDP renders those BLACK). Used
+//!      whenever the active window is a live, capturable OS window that produces
+//!      frames.
+//!   2. CDP `Page.startScreencast` (this module's `start_cdp_screencast`) — the
+//!      FALLBACK. The Windows compositor only presents a visible window, so a Tauri
+//!      app at idle (pill transparent+hidden, settings/onboarding/overlay
+//!      `visible:false`) has NO opaque window for WGC to capture → WGC finds nothing
+//!      / no frames. CDP screencast produces frames from the compositor REGARDLESS of
+//!      window visibility/occlusion, so it shows the active OPAQUE target live even
+//!      when it has no visible window. (It renders TRANSPARENT windows black, which is
+//!      exactly why transparent chrome stays on WGC.)
 //!
-//! CDP is still used for the AI's structured tools (snapshot/click/type); this
-//! module is only the human-facing live picture.
+//! A dedicated tokio task owns the CDP screencast WebSocket so it can BOTH receive
+//! `Page.screencastFrame` events AND reply with `Page.screencastFrameAck` (omitting
+//! the ack stops frames) — the one thing the request/reply `Cdp::call` cannot do.
+//! Its frames go straight into `window_stream`'s shared FRAME_BUFFER via
+//! `publish_external_frame`, guarded by the same generation discipline as WGC so the
+//! two sources never write at once. CDP is also used for the AI's structured tools
+//! (snapshot/click/type).
 
+use std::sync::atomic::Ordering;
 use std::time::Duration;
 
-use serde_json::Value;
+use futures_util::{SinkExt, StreamExt};
+use serde_json::{json, Value};
+use tokio_tungstenite::{connect_async, tungstenite::Message};
 use tracing::{info, warn};
 
 /// One of the app's visible windows (pill, settings, a dialog, …).
@@ -25,22 +41,206 @@ pub struct AppWindow {
     pub title: String,
 }
 
-/// Start mirroring the app on CDP `cdp_port`. If `hwnd` is given, mirror that
-/// specific window; otherwise mirror the main window. Returns the local MJPEG
-/// port to point an `<img src="http://127.0.0.1:{port}/stream">` at.
-pub async fn start(cdp_port: u16, hwnd: Option<i64>) -> Result<(u16, i64), String> {
-    let hwnd = match hwnd {
-        Some(h) => h,
-        None => find_app_hwnd(cdp_port)
-            .await
-            .ok_or_else(|| "Could not find the app window to capture (is it open?)".to_string())?,
+/// Start the live preview for the app on CDP `cdp_port`. Returns
+/// `(mjpeg_port, hwnd)` — point an `<img src="http://127.0.0.1:{port}/stream">` at
+/// it. `hwnd` is the captured OS window for the WGC source, or `None` for the CDP
+/// screencast fallback (which has no single OS window).
+///
+/// SOURCE SELECTION:
+///   * An explicit `hwnd` (the frontend switcher picked a real window) → WGC of
+///     that window — transparent-safe, exactly what the user chose.
+///   * Otherwise (auto) → prefer WGC of the resolved app window IF it produces a
+///     frame (covers the transparent pill/overlay). If no capturable window is
+///     found, OR a window was found but it never presents a frame (an opaque
+///     window that's hidden/occluded/idle), fall back to a CDP screencast of the
+///     active CDP target — so the preview shows the active OPAQUE window live
+///     instead of erroring with "Failed to start the live preview".
+pub async fn start(cdp_port: u16, hwnd: Option<i64>) -> Result<(u16, Option<i64>), String> {
+    // Explicit window from the switcher → always WGC (the user picked it).
+    if let Some(h) = hwnd {
+        let port = crate::services::window_stream::start(h, 30)?;
+        info!(
+            "[sandbox_stream] mirroring app window hwnd={} via WGC (CDP :{}) -> MJPEG :{}",
+            h, cdp_port, port
+        );
+        return Ok((port, Some(h)));
+    }
+
+    // Auto: try WGC of the resolved app window first (transparent-safe).
+    if let Some(h) = find_app_hwnd(cdp_port).await {
+        let port = crate::services::window_stream::start(h, 30)?;
+        // Wait briefly for the FIRST frame. A visible window (the pill) presents
+        // promptly (the present-nudge fires at ~400ms); an opaque window that's
+        // occluded/not-presenting yields nothing — then we fall back to CDP.
+        let got_frame = wait_for_wgc_frame(Duration::from_millis(1500)).await;
+        if got_frame {
+            info!(
+                "[sandbox_stream] mirroring app window hwnd={} via WGC (CDP :{}) -> MJPEG :{}",
+                h, cdp_port, port
+            );
+            return Ok((port, Some(h)));
+        }
+        info!(
+            "[sandbox_stream] WGC window hwnd={} produced no frame — falling back to CDP screencast",
+            h
+        );
+        // Fall through to the CDP screencast (it will supersede the WGC capture).
+    } else {
+        info!(
+            "[sandbox_stream] no capturable WGC window on CDP :{} — using CDP screencast fallback",
+            cdp_port
+        );
+    }
+
+    // CDP screencast fallback of the active target (opaque windows only — CDP
+    // renders transparent windows black, but those are handled by WGC above).
+    let port = start_cdp_screencast(cdp_port).await?;
+    Ok((port, None))
+}
+
+/// Poll the WGC frame buffer until a frame appears or `budget` elapses. Returns
+/// true if a frame arrived (the window is presenting and WGC works for it).
+async fn wait_for_wgc_frame(budget: Duration) -> bool {
+    let deadline = std::time::Instant::now() + budget;
+    loop {
+        if crate::services::window_stream::latest_frame().is_some() {
+            return true;
+        }
+        if std::time::Instant::now() >= deadline {
+            return false;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+}
+
+/// Start a CDP `Page.startScreencast` of the active target on `cdp_port`, feeding
+/// frames into `window_stream`'s shared FRAME_BUFFER / MJPEG server. Returns the
+/// (stable, port-preserving) MJPEG port. A dedicated tokio task owns the CDP
+/// WebSocket so it can receive `screencastFrame` events and send
+/// `screencastFrameAck`; it self-terminates when the stream generation is
+/// superseded (a later WGC start / another screencast / `stop`) or the socket
+/// closes — so it never leaks.
+async fn start_cdp_screencast(cdp_port: u16) -> Result<u16, String> {
+    // The active CDP target: the window the last snapshot drove, else the first
+    // page target. This is the OPAQUE window we want to show live.
+    let ws_url = crate::services::sandbox::active_target_ws(cdp_port).await?;
+
+    let (mut ws, _) = connect_async(&ws_url)
+        .await
+        .map_err(|e| format!("CDP screencast connect failed: {}", e))?;
+
+    // Enable the page domain and start the screencast BEFORE we claim the stream
+    // (so a failure here doesn't leave the buffer cleared with no producer).
+    let mut id: u64 = 1;
+    ws_send(&mut ws, id, "Page.enable", json!({})).await?;
+    id += 1;
+    ws_send(
+        &mut ws,
+        id,
+        "Page.startScreencast",
+        json!({
+            "format": "jpeg",
+            "quality": 70,
+            "maxWidth": 1600,
+            "maxHeight": 1200,
+            "everyNthFrame": 1
+        }),
+    )
+    .await?;
+    id += 1;
+
+    // Claim the stream as an external source: stops any WGC capture, reuses the
+    // MJPEG server + port, and hands us this source's generation + stop flag.
+    let title = crate::services::sandbox::active_meta().title;
+    let title = if title.trim().is_empty() {
+        "App (CDP screencast)".to_string()
+    } else {
+        title
     };
-    let port = crate::services::window_stream::start(hwnd, 30)?;
+    let (mjpeg_port, generation, stop_flag) =
+        crate::services::window_stream::start_external(title, 30)?;
+
+    // Read-loop task: owns the WS, publishes frames into the shared buffer, acks
+    // each one, and stops cleanly when superseded or the socket closes.
+    tokio::spawn(async move {
+        let mut ack_id = id;
+        loop {
+            if stop_flag.load(Ordering::SeqCst) {
+                break;
+            }
+            // Short timeout so a STATIC opaque page (no new compositor frames)
+            // still notices the stop flag promptly instead of blocking ~30s.
+            match tokio::time::timeout(Duration::from_secs(2), ws.next()).await {
+                Ok(Some(Ok(Message::Text(txt)))) => {
+                    let v: Value = match serde_json::from_str(txt.as_str()) {
+                        Ok(v) => v,
+                        Err(_) => continue,
+                    };
+                    if v.get("method").and_then(|m| m.as_str()) == Some("Page.screencastFrame") {
+                        let params = v.get("params");
+                        let data = params
+                            .and_then(|p| p.get("data"))
+                            .and_then(|d| d.as_str())
+                            .unwrap_or("");
+                        let session_id = params
+                            .and_then(|p| p.get("sessionId"))
+                            .cloned()
+                            .unwrap_or_else(|| Value::from(0));
+                        if let Ok(bytes) = crate::voice::tts::crypto::base64_decode(data) {
+                            if !bytes.is_empty() {
+                                // Generation guard: if a newer source has taken
+                                // over, stop — never clobber its frames.
+                                if !crate::services::window_stream::publish_external_frame(
+                                    generation, bytes,
+                                ) {
+                                    break;
+                                }
+                            }
+                        }
+                        // Ack — without this, Chromium stops sending frames.
+                        let _ = ws_send(
+                            &mut ws,
+                            ack_id,
+                            "Page.screencastFrameAck",
+                            json!({ "sessionId": session_id }),
+                        )
+                        .await;
+                        ack_id += 1;
+                    }
+                }
+                Ok(Some(Ok(Message::Close(_)))) | Ok(None) => break,
+                Ok(Some(Ok(_))) => {}      // ping/binary/etc — ignore
+                Ok(Some(Err(_))) => break, // socket error
+                Err(_) => {}               // read timeout — loop, re-check stop
+            }
+        }
+        // Best-effort stop so a re-targeted/closed app frees the screencast.
+        let _ = ws_send(&mut ws, ack_id, "Page.stopScreencast", json!({})).await;
+        info!(
+            "[sandbox_stream] CDP screencast (gen {}) on :{} ended",
+            generation, cdp_port
+        );
+    });
+
     info!(
-        "[sandbox_stream] mirroring app window hwnd={} (CDP :{}) -> MJPEG :{}",
-        hwnd, cdp_port, port
+        "[sandbox_stream] CDP screencast started: CDP :{} -> MJPEG :{} (gen {})",
+        cdp_port, mjpeg_port, generation
     );
-    Ok((port, hwnd))
+    Ok(mjpeg_port)
+}
+
+/// Send a CDP command over the screencast WebSocket as a JSON text frame.
+async fn ws_send<S>(ws: &mut S, id: u64, method: &str, params: Value) -> Result<(), String>
+where
+    S: SinkExt<Message> + Unpin,
+    <S as futures_util::Sink<Message>>::Error: std::fmt::Display,
+{
+    let msg = json!({ "id": id, "method": method, "params": params }).to_string();
+    ws.send(Message::Text(msg.into())).await.map_err(|e| {
+        let m = format!("CDP screencast send {} failed: {}", method, e);
+        warn!("[sandbox_stream] {}", m);
+        m
+    })
 }
 
 /// List the app's visible top-level windows (pill, settings, dialogs), so the
@@ -107,26 +307,37 @@ pub fn stop(_cdp_port: u16) {
 /// wrong-window attach (or an all-black transparent CDP capture) is instantly
 /// visible.
 pub async fn capture_app_window(port: u16) -> Result<Value, String> {
-    if let Some(target) = crate::services::sandbox::active_hwnd() {
-        if crate::services::sandbox::is_window_alive(target)
-            && crate::services::window_stream::current_hwnd() != Some(target)
-        {
-            // Re-point the single global WGC stream onto the active window. It
-            // re-acquires the same MJPEG port after stopping, so the live preview
-            // <img> keeps working; the preview store's next poll re-syncs anyway.
-            crate::services::window_stream::start(target, 30)?;
-            // Wait for the re-pointed window's first frame (≤3s).
-            for _ in 0..60 {
-                if crate::services::window_stream::latest_frame().is_some() {
-                    break;
+    // When the live preview is CDP-backed (external source — an opaque window WGC
+    // can't capture), don't try to re-point a WGC window or reuse the screencast
+    // frame: take a fresh CDP screenshot of the active target below (PATH 2), which
+    // is always the current resolved window. Re-pointing WGC here would also tear
+    // down the live CDP screencast the user is watching.
+    let external = crate::services::window_stream::is_external();
+    if !external {
+        if let Some(target) = crate::services::sandbox::active_hwnd() {
+            if crate::services::sandbox::is_window_alive(target)
+                && crate::services::window_stream::current_hwnd() != Some(target)
+            {
+                // Re-point the single global WGC stream onto the active window. It
+                // re-acquires the same MJPEG port after stopping, so the live preview
+                // <img> keeps working; the preview store's next poll re-syncs anyway.
+                crate::services::window_stream::start(target, 30)?;
+                // Wait for the re-pointed window's first frame (≤3s).
+                for _ in 0..60 {
+                    if crate::services::window_stream::latest_frame().is_some() {
+                        break;
+                    }
+                    tokio::time::sleep(Duration::from_millis(50)).await;
                 }
-                tokio::time::sleep(Duration::from_millis(50)).await;
             }
         }
     }
     let meta = crate::services::sandbox::active_meta();
 
-    // PATH 1 — live WGC frame (transparent-safe + what's on screen).
+    // PATH 1 — live WGC frame (transparent-safe + what's on screen). Skipped for a
+    // CDP-backed preview so the screenshot reflects the CURRENT active target via a
+    // fresh CDP capture rather than the screencast's possibly-older frame.
+    if !external {
     if let Some(jpeg) = crate::services::window_stream::latest_frame() {
         let b64 = crate::voice::tts::crypto::base64_encode(&jpeg);
         return Ok(serde_json::json!({
@@ -141,8 +352,10 @@ pub async fn capture_app_window(port: u16) -> Result<Value, String> {
             "activeHeight": meta.height,
         }));
     }
+    }
 
-    // PATH 2 — no WGC frame: fall back to CDP of the SAME active target. This
+    // PATH 2 — no WGC frame (or a CDP-backed preview): fall back to CDP of the SAME
+    // active target. This
     // makes the screenshot work for OPAQUE windows that are hidden/occluded or
     // not presenting (the common idle case for a Tauri app with no visible opaque
     // window). CDP renders TRANSPARENT windows black, so we flag that in `note`.

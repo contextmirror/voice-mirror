@@ -398,6 +398,15 @@ async fn action_target(port: u16) -> Result<String, String> {
     }
 }
 
+/// The CDP `webSocketDebuggerUrl` of the ACTIVE target on `port` — the window the
+/// last snapshot drove (`set_target`), falling back to the first page target.
+/// Exposed for the live preview's CDP screencast fallback: when WGC can't capture
+/// the active window (an opaque window that's hidden/occluded/not-presenting), the
+/// preview screencasts THIS target instead of erroring.
+pub(crate) async fn active_target_ws(port: u16) -> Result<String, String> {
+    action_target(port).await
+}
+
 /// A minimal CDP session over a single WebSocket. Commands are sequential:
 /// send an id-tagged request, then read frames (skipping events) until the
 /// matching reply. Sufficient for one-page driving recipes.
