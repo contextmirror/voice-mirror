@@ -120,7 +120,7 @@
   .sandbox-header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-start;
     gap: 8px;
     height: 30px;
     flex-shrink: 0;
@@ -133,6 +133,8 @@
     display: flex;
     align-items: center;
     gap: 6px;
+    flex: 1;
+    min-width: 0;
     font-size: 12px;
     color: var(--text);
     white-space: nowrap;
