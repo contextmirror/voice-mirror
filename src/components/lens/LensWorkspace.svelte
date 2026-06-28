@@ -306,7 +306,11 @@
           const target =
             servers.find((s) => (s.framework || '').toLowerCase() === 'tauri') || servers[0];
           if (target) {
-            devServerManager.startServer(target, path, data.packageManager);
+            // `force` (from the user's Open-app/App-tab path) tears down a stale
+            // 'running' server first so the relaunch isn't a silent no-op.
+            devServerManager.startServer(target, path, data.packageManager, {
+              force: e?.payload?.force === true,
+            });
           } else {
             console.warn('[sandbox] start: no dev server detected in', path);
           }
@@ -500,6 +504,21 @@
     }
   }
 
+  // The "App" tab as a USER entry point (previously the preview could only be
+  // started by Claude's sandbox_start). Running session → toggle visibility;
+  // starting (panel visible, not yet active) → hide; nothing running → START the
+  // selected workspace's app into the preview.
+  function appPreviewClick() {
+    if (sandboxPreviewStore.active) {
+      toggleAppPreview();
+    } else if (sandboxPreviewStore.visible) {
+      sandboxPreviewStore.hide();
+    } else {
+      showBrowser = false;
+      sandboxPreviewStore.requestStart();
+    }
+  }
+
   // Start/stop file watcher when entering Lens mode or switching projects.
   // Uses memoized projectRoot so unrelated entry mutations don't churn the watcher.
   $effect(() => {
@@ -618,7 +637,7 @@
 
 {#snippet renderNode(node)}
   {#if node.type === 'leaf'}
-    <EditorPane groupId={node.groupId} showBrowser={node.groupId === firstGroupId ? showBrowser : false} onBrowserClick={node.groupId === firstGroupId ? () => { showBrowser = !showBrowser; if (showBrowser) sandboxPreviewStore.hide(); } : null} onDevicePreviewClick={node.groupId === firstGroupId ? () => { devicePreviewStore.toggle(); } : null} showDevicePreview={node.groupId === firstGroupId ? devicePreviewStore.isOpen : false} onAppPreviewClick={node.groupId === firstGroupId && sandboxPreviewStore.active ? toggleAppPreview : null} showAppPreview={node.groupId === firstGroupId ? sandboxPreviewStore.visible : false} />
+    <EditorPane groupId={node.groupId} showBrowser={node.groupId === firstGroupId ? showBrowser : false} onBrowserClick={node.groupId === firstGroupId ? () => { showBrowser = !showBrowser; if (showBrowser) sandboxPreviewStore.hide(); } : null} onDevicePreviewClick={node.groupId === firstGroupId ? () => { devicePreviewStore.toggle(); } : null} showDevicePreview={node.groupId === firstGroupId ? devicePreviewStore.isOpen : false} onAppPreviewClick={node.groupId === firstGroupId ? appPreviewClick : null} showAppPreview={node.groupId === firstGroupId ? sandboxPreviewStore.visible : false} />
   {:else}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div class="grid-branch" class:horizontal={node.direction === 'horizontal'} class:vertical={node.direction === 'vertical'}>
@@ -678,7 +697,7 @@
                         <!-- Editor Grid: always visible so GroupTabBar stays accessible -->
                         <div class="editor-grid">
                           {#if editorGroupsStore.maximizedGroupId !== null}
-                            <EditorPane groupId={editorGroupsStore.maximizedGroupId} showBrowser={editorGroupsStore.maximizedGroupId === firstGroupId ? showBrowser : false} onBrowserClick={editorGroupsStore.maximizedGroupId === firstGroupId ? () => { showBrowser = !showBrowser; if (showBrowser) sandboxPreviewStore.hide(); } : null} onDevicePreviewClick={editorGroupsStore.maximizedGroupId === firstGroupId ? () => { devicePreviewStore.toggle(); } : null} showDevicePreview={editorGroupsStore.maximizedGroupId === firstGroupId ? devicePreviewStore.isOpen : false} onAppPreviewClick={editorGroupsStore.maximizedGroupId === firstGroupId && sandboxPreviewStore.active ? toggleAppPreview : null} showAppPreview={editorGroupsStore.maximizedGroupId === firstGroupId ? sandboxPreviewStore.visible : false} />
+                            <EditorPane groupId={editorGroupsStore.maximizedGroupId} showBrowser={editorGroupsStore.maximizedGroupId === firstGroupId ? showBrowser : false} onBrowserClick={editorGroupsStore.maximizedGroupId === firstGroupId ? () => { showBrowser = !showBrowser; if (showBrowser) sandboxPreviewStore.hide(); } : null} onDevicePreviewClick={editorGroupsStore.maximizedGroupId === firstGroupId ? () => { devicePreviewStore.toggle(); } : null} showDevicePreview={editorGroupsStore.maximizedGroupId === firstGroupId ? devicePreviewStore.isOpen : false} onAppPreviewClick={editorGroupsStore.maximizedGroupId === firstGroupId ? appPreviewClick : null} showAppPreview={editorGroupsStore.maximizedGroupId === firstGroupId ? sandboxPreviewStore.visible : false} />
                           {:else}
                             {@render renderNode(editorGroupsStore.gridRoot)}
                           {/if}

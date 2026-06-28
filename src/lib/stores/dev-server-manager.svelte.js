@@ -190,11 +190,17 @@ function createDevServerManager() {
    * @param {string} projectPath
    * @param {string} [packageManager]
    */
-  async function startServer(server, projectPath, packageManager) {
+  async function startServer(server, projectPath, packageManager, opts = {}) {
     const state = getOrCreateState(projectPath);
 
-    // Already running or starting
-    if (state.status === 'running' || state.status === 'starting') return;
+    // Already running or starting. A user-initiated relaunch (force) tears the
+    // (possibly stale) server down first so "Open app" / the App tab always yields
+    // a fresh window — otherwise a leftover 'running' status silently no-ops (e.g.
+    // after the user manually closed the app window).
+    if (state.status === 'running' || state.status === 'starting') {
+      if (!opts.force) return;
+      await stopServer(projectPath);
+    }
 
     // Crash loop protection
     if (state.crashLoopDetected) {

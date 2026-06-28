@@ -260,6 +260,21 @@ function createSandboxPreviewStore() {
     },
 
     /**
+     * User-initiated start — the "App" tab as an entry point (not just Claude's
+     * sandbox_start). With NO session running, launch the CURRENT project's app
+     * into the preview: show the panel (a "Starting live preview…" state) and emit
+     * `sandbox-start-request`, which LensWorkspace handles (detectDevServers →
+     * devServerManager.start). Once the dev server is up, syncAuto → open() takes
+     * over with the live stream.
+     */
+    async requestStart() {
+      if (active) { this.show(); return; }
+      visible = true;
+      userHidden = false;
+      await emit('sandbox-start-request', { force: true });
+    },
+
+    /**
      * Recover the preview from the disconnected/empty state.
      *
      * If the app is actually STILL RUNNING (one or more live VISIBLE windows are
@@ -278,7 +293,7 @@ function createSandboxPreviewStore() {
         startStream(liveVisible[0].hwnd);
         return;
       }
-      await emit('sandbox-start-request', {});
+      await emit('sandbox-start-request', { force: true });
     },
 
     /** Hide the panel but keep the screencast running (instant to re-show). */
