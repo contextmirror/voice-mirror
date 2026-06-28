@@ -121,8 +121,11 @@ pub async fn capture_app_window() -> Result<Value, String> {
         "base64": b64,
         "contentType": "image/jpeg",
         "activeWindow": meta.title,
+        "activeLabel": meta.label,
         "activeUrl": meta.url,
         "activeIndex": meta.index,
+        "activeWidth": meta.width,
+        "activeHeight": meta.height,
     }))
 }
 

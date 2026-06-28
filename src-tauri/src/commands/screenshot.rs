@@ -626,7 +626,10 @@ mod win32 {
                 let _ = GetWindowRect(hwnd, &mut rect);
                 let w = rect.right - rect.left;
                 let h = rect.bottom - rect.top;
-                if w < 100 || h < 50 {
+                // Keep small but real app windows (e.g. a Tauri pill 210×60 or an
+                // overlay 330×48) — only drop genuinely degenerate ones. The old
+                // 100×50 floor hid the overlay so the sandbox couldn't target it.
+                if w < 40 || h < 24 {
                     return windows_core::BOOL(1);
                 }
 

@@ -47,8 +47,9 @@ pub async fn handle_sandbox_snapshot(
             let tree = resp.get("tree").and_then(|v| v.as_str()).unwrap_or("");
             let page_url = resp.get("pageUrl").and_then(|v| v.as_str()).unwrap_or("");
             let ref_count = resp.get("refCount").and_then(|v| v.as_i64()).unwrap_or(0);
-            // `windows` is now a list of { index, title, url } so identical titles
-            // ("Yap, Yap, Yap") can be disambiguated by route or index.
+            // `windows` is a list of { index, label, title, url, width, height } so
+            // identical titles/URLs ("Yap, Yap, Yap" on "http://localhost:1430/")
+            // can be disambiguated by the unique Tauri LABEL (or index).
             let windows = resp
                 .get("windows")
                 .and_then(|v| v.as_array())
@@ -56,9 +57,17 @@ pub async fn handle_sandbox_snapshot(
                     a.iter()
                         .map(|w| {
                             let idx = w.get("index").and_then(|v| v.as_i64()).unwrap_or(0);
+                            let label = w.get("label").and_then(|v| v.as_str()).unwrap_or("?");
+                            let label = if label.is_empty() { "?" } else { label };
                             let title = w.get("title").and_then(|v| v.as_str()).unwrap_or("");
-                            let url = w.get("url").and_then(|v| v.as_str()).unwrap_or("");
-                            format!("[{}] {} — {}", idx, title, url)
+                            let width = w.get("width").and_then(|v| v.as_i64()).unwrap_or(0);
+                            let height = w.get("height").and_then(|v| v.as_i64()).unwrap_or(0);
+                            let size = if width > 0 && height > 0 {
+                                format!(" ({}×{})", width, height)
+                            } else {
+                                String::new()
+                            };
+                            format!("[{}] {} \"{}\"{}", idx, label, title, size)
                         })
                         .collect::<Vec<_>>()
                         .join("\n  ")
@@ -66,27 +75,49 @@ pub async fn handle_sandbox_snapshot(
                 .unwrap_or_default();
             // Echo the resolved target so a wrong-app attach is instantly visible.
             let active_window = resp.get("activeWindow").and_then(|v| v.as_str()).unwrap_or("");
+            let active_label = resp.get("activeLabel").and_then(|v| v.as_str()).unwrap_or("");
             let active_index = resp.get("activeIndex").and_then(|v| v.as_i64());
+            let active_width = resp.get("activeWidth").and_then(|v| v.as_i64()).unwrap_or(0);
+            let active_height = resp.get("activeHeight").and_then(|v| v.as_i64()).unwrap_or(0);
             let port = resp.get("port").and_then(|v| v.as_i64());
             let pid = resp.get("pid").and_then(|v| v.as_i64());
             let target_line = {
-                let mut parts: Vec<String> = Vec::new();
+                // Primary echo: `[i] label "title" (W×H)` — the label is identity.
+                let mut head: Vec<String> = Vec::new();
                 if let Some(i) = active_index {
-                    parts.push(format!("[{}]", i));
+                    head.push(format!("[{}]", i));
+                }
+                if !active_label.is_empty() {
+                    head.push(active_label.to_string());
                 }
                 if !active_window.is_empty() {
-                    parts.push(format!("window \"{}\"", active_window));
+                    head.push(format!("\"{}\"", active_window));
                 }
+                if active_width > 0 && active_height > 0 {
+                    head.push(format!("({}×{})", active_width, active_height));
+                }
+                // Trailing context: port + pid (url is appended after the dash).
+                let mut tail: Vec<String> = Vec::new();
                 if let Some(p) = port {
-                    parts.push(format!("port {}", p));
+                    tail.push(format!("port {}", p));
                 }
                 if let Some(p) = pid {
-                    parts.push(format!("pid {}", p));
+                    tail.push(format!("pid {}", p));
                 }
-                if parts.is_empty() {
+                if head.is_empty() {
                     String::new()
                 } else {
-                    format!("\nResolved target: {} — {}.", parts.join(", "), page_url)
+                    let tail = if tail.is_empty() {
+                        String::new()
+                    } else {
+                        format!(" ({})", tail.join(", "))
+                    };
+                    format!(
+                        "\nResolved target: {} — {}{}.",
+                        head.join(" "),
+                        page_url,
+                        tail
+                    )
                 }
             };
             if tree.is_empty() {
@@ -98,8 +129,8 @@ pub async fn handle_sandbox_snapshot(
                     String::new()
                 } else {
                     format!(
-                        "\nApp windows (snapshot again with `window` set to a route/URL substring, \
-                         an index, or a title to target one):\n  {}",
+                        "\nApp windows (snapshot again with `window` set to a LABEL (e.g. \
+                         \"settings\"), an index, or a title to target one):\n  {}",
                         windows
                     )
                 };
@@ -134,22 +165,35 @@ pub async fn handle_sandbox_screenshot(
                 // visible that the screenshot and snapshot/click agree (they now
                 // share one active window by construction).
                 let active_window = resp.get("activeWindow").and_then(|v| v.as_str()).unwrap_or("");
+                let active_label = resp.get("activeLabel").and_then(|v| v.as_str()).unwrap_or("");
                 let active_url = resp.get("activeUrl").and_then(|v| v.as_str()).unwrap_or("");
                 let active_index = resp.get("activeIndex").and_then(|v| v.as_i64());
+                let active_width = resp.get("activeWidth").and_then(|v| v.as_i64()).unwrap_or(0);
+                let active_height = resp.get("activeHeight").and_then(|v| v.as_i64()).unwrap_or(0);
                 let mut caption =
                     "The app you are building, at its true window size.".to_string();
-                let mut parts: Vec<String> = Vec::new();
+                // Echo the SAME `[i] label "title" (W×H)` shape the snapshot resolved
+                // to, so snapshot vs screenshot agreement is eyeballable.
+                let mut head: Vec<String> = Vec::new();
                 if let Some(i) = active_index {
-                    parts.push(format!("[{}]", i));
+                    head.push(format!("[{}]", i));
+                }
+                if !active_label.is_empty() {
+                    head.push(active_label.to_string());
                 }
                 if !active_window.is_empty() {
-                    parts.push(format!("window \"{}\"", active_window));
+                    head.push(format!("\"{}\"", active_window));
                 }
-                if !active_url.is_empty() {
-                    parts.push(active_url.to_string());
+                if active_width > 0 && active_height > 0 {
+                    head.push(format!("({}×{})", active_width, active_height));
                 }
-                if !parts.is_empty() {
-                    caption.push_str(&format!(" Showing {}.", parts.join(" — ")));
+                if !head.is_empty() {
+                    let url = if active_url.is_empty() {
+                        String::new()
+                    } else {
+                        format!(" — {}", active_url)
+                    };
+                    caption.push_str(&format!(" Showing {}{}.", head.join(" "), url));
                 }
                 result.content.push(McpContent::Text { text: caption });
                 result

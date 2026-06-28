@@ -330,6 +330,22 @@ fn run_capture(
         warn!("Could not disable capture border (older Windows?): {}", e);
     }
 
+    // Force a MINIMUM frame cadence. WGC only delivers a frame when the source
+    // CHANGES, so a STATIC, transparent window (a pill/overlay that never repaints)
+    // produces ZERO frames after the initial one — leaving the buffer empty and the
+    // sandbox screenshot stuck at "No live app frame yet". MinUpdateInterval makes
+    // WGC re-deliver the current surface on a timer even when nothing changed.
+    // It only exists on newer Windows 11 builds, so FEATURE-DETECT: try-set and
+    // ignore failure (older builds simply keep the change-driven cadence).
+    {
+        // TimeSpan is in 100ns ticks; 100ms = 1_000_000 ticks → ~10 fps floor.
+        let interval = windows::Foundation::TimeSpan { Duration: 1_000_000 };
+        match session.SetMinUpdateInterval(interval) {
+            Ok(()) => info!("WGC: MinUpdateInterval set to 100ms (static-window cadence)"),
+            Err(e) => warn!("WGC: MinUpdateInterval unsupported (older Windows?): {}", e),
+        }
+    }
+
     session
         .StartCapture()
         .map_err(|e| format!("StartCapture failed: {}", e))?;

@@ -257,6 +257,12 @@ pub struct ActiveMeta {
     pub url: String,
     pub title: String,
     pub index: i64,
+    /// The Tauri window LABEL (unique per window) — the authoritative identity key
+    /// for the screenshot/snapshot/click lockstep echo. Empty for non-Tauri apps.
+    pub label: String,
+    /// The resolved window's logical (DIP) size, for the echo (e.g. 720×640).
+    pub width: i64,
+    pub height: i64,
 }
 
 static ACTIVE_META: OnceLock<Mutex<ActiveMeta>> = OnceLock::new();
@@ -265,10 +271,10 @@ fn active_meta_cell() -> &'static Mutex<ActiveMeta> {
     ACTIVE_META.get_or_init(|| Mutex::new(ActiveMeta::default()))
 }
 
-/// Record the resolved active target's url/title/index (for the screenshot echo).
-pub fn set_active_meta(url: String, title: String, index: i64) {
+/// Record the resolved active target's url/title/index/label/size (screenshot echo).
+pub fn set_active_meta(url: String, title: String, index: i64, label: String, width: i64, height: i64) {
     if let Ok(mut g) = active_meta_cell().lock() {
-        *g = ActiveMeta { url, title, index };
+        *g = ActiveMeta { url, title, index, label, width, height };
     }
 }
 
@@ -462,14 +468,16 @@ pub async fn snapshot(port: u16, window: Option<&str>) -> Result<Value, String> 
     }
     let want = window.map(|t| t.trim().to_lowercase());
 
-    // Real OS windows (DISTINCT titles + screen positions) to correlate the CDP
-    // page targets against — the CDP titles all collide ("Yap"), but the OS
-    // windows ("Yap", "Yap Settings", …) don't, and their positions are unique.
-    let os_windows = app_windows_with_rects(port).await;
+    // Real OS windows to correlate the CDP page targets against. The CDP page
+    // titles + URLs all collide on a Tauri SPA ("Yap" / "http://localhost:1430/"),
+    // so we DON'T key off them: the Tauri LABEL is identity, and the OS window's
+    // SIZE (distinct per window: 210×60 / 720×640 / 620×720 / 330×48) binds the HWND.
+    let os_windows = app_windows_with_geom(port).await;
     let foreground = foreground_hwnd();
 
-    // Snapshot every page target and correlate each to a real OS window so we
-    // know its distinct title + HWND.
+    // Snapshot every page target. For each we read its Tauri window LABEL (the
+    // unique identity key) and correlate it to a real OS window by SIZE (so we
+    // recover the native title + HWND for capture).
     struct Cand {
         ws: String,
         page_url: String,
@@ -479,12 +487,11 @@ pub async fn snapshot(port: u16, window: Option<&str>) -> Result<Value, String> 
         visible: bool,
         hwnd: Option<i64>,
         os_title: String,
+        /// The Tauri window label (`window.__TAURI_INTERNALS__.metadata.currentWindow.label`).
+        label: Option<String>,
+        /// The correlated OS window's logical (DIP) size, for the windows list echo.
+        os_size: Option<(f64, f64)>,
     }
-    // Max DIP distance for a CDP target to count as "the same window" as a
-    // visible OS window. Beyond this, the target has no real mirrorable window
-    // (e.g. a hidden leftover onboarding page) and must NOT mis-correlate to the
-    // one visible window — else Claude reads a ghost the preview can't show.
-    const MATCH_THRESHOLD: f64 = 140.0;
 
     let mut cands: Vec<Cand> = Vec::new();
     for t in &targets {
@@ -494,24 +501,16 @@ pub async fn snapshot(port: u16, window: Option<&str>) -> Result<Value, String> 
         };
         let page_url = t.get("url").and_then(|v| v.as_str()).unwrap_or("").to_string();
         let page_title = t.get("title").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
-        let (tree, refs, bounds, visible) = snapshot_target(&ws).await.unwrap_or_default();
-        // Correlate to the closest OS window by position (+ size) — but only if
-        // it's actually CLOSE (a real, mirrorable window).
-        let (hwnd, os_title) = match bounds {
-            Some((cx, cy, cw, ch)) => os_windows
-                .iter()
-                .map(|(h, title, x, y, w, hh)| {
-                    let d =
-                        (cx - x).abs() + (cy - y).abs() + 0.5 * ((cw - w).abs() + (ch - hh).abs());
-                    (d, *h, title.clone())
-                })
-                .min_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal))
-                .filter(|(d, ..)| *d <= MATCH_THRESHOLD)
-                .map(|(_, h, title)| (Some(h), title))
-                .unwrap_or((None, String::new())),
-            None => (None, String::new()),
+        let (tree, refs, bounds, visible, label) = snapshot_target(&ws).await.unwrap_or_default();
+        // Correlate to an OS window by SIZE (DPI-tolerant). Sizes are distinct per
+        // window, so size alone disambiguates even when titles/URLs are identical.
+        let (hwnd, os_title, os_size) = match bounds {
+            Some((cx, cy, cw, ch)) => correlate_by_size(&os_windows, cx, cy, cw, ch),
+            None => (None, String::new(), None),
         };
-        cands.push(Cand { ws, page_url, page_title, tree, refs, visible, hwnd, os_title });
+        cands.push(Cand {
+            ws, page_url, page_title, tree, refs, visible, hwnd, os_title, label, os_size,
+        });
     }
     if cands.is_empty() {
         return Err("no debuggable page target found".to_string());
@@ -538,15 +537,50 @@ pub async fn snapshot(port: u16, window: Option<&str>) -> Result<Value, String> 
     // this same window) from ever diverging from snapshot/click.
     let preview_hwnd = crate::services::window_stream::current_hwnd();
 
+    // A short echo of a candidate for error/diagnostics: `[i] label "title" (W×H)`.
+    let fmt_cand = |i: usize, c: &Cand| -> String {
+        let title = if !c.os_title.trim().is_empty() {
+            c.os_title.trim()
+        } else {
+            c.page_title.trim()
+        };
+        let label = c.label.as_deref().filter(|s| !s.trim().is_empty()).unwrap_or("?");
+        let size = c
+            .os_size
+            .map(|(w, h)| format!(" ({}×{})", w.round() as i64, h.round() as i64))
+            .unwrap_or_default();
+        format!("[{}] {} \"{}\"{}", i, label, title, size)
+    };
+
     // Pick the target.
     let chosen_idx = if let Some(w) = &want {
-        // Explicit window: identical titles (e.g. all "Yap") make a title match
-        // ambiguous or impossible, so we match by — in priority order — a numeric
-        // INDEX (from the `windows` list), an EXACT title, a URL/route substring
-        // (`window:"settings"` → settings.html), then a loose title substring.
-        // This makes selection title-INDEPENDENT for any app.
-        let by_index = w.parse::<usize>().ok().filter(|i| *i < cands.len());
-        by_index
+        // Resolution order (title/URL-INDEPENDENT, so identical titles like all
+        // "Yap" never block selection):
+        //   1. label exact (case-insensitive)  — the unique Tauri identity key
+        //   2. label substring
+        //   3. numeric index (from the `windows` list)
+        //   4. exact native/page title
+        //   5. URL/route substring, then loose title substring
+        cands
+            .iter()
+            .position(|c| {
+                c.label
+                    .as_deref()
+                    .map(|l| l.trim().to_lowercase() == *w)
+                    .unwrap_or(false)
+            })
+            .or_else(|| {
+                cands.iter().position(|c| {
+                    c.label
+                        .as_deref()
+                        .map(|l| {
+                            let l = l.trim().to_lowercase();
+                            !l.is_empty() && (l.contains(w.as_str()) || w.contains(&l))
+                        })
+                        .unwrap_or(false)
+                })
+            })
+            .or_else(|| w.parse::<usize>().ok().filter(|i| *i < cands.len()))
             // Exact title (OS or CDP page) — a parent stays selectable by its exact
             // name even when a child window's title extends it.
             .or_else(|| {
@@ -556,7 +590,7 @@ pub async fn snapshot(port: u16, window: Option<&str>) -> Result<Value, String> 
                     (!ot.is_empty() && ot == *w) || (!pt.is_empty() && pt == *w)
                 })
             })
-            // URL / route substring — the disambiguator when titles collide.
+            // URL / route substring.
             .or_else(|| {
                 cands.iter().position(|c| {
                     let url = c.page_url.to_lowercase();
@@ -573,25 +607,18 @@ pub async fn snapshot(port: u16, window: Option<&str>) -> Result<Value, String> 
                 })
             })
             .ok_or_else(|| {
-                // Echo the REAL targetable candidates with their index + URL, so an
-                // agent facing identical titles can disambiguate by route/index.
+                // Echo the REAL targetable candidates as `[index] label "title" (W×H)`
+                // so an agent facing identical titles can disambiguate by label/index.
                 let listed = cands
                     .iter()
                     .enumerate()
-                    .map(|(i, c)| {
-                        let t = if !c.os_title.trim().is_empty() {
-                            c.os_title.trim()
-                        } else {
-                            c.page_title.trim()
-                        };
-                        format!("[{}] {} — {}", i, t, c.page_url)
-                    })
+                    .map(|(i, c)| fmt_cand(i, c))
                     .collect::<Vec<_>>()
                     .join("; ");
                 let listed = if listed.is_empty() { "(none)".to_string() } else { listed };
                 format!(
                     "No app window matching '{}'. Available windows on port {}: {}. \
-                     Target one by its route/URL substring, its index, or its title — \
+                     Target one by its label (exact or substring), its index, or its title — \
                      or snapshot without `window` for the default.",
                     w, port, listed
                 )
@@ -640,18 +667,29 @@ pub async fn snapshot(port: u16, window: Option<&str>) -> Result<Value, String> 
     } else {
         chosen.os_title.clone()
     };
+    let active_label = chosen.label.clone().unwrap_or_default();
+    let (active_w, active_h) = chosen
+        .os_size
+        .map(|(w, h)| (w.round() as i64, h.round() as i64))
+        .unwrap_or((0, 0));
     let resolved_pid = chosen.hwnd.and_then(pid_of_hwnd);
     let ref_count = chosen.refs.len();
     store_refs(port, chosen.refs.clone());
 
-    // Record the resolved target's url/title/index so the screenshot path echoes
-    // the SAME window — and so a wrong-window attach is instantly visible.
-    set_active_meta(page_url.clone(), active_window.clone(), chosen_idx as i64);
+    // Record the resolved target's url/title/index/label/size so the screenshot
+    // path echoes the SAME window — wrong-window attach is then instantly visible.
+    set_active_meta(
+        page_url.clone(),
+        active_window.clone(),
+        chosen_idx as i64,
+        active_label.clone(),
+        active_w,
+        active_h,
+    );
 
-    // The drivable windows, each with a stable INDEX and its CDP URL/route so
-    // identical titles ("Yap, Yap, Yap") stop blocking selection — the agent can
-    // target by route or index. Built from the real candidates (post host
-    // exclusion), so the index lines up with the explicit-`window` matcher.
+    // The drivable windows, each with its stable INDEX, Tauri LABEL (the unique
+    // identity key) and its size, so identical titles/URLs ("Yap, Yap, Yap" on
+    // "http://localhost:1430/") stop blocking selection — target by label or index.
     let windows: Vec<Value> = cands
         .iter()
         .enumerate()
@@ -661,7 +699,18 @@ pub async fn snapshot(port: u16, window: Option<&str>) -> Result<Value, String> 
             } else {
                 c.os_title.trim().to_string()
             };
-            json!({ "index": i, "title": title, "url": c.page_url })
+            let (w, h) = c
+                .os_size
+                .map(|(w, h)| (w.round() as i64, h.round() as i64))
+                .unwrap_or((0, 0));
+            json!({
+                "index": i,
+                "label": c.label,
+                "title": title,
+                "url": c.page_url,
+                "width": w,
+                "height": h,
+            })
         })
         .collect();
 
@@ -671,6 +720,9 @@ pub async fn snapshot(port: u16, window: Option<&str>) -> Result<Value, String> 
         "refCount": ref_count,
         "windows": windows,
         "activeWindow": active_window,
+        "activeLabel": active_label,
+        "activeWidth": active_w,
+        "activeHeight": active_h,
         "activeIndex": chosen_idx,
         // Echo the resolved target so a wrong-app attach is instantly visible.
         "port": port,
@@ -679,15 +731,58 @@ pub async fn snapshot(port: u16, window: Option<&str>) -> Result<Value, String> 
 }
 
 /// Snapshot a single CDP target: the accessibility tree (falling back to a DOM
-/// walk when the AX tree is empty), plus the target window's aspect ratio (w/h)
-/// so we can match it to the OS window the preview is mirroring.
+/// walk when the AX tree is empty), the target window's screen bounds (so we can
+/// correlate it to a real OS window by size), its visibility, and its **Tauri
+/// window label** (the unique identity key).
 async fn snapshot_target(
     ws_url: &str,
-) -> Result<(String, HashMap<String, RefEntry>, Option<(f64, f64, f64, f64)>, bool), String> {
+) -> Result<
+    (
+        String,
+        HashMap<String, RefEntry>,
+        Option<(f64, f64, f64, f64)>,
+        bool,
+        Option<String>,
+    ),
+    String,
+> {
     let mut cdp = Cdp::connect(ws_url).await?;
     let _ = cdp.call("DOM.enable", json!({})).await;
     // Accessibility is off until enabled; without this the AX tree is empty.
     let _ = cdp.call("Accessibility.enable", json!({})).await;
+
+    // The Tauri window LABEL — injected into every Tauri webview unconditionally
+    // (no withGlobalTauri needed), but transiently undefined in the first ms after
+    // a target appears, so POLL it (up to 5×, 60ms apart) until it's non-null.
+    let mut label: Option<String> = None;
+    for attempt in 0..5 {
+        let r = cdp
+            .call(
+                "Runtime.evaluate",
+                json!({
+                    "expression": "window.__TAURI_INTERNALS__?.metadata?.currentWindow?.label",
+                    "returnByValue": true
+                }),
+            )
+            .await
+            .ok();
+        if let Some(s) = r
+            .as_ref()
+            .and_then(|r| r.get("result"))
+            .and_then(|res| res.get("value"))
+            .and_then(|v| v.as_str())
+        {
+            let s = s.trim();
+            if !s.is_empty() {
+                label = Some(s.to_string());
+                break;
+            }
+        }
+        if attempt < 4 {
+            tokio::time::sleep(Duration::from_millis(60)).await;
+        }
+    }
+
     let bounds = cdp
         .call("Browser.getWindowForTarget", json!({}))
         .await
@@ -728,15 +823,30 @@ async fn snapshot_target(
             }
         }
     }
-    Ok((tree, refs, bounds, visible))
+    Ok((tree, refs, bounds, visible, label))
 }
 
-/// Logical (DIP) screen rect (left, top, width, height) of an OS window. CDP
-/// `Browser.getWindowForTarget` bounds are also in DIP, so they compare directly
-/// once we divide the physical rect by the window's DPI scale. Used to correlate
-/// CDP page targets to real OS windows by position (unique per window).
+/// A real OS window's geometry, in BOTH logical (DIP) and physical pixels. We
+/// keep both because `Browser.getWindowForTarget` bounds can come back in DIP or
+/// physical px depending on the WebView2 / per-monitor-DPI combo, so a robust
+/// correlation must be able to match either interpretation.
+#[derive(Clone)]
+struct OsWin {
+    hwnd: i64,
+    title: String,
+    /// DIP rect (left, top, width, height) — width/height are what we echo.
+    x: f64,
+    y: f64,
+    w: f64,
+    h: f64,
+    /// Physical size (px).
+    pw: f64,
+    ph: f64,
+}
+
+/// Geometry of an OS window in DIP + physical px.
 #[cfg(windows)]
-fn window_dip_rect(hwnd: i64) -> Option<(f64, f64, f64, f64)> {
+fn window_geom(hwnd: i64) -> Option<OsWin> {
     use windows::Win32::Foundation::{HWND, RECT};
     use windows::Win32::UI::HiDpi::GetDpiForWindow;
     use windows::Win32::UI::WindowsAndMessaging::GetWindowRect;
@@ -749,29 +859,76 @@ fn window_dip_rect(hwnd: i64) -> Option<(f64, f64, f64, f64)> {
         }
         let dpi = GetDpiForWindow(h);
         let scale = if dpi > 0 { dpi as f64 / 96.0 } else { 1.0 };
-        Some((
-            rect.left as f64 / scale,
-            rect.top as f64 / scale,
-            (rect.right - rect.left) as f64 / scale,
-            (rect.bottom - rect.top) as f64 / scale,
-        ))
+        let pw = (rect.right - rect.left) as f64;
+        let ph = (rect.bottom - rect.top) as f64;
+        Some(OsWin {
+            hwnd,
+            title: String::new(),
+            x: rect.left as f64 / scale,
+            y: rect.top as f64 / scale,
+            w: pw / scale,
+            h: ph / scale,
+            pw,
+            ph,
+        })
     }
 }
 
-/// The app's visible windows with their DISTINCT OS titles + DIP rects, to
-/// correlate CDP page targets to real OS windows. Returns
-/// `(hwnd, title, left, top, width, height)`.
+/// The app's visible windows with their OS titles + geometry, to correlate CDP
+/// page targets to real OS windows by SIZE (distinct per window).
 #[cfg(windows)]
-async fn app_windows_with_rects(port: u16) -> Vec<(i64, String, f64, f64, f64, f64)> {
+async fn app_windows_with_geom(port: u16) -> Vec<OsWin> {
     let wins = crate::services::sandbox_stream::list_windows(port)
         .await
         .unwrap_or_default();
     wins.into_iter()
         .filter_map(|w| {
-            let (x, y, ww, hh) = window_dip_rect(w.hwnd)?;
-            Some((w.hwnd, w.title, x, y, ww, hh))
+            let mut g = window_geom(w.hwnd)?;
+            g.title = w.title;
+            Some(g)
         })
         .collect()
+}
+
+/// Combined relative size error of CDP bounds `(cw,ch)` vs an OS size `(ow,oh)`.
+fn rel_size_err(cw: f64, ch: f64, ow: f64, oh: f64) -> f64 {
+    (cw - ow).abs() / ow.max(1.0) + (ch - oh).abs() / oh.max(1.0)
+}
+
+/// Correlate a CDP target's window bounds to the best-matching OS window by SIZE,
+/// DPI-tolerantly. CDP bounds may be in DIP OR physical px, so we compare against
+/// both the OS window's DIP and physical size and take the closer fit. Position is
+/// only a tiny tiebreak (it diverges for borderless/transparent Tauri windows, so
+/// it must NOT gate the match the way the old absolute-pixel threshold did).
+/// Returns `(hwnd, os_title, dip_size)` or `(None, "", None)` if nothing is close.
+#[cfg(windows)]
+fn correlate_by_size(
+    os: &[OsWin],
+    cx: f64,
+    cy: f64,
+    cw: f64,
+    ch: f64,
+) -> (Option<i64>, String, Option<(f64, f64)>) {
+    // Reasonably-close size match: combined relative error within ~35% (so a real
+    // window always wins, but a target with no on-screen window won't mis-bind).
+    const SIZE_TOL: f64 = 0.35;
+    let mut best: Option<(f64, &OsWin)> = None;
+    for w in os {
+        let size_err = rel_size_err(cw, ch, w.w, w.h).min(rel_size_err(cw, ch, w.pw, w.ph));
+        // Normalize position into a tiny additive nudge (≤0.05) — breaks ties
+        // between same-size windows without ever overriding a clear size winner.
+        let pos = (((cx - w.x).abs() + (cy - w.y).abs()) / 4000.0).min(0.05);
+        let score = size_err + pos;
+        if best.as_ref().map(|(b, _)| score < *b).unwrap_or(true) {
+            best = Some((score, w));
+        }
+    }
+    match best {
+        Some((score, w)) if score <= SIZE_TOL + 0.05 => {
+            (Some(w.hwnd), w.title.clone(), Some((w.w, w.h)))
+        }
+        _ => (None, String::new(), None),
+    }
 }
 
 /// The foreground OS window's HWND, if any — used to default the snapshot to the
@@ -790,8 +947,32 @@ pub(crate) fn foreground_hwnd() -> Option<i64> {
 }
 
 #[cfg(not(windows))]
-async fn app_windows_with_rects(_port: u16) -> Vec<(i64, String, f64, f64, f64, f64)> {
+#[derive(Clone)]
+struct OsWin {
+    hwnd: i64,
+    title: String,
+    x: f64,
+    y: f64,
+    w: f64,
+    h: f64,
+    pw: f64,
+    ph: f64,
+}
+
+#[cfg(not(windows))]
+async fn app_windows_with_geom(_port: u16) -> Vec<OsWin> {
     Vec::new()
+}
+
+#[cfg(not(windows))]
+fn correlate_by_size(
+    _os: &[OsWin],
+    _cx: f64,
+    _cy: f64,
+    _cw: f64,
+    _ch: f64,
+) -> (Option<i64>, String, Option<(f64, f64)>) {
+    (None, String::new(), None)
 }
 
 #[cfg(not(windows))]
