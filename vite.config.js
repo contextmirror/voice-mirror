@@ -141,14 +141,17 @@ export default defineConfig(async ({ mode }) => ({
   },
 
   server: {
-    port: 1420,
+    // Deliberately weird, fixed port well clear of the default Tauri/Vite 1420 —
+    // so apps built/previewed inside VM (which default to 1420) never collide with
+    // Voice Mirror's own dev server.
+    port: 31420,
     strictPort: true,
     host: host || false,
     hmr: host
       ? {
           protocol: 'ws',
           host,
-          port: 1421,
+          port: 31421,
         }
       : undefined,
   },

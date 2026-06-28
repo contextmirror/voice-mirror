@@ -142,7 +142,7 @@ pub async fn lens_find_devtools_url(
     for target in &targets {
         if target["type"].as_str() == Some("page") {
             if let Some(target_url) = target["url"].as_str() {
-                if target_url.starts_with("http://localhost:1420")
+                if target_url.starts_with("http://localhost:31420")
                     || target_url.starts_with("https://tauri.localhost")
                 {
                     continue;
@@ -164,7 +164,7 @@ pub async fn lens_find_devtools_url(
     for target in &targets {
         if target["type"].as_str() == Some("page") {
             if let Some(target_url) = target["url"].as_str() {
-                if target_url.starts_with("http://localhost:1420")
+                if target_url.starts_with("http://localhost:31420")
                     || target_url.starts_with("https://tauri.localhost")
                 {
                     continue;

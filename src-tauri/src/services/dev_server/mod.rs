@@ -98,7 +98,7 @@ pub fn detect_dev_servers(project_root: &str) -> Vec<DetectedDevServer> {
 
     // Self-detection guard: when scanning our own project root, exclude the
     // Tauri dev server entry. During `tauri dev`, Voice Mirror's own Vite
-    // dev server on port 1420 is always running — reporting it as a detected
+    // dev server on port 31420 is always running — reporting it as a detected
     // "external" dev server is misleading.
     if util::is_own_project(root) {
         if let Some(own_port) = util::own_tauri_dev_port(root) {

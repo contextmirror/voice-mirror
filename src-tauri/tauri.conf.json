@@ -5,7 +5,7 @@
   "identifier": "com.voicemirror.app",
   "build": {
     "beforeDevCommand": "npx vite dev",
-    "devUrl": "http://localhost:1420",
+    "devUrl": "http://localhost:31420",
     "beforeBuildCommand": "npx vite build",
     "frontendDist": "../dist",
     "features": ["native-ml", "cuda"]
