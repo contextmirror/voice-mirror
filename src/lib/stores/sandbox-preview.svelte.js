@@ -125,6 +125,8 @@ function createSandboxPreviewStore() {
         noWindow = true;
         currentHwnd = null;
         streamUrl = ''; // clears the stale frame → component resets hasFrame
+        windows = []; // drop the ghost window list (the app is gone) so the picker
+        // doesn't offer a dead window and "Open app" falls through to a real relaunch
       }
       return;
     }
