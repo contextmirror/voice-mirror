@@ -329,6 +329,46 @@ pub fn active_meta() -> ActiveMeta {
     active_meta_cell().lock().ok().map(|g| g.clone()).unwrap_or_default()
 }
 
+/// Null ALL active-target state because the previewed app has DIED. This is the
+/// core lifecycle gap: nothing was clearing these registries when the app's CDP
+/// port went dead, so the sandbox tools + live preview kept honouring a ghost
+/// target (and the preview kept serving the dead app's last frame). The liveness
+/// gate in `decide_sandbox_route` calls this the moment it finds a default CDP
+/// target unreachable — after which a follow-up tool with no explicit target gets
+/// a clear "the app exited" error instead of silently driving nothing.
+///
+/// Clears: the active backend marker, the active CDP port, the screenshot-echo
+/// metadata, the active HWND, the per-port `@ref` + CDP-target stores for the dead
+/// port, and stops the live preview stream (which empties `FRAME_BUFFER` and resets
+/// `running`/`external`).
+pub(crate) fn clear_active_target() {
+    // Resolve the port we're evicting BEFORE we null the markers.
+    let port = active_cdp_port().or_else(|| match active_backend() {
+        Some(ActiveBackend::Cdp(p)) => Some(p),
+        _ => None,
+    });
+
+    set_active_backend(None);
+    set_active_cdp_port(None);
+    set_active_hwnd(None);
+    // Reset the screenshot-echo metadata so a stale window can never be echoed.
+    set_active_meta(String::new(), String::new(), 0, String::new(), 0, 0);
+
+    // Evict the dead port's snapshot ref map + last-snapshot CDP target.
+    if let Some(p) = port {
+        if let Ok(mut g) = ref_store().lock() {
+            g.remove(&p);
+        }
+        if let Ok(mut g) = target_store().lock() {
+            g.remove(&p);
+        }
+    }
+
+    // Stop the live preview so latest_frame()/is_external() stop serving the dead
+    // app's last frame (also resets running/external + clears FRAME_BUFFER).
+    let _ = crate::services::window_stream::stop();
+}
+
 // ── CDP discovery + session ──────────────────────────────────────────────────
 
 /// Fetch the debuggable `page` targets from a CDP port's `/json` endpoint.
@@ -359,6 +399,15 @@ async fn fetch_page_targets(port: u16) -> Result<Vec<Value>, String> {
         "CDP port {} not reachable (is the app running with --remote-debugging-port={}?): {}",
         port, port, last_err
     ))
+}
+
+/// True if a CDP debug port is still reachable — i.e. the app is ALIVE. A dead
+/// app's `/json` endpoint refuses the connection, so `fetch_page_targets` errors.
+/// Used by the liveness gate + the honest `list_windows` to tell "app exited" apart
+/// from "app alive with 0 windows". A reachable port with no page targets is still
+/// alive (Ok), so this only reports `false` when the port can't be reached at all.
+pub(crate) async fn is_cdp_port_alive(port: u16) -> bool {
+    fetch_page_targets(port).await.is_ok()
 }
 
 /// Discover a page target on a CDP port. With `title`, match the window whose

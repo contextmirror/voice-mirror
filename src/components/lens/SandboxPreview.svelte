@@ -116,11 +116,11 @@
   <div class="sandbox-body">
     {#if error}
       <div class="sandbox-msg error">{error}</div>
-    {:else if loading || !url}
-      <div class="sandbox-msg">Starting live preview…</div>
-    {:else if showEmpty && !hasFrame}
-      <!-- The app window closed (or never appeared) and nothing is mirrorable.
-           Show a clear, actionable empty state instead of an endless spinner. -->
+    {:else if showEmpty}
+      <!-- An explicit disconnect (the app exited / no mirrorable window, or the
+           first-load wait timed out) OVERRIDES a painted stale frame AND the
+           "Starting…" wait: show the clear, actionable empty state regardless of
+           hasFrame so a dead app never lingers on its last picture. -->
       <div class="sandbox-msg empty">
         <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <rect x="3" y="4" width="18" height="16" rx="2" /><line x1="3" y1="9" x2="21" y2="9" /><line x1="8" y1="14" x2="16" y2="14" />
@@ -144,6 +144,8 @@
           </select>
         {/if}
       </div>
+    {:else if loading || !url}
+      <div class="sandbox-msg">Starting live preview…</div>
     {:else}
       {#if !hasFrame}
         <div class="sandbox-msg waiting">

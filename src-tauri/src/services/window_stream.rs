@@ -75,6 +75,16 @@ pub(crate) fn is_external() -> bool {
     state().lock().map(|s| s.running && s.external).unwrap_or(false)
 }
 
+/// True if `generation` is the stream's CURRENT (live) generation. Lets an
+/// external CDP screencast task verify it still owns the stream before tearing it
+/// down on socket close, so it never kills a newer source that superseded it.
+pub(crate) fn is_current_generation(generation: u64) -> bool {
+    state()
+        .lock()
+        .map(|s| s.running && s.generation == generation)
+        .unwrap_or(false)
+}
+
 /// The most recent captured JPEG frame, if a stream is running and has produced
 /// at least one frame. Lets the sandbox screenshot reuse exactly what the live
 /// preview shows (reliable for transparent windows that CDP can't capture).

@@ -194,6 +194,11 @@ async fn start_cdp_screencast(cdp_port: u16) -> Result<u16, String> {
     // each one, and stops cleanly when superseded or the socket closes.
     tokio::spawn(async move {
         let mut ack_id = id;
+        // Set when the loop exits because the CDP SOCKET died (Close/None/error) —
+        // i.e. the app exited. Distinct from being superseded (stop_flag /
+        // publish_external_frame=false), where a NEWER source now owns the stream
+        // and we must NOT tear it down.
+        let mut socket_dead = false;
         loop {
             if stop_flag.load(Ordering::SeqCst) {
                 break;
@@ -238,17 +243,30 @@ async fn start_cdp_screencast(cdp_port: u16) -> Result<u16, String> {
                         ack_id += 1;
                     }
                 }
-                Ok(Some(Ok(Message::Close(_)))) | Ok(None) => break,
+                Ok(Some(Ok(Message::Close(_)))) | Ok(None) => {
+                    socket_dead = true;
+                    break;
+                }
                 Ok(Some(Ok(_))) => {}      // ping/binary/etc — ignore
-                Ok(Some(Err(_))) => break, // socket error
+                Ok(Some(Err(_))) => {
+                    socket_dead = true; // socket error
+                    break;
+                }
                 Err(_) => {}               // read timeout — loop, re-check stop
             }
         }
         // Best-effort stop so a re-targeted/closed app frees the screencast.
         let _ = ws_send(&mut ws, ack_id, "Page.stopScreencast", json!({})).await;
+        // The app's CDP socket died (it exited) — tear the live preview stream down
+        // so latest_frame()/is_external() stop serving the dead app's last frame.
+        // Guard on generation: only if WE still own the stream (a newer WGC/CDP
+        // source that superseded us must never be killed by our late teardown).
+        if socket_dead && crate::services::window_stream::is_current_generation(generation) {
+            let _ = crate::services::window_stream::stop();
+        }
         info!(
-            "[sandbox_stream] CDP screencast (gen {}) on :{} ended",
-            generation, cdp_port
+            "[sandbox_stream] CDP screencast (gen {}) on :{} ended (socket_dead={})",
+            generation, cdp_port, socket_dead
         );
     });
 
@@ -278,6 +296,16 @@ where
 /// the app's process via its main window (matched by CDP page title), then
 /// returns every visible window of that process.
 pub async fn list_windows(cdp_port: u16) -> Result<Vec<AppWindow>, String> {
+    // Honest disconnect: if the app's CDP debug port is unreachable, the app has
+    // EXITED. Return Err so the frontend can tell "app gone" (drop the stale frame,
+    // surface the disconnected state) apart from "app alive with 0 visible windows"
+    // (a reachable port that genuinely lists no windows still returns Ok([])).
+    if !crate::services::sandbox::is_cdp_port_alive(cdp_port).await {
+        return Err(format!(
+            "The app's CDP debug port :{} is unreachable — the previewed app has exited.",
+            cdp_port
+        ));
+    }
     let windows = crate::commands::screenshot::list_visible_windows_metadata()?;
     let main_proc = match cdp_page_title(cdp_port).await {
         Some(title) => {

@@ -157,8 +157,13 @@ function createSandboxPreviewStore() {
           startStream(visible[0].hwnd);
         } else {
           // Nothing presentable to mirror — show a clear empty state instead of
-          // spinning forever. (Cleared the moment any window is shown again.)
+          // spinning forever, and DROP the stale frame (mirror the listFailCount
+          // disconnect branch). Every path that concludes "nothing to show" must
+          // clear the frame, never keep lying with the closed window's picture.
+          // (All cleared the moment any window is shown again.)
           noWindow = true;
+          currentHwnd = null;
+          streamUrl = ''; // clears the stale frame → component resets hasFrame
         }
       }
     } catch {

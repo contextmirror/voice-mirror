@@ -523,7 +523,7 @@ async fn handle_capture_action(
             // Route CDP (WebView2/Tauri) vs UIA (native window) — IDENTICAL `@ref`
             // model + JSON shape, so the agent can't tell which engine ran.
             let window = args.get("window").and_then(|v| v.as_str());
-            match decide_sandbox_route(args)? {
+            match decide_sandbox_route(args).await? {
                 SandboxRoute::Cdp(port) => {
                     crate::services::sandbox::snapshot(port, window).await
                 }
@@ -535,7 +535,7 @@ async fn handle_capture_action(
             // CDP Page.captureScreenshot of the active target.
             // UIA path (native, no CDP): WGC frame if the preview is mirroring this
             // window, else a GDI PrintWindow capture of the exact window.
-            match decide_sandbox_route(args)? {
+            match decide_sandbox_route(args).await? {
                 SandboxRoute::Cdp(port) => {
                     crate::services::sandbox_stream::capture_app_window(port).await
                 }
@@ -547,7 +547,7 @@ async fn handle_capture_action(
                 .get("element_ref")
                 .and_then(|v| v.as_str())
                 .ok_or("element_ref parameter required")?;
-            match decide_sandbox_route(args)? {
+            match decide_sandbox_route(args).await? {
                 SandboxRoute::Cdp(port) => {
                     crate::services::sandbox::click(port, element_ref).await
                 }
@@ -560,7 +560,7 @@ async fn handle_capture_action(
                 .and_then(|v| v.as_str())
                 .ok_or("element_ref parameter required")?;
             let text = args.get("text").and_then(|v| v.as_str()).unwrap_or("");
-            match decide_sandbox_route(args)? {
+            match decide_sandbox_route(args).await? {
                 SandboxRoute::Cdp(port) => {
                     crate::services::sandbox::type_text(port, element_ref, text).await
                 }
@@ -765,7 +765,7 @@ enum SandboxRoute {
 ///   3. `window` title with NO active CDP app → resolve it to a native window (UIA);
 ///   4. else follow the last snapshot's backend (`active_backend()`);
 ///   5. else the active CDP port Voice Mirror launched (legacy default).
-fn decide_sandbox_route(args: &serde_json::Value) -> Result<SandboxRoute, String> {
+async fn decide_sandbox_route(args: &serde_json::Value) -> Result<SandboxRoute, String> {
     use crate::services::sandbox::{self, ActiveBackend};
 
     // 1. Explicit CDP port (unchanged) — never the host's own renderer.
@@ -798,9 +798,10 @@ fn decide_sandbox_route(args: &serde_json::Value) -> Result<SandboxRoute, String
         }
     }
 
-    // 4. Follow the engine the last snapshot used.
+    // 4. Follow the engine the last snapshot used. A default (non-explicit) CDP
+    //    target is LIVENESS-GATED below — a UIA window default is returned as-is.
     match sandbox::active_backend() {
-        Some(ActiveBackend::Cdp(p)) => return Ok(SandboxRoute::Cdp(p)),
+        Some(ActiveBackend::Cdp(p)) => return ensure_cdp_alive(p).await,
         Some(ActiveBackend::Uia(h)) => return Ok(SandboxRoute::Uia(h)),
         None => {}
     }
@@ -812,6 +813,29 @@ fn decide_sandbox_route(args: &serde_json::Value) -> Result<SandboxRoute, String
          (a native app like Notepad/Calculator/Settings)."
             .to_string()
     })?;
+    ensure_cdp_alive(port).await
+}
+
+/// Liveness gate for a DEFAULT (non-explicit) CDP target. Steps 4 & 5 of
+/// `decide_sandbox_route` fall back to whatever CDP app ran last — but if that app
+/// has since EXITED, its registries are stale. Verify the target is alive (its CDP
+/// debug port is reachable, OR its recorded OS window still exists); if it's dead,
+/// null all active-target state and return a clear, actionable error rather than
+/// silently driving a ghost. Explicit `port`/`hwnd`/`window` args never reach here,
+/// so they keep working unchanged.
+async fn ensure_cdp_alive(port: u16) -> Result<SandboxRoute, String> {
+    use crate::services::sandbox;
+    // Alive if the CDP port is reachable, OR (conservatively, to avoid clearing a
+    // briefly-unreachable app) the last-driven OS window still exists.
+    let alive = sandbox::is_cdp_port_alive(port).await
+        || sandbox::active_hwnd().map(sandbox::is_window_alive).unwrap_or(false);
+    if !alive {
+        sandbox::clear_active_target();
+        return Err(
+            "The previewed app has exited — relaunch it or pass an explicit `port`/`hwnd`."
+                .to_string(),
+        );
+    }
     Ok(SandboxRoute::Cdp(port))
 }
 
