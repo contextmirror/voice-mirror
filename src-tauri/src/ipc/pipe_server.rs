@@ -525,10 +525,14 @@ async fn handle_capture_action(
             crate::services::sandbox::snapshot(port, window).await
         }
         "sandbox_screenshot" => {
-            // Use the WGC window frame (what the live preview shows), not CDP —
-            // CDP renders transparent Tauri windows as black.
-            let _ = resolve_sandbox_port(args)?;
-            crate::services::sandbox_stream::capture_app_window().await
+            // Prefer the WGC window frame (what the live preview shows) — it's
+            // transparent-safe (CDP renders transparent Tauri windows black) and
+            // live. If there is NO WGC frame (e.g. an OPAQUE window that's hidden,
+            // occluded, or simply not painting at idle), fall back to CDP
+            // Page.captureScreenshot of the SAME active target. The port is needed
+            // for that CDP fallback.
+            let port = resolve_sandbox_port(args)?;
+            crate::services::sandbox_stream::capture_app_window(port).await
         }
         "sandbox_click" => {
             let port = resolve_sandbox_port(args)?;

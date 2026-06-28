@@ -83,18 +83,30 @@ pub fn stop(_cdp_port: u16) {
     let _ = crate::services::window_stream::stop();
 }
 
-/// Screenshot the app window for the AI — the same WGC frame the live preview
-/// shows. Reliable for transparent windows (which CDP captures as black).
-/// Requires the live preview to be streaming (it auto-opens for Tauri apps).
+/// Screenshot the app window for the AI — focus/occlusion/visibility-independent.
 ///
-/// UNIFIED ACTIVE WINDOW: the screenshot MUST be of the same window
-/// snapshot/click is driving (`active_hwnd`), never "the frontmost OS window".
-/// If the live stream is lagging on a different window (e.g. the preview poll
-/// hasn't caught up after a snapshot re-pointed the active window), we re-target
-/// the WGC stream to the active window HERE and wait for its first frame, so the
-/// screenshot can never diverge from snapshot/click. The resolved url/title/index
-/// are echoed so a wrong-window attach is instantly visible.
-pub async fn capture_app_window() -> Result<Value, String> {
+/// TWO PATHS, chosen automatically so the agent ALWAYS gets a frame:
+///   1. WGC (`window_stream::latest_frame`): the same live frame the preview
+///      shows. Reliable for TRANSPARENT windows (pill/overlay) that CDP captures
+///      as black, and it's what's on screen. Used whenever a frame exists.
+///   2. CDP (`services::sandbox::screenshot`, `Page.captureScreenshot`): a
+///      fallback for when there is NO WGC frame — e.g. an OPAQUE window that is
+///      hidden, occluded, or simply not presenting at idle (a Tauri app at idle
+///      has no visible opaque window for WGC to paint). This works even when the
+///      window is off-screen/occluded, but CDP renders TRANSPARENT windows BLACK,
+///      so it's only meaningful for OPAQUE content. It captures the SAME active
+///      target snapshot/click drive (`action_target` → the stored snapshot ws).
+///
+/// UNIFIED ACTIVE WINDOW: both paths target the same window snapshot/click is
+/// driving (`active_hwnd` for WGC, the stored CDP target for the fallback), never
+/// "the frontmost OS window". If the live stream is lagging on a different window
+/// (e.g. the preview poll hasn't caught up after a snapshot re-pointed the active
+/// window), we re-target the WGC stream to the active window HERE and wait for its
+/// first frame, so the screenshot can never diverge from snapshot/click. The
+/// resolved url/title/label/index and the `source` ("wgc"|"cdp") are echoed so a
+/// wrong-window attach (or an all-black transparent CDP capture) is instantly
+/// visible.
+pub async fn capture_app_window(port: u16) -> Result<Value, String> {
     if let Some(target) = crate::services::sandbox::active_hwnd() {
         if crate::services::sandbox::is_window_alive(target)
             && crate::services::window_stream::current_hwnd() != Some(target)
@@ -112,21 +124,61 @@ pub async fn capture_app_window() -> Result<Value, String> {
             }
         }
     }
-    let jpeg = crate::services::window_stream::latest_frame().ok_or_else(|| {
-        "No live app frame yet — open the App Preview (it auto-opens for Tauri apps) so the window is being captured.".to_string()
-    })?;
-    let b64 = crate::voice::tts::crypto::base64_encode(&jpeg);
     let meta = crate::services::sandbox::active_meta();
-    Ok(serde_json::json!({
-        "base64": b64,
-        "contentType": "image/jpeg",
-        "activeWindow": meta.title,
-        "activeLabel": meta.label,
-        "activeUrl": meta.url,
-        "activeIndex": meta.index,
-        "activeWidth": meta.width,
-        "activeHeight": meta.height,
-    }))
+
+    // PATH 1 — live WGC frame (transparent-safe + what's on screen).
+    if let Some(jpeg) = crate::services::window_stream::latest_frame() {
+        let b64 = crate::voice::tts::crypto::base64_encode(&jpeg);
+        return Ok(serde_json::json!({
+            "base64": b64,
+            "contentType": "image/jpeg",
+            "source": "wgc",
+            "activeWindow": meta.title,
+            "activeLabel": meta.label,
+            "activeUrl": meta.url,
+            "activeIndex": meta.index,
+            "activeWidth": meta.width,
+            "activeHeight": meta.height,
+        }));
+    }
+
+    // PATH 2 — no WGC frame: fall back to CDP of the SAME active target. This
+    // makes the screenshot work for OPAQUE windows that are hidden/occluded or
+    // not presenting (the common idle case for a Tauri app with no visible opaque
+    // window). CDP renders TRANSPARENT windows black, so we flag that in `note`.
+    match crate::services::sandbox::screenshot(port).await {
+        Ok(shot) => {
+            let b64 = shot
+                .get("base64")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            info!(
+                "[sandbox_stream] no WGC frame; used CDP fallback for label='{}' index={} url='{}'",
+                meta.label, meta.index, meta.url
+            );
+            Ok(serde_json::json!({
+                "base64": b64,
+                "contentType": "image/jpeg",
+                "source": "cdp",
+                "note": "Captured via CDP fallback (no live WGC frame — window hidden/occluded \
+                         or not presenting). CDP renders TRANSPARENT windows (the pill/overlay) \
+                         BLACK; this path is reliable only for OPAQUE windows.",
+                "activeWindow": meta.title,
+                "activeLabel": meta.label,
+                "activeUrl": meta.url,
+                "activeIndex": meta.index,
+                "activeWidth": meta.width,
+                "activeHeight": meta.height,
+            }))
+        }
+        Err(e) => Err(format!(
+            "No live app frame yet, and the CDP screenshot fallback failed: {}. \
+             Open the App Preview (it auto-opens for Tauri apps) so the window is captured, \
+             or make sure the app's CDP debug port is reachable.",
+            e
+        )),
+    }
 }
 
 /// Find the OS window for the app on `cdp_port`. Prefers the RESOLVED sandbox

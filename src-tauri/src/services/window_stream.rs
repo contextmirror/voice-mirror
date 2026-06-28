@@ -382,6 +382,14 @@ fn run_capture(
     // 8. Frame processing loop
     let frame_interval = std::time::Duration::from_millis(1000 / fps as u64);
     let mut last_frame_time = std::time::Instant::now();
+    // Present-nudge bookkeeping: WGC only delivers a frame when the source
+    // presents. A visible-but-not-presenting window (transparent pill, or an
+    // occluded opaque window) can sit at ZERO frames until the user interacts. If
+    // no frame has arrived shortly after StartCapture, kick it ONCE with a Win32
+    // present-nudge (no focus steal, never force-shows a hidden window).
+    let loop_start = std::time::Instant::now();
+    let mut got_frame = false;
+    let mut nudged = false;
 
     while !stop_flag.load(Ordering::SeqCst) {
         // Rate limiting
@@ -391,11 +399,19 @@ fn run_capture(
         }
         last_frame_time = std::time::Instant::now();
 
+        // Best-effort present-nudge if nothing has presented within ~400ms.
+        if !got_frame && !nudged && loop_start.elapsed() >= std::time::Duration::from_millis(400) {
+            present_nudge(hwnd);
+            nudged = true;
+        }
+
         // Try to get a frame
         let frame = match pool.TryGetNextFrame() {
             Ok(f) => f,
             Err(_) => continue,
         };
+        // A frame arrived → the window is presenting; no nudge needed.
+        got_frame = true;
 
         let surface = match frame.Surface() {
             Ok(s) => s,
@@ -668,3 +684,64 @@ fn get_window_title(hwnd: i64) -> String {
 fn get_window_title(_hwnd: i64) -> String {
     "Unknown".to_string()
 }
+
+/// Best-effort "present nudge": kick a window into repainting/presenting WITHOUT
+/// stealing focus or changing its visibility, so WGC delivers a frame for a window
+/// that is visible-but-not-presenting (a transparent pill that never repaints, or
+/// an occluded-but-visible opaque window). Never force-shows a window the app
+/// intentionally hid — it returns immediately unless `IsWindowVisible` is already
+/// true, and uses `SWP_NOACTIVATE | SWP_NOZORDER` (NOT `SWP_SHOWWINDOW`). All
+/// failures are ignored.
+#[cfg(target_os = "windows")]
+fn present_nudge(hwnd: i64) {
+    use windows::Win32::Foundation::{HWND, RECT};
+    use windows::Win32::Graphics::Gdi::{
+        RedrawWindow, RDW_ALLCHILDREN, RDW_INVALIDATE, RDW_UPDATENOW,
+    };
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GetWindowRect, IsWindowVisible, SetWindowPos, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOZORDER,
+    };
+
+    unsafe {
+        let h = HWND(hwnd as *mut std::ffi::c_void);
+        // Only nudge a window that is ALREADY visible — never reveal a hidden one.
+        if !IsWindowVisible(h).as_bool() {
+            return;
+        }
+        // 1. Force an immediate repaint of the window and its children.
+        let _ = RedrawWindow(
+            Some(h),
+            None,
+            None,
+            RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN,
+        );
+        // 2. 1px resize-then-restore to force a present, without moving, activating
+        //    or restacking the window.
+        let mut rect = RECT::default();
+        if GetWindowRect(h, &mut rect).is_ok() {
+            let w = rect.right - rect.left;
+            let ht = rect.bottom - rect.top;
+            let _ = SetWindowPos(
+                h,
+                None,
+                0,
+                0,
+                w + 1,
+                ht + 1,
+                SWP_NOMOVE | SWP_NOACTIVATE | SWP_NOZORDER,
+            );
+            let _ = SetWindowPos(
+                h,
+                None,
+                0,
+                0,
+                w,
+                ht,
+                SWP_NOMOVE | SWP_NOACTIVATE | SWP_NOZORDER,
+            );
+        }
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn present_nudge(_hwnd: i64) {}
