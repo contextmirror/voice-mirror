@@ -25,6 +25,18 @@ pub fn install() {
     tracing::info!("Native crash handler installed (SetUnhandledExceptionFilter)");
 }
 
+/// Write a full-process minidump (no exception) capturing ALL thread stacks — used
+/// by the hang watchdog to snapshot the stuck main thread during a UI freeze.
+#[cfg(windows)]
+pub fn capture_process_dump(path: &std::path::Path) -> bool {
+    unsafe { imp::write_dump(path, std::ptr::null()) }
+}
+
+#[cfg(not(windows))]
+pub fn capture_process_dump(_path: &std::path::Path) -> bool {
+    false
+}
+
 #[cfg(windows)]
 mod imp {
     use std::os::windows::ffi::OsStrExt;
@@ -90,8 +102,10 @@ mod imp {
         String::from_utf16_lossy(&buf[..len as usize])
     }
 
-    /// Best-effort minidump for post-mortem stack/symbol inspection.
-    unsafe fn write_minidump(path: &std::path::Path, info: *const EXCEPTION_POINTERS) -> bool {
+    /// Best-effort minidump for post-mortem stack/symbol inspection. `info` may be
+    /// NULL — for a no-exception process dump (used by the hang watchdog) all thread
+    /// stacks (incl. the stuck main thread) are still captured.
+    pub(super) unsafe fn write_dump(path: &std::path::Path, info: *const EXCEPTION_POINTERS) -> bool {
         const GENERIC_WRITE: u32 = 0x4000_0000;
         let wide: Vec<u16> = path
             .as_os_str()
@@ -110,22 +124,35 @@ mod imp {
             Ok(h) => h,
             Err(_) => return false,
         };
-        let mei = MINIDUMP_EXCEPTION_INFORMATION {
-            ThreadId: GetCurrentThreadId(),
-            ExceptionPointers: info as *mut _,
-            ClientPointers: FALSE,
-        };
         let dump_type = MINIDUMP_TYPE(MiniDumpWithThreadInfo.0 | MiniDumpWithDataSegs.0);
-        let ok = MiniDumpWriteDump(
-            GetCurrentProcess(),
-            GetCurrentProcessId(),
-            hfile,
-            dump_type,
-            Some(&mei as *const _),
-            None,
-            None,
-        )
-        .is_ok();
+        let ok = if info.is_null() {
+            MiniDumpWriteDump(
+                GetCurrentProcess(),
+                GetCurrentProcessId(),
+                hfile,
+                dump_type,
+                None,
+                None,
+                None,
+            )
+            .is_ok()
+        } else {
+            let mei = MINIDUMP_EXCEPTION_INFORMATION {
+                ThreadId: GetCurrentThreadId(),
+                ExceptionPointers: info as *mut _,
+                ClientPointers: FALSE,
+            };
+            MiniDumpWriteDump(
+                GetCurrentProcess(),
+                GetCurrentProcessId(),
+                hfile,
+                dump_type,
+                Some(&mei as *const _),
+                None,
+                None,
+            )
+            .is_ok()
+        };
         let _ = CloseHandle(hfile);
         ok
     }
@@ -166,7 +193,7 @@ mod imp {
         let dir = crate::services::platform::get_log_dir();
         let _ = std::fs::create_dir_all(&dir);
         let dump_path = dir.join(format!("crash-{epoch}.dmp"));
-        let dumped = write_minidump(&dump_path, info);
+        let dumped = write_dump(&dump_path, info);
 
         let report = format!(
             "==== Voice Mirror NATIVE CRASH ====\n\

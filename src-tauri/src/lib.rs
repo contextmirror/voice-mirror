@@ -834,6 +834,13 @@ pub fn run() {
                     let host_hwnd = window.hwnd().ok().map(|h| h.0 as i64);
                     let host_title = window.title().ok();
                     services::sandbox::set_host_identity(host_hwnd, host_title);
+
+                    // Watch the main window for UI-thread hangs ("Not Responding"):
+                    // on a sustained freeze, dump the stuck main-thread stack so the
+                    // hang is diagnosable (faults/panics are handled separately).
+                    if let Some(h) = host_hwnd {
+                        services::hang_watchdog::start(h);
+                    }
                 }
 
                 // Create native overlay titlebar (Windows: native min/max/close buttons)
