@@ -167,6 +167,21 @@ describe('sandbox-preview: closed-window recovery', () => {
       'Should import emit from @tauri-apps/api/event'
     );
   });
+
+  it('openApp re-attaches to a live visible window instead of relaunching when one exists', () => {
+    const block = src.split('async openApp()')[1]?.split('},')[0] || '';
+    // When the app is still alive (a visible window is available), re-mirror it
+    // rather than no-op relaunching the already-up dev server.
+    assert.ok(
+      block.includes('windows.filter') && block.includes('w.visible'),
+      'openApp should check for live visible windows'
+    );
+    assert.ok(block.includes('startStream('), 'openApp should re-mirror a live window via startStream');
+    assert.ok(
+      block.includes('noWindow = false'),
+      'openApp should clear noWindow when re-attaching to a live window'
+    );
+  });
 });
 
 describe('sandbox-preview: multi-window', () => {

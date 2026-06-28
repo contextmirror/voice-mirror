@@ -258,12 +258,24 @@ function createSandboxPreviewStore() {
     },
 
     /**
-     * (Re)launch the current project's app so a closed/missing app window comes
-     * back. Reuses the existing dev-server launch flow: LensWorkspace listens for
-     * `sandbox-start-request` and runs detectDevServers → devServerManager.start.
-     * Frontend-emitted events ARE caught by that `listen`, so this is all it needs.
+     * Recover the preview from the disconnected/empty state.
+     *
+     * If the app is actually STILL RUNNING (one or more live VISIBLE windows are
+     * available), RE-ATTACH to one — re-launching the dev server would no-op when
+     * it's already up, making the "Open app" button look dead. Only when NO visible
+     * window remains (the app is truly gone) do we relaunch via the dev-server flow:
+     * LensWorkspace listens for `sandbox-start-request` and runs detectDevServers →
+     * devServerManager.start (frontend-emitted events ARE caught by that `listen`).
      */
     async openApp() {
+      const liveVisible = windows.filter((w) => w.visible);
+      if (liveVisible.length > 0) {
+        // The app is alive — re-mirror a live window instead of relaunching.
+        noWindow = false;
+        userPinned = false;
+        startStream(liveVisible[0].hwnd);
+        return;
+      }
       await emit('sandbox-start-request', {});
     },
 
