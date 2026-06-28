@@ -30,8 +30,10 @@
   function handleTabClick(tab) {
     tabsStore.setActive(tab.id);
     editorGroupsStore.setFocusedGroup(groupId);
-    // Clicking a file tab should dismiss the browser overlay
+    // Clicking a file tab should dismiss the browser / app-preview overlay so the
+    // editor surfaces — even when that tab is already the active one (no tab change).
     if (onBrowserClick && showBrowser) onBrowserClick();
+    if (onAppPreviewClick && showAppPreview) onAppPreviewClick();
   }
 
   function doSplit(direction) {
