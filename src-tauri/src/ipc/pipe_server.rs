@@ -520,39 +520,58 @@ async fn handle_capture_action(
         // Sandbox tools: drive an app being built over CDP. These run here (in the
         // app process) so services::sandbox's @ref store is shared across calls.
         "sandbox_snapshot" => {
-            let port = resolve_sandbox_port(args)?;
+            // Route CDP (WebView2/Tauri) vs UIA (native window) — IDENTICAL `@ref`
+            // model + JSON shape, so the agent can't tell which engine ran.
             let window = args.get("window").and_then(|v| v.as_str());
-            crate::services::sandbox::snapshot(port, window).await
+            match decide_sandbox_route(args)? {
+                SandboxRoute::Cdp(port) => {
+                    crate::services::sandbox::snapshot(port, window).await
+                }
+                SandboxRoute::Uia(hwnd) => crate::services::uia::snapshot(hwnd, window).await,
+            }
         }
         "sandbox_screenshot" => {
-            // Prefer the WGC window frame (what the live preview shows) — it's
-            // transparent-safe (CDP renders transparent Tauri windows black) and
-            // live. If there is NO WGC frame (e.g. an OPAQUE window that's hidden,
-            // occluded, or simply not painting at idle), fall back to CDP
-            // Page.captureScreenshot of the SAME active target. The port is needed
-            // for that CDP fallback.
-            let port = resolve_sandbox_port(args)?;
-            crate::services::sandbox_stream::capture_app_window(port).await
+            // CDP path: prefer the WGC window frame (transparent-safe, live), else
+            // CDP Page.captureScreenshot of the active target.
+            // UIA path (native, no CDP): WGC frame if the preview is mirroring this
+            // window, else a GDI PrintWindow capture of the exact window.
+            match decide_sandbox_route(args)? {
+                SandboxRoute::Cdp(port) => {
+                    crate::services::sandbox_stream::capture_app_window(port).await
+                }
+                SandboxRoute::Uia(hwnd) => capture_native_window(hwnd),
+            }
         }
         "sandbox_click" => {
-            let port = resolve_sandbox_port(args)?;
             let element_ref = args
                 .get("element_ref")
                 .and_then(|v| v.as_str())
                 .ok_or("element_ref parameter required")?;
-            crate::services::sandbox::click(port, element_ref).await
+            match decide_sandbox_route(args)? {
+                SandboxRoute::Cdp(port) => {
+                    crate::services::sandbox::click(port, element_ref).await
+                }
+                SandboxRoute::Uia(hwnd) => crate::services::uia::click(hwnd, element_ref).await,
+            }
         }
         "sandbox_type" => {
-            let port = resolve_sandbox_port(args)?;
             let element_ref = args
                 .get("element_ref")
                 .and_then(|v| v.as_str())
                 .ok_or("element_ref parameter required")?;
             let text = args.get("text").and_then(|v| v.as_str()).unwrap_or("");
-            crate::services::sandbox::type_text(port, element_ref, text).await
+            match decide_sandbox_route(args)? {
+                SandboxRoute::Cdp(port) => {
+                    crate::services::sandbox::type_text(port, element_ref, text).await
+                }
+                SandboxRoute::Uia(hwnd) => {
+                    crate::services::uia::type_text(hwnd, element_ref, text).await
+                }
+            }
         }
         "sandbox_close" => {
-            let _ = resolve_sandbox_port(args)?;
+            // Works for both backends: closes whatever window the last snapshot
+            // resolved (`active_hwnd`), CDP or native. No port/backend needed.
             crate::services::sandbox::close_active_window()
         }
         "sandbox_start" => {
@@ -732,28 +751,142 @@ async fn handle_capture_action(
     }
 }
 
-/// Resolve the CDP port for a sandbox action: the explicit `port` arg, else the
-/// active sandbox app Voice Mirror launched.
-fn resolve_sandbox_port(args: &serde_json::Value) -> Result<u16, String> {
-    let port = if let Some(p) = args.get("port").and_then(|v| v.as_u64()) {
-        p as u16
-    } else {
-        crate::services::sandbox::active_cdp_port().ok_or_else(|| {
-            "No sandbox app is running. Call sandbox_start to launch the app you're building, \
-             or pass an explicit `port`."
-                .to_string()
-        })?
-    };
-    // Never let a sandbox action target Voice Mirror's own renderer.
-    if port == crate::services::sandbox::host_cdp_port() {
-        return Err(format!(
-            "Port {} is Voice Mirror's own renderer — not the app you're building. \
-             Launch your app with a different --remote-debugging-port (use sandbox_start), \
-             then retry.",
-            port
-        ));
+/// Which engine a sandbox action targets — CDP (WebView2/Tauri on a port) or UIA
+/// (a native window by HWND).
+#[derive(Clone, Copy)]
+enum SandboxRoute {
+    Cdp(u16),
+    Uia(i64),
+}
+
+/// Decide the backend for a sandbox action, preserving the CDP behavior exactly:
+///   1. explicit `port` → CDP (with the host-renderer guard);
+///   2. explicit `hwnd` → UIA (drive a native, non-CDP app);
+///   3. `window` title with NO active CDP app → resolve it to a native window (UIA);
+///   4. else follow the last snapshot's backend (`active_backend()`);
+///   5. else the active CDP port Voice Mirror launched (legacy default).
+fn decide_sandbox_route(args: &serde_json::Value) -> Result<SandboxRoute, String> {
+    use crate::services::sandbox::{self, ActiveBackend};
+
+    // 1. Explicit CDP port (unchanged) — never the host's own renderer.
+    if let Some(p) = args.get("port").and_then(|v| v.as_u64()) {
+        let port = p as u16;
+        if port == sandbox::host_cdp_port() {
+            return Err(format!(
+                "Port {} is Voice Mirror's own renderer — not the app you're building. \
+                 Launch your app with a different --remote-debugging-port (use sandbox_start), \
+                 then retry.",
+                port
+            ));
+        }
+        return Ok(SandboxRoute::Cdp(port));
     }
-    Ok(port)
+
+    // 2. Explicit native window handle → UIA.
+    if let Some(h) = args.get("hwnd").and_then(|v| v.as_i64()) {
+        return Ok(SandboxRoute::Uia(h));
+    }
+
+    // 3. `window` title with no active CDP app → treat as a native window name.
+    if let Some(win) = args.get("window").and_then(|v| v.as_str()) {
+        let no_cdp = sandbox::active_cdp_port().is_none()
+            && !matches!(sandbox::active_backend(), Some(ActiveBackend::Cdp(_)));
+        if no_cdp {
+            if let Some(h) = find_native_window_by_title(win) {
+                return Ok(SandboxRoute::Uia(h));
+            }
+        }
+    }
+
+    // 4. Follow the engine the last snapshot used.
+    match sandbox::active_backend() {
+        Some(ActiveBackend::Cdp(p)) => return Ok(SandboxRoute::Cdp(p)),
+        Some(ActiveBackend::Uia(h)) => return Ok(SandboxRoute::Uia(h)),
+        None => {}
+    }
+
+    // 5. Legacy default: the active CDP port Voice Mirror launched.
+    let port = sandbox::active_cdp_port().ok_or_else(|| {
+        "No sandbox app is running. Call sandbox_start to launch the app you're building, \
+         pass an explicit `port` (a CDP app), or pass an `hwnd` from capture_list_windows \
+         (a native app like Notepad/Calculator/Settings)."
+            .to_string()
+    })?;
+    Ok(SandboxRoute::Cdp(port))
+}
+
+/// Find a real, non-host OS window whose title matches `title` (case-insensitive
+/// substring, either direction). Used to route a `window` name to UIA when no CDP
+/// app is active (e.g. the agent says "Calculator").
+fn find_native_window_by_title(title: &str) -> Option<i64> {
+    #[cfg(windows)]
+    {
+        let t = title.trim().to_lowercase();
+        if t.is_empty() {
+            return None;
+        }
+        let windows = crate::commands::screenshot::list_visible_windows_metadata().ok()?;
+        windows
+            .into_iter()
+            .filter(|w| !crate::services::sandbox::is_host_window(w.hwnd, &w.title))
+            .find(|w| {
+                let wt = w.title.trim().to_lowercase();
+                !wt.is_empty() && (wt == t || wt.contains(&t) || t.contains(&wt))
+            })
+            .map(|w| w.hwnd)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = title;
+        None
+    }
+}
+
+/// Screenshot a NATIVE window (UIA backend): the live WGC frame if the preview is
+/// mirroring exactly this window, else a GDI `PrintWindow` capture of the exact
+/// window (focus/occlusion-independent). Mirrors the CDP screenshot's echo fields.
+#[cfg(windows)]
+fn capture_native_window(hwnd: i64) -> Result<serde_json::Value, String> {
+    use crate::services::{sandbox, window_stream};
+    let meta = sandbox::active_meta();
+
+    // PATH 1 — the same live WGC frame the user sees, but ONLY when the preview is
+    // pointed at THIS window (so the screenshot can't show a different app).
+    if window_stream::current_hwnd() == Some(hwnd) {
+        if let Some(jpeg) = window_stream::latest_frame() {
+            let b64 = crate::voice::tts::crypto::base64_encode(&jpeg);
+            return Ok(serde_json::json!({
+                "base64": b64,
+                "contentType": "image/jpeg",
+                "source": "wgc",
+                "activeWindow": meta.title,
+                "activeLabel": meta.label,
+                "activeUrl": meta.url,
+                "activeIndex": meta.index,
+                "activeWidth": meta.width,
+                "activeHeight": meta.height,
+            }));
+        }
+    }
+
+    // PATH 2 — GDI PrintWindow of the exact window (works hidden/occluded too).
+    let (b64, w, h) = crate::commands::screenshot::capture_window_as_base64(hwnd)?;
+    Ok(serde_json::json!({
+        "base64": b64,
+        "contentType": "image/png",
+        "source": "gdi",
+        "activeWindow": meta.title,
+        "activeLabel": meta.label,
+        "activeUrl": meta.url,
+        "activeIndex": meta.index,
+        "activeWidth": if meta.width > 0 { meta.width } else { w as i64 },
+        "activeHeight": if meta.height > 0 { meta.height } else { h as i64 },
+    }))
+}
+
+#[cfg(not(windows))]
+fn capture_native_window(_hwnd: i64) -> Result<serde_json::Value, String> {
+    Err("Native window capture is Windows-only".to_string())
 }
 
 // ---------------------------------------------------------------------------
