@@ -42,7 +42,7 @@ describe('sandbox-preview: integration', () => {
 });
 
 describe('sandbox-preview: state', () => {
-  for (const field of ['active', 'visible', 'cdpPort', 'streamUrl', 'loading', 'error']) {
+  for (const field of ['active', 'visible', 'maximized', 'cdpPort', 'streamUrl', 'loading', 'error']) {
     it(`uses $state for ${field}`, () => {
       assert.ok(
         new RegExp(`let\\s+${field}\\s*=\\s*\\$state\\(`).test(src),
@@ -51,11 +51,35 @@ describe('sandbox-preview: state', () => {
     });
   }
 
-  for (const getter of ['active', 'visible', 'cdpPort', 'streamUrl', 'loading', 'error']) {
+  for (const getter of ['active', 'visible', 'maximized', 'cdpPort', 'streamUrl', 'loading', 'error']) {
     it(`has getter ${getter}`, () => {
       assert.ok(src.includes(`get ${getter}()`), `Should expose getter ${getter}`);
     });
   }
+});
+
+describe('sandbox-preview: maximize layout', () => {
+  it('defaults maximized to true so the preview opens big, not crammed', () => {
+    assert.ok(
+      /let\s+maximized\s*=\s*\$state\(true\)/.test(src),
+      'maximized should default to true'
+    );
+  });
+
+  it('exposes a toggleMaximize() method', () => {
+    assert.ok(/toggleMaximize\(\)\s*\{/.test(src), 'Should expose toggleMaximize()');
+    const block = src.split('toggleMaximize()')[1]?.split('},')[0] || '';
+    assert.ok(block.includes('maximized = !maximized'), 'toggleMaximize should flip maximized');
+  });
+
+  it('exposes a setMaximized(value) setter', () => {
+    assert.ok(/setMaximized\(value\)\s*\{/.test(src), 'Should expose setMaximized(value)');
+  });
+
+  it('opening a new session resets to maximized', () => {
+    const block = src.split('async open(port')[1]?.split('syncAuto(')[0] || '';
+    assert.ok(block.includes('maximized = true'), 'open() should set maximized = true for a new session');
+  });
 });
 
 describe('sandbox-preview: lifecycle', () => {

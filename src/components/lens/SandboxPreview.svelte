@@ -51,7 +51,27 @@
       </select>
     {/if}
     <button
-      class="close-btn"
+      class="header-btn maximize-btn"
+      onclick={() => sandboxPreviewStore.toggleMaximize()}
+      title={sandboxPreviewStore.maximized
+        ? 'Restore to side panel (dock beside the editor)'
+        : 'Maximize (fill the preview area)'}
+      aria-label={sandboxPreviewStore.maximized ? 'Restore live preview to side panel' : 'Maximize live preview'}
+    >
+      {#if sandboxPreviewStore.maximized}
+        <!-- Restore-to-columns glyph: editor pane + side panel -->
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="4" width="18" height="16" rx="1.5" /><line x1="15" y1="4" x2="15" y2="20" />
+        </svg>
+      {:else}
+        <!-- Maximize / expand glyph -->
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 9V4h5" /><path d="M20 9V4h-5" /><path d="M4 15v5h5" /><path d="M20 15v5h-5" />
+        </svg>
+      {/if}
+    </button>
+    <button
+      class="header-btn close-btn"
       onclick={() => sandboxPreviewStore.hide()}
       title="Hide live preview (keeps it running — re-open from the App button)"
       aria-label="Hide live preview"
@@ -158,7 +178,7 @@
     border-color: var(--accent);
   }
 
-  .close-btn {
+  .header-btn {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -172,7 +192,7 @@
     flex-shrink: 0;
   }
 
-  .close-btn:hover {
+  .header-btn:hover {
     background: var(--bg-hover);
     color: var(--text);
   }

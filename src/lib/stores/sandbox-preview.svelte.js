@@ -28,6 +28,10 @@ const POLL_INTERVAL = 1000;
 function createSandboxPreviewStore() {
   let active = $state(false);
   let visible = $state(false);
+  // Layout mode: maximized fills the center content area (the same region the
+  // Browser overlay occupies); restored docks it in the narrow side column.
+  // Default to maximized so a freshly-opened preview is big, not crammed.
+  let maximized = $state(true);
   let cdpPort = $state(null);
   let streamUrl = $state('');
   let loading = $state(false);
@@ -133,6 +137,7 @@ function createSandboxPreviewStore() {
   return {
     get active() { return active; },
     get visible() { return visible; },
+    get maximized() { return maximized; },
     get cdpPort() { return cdpPort; },
     get streamUrl() { return streamUrl; },
     get loading() { return loading; },
@@ -158,6 +163,9 @@ function createSandboxPreviewStore() {
       cdpPort = port;
       active = true;
       visible = true;
+      // A newly launched app opens maximized (fills the preview area) so it's not
+      // shrunk into the narrow side strip. User can restore it to the side column.
+      maximized = true;
       attached = opts.attached ?? false;
       userPinned = false;
       currentHwnd = null;
@@ -199,6 +207,19 @@ function createSandboxPreviewStore() {
     hide() {
       userHidden = true;
       visible = false;
+    },
+
+    /**
+     * Toggle between maximized (center overlay, fills the preview area) and
+     * restored (narrow side column). Read by LensWorkspace to pick the layout.
+     */
+    toggleMaximize() {
+      maximized = !maximized;
+    },
+
+    /** Explicitly set the layout mode (true = maximized center overlay). */
+    setMaximized(value) {
+      maximized = !!value;
     },
 
     /**

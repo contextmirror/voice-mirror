@@ -648,7 +648,7 @@
             <SplitPanel direction="vertical" bind:ratio={centerRatio} minA={200} minB={80} collapseB={!layoutStore.showTerminal}>
               {#snippet panelA()}
                 <div class="preview-area">
-                 <SplitPanel direction="horizontal" bind:ratio={appPreviewRatio} minA={300} minB={240} collapseB={!sandboxPreviewStore.visible}>
+                 <SplitPanel direction="horizontal" bind:ratio={appPreviewRatio} minA={300} minB={240} collapseB={!sandboxPreviewStore.visible || sandboxPreviewStore.maximized}>
                   {#snippet panelA()}
                   <SplitPanel direction="horizontal" bind:ratio={devicePreviewRatio} minA={300} minB={200} collapseB={!devicePreviewStore.isOpen}>
                     {#snippet panelA()}
@@ -710,6 +710,17 @@
                             <DownloadsPanel onClose={() => showDownloads = false} />
                           {/if}
                         </div>
+
+                        <!-- App Preview layer (maximized mode): fills the same
+                             center region as the Browser overlay. Safe as a plain
+                             DOM overlay because the live app is an <img> MJPEG
+                             stream (no native WebView2 airspace). Mutually
+                             exclusive with the Browser. -->
+                        <div class="preview-layer app-preview-layer" class:visible={sandboxPreviewStore.visible && sandboxPreviewStore.maximized}>
+                          {#if sandboxPreviewStore.maximized}
+                            <SandboxPreview />
+                          {/if}
+                        </div>
                       </div>
                     {/snippet}
                     {#snippet panelB()}
@@ -718,10 +729,13 @@
                   </SplitPanel>
                   {/snippet}
                   {#snippet panelB()}
-                    <!-- App Preview: a real, resizable panel beside the editor
-                         (the live app via WGC). Mutually exclusive with the
-                         Browser, so no airspace conflict. -->
-                    <SandboxPreview />
+                    <!-- App Preview (restored / side-panel mode): a real,
+                         resizable panel beside the editor (the live app via WGC).
+                         When maximized, it renders as a center overlay instead
+                         (see .app-preview-layer below), so only mount one. -->
+                    {#if !sandboxPreviewStore.maximized}
+                      <SandboxPreview />
+                    {/if}
                   {/snippet}
                  </SplitPanel>
                 </div>
@@ -879,6 +893,12 @@
 
   .preview-layer.visible {
     display: flex;
+  }
+
+  /* App Preview overlay shares the Browser's center region; sits just above it
+     (they're mutually exclusive, so this is only belt-and-braces). */
+  .app-preview-layer {
+    z-index: 11;
   }
 
   /* Editor pane styles are in EditorPane.svelte */
