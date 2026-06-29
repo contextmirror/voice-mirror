@@ -10,6 +10,7 @@ import { configStore } from './config.svelte.js';
 import { chatStore } from './chat.svelte.js';
 import { aiStatusStore } from './ai-status.svelte.js';
 import { attachmentsStore } from './attachments.svelte.js';
+import { toastStore } from './toast.svelte.js';
 import { unwrapResult } from '../utils.js';
 
 /** Dedup window (ms) — ignore duplicate transcription text within this period. */
@@ -243,11 +244,15 @@ export async function startVoiceEngine() {
   try {
     const result = await startVoice();
     if (result?.success === false) {
-      voiceStore._setError(result.error || 'Failed to start voice engine');
+      const msg = result.error || 'Failed to start voice engine';
+      voiceStore._setError(msg);
+      toastStore.addToast({ message: `Voice engine failed to start: ${msg}`, severity: 'error' });
     }
     // Running state will be confirmed by the voice-event Ready event
   } catch (err) {
-    voiceStore._setError(err?.message || String(err));
+    const msg = err?.message || String(err);
+    voiceStore._setError(msg);
+    toastStore.addToast({ message: `Voice engine failed to start: ${msg}`, severity: 'error' });
   }
 }
 
