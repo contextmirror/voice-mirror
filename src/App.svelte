@@ -80,6 +80,12 @@
           minimizeWindow().catch(() => {});
         }
       }).catch(() => {});
+
+      // If config failed to load we booted on defaults — tell the user rather
+      // than silently losing their settings (error toasts always show).
+      if (configStore.error) {
+        toastStore.addToast({ message: `Couldn't load settings (${configStore.error}) — using defaults.`, severity: 'error' });
+      }
     }
   });
 
