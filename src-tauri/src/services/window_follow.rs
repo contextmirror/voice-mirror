@@ -133,7 +133,19 @@ mod imp {
         }
         if let Ok(mut g) = JOIN.lock() {
             if let Some(h) = g.take() {
-                let _ = h.join();
+                // Bound the join so a (theoretically) wedged pump can NEVER freeze
+                // the caller — stop() runs on the UI thread. With the timeout-bounded
+                // window sends in window_stream the pump can't wedge anymore, so this
+                // is belt-and-braces: wait briefly, then move on (a detached helper
+                // owns the handle and reaps the thread whenever it finally exits).
+                let (tx, rx) = std::sync::mpsc::channel();
+                std::thread::spawn(move || {
+                    let _ = h.join();
+                    let _ = tx.send(());
+                });
+                if rx.recv_timeout(Duration::from_millis(1500)).is_err() {
+                    tracing::warn!(target: "preview", "window-follow pump join timed out — detaching");
+                }
             }
         }
         THREAD_ID.store(0, Ordering::SeqCst);

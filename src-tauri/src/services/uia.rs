@@ -189,7 +189,12 @@ mod sys {
                 reply: tx,
             })
             .map_err(|e| format!("UIA worker thread unavailable: {}", e))?;
-        rx.await
+        // Bound the wait: a hung native app can make the worker's COM calls
+        // (FindAll/Invoke/SetForegroundWindow) block indefinitely; without this the
+        // caller (and any queued UIA op) would await forever. Time out instead.
+        tokio::time::timeout(std::time::Duration::from_secs(10), rx)
+            .await
+            .map_err(|_| "UIA operation timed out (target app unresponsive)".to_string())?
             .map_err(|e| format!("UIA worker dropped the reply: {}", e))?
     }
 
@@ -203,7 +208,12 @@ mod sys {
                 reply: tx,
             })
             .map_err(|e| format!("UIA worker thread unavailable: {}", e))?;
-        rx.await
+        // Bound the wait: a hung native app can make the worker's COM calls
+        // (FindAll/Invoke/SetForegroundWindow) block indefinitely; without this the
+        // caller (and any queued UIA op) would await forever. Time out instead.
+        tokio::time::timeout(std::time::Duration::from_secs(10), rx)
+            .await
+            .map_err(|_| "UIA operation timed out (target app unresponsive)".to_string())?
             .map_err(|e| format!("UIA worker dropped the reply: {}", e))?
     }
 
@@ -218,7 +228,12 @@ mod sys {
                 reply: tx,
             })
             .map_err(|e| format!("UIA worker thread unavailable: {}", e))?;
-        rx.await
+        // Bound the wait: a hung native app can make the worker's COM calls
+        // (FindAll/Invoke/SetForegroundWindow) block indefinitely; without this the
+        // caller (and any queued UIA op) would await forever. Time out instead.
+        tokio::time::timeout(std::time::Duration::from_secs(10), rx)
+            .await
+            .map_err(|_| "UIA operation timed out (target app unresponsive)".to_string())?
             .map_err(|e| format!("UIA worker dropped the reply: {}", e))?
     }
 

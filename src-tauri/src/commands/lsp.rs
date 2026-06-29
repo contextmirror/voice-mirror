@@ -883,19 +883,22 @@ pub async fn lsp_apply_workspace_edit(
                 continue;
             }
 
+            // Snap LSP character offsets to UTF-8 char boundaries (clamping to the
+            // line length) so slicing a line containing multibyte text — emoji,
+            // accented or CJK characters — can never panic the rename/edit.
+            fn floor_boundary(s: &str, i: usize) -> usize {
+                let mut i = i.min(s.len());
+                while i > 0 && !s.is_char_boundary(i) {
+                    i -= 1;
+                }
+                i
+            }
+
             // Build the new content: prefix of start line + new_text + suffix of end line
-            let prefix = if sc <= owned_lines[sl].len() {
-                &owned_lines[sl][..sc]
-            } else {
-                &owned_lines[sl]
-            };
+            let prefix = &owned_lines[sl][..floor_boundary(&owned_lines[sl], sc)];
 
             let suffix = if el < owned_lines.len() {
-                if ec <= owned_lines[el].len() {
-                    &owned_lines[el][ec..]
-                } else {
-                    ""
-                }
+                &owned_lines[el][floor_boundary(&owned_lines[el], ec)..]
             } else {
                 ""
             };
