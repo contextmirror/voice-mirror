@@ -131,7 +131,10 @@ mod inner {
         /// Find espeak-ng executable.
         fn find_espeak_ng() -> Option<(PathBuf, Option<PathBuf>)> {
             // 1. Check if espeak-ng is on PATH
-            if let Ok(output) = Command::new("espeak-ng").arg("--version").output() {
+            let mut version_cmd = Command::new("espeak-ng");
+            version_cmd.arg("--version");
+            crate::util::hidden(&mut version_cmd);
+            if let Ok(output) = version_cmd.output() {
                 if output.status.success() {
                     return Some((PathBuf::from("espeak-ng"), None));
                 }
@@ -182,6 +185,7 @@ mod inner {
                 cmd.env("ESPEAK_DATA_PATH", data);
             }
 
+            crate::util::hidden(&mut cmd);
             match cmd.output() {
                 Ok(out) if out.status.success() => {
                     let phonemes = String::from_utf8_lossy(&out.stdout)

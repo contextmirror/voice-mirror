@@ -68,20 +68,17 @@ pub fn detect_package_manager(project_root: &str) -> String {
 
 /// Check if a command is available on the system PATH.
 pub(crate) fn is_command_available(cmd: &str) -> bool {
-    let check = if cfg!(target_os = "windows") {
+    let mut check_cmd = if cfg!(target_os = "windows") {
         std::process::Command::new("where")
-            .arg(cmd)
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .status()
     } else {
         std::process::Command::new("which")
-            .arg(cmd)
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .status()
     };
-    matches!(check, Ok(status) if status.success())
+    check_cmd
+        .arg(cmd)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
+    crate::util::hidden(&mut check_cmd);
+    matches!(check_cmd.status(), Ok(status) if status.success())
 }
 
 /// Build a start command from the package manager and script name.
@@ -157,8 +154,10 @@ pub fn kill_port_process(port: u16) -> Result<(), String> {
 fn kill_port_process_impl(port: u16) -> Result<(), String> {
     use std::process::Command;
 
-    let output = Command::new("netstat")
-        .args(["-ano"])
+    let mut netstat_cmd = Command::new("netstat");
+    netstat_cmd.args(["-ano"]);
+    crate::util::hidden(&mut netstat_cmd);
+    let output = netstat_cmd
         .output()
         .map_err(|e| format!("Failed to run netstat: {}", e))?;
 
@@ -186,8 +185,10 @@ fn kill_port_process_impl(port: u16) -> Result<(), String> {
         if let Ok(pid) = pid_str.parse::<u32>() {
             if pid > 0 {
                 tracing::info!("[dev-server] Killing PID {} on port {} (addr={})", pid, port, local_addr);
-                let kill = Command::new("taskkill")
-                    .args(["/PID", &pid.to_string(), "/F"])
+                let mut kill_cmd = Command::new("taskkill");
+                kill_cmd.args(["/PID", &pid.to_string(), "/F"]);
+                crate::util::hidden(&mut kill_cmd);
+                let kill = kill_cmd
                     .output()
                     .map_err(|e| format!("Failed to run taskkill: {}", e))?;
 
