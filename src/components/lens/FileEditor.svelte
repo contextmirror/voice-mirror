@@ -901,6 +901,18 @@
       'command:editor-select-all': () => runEditorCommand('selectAll'),
       'command:editor-expand-selection': () => runEditorCommand('expand'),
       'command:editor-shrink-selection': () => runEditorCommand('shrink'),
+      // LSP commands from the title-bar Go menu / palette (the keyboard shortcuts
+      // F12 / Shift+F12 / F2 go through CodeMirror keymaps; these events did not
+      // have a listener, so the menu items were dead).
+      'command:go-to-definition': () => {
+        if (view && lsp.hasLsp && currentPath && isFocusedGroup()) lsp.handleGoToDefinition(view, view.state.selection.main.head);
+      },
+      'command:find-references': () => {
+        if (view && lsp.hasLsp && currentPath && isFocusedGroup()) lsp.handleFindReferences(view, currentPath);
+      },
+      'command:rename': () => {
+        if (view && lsp.hasLsp && currentPath && isFocusedGroup()) lsp.handleRenameSymbol(view, currentPath);
+      },
     };
 
     // Also listen to unscoped event for backwards compatibility

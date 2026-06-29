@@ -237,6 +237,14 @@
         window.dispatchEvent(new CustomEvent('lens-focus-search'));
       });
 
+      // Title-bar menu + command-palette "commands" entries dispatch this event;
+      // without a listener those menu items silently did nothing. (App is the
+      // root and never unmounts, so no teardown needed — matches the handlers above.)
+      window.addEventListener('command:open-palette', (e) => {
+        commandPaletteMode = e.detail?.mode || 'commands';
+        commandPaletteVisible = true;
+      });
+
       // Listen for PTT events from the unified input hook.
       // The Rust hook handles matching the configured key and emits
       // ptt-key-pressed/released — no frontend key comparison needed.
