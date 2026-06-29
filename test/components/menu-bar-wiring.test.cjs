@@ -17,6 +17,7 @@ const fileEditor = read('src/components/lens/FileEditor.svelte');
 const terminalTabs = read('src/components/terminal/TerminalTabs.svelte');
 const terminalPanel = read('src/components/terminal/TerminalPanel.svelte');
 const app = read('src/App.svelte');
+const devServerManager = read('src/lib/stores/dev-server-manager.svelte.js');
 
 describe('commands.svelte.js: menu-bar commands registered', () => {
   const expectedIds = [
@@ -104,6 +105,25 @@ describe('Terminal: Clear / Show wiring', () => {
     assert.ok(terminalPanel.includes('instanceActions'), 'tracks per-instance actions');
     assert.ok(terminalPanel.includes('activeInstanceId'), 'targets the active instance');
     assert.ok(!terminalPanel.includes('onRegisterActions={() => {}}'), 'no longer discards terminal actions');
+  });
+});
+
+describe('Dev-server notifications: deduped (one toast per action)', () => {
+  it('run commands no longer emit interim Starting/Stopping/Restarting toasts', () => {
+    // The dev-server-manager is the single source of truth for lifecycle toasts.
+    assert.ok(!commands.includes('Starting dev server'), 'no interim Starting toast');
+    assert.ok(!commands.includes('Stopping dev server'), 'no interim Stopping toast');
+    assert.ok(!commands.includes('Restarting dev server'), 'no interim Restarting toast');
+  });
+
+  it('run commands keep the unique guard toasts the manager never emits', () => {
+    assert.ok(commands.includes('No dev server detected'), 'keeps no-server-detected guard');
+    assert.ok(commands.includes('already'), 'keeps already-running guard');
+  });
+
+  it('manager lifecycle toasts share a per-project key so they replace rather than stack', () => {
+    assert.ok(devServerManager.includes('key: `dev-server-${projectPath}`'), 'lifecycle toasts keyed per project');
+    assert.ok(devServerManager.includes('dev-server-crash-'), 'crash toasts use a distinct key');
   });
 });
 

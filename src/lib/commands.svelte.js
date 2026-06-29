@@ -731,8 +731,9 @@ async function runStartActiveProject() {
       toastStore.addToast({ message: 'No dev server detected for this project (no start script found).', severity: 'warning' });
       return;
     }
+    // The dev-server-manager emits the lifecycle toast ("{framework} ready on
+    // :{port}" / failure) — don't add a redundant "Starting…" here.
     devServerManager.startServer(servers[0], projectPath, null);
-    toastStore.addToast({ message: `Starting dev server${servers[0].port ? ` on :${servers[0].port}` : ''}…`, severity: 'info' });
   } catch (err) {
     console.error('[commands] run.start failed:', err);
     toastStore.addToast({ message: 'Failed to start dev server.', severity: 'error' });
@@ -749,8 +750,8 @@ function runStopActiveProject() {
     toastStore.addToast({ message: 'No dev server is running for this project.', severity: 'warning' });
     return;
   }
+  // The manager emits "Stopped {framework} on :{port}" — no interim toast here.
   devServerManager.stopServer(projectPath);
-  toastStore.addToast({ message: 'Stopping dev server…', severity: 'info' });
 }
 commandRegistry.registerMany([
   {
@@ -778,8 +779,8 @@ commandRegistry.registerMany([
         runStartActiveProject();
         return;
       }
+      // The manager narrates restart via its stop + ready toasts.
       devServerManager.restartServer(p);
-      toastStore.addToast({ message: 'Restarting dev server…', severity: 'info' });
     },
   },
 ]);

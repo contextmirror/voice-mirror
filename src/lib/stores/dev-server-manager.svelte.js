@@ -209,6 +209,7 @@ function createDevServerManager() {
       toastStore.addToast({
         message: `Crash loop detected for ${server.framework || 'server'} — not restarting`,
         severity: 'error',
+        key: `dev-server-crash-${projectPath}`,
       });
       return;
     }
@@ -277,6 +278,7 @@ function createDevServerManager() {
         toastStore.addToast({
           message: 'Failed to spawn terminal for dev server',
           severity: 'error',
+          key: `dev-server-${projectPath}`,
         });
         return;
       }
@@ -344,6 +346,7 @@ function createDevServerManager() {
         toastStore.addToast({
           message: `${server.framework || 'Server'} ready on :${server.port}`,
           severity: 'success',
+          key: `dev-server-${projectPath}`,
         });
       } else {
         // Timeout -- don't kill, let user check terminal
@@ -353,6 +356,7 @@ function createDevServerManager() {
             ? "Setup may still be running — check terminal"
             : "Server didn't start — check terminal",
           severity: hasSetup ? 'warning' : 'error',
+          key: `dev-server-${projectPath}`,
         });
       }
     } catch (err) {
@@ -361,6 +365,7 @@ function createDevServerManager() {
       toastStore.addToast({
         message: `Dev server start failed: ${err.message || err}`,
         severity: 'error',
+        key: `dev-server-${projectPath}`,
       });
     }
   }
@@ -414,6 +419,7 @@ function createDevServerManager() {
     toastStore.addToast({
       message: `Stopped ${framework || 'dev server'}${port ? ` on :${port}` : ''}`,
       severity: 'info',
+      key: `dev-server-${projectPath}`,
     });
   }
 
@@ -579,11 +585,13 @@ function createDevServerManager() {
         message: `${state.framework || 'Server'} crash loop detected (${CRASH_LOOP_COUNT} crashes in ${CRASH_LOOP_WINDOW / 60000}min) — auto-restart disabled`,
         severity: 'error',
         duration: 0,
+        key: `dev-server-crash-${crashedProject}`,
       });
     } else if (wasRunning) {
       toastStore.addToast({
         message: `${state.framework || 'Dev server'} crashed unexpectedly`,
         severity: 'warning',
+        key: `dev-server-crash-${crashedProject}`,
       });
     }
   }
