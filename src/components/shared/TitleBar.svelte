@@ -160,6 +160,7 @@
       { label: 'Clear Terminal', cmd: 'terminal.clear' },
     ],
     help: [
+      { label: 'Get Started', cmd: 'help.getStarted' },
       { label: 'Documentation', cmd: 'help.documentation' },
       { label: 'Keyboard Shortcuts', kbd: 'Ctrl+K Ctrl+S', cmd: 'help.keyboardShortcuts' },
       { separator: true },

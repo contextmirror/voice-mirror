@@ -32,6 +32,7 @@
   import CommandPalette from './components/lens/CommandPalette.svelte';
   import AboutDialog from './components/shared/AboutDialog.svelte';
   import KeyboardShortcutsDialog from './components/shared/KeyboardShortcutsDialog.svelte';
+  import GettingStarted from './components/shared/GettingStarted.svelte';
   import { layoutStore } from './lib/stores/layout.svelte.js';
   import OverlayPanel from './components/overlay/OverlayPanel.svelte';
   import WelcomeWizard from './components/onboarding/WelcomeWizard.svelte';
@@ -639,6 +640,7 @@
 <CommandPalette bind:visible={commandPaletteVisible} initialMode={commandPaletteMode} onClose={() => { commandPaletteVisible = false; }} />
 <AboutDialog />
 <KeyboardShortcutsDialog />
+<GettingStarted />
 <ToastContainer />
 
 <style>

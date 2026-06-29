@@ -807,6 +807,12 @@ commandRegistry.registerMany([
 // Help
 commandRegistry.registerMany([
   {
+    id: 'help.getStarted',
+    label: 'Help: Get Started',
+    category: 'Help',
+    execute: () => window.dispatchEvent(new CustomEvent('show-tutorial')),
+  },
+  {
     id: 'help.documentation',
     label: 'Help: Documentation',
     category: 'Help',
