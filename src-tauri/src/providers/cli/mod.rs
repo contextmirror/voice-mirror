@@ -261,8 +261,18 @@ impl Provider for CliProvider {
                 }
             };
 
-            // Write MCP config files for all supported providers
-            if let Some(ref root) = project_root {
+            // Write MCP config files for all supported providers.
+            //
+            // The MCP config (.mcp.json) + status line belong in the workspace Claude
+            // Code actually runs in. In dev, find_project_root() returns the VM repo
+            // (so dev gets the repo's .mcp.json); in an INSTALLED build there is no dev
+            // marker (src-tauri/tauri.conf.json), so project_root is None — fall back to
+            // the working directory (the user's open project, else home). The MCP binary
+            // is resolved next to the exe, so it does NOT need the dev tree. Without this
+            // fallback the Voice Agent gets no MCP tools in the packaged app and the
+            // provider destabilises on startup (the "freeze before it loads in").
+            let mcp_root = project_root.clone().or_else(|| work_dir.clone());
+            if let Some(ref root) = mcp_root {
                 let cwd_override = work_dir.as_ref().filter(|w| w.as_path() != root.as_path());
                 if let Err(e) = mcp_config::write_mcp_config(root, &enabled_groups, cwd_override, &self.config.mcp_preferences) {
                     warn!("Failed to write MCP config: {}", e);
@@ -273,8 +283,7 @@ impl Provider for CliProvider {
                 }
             } else {
                 warn!(
-                    "No project root found — MCP tools will NOT be available to {}. \
-                     Set VOICE_MIRROR_ROOT env var to the project directory.",
+                    "No workspace directory available — MCP tools will NOT be available to {}.",
                     self.cli_config.display_name
                 );
             }
