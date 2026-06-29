@@ -57,6 +57,24 @@ describe('TitleBar: Zed-style menu bar', () => {
     assert.ok(src.includes('class="menu-bar"'), 'Should have menu-bar class');
   });
 
+  it('menu bar is shown by default and its state is persisted', () => {
+    // Defaults open (loadMenuBarOpen returns true when nothing is stored) and
+    // remembers the toggle across sessions via localStorage.
+    assert.ok(src.includes('loadMenuBarOpen'), 'Should initialise from a persisted preference');
+    assert.ok(src.includes('let appMenuOpen = $state(loadMenuBarOpen())'), 'appMenuOpen should init from the preference');
+    assert.ok(src.includes("'voice-mirror-menu-bar-open'") || src.includes('MENU_BAR_PREF'), 'Should use a localStorage key');
+    assert.ok(src.includes('localStorage.setItem(MENU_BAR_PREF'), 'Toggle should persist the choice');
+    assert.ok(/return v === null \? true/.test(src), 'Default (no stored value) should be open');
+  });
+
+  it('click-outside / Escape close only the submenu, not the whole bar', () => {
+    // closeAppMenu must NOT hide the persistent bar (no appMenuOpen = false in it).
+    const fn = src.match(/function closeAppMenu\(\)\s*\{[^}]*\}/);
+    assert.ok(fn, 'closeAppMenu should exist');
+    assert.ok(!/appMenuOpen\s*=\s*false/.test(fn[0]), 'closeAppMenu should not hide the bar');
+    assert.ok(fn[0].includes('activeMenuId = null'), 'closeAppMenu should close the dropdown');
+  });
+
   it('menu bar items have hover-through behavior', () => {
     assert.ok(src.includes('handleMenuHover'), 'Should have hover handler');
     assert.ok(src.includes('onmouseenter'), 'Should use onmouseenter for hover-through');

@@ -18,7 +18,20 @@
   }
 
   // ---- App Menu ----
-  let appMenuOpen = $state(false);
+  // The menu bar (File/Edit/…) is shown by default and toggled only by the
+  // broadcast button; the choice is remembered across sessions (localStorage,
+  // to avoid a backend config rebuild). Click-outside / Escape close just the
+  // open submenu dropdown — not the bar itself.
+  const MENU_BAR_PREF = 'voice-mirror-menu-bar-open';
+  function loadMenuBarOpen() {
+    try {
+      const v = localStorage.getItem(MENU_BAR_PREF);
+      return v === null ? true : v === 'true';
+    } catch {
+      return true;
+    }
+  }
+  let appMenuOpen = $state(loadMenuBarOpen());
   let activeMenuId = $state(null);
   let submenuLeft = $state(0);
 
@@ -29,10 +42,16 @@
     e.stopPropagation();
     appMenuOpen = !appMenuOpen;
     if (!appMenuOpen) activeMenuId = null;
+    try {
+      localStorage.setItem(MENU_BAR_PREF, String(appMenuOpen));
+    } catch {
+      // localStorage unavailable — non-fatal, just won't persist
+    }
   }
 
+  // Closes only the open submenu dropdown (click-outside / Escape / after an
+  // action). The menu bar itself stays put — it's toggled only via the button.
   function closeAppMenu() {
-    appMenuOpen = false;
     activeMenuId = null;
   }
 
