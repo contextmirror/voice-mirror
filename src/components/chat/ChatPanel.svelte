@@ -12,6 +12,9 @@
   import { attachmentsStore } from '../../lib/stores/attachments.svelte.js';
   import { chatLoad, chatSave, exportChatToFile, lensCapturePreview, clearInbox } from '../../lib/api.js';
   import { lensStore } from '../../lib/stores/lens.svelte.js';
+  import { aiStatusStore, startProvider } from '../../lib/stores/ai-status.svelte.js';
+  import { configStore } from '../../lib/stores/config.svelte.js';
+  import { CLI_PROVIDERS, PROVIDER_NAMES } from '../../lib/providers.js';
   import { save } from '@tauri-apps/plugin-dialog';
   import { unwrapResult } from '../../lib/utils.js';
   import MessageGroup from './MessageGroup.svelte';
@@ -66,6 +69,27 @@
   });
 
   const hasMessages = $derived(chatStore.messages.length > 0);
+
+  // First-run dead-end guard: a CLI agent (e.g. claude) is configured but not
+  // running, so typing/speaking would route to the MCP inbox with no agent
+  // reading it — silently. Surface a Start affordance instead. (API providers
+  // respond per-request and don't need this; dictation has its own flow.)
+  const configuredProvider = $derived(configStore.value?.ai?.provider || 'claude');
+  const providerLabel = $derived(PROVIDER_NAMES[configuredProvider] || configuredProvider);
+  const needsProviderStart = $derived(
+    CLI_PROVIDERS.includes(configuredProvider) && !aiStatusStore.running
+  );
+  let startingProvider = $state(false);
+
+  async function handleStartProvider() {
+    if (startingProvider) return;
+    startingProvider = true;
+    try {
+      await startProvider();
+    } finally {
+      startingProvider = false;
+    }
+  }
 
   /** Whether the user has manually scrolled up away from the bottom. */
   let userScrolledUp = $state(false);
@@ -365,6 +389,18 @@
     {/if}
   </div>
 
+  {#if needsProviderStart}
+    <div class="provider-banner" role="status">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="16" height="16" aria-hidden="true">
+        <path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>
+      </svg>
+      <span class="provider-banner-text">{providerLabel} isn't running — messages won't get a response.</span>
+      <button class="provider-banner-btn" onclick={handleStartProvider} disabled={startingProvider}>
+        {startingProvider ? 'Starting…' : `Start ${providerLabel}`}
+      </button>
+    </div>
+  {/if}
+
   <ChatInput
     {onSend}
     onClear={handleClear}
@@ -460,6 +496,52 @@
   .scroll-spacer {
     height: 8px;
     flex-shrink: 0;
+  }
+
+  /* "Provider not running" banner above the chat input */
+  .provider-banner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 8px 6px;
+    padding: 7px 10px;
+    background: var(--warning-subtle, color-mix(in srgb, var(--warning, #d9a521) 14%, transparent));
+    border: 1px solid color-mix(in srgb, var(--warning, #d9a521) 45%, transparent);
+    border-radius: var(--radius-md, 6px);
+    color: var(--text);
+    font-size: 12px;
+  }
+
+  .provider-banner svg {
+    color: var(--warning, #d9a521);
+    flex-shrink: 0;
+  }
+
+  .provider-banner-text {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .provider-banner-btn {
+    flex-shrink: 0;
+    padding: 4px 10px;
+    border: none;
+    border-radius: var(--radius-sm, 4px);
+    background: var(--accent);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .provider-banner-btn:hover:not(:disabled) {
+    filter: brightness(1.08);
+  }
+
+  .provider-banner-btn:disabled {
+    opacity: 0.6;
+    cursor: default;
   }
 
   /* Empty state */
