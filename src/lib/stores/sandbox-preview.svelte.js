@@ -22,6 +22,7 @@ import {
   sandboxListWindows,
 } from '../api.js';
 import { unwrapResult } from '../utils.js';
+import { projectStore } from './project.svelte.js';
 
 // Window-list refresh / disconnect-detection cadence. The backend's event-driven
 // window-follow (`sandbox-follow-target`) now drives WHICH window we mirror, so
@@ -70,6 +71,10 @@ function createSandboxPreviewStore() {
   // launched), not by a Voice Mirror dev server — so the auto-sync must NOT close
   // it when no dev-server CDP port is active.
   let attached = false;
+  // The user clicked the App tab with no session and no remembered preference —
+  // show an in-panel confirmation ("Start the dev server?") instead of silently
+  // launching it. Cleared once they choose (Start / Not now) or a session opens.
+  let confirmStart = $state(false);
 
   function setStreamUrl(url) {
     // Cache-bust so the <img> reconnects when we re-target the stream to a
@@ -208,6 +213,7 @@ function createSandboxPreviewStore() {
     get windows() { return windows; },
     get currentHwnd() { return currentHwnd; },
     get noWindow() { return noWindow; },
+    get confirmStart() { return confirmStart; },
 
     /**
      * Begin a live preview for the app on `port` (CDP) and show it. Idempotent:
@@ -227,6 +233,7 @@ function createSandboxPreviewStore() {
       cdpPort = port;
       active = true;
       visible = true;
+      confirmStart = false; // a live session supersedes any pending start prompt
       // A newly launched app opens maximized (fills the preview area) so it's not
       // shrunk into the narrow side strip. User can restore it to the side column.
       maximized = true;
@@ -282,9 +289,49 @@ function createSandboxPreviewStore() {
      */
     async requestStart() {
       if (active) { this.show(); return; }
+      confirmStart = false;
       visible = true;
       userHidden = false;
       await emit('sandbox-start-request', { force: true });
+    },
+
+    /**
+     * USER clicked the App tab with no session running. Unlike the AI's
+     * `sandbox_start` (which goes straight through `sandbox-start-request`), a
+     * human click must NOT silently spin up a dev server. If this project has a
+     * remembered "always auto-start" preference, start immediately; otherwise
+     * show an in-panel confirmation (Start / Not now / Always) — see SandboxPreview.
+     */
+    async promptStart() {
+      if (active) { this.show(); return; }
+      const remembered = projectStore.activeProject?.autoStartPreview;
+      if (remembered === true) {
+        await this.requestStart();
+        return;
+      }
+      // Reveal the panel showing the confirmation, but don't launch anything yet.
+      visible = true;
+      userHidden = false;
+      confirmStart = true;
+    },
+
+    /**
+     * Confirm the in-panel start prompt. `always` persists a per-project
+     * preference so future App-tab clicks auto-start without prompting.
+     * @param {boolean} [always]
+     */
+    async confirmStartNow(always = false) {
+      if (always) {
+        projectStore.updateActiveField('autoStartPreview', true);
+      }
+      confirmStart = false;
+      await this.requestStart();
+    },
+
+    /** Dismiss the in-panel start prompt without launching ("Not now"). */
+    cancelStart() {
+      confirmStart = false;
+      visible = false;
     },
 
     /**
@@ -359,6 +406,7 @@ function createSandboxPreviewStore() {
       userPinned = false;
       attached = false;
       userHidden = false;
+      confirmStart = false;
       if (port) {
         sandboxStreamStop(port).catch(() => {});
       }

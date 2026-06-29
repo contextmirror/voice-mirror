@@ -194,11 +194,13 @@ function createDevServerManager() {
     const state = getOrCreateState(projectPath);
 
     // Already running or starting. A user-initiated relaunch (force) tears the
-    // (possibly stale) server down first so "Open app" / the App tab always yields
-    // a fresh window — otherwise a leftover 'running' status silently no-ops (e.g.
-    // after the user manually closed the app window).
+    // (possibly stale) RUNNING server down first so "Open app" / the App tab always
+    // yields a fresh window — otherwise a leftover 'running' status silently no-ops
+    // (e.g. after the user manually closed the app window). But NEVER force-restart
+    // a server that's still STARTING: a relaunch click mid-launch must let the
+    // in-flight start finish, not kill+respawn it (avoids churning a just-started app).
     if (state.status === 'running' || state.status === 'starting') {
-      if (!opts.force) return;
+      if (!opts.force || state.status === 'starting') return;
       await stopServer(projectPath);
     }
 

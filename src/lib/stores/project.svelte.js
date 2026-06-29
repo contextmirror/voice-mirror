@@ -90,6 +90,7 @@ function createProjectStore() {
         preferredServerUrl: null,
         lastBrowserUrl: null,
         autoStartServer: null,
+        autoStartPreview: null,
       }];
       activeIndex = entries.length - 1;
       this._persist();

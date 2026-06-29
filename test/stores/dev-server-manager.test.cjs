@@ -500,6 +500,25 @@ describe('dev-server-manager.svelte.js -- startServer race condition fix', () =>
   });
 });
 
+// -- force-restart guard (don't churn an in-flight launch) --
+
+describe('dev-server-manager.svelte.js -- force-restart guard', () => {
+  it('only tears down a RUNNING server on force, never a STARTING one', () => {
+    const block = src.split('async function startServer')[1]?.split('async function')[0] || '';
+    // A relaunch click mid-launch must let the in-flight start finish: when status
+    // is 'starting' it returns early regardless of force, instead of stopServer().
+    assert.ok(
+      block.includes("!opts.force || state.status === 'starting'"),
+      'force should bail out when the server is still starting'
+    );
+  });
+
+  it('still force-restarts a (possibly stale) running server', () => {
+    const block = src.split('async function startServer')[1]?.split('async function')[0] || '';
+    assert.ok(block.includes('await stopServer(projectPath)'), 'force on running should stop then restart');
+  });
+});
+
 // -- startCommand preservation --
 
 describe('dev-server-manager.svelte.js -- startCommand preservation', () => {

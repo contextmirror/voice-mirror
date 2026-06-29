@@ -9,6 +9,7 @@
    * (a small pill app shows centered, not stretched).
    */
   import { sandboxPreviewStore } from '../../lib/stores/sandbox-preview.svelte.js';
+  import { projectStore } from '../../lib/stores/project.svelte.js';
 
   const url = $derived(sandboxPreviewStore.streamUrl);
   const loading = $derived(sandboxPreviewStore.loading);
@@ -16,6 +17,12 @@
   const windows = $derived(sandboxPreviewStore.windows);
   const currentHwnd = $derived(sandboxPreviewStore.currentHwnd);
   const noWindow = $derived(sandboxPreviewStore.noWindow);
+  // Whether the body shows the "Start the dev server?" confirmation (user clicked
+  // the App tab with no session and no remembered preference).
+  const confirmStart = $derived(sandboxPreviewStore.confirmStart);
+  const projectName = $derived(projectStore.activeProject?.name || 'this project');
+  // "Always start automatically for this project" — persisted on Start if ticked.
+  let alwaysStart = $state(false);
 
   // The MJPEG stream serves immediately but is empty until the app window exists
   // (a `tauri dev` app compiles Rust first, so its window can appear minutes
@@ -114,7 +121,29 @@
     </button>
   </div>
   <div class="sandbox-body">
-    {#if error}
+    {#if confirmStart}
+      <!-- USER clicked App with no session: confirm before launching a dev server
+           (never silently spin one up). "Always" persists a per-project pref. -->
+      <div class="sandbox-msg confirm">
+        <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="3" y="4" width="18" height="16" rx="2" /><path d="M10 9l4 3-4 3z" fill="currentColor" stroke="none" />
+        </svg>
+        <span>Start the dev server for <strong>{projectName}</strong>?</span>
+        <small>This launches the app so you can preview it live here.</small>
+        <div class="confirm-actions">
+          <button class="open-app-cta" onclick={() => sandboxPreviewStore.confirmStartNow(alwaysStart)}>
+            Start
+          </button>
+          <button class="confirm-dismiss" onclick={() => sandboxPreviewStore.cancelStart()}>
+            Not now
+          </button>
+        </div>
+        <label class="confirm-always">
+          <input type="checkbox" bind:checked={alwaysStart} />
+          Always start automatically for this project
+        </label>
+      </div>
+    {:else if error}
       <div class="sandbox-msg error">{error}</div>
     {:else if showEmpty}
       <!-- An explicit disconnect (the app exited / no mirrorable window, or the
@@ -324,6 +353,44 @@
   .empty-switcher {
     margin: 0;
     max-width: 220px;
+  }
+
+  .sandbox-msg.confirm {
+    color: var(--text);
+    max-width: 360px;
+  }
+
+  .confirm-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 4px;
+  }
+
+  .confirm-dismiss {
+    padding: 6px 14px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .confirm-dismiss:hover {
+    background: var(--bg-hover);
+  }
+
+  .confirm-always {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 6px;
+    font-size: 11px;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .confirm-always input {
+    cursor: pointer;
   }
 
   .spinner {

@@ -454,10 +454,24 @@
   // after the user hid it (the old component-local `lastSandboxPort` bug).
   $effect(() => {
     let activeCdp = null;
-    for (const [, s] of devServerManager.servers) {
-      if (s?.cdpPort && (s.status === 'running' || s.status === 'idle')) {
-        activeCdp = s.cdpPort;
-        break;
+    // PREFER the currently-active workspace's app. When you close one app, switch
+    // workspace, and launch THAT workspace's app, the preview must RE-POINT to the
+    // new app — it must never stay pinned to the previous (now-dead) app whose
+    // server entry happens to sit earlier in the insertion-ordered `servers` Map.
+    // The bug: a closed-but-still-listed prior app (e.g. idle with a stale CDP
+    // port) won the first-match scan, so the new live port was never reached.
+    const activePath = projectStore.root;
+    const activeState = activePath ? devServerManager.servers.get(activePath) : null;
+    if (activeState?.cdpPort && (activeState.status === 'running' || activeState.status === 'idle')) {
+      activeCdp = activeState.cdpPort;
+    } else {
+      // The active project has no running app — fall back to any other running
+      // app (e.g. one launched in another workspace) so it still gets mirrored.
+      for (const [, s] of devServerManager.servers) {
+        if (s?.cdpPort && (s.status === 'running' || s.status === 'idle')) {
+          activeCdp = s.cdpPort;
+          break;
+        }
       }
     }
     sandboxPreviewStore.syncAuto(activeCdp);
@@ -515,7 +529,10 @@
       sandboxPreviewStore.hide();
     } else {
       showBrowser = false;
-      sandboxPreviewStore.requestStart();
+      // USER entry point: confirm before silently launching a dev server (unless
+      // this project has a remembered auto-start preference). The AI's
+      // sandbox_start path is unaffected — it emits sandbox-start-request directly.
+      sandboxPreviewStore.promptStart();
     }
   }
 

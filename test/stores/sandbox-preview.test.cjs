@@ -184,6 +184,46 @@ describe('sandbox-preview: closed-window recovery', () => {
   });
 });
 
+describe('sandbox-preview: confirm-before-start', () => {
+  it('tracks a confirmStart flag in $state with a getter', () => {
+    assert.ok(/let\s+confirmStart\s*=\s*\$state\(false\)/.test(src), 'Should hold confirmStart in $state(false)');
+    assert.ok(src.includes('get confirmStart()'), 'Should expose a confirmStart getter');
+  });
+
+  it('promptStart auto-starts when the project remembers a preference, else prompts', () => {
+    assert.ok(/async promptStart\(\)/.test(src), 'Should expose async promptStart()');
+    const block = src.split('async promptStart()')[1]?.split('},')[0] || '';
+    assert.ok(block.includes('autoStartPreview'), 'Should read the per-project autoStartPreview preference');
+    assert.ok(block.includes('this.requestStart()'), 'Should requestStart immediately when remembered');
+    assert.ok(block.includes('confirmStart = true'), 'Should show the prompt when not remembered');
+  });
+
+  it('confirmStartNow persists the preference when "always" is chosen, then starts', () => {
+    const block = src.split('async confirmStartNow(')[1]?.split('},')[0] || '';
+    assert.ok(
+      block.includes("updateActiveField('autoStartPreview', true)"),
+      'Should persist autoStartPreview=true via projectStore when always'
+    );
+    assert.ok(block.includes('this.requestStart()'), 'Should proceed to requestStart');
+  });
+
+  it('cancelStart dismisses the prompt without launching', () => {
+    const block = src.split('cancelStart()')[1]?.split('},')[0] || '';
+    assert.ok(block.includes('confirmStart = false'), 'Should clear confirmStart');
+    assert.ok(block.includes('visible = false'), 'Should hide the panel');
+    assert.ok(!block.includes('sandbox-start-request'), 'Should NOT emit a start request');
+  });
+
+  it('reads the per-project preference from projectStore', () => {
+    assert.ok(src.includes("from './project.svelte.js'"), 'Should import projectStore');
+  });
+
+  it('a live session clears any pending start prompt', () => {
+    const openBlock = src.split('async open(port')[1]?.split('syncAuto(')[0] || '';
+    assert.ok(openBlock.includes('confirmStart = false'), 'open() should clear confirmStart');
+  });
+});
+
 describe('sandbox-preview: multi-window', () => {
   it('tracks the window list and current window', () => {
     assert.ok(/let\s+windows\s*=\s*\$state\(/.test(src), 'Should hold a windows list in $state');

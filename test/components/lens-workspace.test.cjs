@@ -336,6 +336,31 @@ describe('LensWorkspace.svelte', () => {
     );
   });
 
+  // Sandbox preview auto-open / re-point on workspace switch
+  it('syncs the sandbox preview to the active dev server CDP port', () => {
+    assert.ok(src.includes('sandboxPreviewStore.syncAuto'), 'Should call syncAuto with the active CDP port');
+  });
+
+  it('prefers the ACTIVE workspace app so the preview re-points on switch', () => {
+    // The active-project entry must be checked first so a closed/stale prior app
+    // (earlier in the insertion-ordered servers Map) cannot pin the preview.
+    assert.ok(
+      src.includes('devServerManager.servers.get(activePath)') ||
+        src.includes('servers.get(projectStore.root)'),
+      'Should look up the active project\'s server first'
+    );
+    assert.ok(src.includes('projectStore.root'), 'Should read the active project root');
+  });
+
+  it('falls back to any running app when the active project has none', () => {
+    // After preferring the active project, it still scans for any other running app.
+    assert.ok(src.includes('for (const [, s] of devServerManager.servers)'), 'Should keep the fallback scan');
+  });
+
+  it('App-tab click confirms before starting (promptStart, not silent requestStart)', () => {
+    assert.ok(src.includes('sandboxPreviewStore.promptStart()'), 'App click should go through promptStart');
+  });
+
   // CSS
   it('has workspace-content with flex and margins', () => {
     assert.ok(src.includes('.workspace-content'));

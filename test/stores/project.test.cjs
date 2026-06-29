@@ -173,6 +173,10 @@ describe('project: addProject includes dev server fields', () => {
   it('sets autoStartServer to null', () => {
     assert.ok(src.includes('autoStartServer: null'), 'Should set autoStartServer to null');
   });
+
+  it('sets autoStartPreview to null (per-project App-preview start preference)', () => {
+    assert.ok(src.includes('autoStartPreview: null'), 'Should set autoStartPreview to null');
+  });
 });
 
 // ============ updateProjectField / updateActiveField ============
