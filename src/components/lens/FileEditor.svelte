@@ -23,6 +23,8 @@
   import { gitGutterPlugin } from '../../lib/editor-git-gutter.js';
   import { loadLanguageExtension } from '../../lib/codemirror-languages.js';
   import { statusBarStore, getLanguageName } from '../../lib/stores/status-bar.svelte.js';
+  import { editorGroupsStore } from '../../lib/stores/editor-groups.svelte.js';
+  import { toastStore } from '../../lib/stores/toast.svelte.js';
 
   let { tab, groupId = 1 } = $props();
 
@@ -68,6 +70,9 @@
 
   // Cache CodeMirror modules after first load
   let cmCache = null;
+
+  // Selection history for Expand/Shrink Selection (Shift+Alt+Right/Left).
+  let selectionExpandStack = [];
 
   /**
    * Detect Vite's "outdated optimized dependency" failure, which manifests as a
@@ -195,9 +200,24 @@
   }
 
   async function handleFormat() {
-    if (!view || !lsp.hasLsp) return;
+    // Format Document only works with an open file whose language has a running
+    // LSP that supports formatting. Surface the reason instead of failing silently.
+    if (!view) {
+      toastStore.addToast({ message: 'Open a file to format.', severity: 'warning' });
+      return;
+    }
+    if (!lsp.hasLsp) {
+      toastStore.addToast({
+        message: 'Formatting needs a language server for this file type — none is running.',
+        severity: 'warning',
+      });
+      return;
+    }
     const root = projectStore.root;
-    await lsp.formatDocument(view, currentPath, root);
+    const changed = await lsp.formatDocument(view, currentPath, root);
+    if (!changed) {
+      toastStore.addToast({ message: 'Nothing to format — no changes from the language server.', severity: 'info' });
+    }
   }
 
   const DEFAULT_FONT_SIZE = 14;
@@ -817,16 +837,88 @@
     const handleCommandSave = () => save();
     const handleCommandFormat = () => handleFormat();
 
+    // Edit / Selection commands from the title-bar menu + command palette.
+    // Only the focused editor group should respond (when more than one exists).
+    function isFocusedGroup() {
+      return editorGroupsStore.groupCount <= 1 || editorGroupsStore.focusedGroupId === groupId;
+    }
+    async function runEditorCommand(kind) {
+      if (!view || !isFocusedGroup()) return;
+      try {
+        if (kind === 'find') {
+          const { openSearchPanel } = await import('@codemirror/search');
+          openSearchPanel(view);
+          return;
+        }
+        if (kind === 'copy' || kind === 'cut') {
+          const sel = view.state.selection.main;
+          const text = sel.empty
+            ? view.state.doc.lineAt(sel.head).text
+            : view.state.sliceDoc(sel.from, sel.to);
+          if (text) await navigator.clipboard.writeText(text);
+          if (kind === 'cut' && !sel.empty) {
+            view.dispatch({ changes: { from: sel.from, to: sel.to, insert: '' }, scrollIntoView: true });
+          }
+          view.focus();
+          return;
+        }
+        if (kind === 'paste') {
+          const text = await navigator.clipboard.readText();
+          if (text) {
+            const sel = view.state.selection.main;
+            view.dispatch({
+              changes: { from: sel.from, to: sel.to, insert: text },
+              selection: { anchor: sel.from + text.length },
+              scrollIntoView: true,
+            });
+          }
+          view.focus();
+          return;
+        }
+        const cmds = await import('@codemirror/commands');
+        if (kind === 'undo') cmds.undo(view);
+        else if (kind === 'redo') cmds.redo(view);
+        else if (kind === 'selectAll') cmds.selectAll(view);
+        else if (kind === 'expand') {
+          selectionExpandStack.push(view.state.selection);
+          cmds.selectParentSyntax(view);
+        } else if (kind === 'shrink') {
+          const prev = selectionExpandStack.pop();
+          if (prev) view.dispatch({ selection: prev });
+        }
+        view.focus();
+      } catch (e) {
+        console.error('[FileEditor] editor command failed:', kind, e);
+      }
+    }
+    const editorCommandMap = {
+      'command:editor-undo': () => runEditorCommand('undo'),
+      'command:editor-redo': () => runEditorCommand('redo'),
+      'command:editor-cut': () => runEditorCommand('cut'),
+      'command:editor-copy': () => runEditorCommand('copy'),
+      'command:editor-paste': () => runEditorCommand('paste'),
+      'command:editor-find': () => runEditorCommand('find'),
+      'command:editor-select-all': () => runEditorCommand('selectAll'),
+      'command:editor-expand-selection': () => runEditorCommand('expand'),
+      'command:editor-shrink-selection': () => runEditorCommand('shrink'),
+    };
+
     // Also listen to unscoped event for backwards compatibility
     window.addEventListener(eventName, handleGotoPosition);
     window.addEventListener('lens-goto-position', handleGotoPosition);
     window.addEventListener('command:save', handleCommandSave);
     window.addEventListener('command:format', handleCommandFormat);
+    for (const [evt, fn] of Object.entries(editorCommandMap)) {
+      window.addEventListener(evt, fn);
+    }
     return () => {
       window.removeEventListener(eventName, handleGotoPosition);
       window.removeEventListener('lens-goto-position', handleGotoPosition);
       window.removeEventListener('command:save', handleCommandSave);
       window.removeEventListener('command:format', handleCommandFormat);
+      for (const [evt, fn] of Object.entries(editorCommandMap)) {
+        window.removeEventListener(evt, fn);
+      }
     };
   });
 

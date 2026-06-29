@@ -57,6 +57,24 @@ describe('TitleBar: Zed-style menu bar', () => {
     assert.ok(src.includes('class="menu-bar"'), 'Should have menu-bar class');
   });
 
+  it('menu bar is shown by default and its state is persisted', () => {
+    // Defaults open (loadMenuBarOpen returns true when nothing is stored) and
+    // remembers the toggle across sessions via localStorage.
+    assert.ok(src.includes('loadMenuBarOpen'), 'Should initialise from a persisted preference');
+    assert.ok(src.includes('let appMenuOpen = $state(loadMenuBarOpen())'), 'appMenuOpen should init from the preference');
+    assert.ok(src.includes("'voice-mirror-menu-bar-open'") || src.includes('MENU_BAR_PREF'), 'Should use a localStorage key');
+    assert.ok(src.includes('localStorage.setItem(MENU_BAR_PREF'), 'Toggle should persist the choice');
+    assert.ok(/return v === null \? true/.test(src), 'Default (no stored value) should be open');
+  });
+
+  it('click-outside / Escape close only the submenu, not the whole bar', () => {
+    // closeAppMenu must NOT hide the persistent bar (no appMenuOpen = false in it).
+    const fn = src.match(/function closeAppMenu\(\)\s*\{[^}]*\}/);
+    assert.ok(fn, 'closeAppMenu should exist');
+    assert.ok(!/appMenuOpen\s*=\s*false/.test(fn[0]), 'closeAppMenu should not hide the bar');
+    assert.ok(fn[0].includes('activeMenuId = null'), 'closeAppMenu should close the dropdown');
+  });
+
   it('menu bar items have hover-through behavior', () => {
     assert.ok(src.includes('handleMenuHover'), 'Should have hover handler');
     assert.ok(src.includes('onmouseenter'), 'Should use onmouseenter for hover-through');
@@ -78,14 +96,26 @@ describe('TitleBar: Zed-style menu bar', () => {
     assert.ok(src.includes("action: handleSettings"), 'File menu should have Settings action');
   });
 
-  it('non-File menus have disabled placeholder items', () => {
-    // Edit menu items should NOT have action properties
-    assert.ok(src.includes("{ label: 'Undo', kbd: 'Ctrl+Z' }"), 'Edit items should be placeholders (no action)');
+  it('non-File menus wire to the command registry via cmd', () => {
+    // Edit/Selection/View/Go/Run/Terminal/Help items now dispatch real commands
+    // through the central registry instead of being inert placeholders.
+    assert.ok(src.includes('commandRegistry'), 'Should import the command registry');
+    assert.ok(src.includes("cmd: 'editor.undo'"), 'Edit should wire Undo → editor.undo');
+    assert.ok(src.includes("cmd: 'editor.selectAll'"), 'Selection should wire Select All');
+    assert.ok(src.includes("cmd: 'view.toggleTerminal'"), 'View should wire Toggle Terminal');
+    assert.ok(src.includes("cmd: 'view.goToFile'"), 'Go should wire Go to File');
+    assert.ok(src.includes("cmd: 'run.start'"), 'Run should wire Start');
+    assert.ok(src.includes("cmd: 'terminal.clear'"), 'Terminal should wire Clear');
+    assert.ok(src.includes("cmd: 'help.about'"), 'Help should wire About');
   });
 
-  it('submenu item disabled class for items without action', () => {
-    assert.ok(src.includes('class:disabled={!item.action}'), 'Should disable items without action');
-    assert.ok(src.includes('disabled={!item.action}'), 'Should set disabled attribute');
+  it('menu actions execute via the command registry', () => {
+    assert.ok(src.includes('commandRegistry.execute(item.cmd)'), 'handleSubmenuAction should execute commands by id');
+  });
+
+  it('submenu item disabled class for items without action or command', () => {
+    assert.ok(src.includes('class:disabled={!item.action && !item.cmd}'), 'Should disable items without action or cmd');
+    assert.ok(src.includes('disabled={!item.action && !item.cmd}'), 'Should set disabled attribute');
   });
 
   it('submenu dropdown has no-drag for Tauri frameless', () => {

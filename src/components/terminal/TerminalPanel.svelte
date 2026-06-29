@@ -46,6 +46,21 @@
     };
   });
 
+  // Per-instance terminal actions ({ clear, copy, paste }), keyed by shellId,
+  // so a `terminal-clear` event can clear the active user-shell terminal.
+  // (This panel is only mounted in 'terminal' mode, so the AI terminal — cleared
+  // in TerminalTabs — is never double-handled.)
+  let instanceActions = {};
+
+  $effect(() => {
+    function onTerminalClear() {
+      const inst = terminalTabsStore.getInstance(terminalTabsStore.activeInstanceId);
+      if (inst) instanceActions[inst.shellId]?.clear();
+    }
+    window.addEventListener('terminal-clear', onTerminalClear);
+    return () => window.removeEventListener('terminal-clear', onTerminalClear);
+  });
+
   // Derived state
   let showSidebar = $derived(
     terminalTabsStore.groups.length > 1 ||
@@ -98,7 +113,7 @@
         {#if node.type === 'leaf'}
           {@const inst = terminalTabsStore.getInstance(node.instanceId)}
           {#if inst}
-            <Terminal shellId={inst.shellId} {visible} onRegisterActions={() => {}} />
+            <Terminal shellId={inst.shellId} {visible} onRegisterActions={(a) => { instanceActions[inst.shellId] = a; }} />
           {/if}
         {:else if node.type === 'split'}
           <SplitPanel direction={node.direction} ratio={node.ratio} minA={80} minB={80}>
