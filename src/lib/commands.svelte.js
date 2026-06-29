@@ -18,6 +18,7 @@ import { overlayStore } from './stores/overlay.svelte.js';
 import { getActionHandler } from './stores/shortcuts.svelte.js';
 import { projectStore } from './stores/project.svelte.js';
 import { devServerManager } from './stores/dev-server-manager.svelte.js';
+import { toastStore } from './stores/toast.svelte.js';
 import { open as openExternal } from '@tauri-apps/plugin-shell';
 import { unwrapResult } from './utils.js';
 import {
@@ -714,16 +715,42 @@ commandRegistry.registerMany([
 // Run (dev server for the active project)
 async function runStartActiveProject() {
   const projectPath = projectStore.root;
-  if (!projectPath) return;
+  if (!projectPath) {
+    toastStore.addToast({ message: 'Open a project first to start its dev server.', severity: 'warning' });
+    return;
+  }
+  const existing = devServerManager.getServerStatus(projectPath);
+  if (existing && (existing.status === 'running' || existing.status === 'starting')) {
+    toastStore.addToast({ message: `Dev server already ${existing.status}${existing.port ? ` on :${existing.port}` : ''}.`, severity: 'info' });
+    return;
+  }
   try {
     const result = await detectDevServers(projectPath);
     const servers = unwrapResult(result)?.servers || [];
-    if (servers.length > 0) {
-      devServerManager.startServer(servers[0], projectPath, null);
+    if (servers.length === 0) {
+      toastStore.addToast({ message: 'No dev server detected for this project (no start script found).', severity: 'warning' });
+      return;
     }
+    devServerManager.startServer(servers[0], projectPath, null);
+    toastStore.addToast({ message: `Starting dev server${servers[0].port ? ` on :${servers[0].port}` : ''}…`, severity: 'info' });
   } catch (err) {
     console.error('[commands] run.start failed:', err);
+    toastStore.addToast({ message: 'Failed to start dev server.', severity: 'error' });
   }
+}
+function runStopActiveProject() {
+  const projectPath = projectStore.root;
+  if (!projectPath) {
+    toastStore.addToast({ message: 'No project is open.', severity: 'warning' });
+    return;
+  }
+  const st = devServerManager.getServerStatus(projectPath);
+  if (!st || st.status === 'stopped') {
+    toastStore.addToast({ message: 'No dev server is running for this project.', severity: 'warning' });
+    return;
+  }
+  devServerManager.stopServer(projectPath);
+  toastStore.addToast({ message: 'Stopping dev server…', severity: 'info' });
 }
 commandRegistry.registerMany([
   {
@@ -736,13 +763,24 @@ commandRegistry.registerMany([
     id: 'run.stop',
     label: 'Run: Stop Dev Server',
     category: 'Run',
-    execute: () => { const p = projectStore.root; if (p) devServerManager.stopServer(p); },
+    execute: () => { runStopActiveProject(); },
   },
   {
     id: 'run.restart',
     label: 'Run: Restart Dev Server',
     category: 'Run',
-    execute: () => { const p = projectStore.root; if (p) devServerManager.restartServer(p); },
+    execute: () => {
+      const p = projectStore.root;
+      if (!p) { toastStore.addToast({ message: 'No project is open.', severity: 'warning' }); return; }
+      const st = devServerManager.getServerStatus(p);
+      if (!st || st.status === 'stopped') {
+        // Nothing to restart — start fresh instead so the button always does something.
+        runStartActiveProject();
+        return;
+      }
+      devServerManager.restartServer(p);
+      toastStore.addToast({ message: 'Restarting dev server…', severity: 'info' });
+    },
   },
 ]);
 

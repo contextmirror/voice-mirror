@@ -24,6 +24,7 @@
   import { loadLanguageExtension } from '../../lib/codemirror-languages.js';
   import { statusBarStore, getLanguageName } from '../../lib/stores/status-bar.svelte.js';
   import { editorGroupsStore } from '../../lib/stores/editor-groups.svelte.js';
+  import { toastStore } from '../../lib/stores/toast.svelte.js';
 
   let { tab, groupId = 1 } = $props();
 
@@ -199,9 +200,24 @@
   }
 
   async function handleFormat() {
-    if (!view || !lsp.hasLsp) return;
+    // Format Document only works with an open file whose language has a running
+    // LSP that supports formatting. Surface the reason instead of failing silently.
+    if (!view) {
+      toastStore.addToast({ message: 'Open a file to format.', severity: 'warning' });
+      return;
+    }
+    if (!lsp.hasLsp) {
+      toastStore.addToast({
+        message: 'Formatting needs a language server for this file type — none is running.',
+        severity: 'warning',
+      });
+      return;
+    }
     const root = projectStore.root;
-    await lsp.formatDocument(view, currentPath, root);
+    const changed = await lsp.formatDocument(view, currentPath, root);
+    if (!changed) {
+      toastStore.addToast({ message: 'Nothing to format — no changes from the language server.', severity: 'info' });
+    }
   }
 
   const DEFAULT_FONT_SIZE = 14;
