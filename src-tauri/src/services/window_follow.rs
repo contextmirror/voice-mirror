@@ -260,6 +260,14 @@ mod imp {
                     break;
                 }
                 if msg.message == WM_TIMER {
+                    // Backstop ALSO guarantees the pump exits within BACKSTOP_MS of
+                    // stop() even if the WM_QUIT was missed — e.g. a stop() that raced
+                    // the thread storing its id (THREAD_ID still 0 when stop() posted).
+                    // Without this, that race would block the pump forever → join()
+                    // would deadlock → a permanent hang. Belt to the WM_QUIT braces.
+                    if !RUNNING.load(Ordering::SeqCst) {
+                        break;
+                    }
                     reconcile(app_pid);
                 }
                 let _ = TranslateMessage(&msg);
