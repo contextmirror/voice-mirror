@@ -80,6 +80,12 @@
           minimizeWindow().catch(() => {});
         }
       }).catch(() => {});
+
+      // If config failed to load we booted on defaults — tell the user rather
+      // than silently losing their settings (error toasts always show).
+      if (configStore.error) {
+        toastStore.addToast({ message: `Couldn't load settings (${configStore.error}) — using defaults.`, severity: 'error' });
+      }
     }
   });
 
@@ -235,6 +241,14 @@
         navigationStore.setView('lens');
         if (!layoutStore.showFileTree) layoutStore.toggleFileTree();
         window.dispatchEvent(new CustomEvent('lens-focus-search'));
+      });
+
+      // Title-bar menu + command-palette "commands" entries dispatch this event;
+      // without a listener those menu items silently did nothing. (App is the
+      // root and never unmounts, so no teardown needed — matches the handlers above.)
+      window.addEventListener('command:open-palette', (e) => {
+        commandPaletteMode = e.detail?.mode || 'commands';
+        commandPaletteVisible = true;
       });
 
       // Listen for PTT events from the unified input hook.

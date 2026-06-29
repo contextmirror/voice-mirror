@@ -74,6 +74,12 @@
   // Selection history for Expand/Shrink Selection (Shift+Alt+Right/Left).
   let selectionExpandStack = [];
 
+  // Per-tab unsaved-edit cache. Switching the active tab destroys + recreates the
+  // single CodeMirror view; without this, unsaved edits in the tab being left were
+  // silently discarded (re-read from disk on return). Keyed by tab.id.
+  const unsavedBuffers = new Map();
+  let loadedTab = null;
+
   /**
    * Detect Vite's "outdated optimized dependency" failure, which manifests as a
    * dynamic import() rejecting with "Failed to fetch dynamically imported module"
@@ -279,6 +285,7 @@
       const content = view.state.doc.toString();
       await writeFile(tab.path, content, root);
       tabsStore.setDirty(tab.id, false);
+      unsavedBuffers.delete(tab.id); // saved → disk is now the source of truth
       lsp.saveFile(tab.path, content, root);
 
       // Refresh git gutter after save (file on disk changed)
@@ -327,6 +334,16 @@
     }
     lsp.reset();
     clearTimeout(sigHelpDebounce);
+
+    // Preserve unsaved edits of the tab we're leaving (only if it's still dirty —
+    // clean tabs should re-read from disk so external changes show). Re-seeded
+    // below when that tab is reopened. Prevents silent data loss on tab switch.
+    if (view && loadedTab) {
+      const prev = tabsStore.tabs.find((t) => t.id === loadedTab.id);
+      if (prev?.dirty) {
+        unsavedBuffers.set(loadedTab.id, view.state.doc.toString());
+      }
+    }
 
     // CRITICAL: Destroy old view BEFORE setting currentPath.
     // Setting currentPath triggers the pending cursor $effect, which checks
@@ -390,8 +407,15 @@
         }
       }
 
+      // Re-seed unsaved edits cached when this tab was last left; otherwise use
+      // the freshly-read disk content. (Consume the cache entry on restore.)
+      let initialDoc = data.content || '';
+      if (tab && unsavedBuffers.has(tab.id)) {
+        initialDoc = unsavedBuffers.get(tab.id);
+        unsavedBuffers.delete(tab.id);
+      }
       // Store content for markdown preview
-      markdownContent = data.content || '';
+      markdownContent = initialDoc;
 
       const langSupport = await loadLanguage(filePath);
 
@@ -584,7 +608,7 @@
       if (rangeHighlightField) extensions.push(rangeHighlightField);
 
       const state = cm.EditorState.create({
-        doc: data.content,
+        doc: initialDoc,
         extensions,
       });
 
@@ -593,6 +617,7 @@
 
       if (editorEl) {
         view = new cm.EditorView({ state, parent: editorEl });
+        loadedTab = tab; // the tab whose unsaved buffer this view now owns
         // Attach current path for LSP handler access
         view._lspPath = filePath;
 
@@ -901,6 +926,18 @@
       'command:editor-select-all': () => runEditorCommand('selectAll'),
       'command:editor-expand-selection': () => runEditorCommand('expand'),
       'command:editor-shrink-selection': () => runEditorCommand('shrink'),
+      // LSP commands from the title-bar Go menu / palette (the keyboard shortcuts
+      // F12 / Shift+F12 / F2 go through CodeMirror keymaps; these events did not
+      // have a listener, so the menu items were dead).
+      'command:go-to-definition': () => {
+        if (view && lsp.hasLsp && currentPath && isFocusedGroup()) lsp.handleGoToDefinition(view, view.state.selection.main.head);
+      },
+      'command:find-references': () => {
+        if (view && lsp.hasLsp && currentPath && isFocusedGroup()) lsp.handleFindReferences(view, currentPath);
+      },
+      'command:rename': () => {
+        if (view && lsp.hasLsp && currentPath && isFocusedGroup()) lsp.handleRenameSymbol(view, currentPath);
+      },
     };
 
     // Also listen to unscoped event for backwards compatibility

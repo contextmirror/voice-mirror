@@ -193,9 +193,19 @@ export async function loadConfig() {
     const result = await getConfig();
     if (result && result.success !== false) {
       configStore.set(unwrapResult(result));
+    } else {
+      // Backend returned a failure response — fall back to defaults so the app
+      // still boots. Without this, `loaded` never flips and App.svelte never
+      // calls showWindow() → the window stays hidden forever (invisible brick).
+      console.error('[config] get_config returned failure:', result);
+      configStore.reset();
+      configStore.setError('Failed to load settings — using defaults.');
     }
   } catch (err) {
+    // Corrupt config / unwritable %APPDATA% on a fresh machine must NOT brick the
+    // app. Fall back to defaults and mark loaded so the window still appears.
     console.error('[config] Failed to load:', err);
+    configStore.reset();
     configStore.setError(String(err));
   }
 }

@@ -18,6 +18,7 @@ import { projectStore } from './project.svelte.js';
 import { buildLocalLlmInstructions } from '../local-llm-instructions.js';
 import { unwrapResult } from '../utils.js';
 import { PROVIDER_NAMES, CLI_PROVIDERS } from '../providers.js';
+import { toastStore } from './toast.svelte.js';
 
 /** Module-level streaming message tracker for API providers. */
 let _apiStreamingMsgId = null;
@@ -114,11 +115,15 @@ export async function startProvider(opts = {}) {
     });
 
     if (result?.success === false) {
-      aiStatusStore._setError(result.error || 'Failed to start provider');
+      const msg = result.error || 'Failed to start provider';
+      aiStatusStore._setError(msg);
+      toastStore.addToast({ message: `AI provider failed to start: ${msg}`, severity: 'error' });
     }
     // Running status will be confirmed by the ai-status-change event
   } catch (err) {
-    aiStatusStore._setError(err?.message || String(err));
+    const msg = err?.message || String(err);
+    aiStatusStore._setError(msg);
+    toastStore.addToast({ message: `AI provider failed to start: ${msg}`, severity: 'error' });
   }
 }
 

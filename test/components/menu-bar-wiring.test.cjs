@@ -127,6 +127,17 @@ describe('Dev-server notifications: deduped (one toast per action)', () => {
   });
 });
 
+describe('Menu commands have live listeners (no dead items)', () => {
+  it('App.svelte listens for command:open-palette (Command Palette / Go to File/Line/Symbol)', () => {
+    assert.ok(app.includes("addEventListener('command:open-palette'"), 'palette open event must have a listener');
+  });
+  it('FileEditor listens for the LSP command events (Go to Definition / Find References / Rename)', () => {
+    assert.ok(fileEditor.includes("'command:go-to-definition'"), 'go-to-definition handled');
+    assert.ok(fileEditor.includes("'command:find-references'"), 'find-references handled');
+    assert.ok(fileEditor.includes("'command:rename'"), 'rename handled');
+  });
+});
+
 describe('App.svelte: Help dialogs mounted', () => {
   it('mounts AboutDialog and KeyboardShortcutsDialog', () => {
     assert.ok(app.includes('AboutDialog'), 'mounts AboutDialog');
