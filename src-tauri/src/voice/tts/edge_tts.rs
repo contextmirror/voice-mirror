@@ -86,7 +86,11 @@ impl EdgeTts {
             voice: voice.to_string(),
             rate: 0,
             cancelled: Arc::new(AtomicBool::new(false)),
-            client: reqwest::Client::new(),
+            client: reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(30))
+                .connect_timeout(std::time::Duration::from_secs(10))
+                .build()
+                .unwrap_or_else(|_| reqwest::Client::new()),
         }
     }
 
@@ -98,7 +102,11 @@ impl EdgeTts {
             voice: voice.to_string(),
             rate,
             cancelled: Arc::new(AtomicBool::new(false)),
-            client: reqwest::Client::new(),
+            client: reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(30))
+                .connect_timeout(std::time::Duration::from_secs(10))
+                .build()
+                .unwrap_or_else(|_| reqwest::Client::new()),
         }
     }
 
@@ -209,9 +217,20 @@ impl EdgeTts {
                 break;
             }
 
-            let frame = match ws_read_frame(&mut upgraded).await {
-                Ok(f) => f,
-                Err(_) => break, // Connection closed or error
+            // Bound the read so a network stall mid-frame can't wedge the pipeline
+            // in the Speaking state forever (cancel is only checked between frames).
+            let frame = match tokio::time::timeout(
+                std::time::Duration::from_secs(10),
+                ws_read_frame(&mut upgraded),
+            )
+            .await
+            {
+                Ok(Ok(f)) => f,
+                Ok(Err(_)) => break, // connection closed or error
+                Err(_) => {
+                    tracing::warn!("Edge TTS: frame read timed out — ending synthesis");
+                    break;
+                }
             };
 
             match frame {

@@ -665,6 +665,9 @@ async fn stuck_watchdog(shared: Arc<PipelineShared>) {
     const PROCESSING_STUCK_SECS: u64 = 30;
     /// A toggle-mode recording running this long was almost certainly forgotten.
     const RECORDING_LONG_SECS: u64 = 5 * 60;
+    /// TTS synthesis/playback wedged (e.g. a network stall) — normal speech is
+    /// seconds; this is the previously-uncovered "stuck while Speaking" case.
+    const SPEAKING_STUCK_SECS: u64 = 60;
 
     let mut last_state = VoiceState::Idle;
     let mut secs_in_state: u64 = 0;
@@ -691,6 +694,7 @@ async fn stuck_watchdog(shared: Arc<PipelineShared>) {
         let threshold = match state {
             VoiceState::Processing => Some(PROCESSING_STUCK_SECS),
             VoiceState::Recording => Some(RECORDING_LONG_SECS),
+            VoiceState::Speaking => Some(SPEAKING_STUCK_SECS),
             _ => None,
         };
 
