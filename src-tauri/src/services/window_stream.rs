@@ -786,14 +786,30 @@ pub(crate) fn find_available_port() -> Result<u16, String> {
 
 #[cfg(target_os = "windows")]
 fn get_window_title(hwnd: i64) -> String {
-    use windows::Win32::Foundation::HWND;
-    use windows::Win32::UI::WindowsAndMessaging::GetWindowTextW;
+    use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        SendMessageTimeoutW, SMTO_ABORTIFHUNG, WM_GETTEXT,
+    };
 
     unsafe {
         let mut buf = [0u16; 256];
-        let len = GetWindowTextW(HWND(hwnd as *mut _), &mut buf);
-        if len > 0 {
-            String::from_utf16_lossy(&buf[..len as usize])
+        let mut copied: usize = 0;
+        // Use a timeout-bounded send (abort if the target is hung) instead of
+        // GetWindowTextW. GetWindowTextW sends WM_GETTEXT *synchronously* and
+        // blocks forever on a frozen target — and because this runs on the
+        // window-follow pump thread (via win_event_proc → arbitrate → start),
+        // that block wedges the pump and freezes the whole UI ("Not Responding").
+        let r: LRESULT = SendMessageTimeoutW(
+            HWND(hwnd as *mut _),
+            WM_GETTEXT,
+            WPARAM(buf.len()),
+            LPARAM(buf.as_mut_ptr() as isize),
+            SMTO_ABORTIFHUNG,
+            200,
+            Some(&mut copied as *mut usize),
+        );
+        if r.0 != 0 && copied > 0 {
+            String::from_utf16_lossy(&buf[..copied.min(buf.len())])
         } else {
             "Unknown".to_string()
         }
@@ -815,11 +831,10 @@ fn get_window_title(_hwnd: i64) -> String {
 #[cfg(target_os = "windows")]
 fn present_nudge(hwnd: i64) {
     use windows::Win32::Foundation::{HWND, RECT};
-    use windows::Win32::Graphics::Gdi::{
-        RedrawWindow, RDW_ALLCHILDREN, RDW_INVALIDATE, RDW_UPDATENOW,
-    };
+    use windows::Win32::Graphics::Gdi::{RedrawWindow, RDW_ALLCHILDREN, RDW_INVALIDATE};
     use windows::Win32::UI::WindowsAndMessaging::{
-        GetWindowRect, IsWindowVisible, SetWindowPos, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOZORDER,
+        GetWindowRect, IsHungAppWindow, IsWindowVisible, SetWindowPos, SWP_ASYNCWINDOWPOS,
+        SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOZORDER,
     };
 
     unsafe {
@@ -828,37 +843,25 @@ fn present_nudge(hwnd: i64) {
         if !IsWindowVisible(h).as_bool() {
             return;
         }
-        // 1. Force an immediate repaint of the window and its children.
-        let _ = RedrawWindow(
-            Some(h),
-            None,
-            None,
-            RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN,
-        );
+        // If the target has stopped responding, any synchronous paint/move send
+        // below would block this thread (the WGC capture / follow path) forever →
+        // UI freeze. A hung window can't present anyway, so skip the nudge.
+        if IsHungAppWindow(h).as_bool() {
+            return;
+        }
+        // 1. Invalidate the window + children. NOTE: no RDW_UPDATENOW — that forces
+        //    a *synchronous* WM_PAINT send, which blocks on a busy target. The async
+        //    invalidate still drives WGC to deliver the next frame.
+        let _ = RedrawWindow(Some(h), None, None, RDW_INVALIDATE | RDW_ALLCHILDREN);
         // 2. 1px resize-then-restore to force a present, without moving, activating
-        //    or restacking the window.
+        //    or restacking. SWP_ASYNCWINDOWPOS posts (never blocks) the request.
         let mut rect = RECT::default();
         if GetWindowRect(h, &mut rect).is_ok() {
             let w = rect.right - rect.left;
             let ht = rect.bottom - rect.top;
-            let _ = SetWindowPos(
-                h,
-                None,
-                0,
-                0,
-                w + 1,
-                ht + 1,
-                SWP_NOMOVE | SWP_NOACTIVATE | SWP_NOZORDER,
-            );
-            let _ = SetWindowPos(
-                h,
-                None,
-                0,
-                0,
-                w,
-                ht,
-                SWP_NOMOVE | SWP_NOACTIVATE | SWP_NOZORDER,
-            );
+            let flags = SWP_ASYNCWINDOWPOS | SWP_NOMOVE | SWP_NOACTIVATE | SWP_NOZORDER;
+            let _ = SetWindowPos(h, None, 0, 0, w + 1, ht + 1, flags);
+            let _ = SetWindowPos(h, None, 0, 0, w, ht, flags);
         }
     }
 }
