@@ -11,6 +11,7 @@
   import TextInput from '../shared/TextInput.svelte';
   import Button from '../shared/Button.svelte';
   import { onboardingStore } from '../../lib/stores/onboarding.svelte.js';
+  import { updaterStore } from '../../lib/stores/updater.svelte.js';
 
   // ---- Local state ----
 
@@ -26,7 +27,30 @@
   let downloadAskLocation = $state(false);
   let downloadPath = $state('');
 
+  // ---- Updates ----
+  let autoCheckUpdates = $state(true);
+  let appVersion = $state('');
+  // Derived live update state — drives the channel toggle + status line.
+  let updateChannel = $derived(updaterStore.channel);
+  let updateState = $derived(updaterStore.state);
+
   let saving = $state(false);
+
+  // Load the running app version (guarded — throws outside a packaged Tauri app).
+  $effect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        if (!('__TAURI_INTERNALS__' in window)) return;
+        const { getVersion } = await import('@tauri-apps/api/app');
+        const v = await getVersion();
+        if (!cancelled) appVersion = v;
+      } catch {
+        /* not in Tauri — leave blank */
+      }
+    })();
+    return () => { cancelled = true; };
+  });
 
   // ---- Sync from config store ----
 
@@ -45,7 +69,19 @@
     showDependencies = cfg.advanced?.showDependencies === true;
     downloadAskLocation = cfg.browser?.downloadAskLocation === true;
     downloadPath = cfg.browser?.downloadPath || '';
+    autoCheckUpdates = cfg.updates?.autoCheck !== false;
   });
+
+  // ---- Updates handlers ----
+
+  function checkForUpdatesNow() {
+    // Explicit check — surfaces errors (unlike silent background checks).
+    updaterStore.checkForUpdates(true);
+  }
+
+  function setUpdateChannel(channel) {
+    updaterStore.setChannel(channel);
+  }
 
   // ---- Folder picker ----
 
@@ -89,6 +125,9 @@
         browser: {
           downloadAskLocation,
           downloadPath: downloadPath || '',
+        },
+        updates: {
+          autoCheck: autoCheckUpdates,
         },
       };
       await updateConfig(patch);
@@ -214,6 +253,60 @@
     </div>
   </section>
 
+  <!-- Updates -->
+  <section class="settings-section">
+    <h3>Updates</h3>
+    <div class="settings-group">
+      <div class="update-version-row">
+        <span class="update-version-label">Current version</span>
+        <span class="update-version-value">{appVersion || '—'}</span>
+      </div>
+
+      <Toggle
+        label="Automatically Check for Updates"
+        description="Check for new versions in the background (30s after launch, then every 6 hours)"
+        checked={autoCheckUpdates}
+        onChange={(v) => (autoCheckUpdates = v)}
+      />
+
+      <!-- Channel toggle (Stable / Beta) -->
+      <div class="update-channel-setting">
+        <div class="update-channel-text">
+          <span class="update-channel-label">Update Channel</span>
+          <span class="update-channel-desc">Beta receives newer, less-tested builds</span>
+        </div>
+        <div class="update-channel-toggle" role="group" aria-label="Update channel">
+          <button
+            class="channel-btn"
+            class:active={updateChannel === 'stable'}
+            onclick={() => setUpdateChannel('stable')}
+          >Stable</button>
+          <button
+            class="channel-btn"
+            class:active={updateChannel === 'beta'}
+            onclick={() => setUpdateChannel('beta')}
+          >Beta</button>
+        </div>
+      </div>
+
+      <!-- Check now -->
+      <div class="update-check-row">
+        <span class="update-status-text">
+          {#if updateState === 'checking'}Checking…
+          {:else if updateState === 'available'}Update available ({updaterStore.version})
+          {:else if updateState === 'downloading'}Downloading… {updaterStore.progress}%
+          {:else if updateState === 'ready' || updateState === 'downloaded'}Update ready — restart to apply
+          {:else if updateState === 'error'}Update check failed
+          {:else if updateState === 'disabled'}Updates unavailable in this build
+          {:else}You're up to date{/if}
+        </span>
+        <Button small onClick={checkForUpdatesNow} disabled={updaterStore.isBusy}>
+          Check for updates
+        </Button>
+      </div>
+    </div>
+  </section>
+
   <!-- Setup -->
   <section class="settings-section">
     <h3>Setup</h3>
@@ -331,5 +424,97 @@
 
   .setup-actions {
     padding: 8px;
+  }
+
+  /* ---- Updates ---- */
+  .update-version-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px;
+  }
+
+  .update-version-label {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text);
+  }
+
+  .update-version-value {
+    font-size: 13px;
+    color: var(--muted);
+    font-family: var(--font-mono);
+  }
+
+  .update-channel-setting {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px;
+    gap: 16px;
+  }
+
+  .update-channel-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .update-channel-label {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text);
+  }
+
+  .update-channel-desc {
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.3;
+  }
+
+  .update-channel-toggle {
+    display: flex;
+    flex-shrink: 0;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+  }
+
+  .channel-btn {
+    padding: 5px 12px;
+    border: none;
+    background: var(--bg);
+    color: var(--muted);
+    font-size: 12px;
+    font-family: var(--font-family);
+    cursor: pointer;
+    transition: background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
+  }
+
+  .channel-btn:hover {
+    color: var(--text);
+  }
+
+  .channel-btn.active {
+    background: var(--accent);
+    color: var(--accent-contrast, #fff);
+  }
+
+  .update-check-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px;
+    gap: 16px;
+  }
+
+  .update-status-text {
+    font-size: 13px;
+    color: var(--muted);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 </style>

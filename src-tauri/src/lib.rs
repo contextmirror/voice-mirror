@@ -200,6 +200,8 @@ pub fn run() {
             info!("Second instance detected, focusing existing window");
         }))
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         // Custom URI scheme for forwarding keyboard shortcuts from the lens
         // child webview back to the app.  Child WebView2 instances are separate
         // processes (NOT iframes), so window.top.postMessage() doesn't work.

@@ -25,6 +25,8 @@
     "core:window:allow-set-always-on-top",
     "core:window:allow-set-resizable",
     "dialog:default",
+    "updater:default",
+    "process:allow-restart",
     "decorum:allow-show-snap-overlay",
     "core:webview:allow-create-webview",
     "core:webview:allow-webview-close",

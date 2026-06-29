@@ -101,8 +101,14 @@ jobs:
         uses: tauri-apps/tauri-action@73fb865345c54760d875b94642314f8c0c894afa # v0.6.1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Updater signing — add these as repo secrets (the minisign keypair from
+          # `tauri signer generate`). Without them, createUpdaterArtifacts produces
+          # no .sig and the published latest.json can't be verified by clients.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           args: --target ${{ matrix.target }}
+          includeUpdaterJson: true
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
