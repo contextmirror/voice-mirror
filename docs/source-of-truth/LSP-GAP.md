@@ -300,14 +300,14 @@ VS Code remaps 8 "style check" diagnostic codes from Error → Warning. This is 
 
 ## 6. Files Cleanup
 
-After creating this document:
+Status of the cleanup actions (verified 2026-06-29):
 
-| File | Action | Reason |
+| File | Action | Status |
 |------|--------|--------|
-| `docs/source-of-truth/LSP-CONFIG-GAPS.md` | **Delete** | Absorbed into §1 of this document |
-| `docs/LSP-CONFIG.md` | **Delete** | Absorbed into §1.1 of this document |
-| `docs/source-of-truth/IDE-GAPS.md` | **Update** | Replace LSP table (lines 56-106) with brief summary + link to this doc |
-| `docs/implementation/LSP-DESIGN.md` | **Keep** | Implementation reference (architecture, data flow, commands), not gap tracking |
+| `docs/source-of-truth/LSP-CONFIG-GAPS.md` | Delete | ✅ Done — no longer present |
+| `docs/LSP-CONFIG.md` | Delete | ✅ Done — no longer present |
+| `docs/source-of-truth/IDE-GAPS.md` | Update LSP table → summary + link | ✅ Done |
+| `docs/implementation/LSP-DESIGN.md` | Keep (architecture/data-flow reference) | ✅ Kept; feature-status note added pointing here |
 
 ---
 

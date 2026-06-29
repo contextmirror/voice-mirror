@@ -22,9 +22,9 @@ What you expected to happen.
 If applicable, add screenshots to help explain your problem.
 
 **Environment**
-- OS: [e.g. Windows 11, macOS 15, Ubuntu 24.04]
-- Voice Mirror version: [e.g. 0.9.5]
-- AI Provider: [e.g. Claude Code, Ollama, OpenCode]
+- OS: [e.g. Windows 11 — primary platform; macOS / Linux are experimental]
+- Voice Mirror version: [from Help → About, or the installer filename]
+- AI Provider: [e.g. Claude Code, OpenCode, Ollama, LM Studio, Jan]
 
 **Additional context**
-Any other context about the problem (logs from Settings > General > Logs, etc.)
+Any other context about the problem. Logs help: check the in-app Output panel, and on Windows `%APPDATA%\voice-mirror\logs\` (including `crashes.log` if the app crashed or hung).

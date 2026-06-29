@@ -1,5 +1,15 @@
 # Browser Control Reference
 
+> **Updated 2026-06-29.** The MCP browser surface has been **consolidated into a
+> single `browser_action` tool** (in the `browser` group) that takes an `action`
+> parameter selecting one of 30+ operations. The per-action tables below (formerly
+> documented as separate `browser_navigate` / `browser_screenshot` / … tools) now
+> describe the **action kinds** of that one tool — the routing, bridge, snapshot,
+> and screenshot mechanics are unchanged. `browser_search` / `browser_fetch` are
+> also actions of `browser_action` (HTTP-based, no webview needed). The
+> see-and-drive of *non-browser* apps lives in the separate `sandbox_*` tools
+> (capture group) — see `ARCHITECTURE.md`.
+
 Voice Mirror's Lens workspace includes a live browser preview panel -- a native
 WebView2 window that renders alongside the code editor, file tree, and terminal.
 The AI agent can navigate pages, take screenshots, read page structure, click
@@ -137,9 +147,10 @@ fn escape_js(s: &str) -> String {
 
 **Source**: `src-tauri/src/mcp/tools.rs` (tool definitions), `src-tauri/src/mcp/handlers/browser.rs` (handlers)
 
-All browser tools are registered in the `browser` tool group (16 tools total).
-The group is loaded on demand or included in tool profiles like `voice-assistant`
-and `web-browser`.
+All browser capability is registered as the single `browser_action` tool in the
+`browser` tool group. The group is loaded on demand or included in tool profiles.
+The "tools" in the tables below are the **action kinds** dispatched via
+`browser_action({ action: "navigate", … })`.
 
 ### Pipe-Based Tools (require active Lens webview)
 

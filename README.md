@@ -1,11 +1,11 @@
 # Voice Mirror
 
 <p align="center">
-  <img src="assets/icon-128.png" alt="Voice Mirror" width="128">
+  <img src="src-tauri/icons/128x128.png" alt="Voice Mirror" width="128">
 </p>
 
 <p align="center">
-  <strong>Voice-controlled AI agent overlay for your entire computer.</strong><br>
+  <strong>A voice-native IDE — build real apps and websites by voice, watch them render live, and let the in-app AI see and drive the running app.</strong><br>
   <sub>Built with Tauri 2, Rust, and Svelte 5.</sub>
 </p>
 
@@ -16,206 +16,148 @@
   <a href="#quick-start">Quick Start</a> •
   <a href="#ai-providers">Providers</a> •
   <a href="CHANGELOG.md">Changelog</a> •
+  <a href="docs/README.md">Docs</a> •
   <a href="#license">License</a>
 </p>
 
 <p align="center">
-  <a href="https://scorecard.dev/viewer/?uri=github.com/contextmirror/voice-mirror-electron"><img src="https://api.scorecard.dev/projects/github.com/contextmirror/voice-mirror-electron/badge" alt="OpenSSF Scorecard"></a>
-  <a href="https://www.bestpractices.dev/projects/11950"><img src="https://www.bestpractices.dev/projects/11950/badge" alt="OpenSSF Best Practices"></a>
-  <a href="https://snyk.io/test/github/contextmirror/voice-mirror-electron"><img src="https://snyk.io/test/github/contextmirror/voice-mirror-electron/badge.svg" alt="Snyk"></a>
-  <a href="https://github.com/contextmirror/voice-mirror-electron"><img src="https://img.shields.io/badge/Socket-monitored-5539cc?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0id2hpdGUiIGQ9Ik0xMiAyQzYuNDggMiAyIDYuNDggMiAxMnM0LjQ4IDEwIDEwIDEwIDEwLTQuNDggMTAtMTBTMTcuNTIgMiAxMiAyem0wIDE4Yy00LjQyIDAtOC0zLjU4LTgtOHMzLjU4LTggOC04IDggMy41OCA4IDgtMy41OCA0LTggOHoiLz48L3N2Zz4=" alt="Socket"></a>
-</p>
-
-<p align="center">
   <img src="https://img.shields.io/badge/status-alpha-orange" alt="Alpha">
-  <img src="https://img.shields.io/badge/version-0.10.0-blue" alt="Version">
-  <img src="https://img.shields.io/badge/platform-Linux%20%7C%20Windows%20%7C%20macOS-blue" alt="Platform">
-  <img src="https://img.shields.io/badge/tests-1070%2B_passing-brightgreen" alt="Tests">
+  <img src="https://img.shields.io/badge/platform-Windows%20first-0078D6?logo=windows" alt="Windows-first">
+  <img src="https://img.shields.io/badge/built%20with-Tauri%202%20%2B%20Svelte%205-24C8DB" alt="Tauri 2 + Svelte 5">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
   <a href="https://discord.com/invite/JBpsSFB7EQ"><img src="https://img.shields.io/badge/Discord-Join%20us-5865F2?logo=discord&logoColor=white" alt="Discord"></a>
 </p>
 
-> **Alpha Release** — Voice Mirror is in active development. Core features work and are tested across all platforms, but expect rough edges. Bug reports and feedback welcome via [GitHub Issues](https://github.com/contextmirror/voice-mirror-electron/issues) or [Discord](https://discord.com/invite/JBpsSFB7EQ).
+> **Alpha — Windows-first launch.** Voice Mirror is in active development. The full voice → build → see → fix loop (live App Preview, native-app driving, push-to-talk) is **Windows-only** for v1. The macOS/Linux builds run the chat, terminal, and editor, but not yet the live-preview loop. Bug reports and feedback welcome via [GitHub Issues](https://github.com/contextmirror/voice-mirror/issues) or [Discord](https://discord.com/invite/JBpsSFB7EQ).
 
-<p align="center">
-  <img src="assets/screenshots/dashboard-v3.png" alt="Voice Mirror Dashboard" width="800">
-</p>
-
-<p align="center">
-  <img src="assets/screenshots/orb-states.png" alt="Orb States — Idle, Human Speaks, AI Thinks, AI Speaks, Dictation" width="800">
-</p>
+<!-- Screenshot placeholder — drop a launch screenshot of the Lens workspace + live App Preview here. -->
 
 ---
 
-```
-Claude Code / OpenCode = Terminal + MCP Tools
-Voice Mirror            = Eyes + Ears + Voice
-Combined                = Full AI agent for your entire computer
-```
+## What is Voice Mirror?
 
-## Why Voice Mirror?
+Voice Mirror is a **voice-native IDE**. You describe what you want to build out loud, an AI coding agent writes the code, and you **watch the app render live** in an in-app App Preview — the same surface the AI itself can see and drive. The north star is the **voice → build → see → fix loop**: speak, build, watch it render, point at what's wrong, fix it.
 
-| Existing Product | What's Missing |
-|------------------|----------------|
-| Siri / Cortana / Alexa | No real capabilities, can't "see" your screen |
-| GitHub Copilot | Code only, no voice, IDE-locked |
-| Claude Desktop | Not an overlay, no wake word, limited platform |
-| ChatGPT Desktop | Just a chat window |
+It is one desktop app that combines:
 
-Voice Mirror is an always-on overlay that listens, sees your screen, executes commands, and speaks back — across any AI provider.
-
----
-
-## What Makes This Different
-
-- **Tauri 2 + Rust native backend** — no Electron, no Node.js runtime in the app. The entire backend is Rust: window management, voice pipeline, AI provider orchestration, config, IPC. Minimal memory footprint and instant startup.
-- **Rust-native voice pipeline** — STT (Whisper ONNX), TTS (Kokoro ONNX / Edge TTS), and VAD run directly in the Tauri process via rodio. No child processes, no FFI bridges, no external binaries.
-- **Svelte 5 frontend** — reactive UI with Vite HMR. Runes-based stores (`$state`, `$derived`, `$effect`) for real-time state management.
-- **Claude Code / OpenCode as PTY-backed brains** — runs Claude Code or OpenCode inside the app as a real terminal. Full MCP tool access with 75+ models via OpenCode, zero extra API cost beyond the CLI itself.
-- **Native Rust MCP server** — `voice-mirror-mcp` is a compiled Rust binary using stdio JSON-RPC. Named pipe server for fast MCP-to-app communication with file-based inbox fallback. 58 tools across 10 dynamically-loaded groups.
-- **Real browser automation** — not "search and summarize." Actual CDP-level click, type, navigate, screenshot, and DOM snapshot.
-- **Unified agent loop** — wake word + screen capture + terminal execution + browser control + persistent memory, all wired together. Most tools pick one; this closes the full Hear > See > Think > Act > Speak > Persist loop.
+- a **Lens workspace** — CodeMirror editor with LSP, file tree, integrated terminal, and dev-server management;
+- a **live App Preview** — your running web app, Tauri/Electron app, or native window mirrored inside Voice Mirror;
+- an **AI that can see and drive the preview** — CDP for web/Tauri/Electron, UI Automation for native apps, the same view you're watching;
+- a **Rust-native voice pipeline** — speech-to-text, text-to-speech, and voice activity detection running directly in the app.
 
 ---
 
 ## Features
 
-### Voice Interaction
+### Lens workspace
+A full IDE surface inside Voice Mirror: **CodeMirror 6** editor with multi-language syntax highlighting, **LSP** (diagnostics, outline, references, rename, code actions), a file tree with inline diagnostics, **split editors**, a **Command Palette**, an integrated **terminal**, **Git** changes view, and **dev-server management** that detects framework + port and captures build/console logs.
 
-| Mode | Trigger | Use Case |
-|------|---------|----------|
-| **Wake Word** | "Hey Claude" | Hands-free, on-demand |
-| **Push to Talk** | Mouse button / keyboard | Manual control |
-| **Dictation** | Configurable hotkey | Voice-to-text input anywhere |
+### Live App Preview *(Windows v1)*
+Build an app and watch it render live, mirrored inside Voice Mirror. The preview tracks whatever you **or** the AI most recently touched, follows window focus, and cleans up when the app closes. The in-app AI drives the **same** surface you watch — click, type, navigate, screenshot — via CDP (web / Tauri / Electron) or UI Automation (native Windows apps).
 
-### Screen Awareness
-Capture your screen at any time — the AI sees what you see and can analyze errors, UI, or anything on screen. Multi-monitor support. Images are sent directly to vision-capable LLMs (Ollama, OpenAI, etc.).
+### Voice interaction *(push-to-talk Windows v1)*
 
-### Chat Dashboard
-Full chat interface with message history, Slack-style grouped messages, markdown rendering, image paste/drop, and persistent chat sessions. AI activity status bar shows real-time provider state.
+| Mode | Use case |
+|------|----------|
+| **Push to talk** | Hold to speak, release to send |
+| **Dictation** | Voice-to-text into the focused input |
+| **Toggle / continuous** | Hands-free conversational loop |
 
-### Terminal Power
-Claude Code or OpenCode runs inside Voice Mirror with full MCP tool access. Execute commands, manage files, and automate workflows — all by voice. OpenCode unlocks 75+ models (GPT, Gemini, Kimi, local Ollama, and more) through a single integration.
+The voice pipeline is fully **Rust-native** — Whisper for speech-to-text (with optional **CUDA** GPU acceleration), Kokoro and Edge TTS for synthesis, and VAD for turn detection. No child processes or external binaries.
 
-### 58 MCP Tools (10 groups, dynamically loaded)
+### Screen + app awareness
+The AI can capture your screen or the previewed app window and reason about what it sees — analyze an error, inspect rendered UI, or verify a change actually worked.
 
-| Group | Tools | Capabilities |
-|-------|-------|-------------|
-| **core** | 4 | Voice I/O, presence tracking |
-| **memory** | 6 | Semantic search, 3-tier persistent memory |
-| **browser** | 16 | Full CDP automation — navigate, click, type, screenshot, cookies, storage |
-| **n8n** | 22 | Workflow CRUD, executions, credentials, tags |
-| **voice-clone** | 3 | Clone any voice from a 3-second audio sample |
-| **screen** | 1 | Desktop screenshot capture |
-| **diagnostic** | 1 | Pipeline message tracing |
-| **meta** | 3 | Dynamic tool loading/unloading |
-| **facades** | 3 | Single-tool wrappers for memory, browser, and n8n (voice-mode efficiency) |
+### Built-in MCP server
+`voice-mirror-mcp` is a compiled **Rust binary** (stdio JSON-RPC) that exposes Voice Mirror's capabilities — voice I/O, screen/app capture, app driving (the sandbox preview), persistent memory, browser automation, and n8n workflow control — to the AI agent. Tool groups load on demand.
 
-### Speech Recognition
-
-| Engine | Speed | Notes |
-|--------|-------|-------|
-| **Whisper** (default) | Fast | Whisper ONNX, runs natively in the Rust backend |
-
-### Voice Synthesis
-
-| Engine | Speed | Voice Cloning | Voices |
-|--------|-------|---------------|--------|
-| **Kokoro** (default) | Fast, CPU | No | 10 built-in |
-| **Edge TTS** | Fast, online | No | 400+ Microsoft voices |
+### Get Started tutorial
+A guided **Get Started** walkthrough (Help → Get Started), a wired title-bar menu, and the Command Palette help new users find their way around on first run.
 
 ---
 
 ## AI Providers
 
-10 built-in providers — 75+ models accessible through OpenCode. Local servers are auto-detected.
+Pick a brain by **right-clicking the Voice Agent tab**. Voice Mirror supports:
 
-| Provider | Type | Key Features |
-|----------|------|-------------|
-| **Claude Code** | CLI agent | Anthropic's gold-standard CLI. MCP tools, vision, full terminal, `CLAUDE.md` ecosystem |
-| **OpenCode** | CLI agent | Universal gateway to 75+ models (GPT, Gemini, Kimi, Grok, Mistral, and more). Full MCP tool support |
-| **Codex** | CLI agent | OpenAI's CLI agent |
-| **Gemini CLI** | CLI agent | Google's CLI agent |
-| **Kimi CLI** | CLI agent | Moonshot's CLI agent |
-| **Ollama** | Local API | Auto-detect, vision (llava), run models on your own hardware |
-| **LM Studio** | Local API | Auto-detect, GUI-based local LLM runner |
-| **Jan** | Local API | Auto-detect, open source local AI |
-| **OpenAI** | Cloud API | GPT models via API |
-| **Groq** | Cloud API | Ultra-fast inference |
+| Provider | Type | Notes |
+|----------|------|-------|
+| **Claude Code** | CLI agent | Anthropic's CLI — MCP tools, vision, full terminal, `CLAUDE.md` ecosystem |
+| **OpenCode** | CLI agent | Universal gateway to many models (GPT, Gemini, Kimi, and more) with MCP support |
+| **Codex / Gemini CLI / Kimi CLI** | CLI agent | Additional first-party CLI agents |
+| **Ollama / LM Studio / Jan** | Local LLM | Auto-detected local servers; run models on your own hardware (vision supported) |
+| **OpenAI / Groq** | Cloud API | Hosted models via API key |
+| **Dictation** | Voice-to-text | No LLM — straight speech-to-text into the focused input |
+
+CLI agents run as real PTY-backed processes inside the app with full MCP tool access. Local servers are auto-detected.
 
 ---
 
 ## Quick Start
 
-### Download (Recommended)
+### Download
 
-Grab the latest installer from [**GitHub Releases**](https://github.com/contextmirror/voice-mirror-electron/releases):
+Grab the latest installer from [**GitHub Releases**](https://github.com/contextmirror/voice-mirror/releases). Voice Mirror is **Windows-first** for v1 — the full live-preview loop targets Windows 10/11.
 
-| Platform | Download |
-|----------|----------|
-| **Windows** | `Voice-Mirror-Setup-x.x.x.exe` (NSIS installer) |
-| **macOS** | `Voice-Mirror-x.x.x.dmg` |
-| **Linux** | `Voice-Mirror-x.x.x.AppImage` |
-
-Everything is bundled — no Node.js, Rust, or build tools required. The app checks for updates automatically and notifies you when a new version is available.
-
-### Development Setup
-
-For contributors or running from source:
-
-```bash
-git clone https://github.com/contextmirror/voice-mirror-electron.git
-cd voice-mirror-electron
-
-# Install JS dependencies (for tests and tooling)
-npm install
-
-# Run the Tauri app with hot-reload
-cd tauri
-cargo tauri dev
-```
-
-**Dev requirements:** Node.js 22+, Rust toolchain, LLVM/libclang, CMake
-
-**Verify builds:**
-
-```bash
-cd tauri && npx vite build           # Check Svelte frontend
-cd tauri/src-tauri && cargo check    # Check Rust backend
-cd tauri/src-tauri && cargo test     # Run Rust tests (167)
-npm test                             # Run JS tests (1070+)
-```
-
-### Optional Dependencies
-
-- **Claude Code CLI** (for Claude provider) or **OpenCode** (for 75+ models)
-- **Codex CLI**, **Gemini CLI**, or **Kimi CLI** (for additional CLI providers)
-- **ffmpeg** (for voice cloning)
-- **CUDA** (optional — GPU acceleration for supported models)
-
----
-
-## Keyboard Shortcuts
-
-| Shortcut | Action |
+| Platform | Status |
 |----------|--------|
-| `Ctrl+Shift+V` | Toggle panel expand/collapse |
-| `Ctrl+Shift+M` | Toggle performance monitor |
-| Drag orb | Move orb position |
+| **Windows 10/11** | Primary — full voice → build → see → fix loop |
+| **macOS / Linux** | Experimental — chat, terminal, and editor run; live App Preview / native driving / push-to-talk not yet available |
+
+Everything is bundled — no Node.js, Rust, or build tools required to run the installer.
+
+### Run from source
+
+```bash
+git clone https://github.com/contextmirror/voice-mirror.git
+cd voice-mirror
+
+npm install        # JS dependencies (frontend + test tooling)
+npm run dev        # builds the voice-mirror-mcp binary, then launches `tauri dev`
+```
+
+`npm run dev` first compiles the native `voice-mirror-mcp` binary, then starts the Tauri app with Vite HMR. The frontend dev server runs on **port 31420** (moved off the default Tauri port so previewed apps never collide).
+
+**Dev requirements:** Node.js 22+, the Rust toolchain (via [rustup](https://rustup.rs/)), the Tauri 2 prerequisites for your OS, plus LLVM/libclang and CMake (for the native ML stack). Optional: **CUDA** for GPU-accelerated Whisper.
+
+### Build a release
+
+```bash
+npm run build      # builds the release voice-mirror-mcp binary, then `tauri build`
+```
+
+### Verify
+
+```bash
+npx vite build                                # frontend compiles
+cargo check --manifest-path src-tauri/Cargo.toml   # Rust backend compiles
+cargo build --bin voice-mirror-mcp --manifest-path src-tauri/Cargo.toml  # MCP binary
+npm test                                      # JS tests (node:test, source-inspection)
+```
+
+> Note: `cargo test --lib` currently fails on Windows due to a WebView2 DLL load — use `cargo check --tests` to verify compilation. The MCP binary tests (`cargo test --bin voice-mirror-mcp`) do run.
+
+### Optional dependencies
+
+- **Claude Code CLI** or **OpenCode** (for those providers) — or any of the other CLI agents
+- **Ollama / LM Studio / Jan** running locally (auto-detected)
+- **CUDA** toolkit for GPU-accelerated speech-to-text
 
 ---
 
 ## Configuration
 
-Config is stored per-platform:
+Data and config live under a single per-user directory:
 
 | Platform | Path |
 |----------|------|
-| Linux | `~/.config/voice-mirror/config.json` |
-| macOS | `~/Library/Application Support/voice-mirror/config.json` |
-| Windows | `%APPDATA%\voice-mirror\config.json` |
+| Windows | `%APPDATA%\voice-mirror\` |
+| macOS | `~/Library/Application Support/voice-mirror/` |
+| Linux | `~/.config/voice-mirror/` |
 
-Settings are accessible from the in-app Settings page — AI provider, voice, activation mode, audio devices, appearance, and more.
+Models, memory, logs, and `config.json` all live there. Settings are editable from the in-app Settings page — AI provider, voice engine, activation mode, audio devices, appearance, and more.
+
+Crashes and hangs self-report to `%APPDATA%\voice-mirror\logs\crashes.log`, and a runtime self-diagnostic system surfaces broken subsystems in-app.
 
 ---
 
@@ -223,97 +165,49 @@ Settings are accessible from the in-app Settings page — AI provider, voice, ac
 
 ```
 voice-mirror/
-├── tauri/                     # Tauri 2 application
-│   ├── src-tauri/             # Rust backend
-│   │   ├── src/
-│   │   │   ├── commands/      # Tauri commands (config, window, voice, ai, chat, tools, shortcuts)
-│   │   │   ├── config/        # Config management + schema
-│   │   │   ├── providers/     # AI providers (CLI PTY + API HTTP)
-│   │   │   ├── voice/         # Voice pipeline (STT, TTS, VAD) — runs natively
-│   │   │   ├── mcp/           # Built-in MCP server (Rust binary)
-│   │   │   └── ipc/           # Named pipe server
-│   │   ├── Cargo.toml         # Rust dependencies
-│   │   └── tauri.conf.json    # Tauri config
-│   └── src/                   # Svelte 5 frontend
-│       ├── components/        # Chat, settings, sidebar, overlay, terminal, shared
-│       ├── lib/stores/        # Reactive stores (.svelte.js with $state/$derived/$effect)
-│       ├── lib/               # Utilities (api.js, markdown.js, utils.js)
-│       └── styles/            # CSS (tokens.css, settings.css)
-├── electron/                  # Legacy Electron app (still in repo, not the active target)
-├── mcp-server/                # Legacy Node.js MCP server
-├── test/                      # Test suites
-│   ├── tauri/                 # Tauri-era JS tests (1070+)
-│   ├── unit/                  # Legacy unit tests
-│   └── integration/           # Legacy integration tests
-├── chrome-extension/          # Browser relay extension (MV3)
-├── cli/                       # Setup wizard + CLI
-└── assets/                    # Icons
+├── src-tauri/              # Rust backend (Tauri 2)
+│   ├── src/
+│   │   ├── commands/       # Tauri commands (config, window, voice, lens, lsp, screenshot, …)
+│   │   ├── providers/      # AI providers (CLI via PTY + HTTP API + dictation)
+│   │   ├── voice/          # Voice pipeline (Whisper STT, Kokoro/Edge TTS, VAD)
+│   │   ├── mcp/            # Built-in MCP server + handlers (also built as voice-mirror-mcp)
+│   │   ├── services/       # Platform services (sandbox preview, window follow, output/logs)
+│   │   ├── ipc/            # Named-pipe IPC between the MCP binary and the app
+│   │   └── bin/mcp.rs      # voice-mirror-mcp binary entry point
+│   ├── Cargo.toml
+│   └── tauri.conf.json
+├── src/                    # Svelte 5 frontend
+│   ├── components/         # chat, lens (editor/preview/terminal), settings, shared, overlay
+│   ├── lib/
+│   │   ├── api.js          # Tauri invoke() wrappers
+│   │   └── stores/         # Reactive runes-based stores (.svelte.js)
+│   └── styles/
+├── test/                   # JS tests (node:test, source-inspection)
+├── docs/                   # Documentation (see docs/README.md)
+├── scripts/ · tools/       # Build + dev tooling
+└── CHANGELOG.md
 ```
 
 ---
 
-## Use Cases
+## Documentation
 
-**Developer:**
-> "Hey Claude, what's this error on my screen?"
-> -> *captures screen, analyzes code, suggests fix*
->
-> "Fix it"
-> -> *executes commands in terminal*
-
-**Desktop:**
-> "What app is using all my memory?"
-> -> *checks processes, reports findings via voice*
-
-**Voice Cloning:**
-> "Clone David Attenborough's voice from this clip"
-> -> *downloads audio, creates clone — all responses now in that voice*
-
-**Automation:**
-> "Create an n8n workflow that emails me when my server goes down"
-> -> *builds workflow via MCP tools*
-
----
-
-## Cross-Platform
-
-| Platform | Status | Notes |
-|----------|--------|-------|
-| Linux | Primary | X11/Wayland, AppImage target |
-| Windows | Supported | NSIS installer |
-| macOS | Supported | DMG target |
+- **[docs/README.md](docs/README.md)** — documentation index and suggested reading order
+- **[docs/guides/GETTING-STARTED.md](docs/guides/GETTING-STARTED.md)** — dev setup, project structure, commands
+- **[docs/source-of-truth/ARCHITECTURE.md](docs/source-of-truth/ARCHITECTURE.md)** — system overview
+- **[docs/guides/VOICE-PIPELINE.md](docs/guides/VOICE-PIPELINE.md)** — the Rust-native STT/TTS/VAD pipeline
+- **[CONTRIBUTING.md](CONTRIBUTING.md)** — how to build, test, and contribute
 
 ---
 
 ## Security & Trust
 
-**Voice Mirror runs its own isolated browser environment. It does not attach to or control your existing browser.**
+- **Tauri security model** — no Node.js in the WebView; all backend logic is Rust behind type-checked `#[tauri::command]` handlers and Tauri 2's capability permissions.
+- **Tool-mediated actions** — every browser/app action flows `LLM → tool schema → controller`. Actions are enumerable, reviewable, and loggable.
+- **Explicit capture** — screenshots are triggered by tool calls or user request, not captured passively.
+- **MCP tool gating** — tool groups load on demand; the AI can only use what's loaded for the session.
 
-- **Embedded Chromium** — browser automation operates in a controlled instance launched by the app, not your system browser. No access to your existing sessions, cookies, or logged-in accounts unless you explicitly log in inside Voice Mirror.
-- **Tool-mediated actions** — every browser action flows through `LLM -> tool schema -> browser controller -> Chromium`. Actions are enumerable, reviewable, and loggable. No arbitrary JS injection.
-- **Explicit screen capture** — screenshots are triggered by tool calls or user request, not captured passively. The orb visually indicates capture state.
-- **MCP tool gating** — tool groups load on demand. The LLM can only access tools that have been explicitly loaded for the session.
-
----
-
-## Environment Variables
-
-| Variable | Provider |
-|----------|----------|
-| `ANTHROPIC_API_KEY` | Claude Code |
-
-Cloud provider API keys (OpenAI, Google, xAI, etc.) are configured through OpenCode directly — see [OpenCode docs](https://opencode.ai/docs/providers/) for setup.
-
----
-
-## Testing
-
-```bash
-npm test                             # JS tests (1070+ across test/tauri/)
-cd tauri/src-tauri && cargo test     # Rust tests (167)
-```
-
-1070+ JavaScript tests (node:test + node:assert/strict) covering config safety, API key detection, provider detection, settings, startup behavior, cross-platform paths, terminal rendering, MCP memory, browser automation, IPC validation, structured logging, path safety, and more. 167 Rust tests covering commands, config, providers, voice pipeline, and MCP server.
+See [SECURITY.md](SECURITY.md) for the disclosure policy and the full security model.
 
 ---
 
@@ -324,5 +218,5 @@ cd tauri/src-tauri && cargo test     # Rust tests (167)
 ---
 
 <p align="center">
-  <sub>Built with Tauri, Rust, Svelte, and a lot of voice commands.</sub>
+  <sub>Built with Tauri, Rust, Svelte — and a lot of voice commands.</sub>
 </p>

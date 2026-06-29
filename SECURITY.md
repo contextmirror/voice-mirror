@@ -2,18 +2,19 @@
 
 ## Supported Versions
 
-| Version | Supported          |
-|---------|--------------------|
-| Tauri 2 (tauri-migration branch) | :white_check_mark: |
-| Electron 0.9.x | :x: (legacy)     |
-| < 0.9   | :x:                |
+Voice Mirror is in active alpha development with a Windows-first launch. Security fixes target the latest release.
+
+| Version | Supported |
+|---------|-----------|
+| Latest alpha release (`main`) | :white_check_mark: |
+| Older / pre-release builds | :x: |
 
 ## Reporting a Vulnerability
 
 If you discover a security vulnerability in Voice Mirror, please report it responsibly:
 
 1. **Do NOT open a public GitHub issue** for security vulnerabilities
-2. **Email:** Send details to the maintainers via [GitHub private vulnerability reporting](https://github.com/contextmirror/voice-mirror-electron/security/advisories/new)
+2. **Report privately:** Send details to the maintainers via [GitHub private vulnerability reporting](https://github.com/contextmirror/voice-mirror/security/advisories/new)
 3. **Include:** A description of the vulnerability, steps to reproduce, and potential impact
 
 ## What to Expect
@@ -66,8 +67,8 @@ Voice Mirror implements the following security controls:
 
 This project is monitored by:
 
-- [OpenSSF Scorecard](https://scorecard.dev/viewer/?uri=github.com/contextmirror/voice-mirror-electron)
-- [Snyk](https://snyk.io/test/github/contextmirror/voice-mirror-electron)
+- [OpenSSF Scorecard](https://scorecard.dev/viewer/?uri=github.com/contextmirror/voice-mirror)
+- [Snyk](https://snyk.io/test/github/contextmirror/voice-mirror)
 - [Socket.dev](https://socket.dev)
 - `cargo audit` for Rust dependency vulnerabilities
 - `npm audit` for JavaScript dependency vulnerabilities

@@ -2,7 +2,17 @@
 
 > Internal doc. Comprehensive audit of interactive surfaces, context menus, keyboard shortcuts, status indicators, tab behaviors, editor micro-interactions, and drag-and-drop. Compared against VS Code and Zed.
 >
-> Last updated: 2026-03-04
+> Last updated: 2026-03-04 · spot-verified 2026-06-29
+>
+> **Note (2026-06-29):** This is a point-in-time UX snapshot. Several "Missing"
+> entries in the per-surface sections below were closed in Waves 1–3 and later
+> work — the wave tables at the top of each section are the canonical "done"
+> list. In particular the **persistent bottom status bar (§2.1) has since
+> shipped** (`shared/StatusBar.svelte`), the **Problems panel (§2.4) shipped**,
+> and font zoom / Tab-indent / F12-go-to-def / Ctrl+W / save-prompt-on-close are
+> all done. Treat the wave tables + `IDE-GAPS.md` as authoritative over the older
+> "Missing" tables. The remaining genuinely-open items are the P2/P3 lists at the
+> bottom.
 
 ---
 
@@ -281,12 +291,18 @@ The **Edit** item opens a modal dialog with:
 
 ## 2. Status Bar & Indicators
 
-### 2.1 Bottom Status Bar — CRITICAL GAP
+### 2.1 Bottom Status Bar — ✅ SHIPPED
 
 #### What We Have
-**No bottom status bar exists.** The closest equivalent is `StatusDropdown.svelte` — a popover button in the FileTree header showing server/LSP status. It requires clicking to see anything.
+**A persistent bottom status bar now exists** — `src/components/shared/StatusBar.svelte`,
+backed by `status-bar.svelte.js`. It surfaces git branch, ahead/behind, aggregate
+diagnostics counts, cursor line:column, language mode, indentation, encoding/EOL,
+LSP health, and dev-server status — most of which click through to the relevant
+panel. (`StatusDropdown.svelte` remains as the multi-tab system health popover;
+`StatsBar.svelte` is still the optional floating CPU/MEM debug widget.)
 
-`StatsBar.svelte` is a floating debug widget (CPU/MEM), not a status bar.
+The gap table below is retained for historical context — the P0/P1 indicators it
+lists are now present in the status bar.
 
 #### What VS Code Has (always visible at bottom)
 Branch name, sync status, error/warning counts, line:column, spaces/tabs, encoding, EOL, language mode, Copilot status, notification bell

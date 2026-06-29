@@ -185,6 +185,10 @@ STT provides a trait-based abstraction (`SttEngine`) with implementations:
 - Uses greedy sampling strategy with `best_of: 1`.
 - Configured for English-only (`set_language(Some("en"))`).
 - Non-speech token suppression is enabled to reduce hallucination on silence.
+- **GPU (CUDA) acceleration**: when `stt_use_gpu` is set (config `voice.sttUseGpu`) and
+  the crate is built with the `cuda` feature (enabled by default in `tauri.conf.json`),
+  inference runs on an NVIDIA GPU and falls back to CPU when unavailable. This makes the
+  large models (`large-v3`, `large-v3-turbo`) practical in real time.
 - Thread count is half the available CPU cores, clamped to 1-8.
 - The `WhisperState` is cached after first use to avoid ~200 MB of buffer
   reallocation per transcription.
@@ -201,6 +205,8 @@ Available model sizes (configured via frontend):
 | `tiny` | `ggml-tiny.en.bin` | ~77 MB |
 | `base` | `ggml-base.en.bin` | ~148 MB (default) |
 | `small` | `ggml-small.en.bin` | ~488 MB |
+| `large-v3` | `ggml-large-v3.bin` | ~3 GB (best accuracy; use with GPU) |
+| `large-v3-turbo` | `ggml-large-v3-turbo-q5_0.bin` | ~570 MB (quantized, fast) |
 
 ### Text-to-Speech (TTS)
 
@@ -241,10 +247,12 @@ provides an iterator over phrase chunks.
 
 ### Activation Modes
 
-The voice engine supports three activation modes, configured via the
-`behavior.activationMode` config key:
+The voice engine supports three activation modes (`VoiceMode`: `PushToTalk`,
+`Toggle`, `WakeWord`), configured via the `behavior.activationMode` config key.
+The shipped app config defaults to **`wakeWord`**; the lower-level
+`VoiceEngineConfig` struct defaults to `PushToTalk`.
 
-#### Push-to-Talk Mode (`pushToTalk`) -- Default
+#### Push-to-Talk Mode (`pushToTalk`)
 
 - Recording starts when PTT key is pressed, stops when released.
 - The frontend sends `start_recording` / `stop_recording` commands.
@@ -259,6 +267,9 @@ The voice engine supports three activation modes, configured via the
 
 #### Wake Word / Continuous Mode (`wakeWord`)
 
+- **Note:** wake-word phrase detection is not yet implemented. This mode currently
+  behaves as always-on, VAD-triggered recording -- the configured `wakeWord.phrase`
+  / `wakeWord.sensitivity` are not actually matched against audio.
 - Audio processing loop starts in **Listening** state automatically.
 - VAD monitors audio continuously for speech onset.
 - When speech is detected, recording begins automatically.
@@ -428,9 +439,10 @@ at pipeline start time. Key fields:
 
 | Field | Default | Description |
 |-------|---------|-------------|
-| `mode` | `PushToTalk` | Activation mode |
+| `mode` | `PushToTalk` | Activation mode (engine-struct default; the shipped app config `behavior.activationMode` defaults to `wakeWord`) |
 | `stt_adapter` | `"whisper-local"` | STT engine name |
 | `stt_model_size` | `"base"` | Whisper model size |
+| `stt_use_gpu` | `false` | Use CUDA GPU acceleration for Whisper |
 | `tts_adapter` | `"kokoro"` | TTS engine name |
 | `tts_voice` | `"af_bella"` | TTS voice name |
 | `tts_speed` | `1.0` | TTS speed multiplier |

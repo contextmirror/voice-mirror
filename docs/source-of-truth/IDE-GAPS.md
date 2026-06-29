@@ -2,7 +2,13 @@
 
 > Internal doc. Tracks what Voice Mirror's Lens workspace has vs what VS Code / Zed / Cursor offer.
 >
-> Last updated: 2026-03-11
+> Last updated: 2026-06-29
+>
+> **Major update since 2026-03-11:** §17 "Universal App Vision" has **shipped** as
+> the see-and-drive **App Preview / sandbox** subsystem (WGC window capture +
+> MJPEG streaming + CDP/UIA driving + event-driven window-follow + `sandbox_*`
+> MCP tools). It is **Windows-only** for v1. See `ARCHITECTURE.md` and
+> `docs/internal/LAUNCH-READINESS.md`.
 
 ---
 
@@ -28,7 +34,7 @@ What's missing is everything that makes a "real IDE" feel seamless — the gaps 
 | Feature | VS Code | Zed | Voice Mirror | Status |
 |---------|---------|-----|-------------|--------|
 | Editor (syntax, save) | Full | Full | Full | **Feature Compete** |
-| LSP (diagnostics, hover, completion) | Full (29/29) | Full (26/29) | 18/29 features | See LSP table below |
+| LSP (diagnostics, hover, completion) | Full | Full | 37/37 feature matrix | **Feature Compete** — see [`LSP-GAP.md`](LSP-GAP.md) |
 | Go-to-definition | Full | Full | Full | **Feature Compete** |
 | Find references | Full | Full | Full | **Feature Compete** |
 | Rename symbol | Full | Full | Full | **Feature Compete** |
@@ -56,17 +62,17 @@ What's missing is everything that makes a "real IDE" feel seamless — the gaps 
 
 > Full LSP gap analysis lives in [`docs/source-of-truth/LSP-GAP.md`](LSP-GAP.md) — configuration alignment, 37-feature matrix, behavior differences, and implementation priorities.
 
-**Current:** 19/37 features (51%). Core editing complete, infrastructure complete, Tier 2 features in progress.
+**Current:** 37/37 features. All 5 waves + frontend CodeMirror wiring complete — core editing, navigation (Tier 1 + 2), inline assistance, formatting/editing, visual enhancements, and infrastructure all implemented.
 
 | Category | VS Code | Voice Mirror | Coverage |
 |----------|---------|-------------|----------|
 | Core (5) | 5/5 | 5/5 | 100% |
-| Navigation Tier 1 (5) | 5/5 | 4/5 | 80% |
-| Navigation Tier 2 (6) | 6/6 | 0/6 | 0% |
-| Inline Assistance (3) | 3/3 | 1/3 | 33% |
-| Formatting & Editing (5) | 5/5 | 1/5 | 20% |
-| Visual (3) | 3/3 | 0/3 | 0% |
-| Infrastructure (10) | 10/10 | 8/10 | 80% |
+| Navigation Tier 1 (5) | 5/5 | 5/5 | 100% |
+| Navigation Tier 2 (6) | 6/6 | 6/6 | 100% |
+| Inline Assistance (3) | 3/3 | 3/3 | 100% |
+| Formatting & Editing (5) | 5/5 | 5/5 | 100% |
+| Visual (3) | 3/3 | 3/3 | 100% |
+| Infrastructure (10) | 10/10 | 10/10 | 100% |
 
 ---
 
@@ -233,7 +239,7 @@ Voice Mirror's extension story is: "Add an MCP server" — not "install a VS Cod
 
 ### 9. Terminal — SEE §14 FOR FULL ANALYSIS
 
-**Status:** Rich terminal system with split panes, sidebar tree, tab coloring/icons, dev-server integration, AI terminal, shell profiles, and drag-to-reorder. See §14 below and `docs/archive/TERMINAL-GAP-ANALYSIS.md` for the full 33-item gap analysis.
+**Status:** Rich terminal system with split panes, sidebar tree, tab coloring/icons, dev-server integration, AI terminal (xterm.js+WebGL) + user shells (ghostty-web), shell profiles, and drag-to-reorder. See §14 below for the gap summary. (The standalone `docs/archive/TERMINAL-GAP-ANALYSIS.md` referenced here is no longer present.)
 
 ---
 
@@ -384,7 +390,7 @@ Voice Mirror's extension story is: "Add an MCP server" — not "install a VS Cod
 
 ### 14. Terminal — DETAILED ANALYSIS
 
-> Full terminal gap analysis lives in `docs/archive/TERMINAL-GAP-ANALYSIS.md` (373 lines, 15 categories).
+> (The full standalone terminal gap analysis `docs/archive/TERMINAL-GAP-ANALYSIS.md` is no longer present; the summary below is the current reference.)
 
 #### Summary of What We Have
 
@@ -403,7 +409,7 @@ Voice Mirror's extension story is: "Add an MCP server" — not "install a VS Cod
 | Tab renaming, context menus | ✅ |
 | Dev server integration (framework detection, crash protection) | ✅ |
 | AI terminal (dedicated Claude Code PTY) | ✅ |
-| ghostty-web WASM renderer | ✅ |
+| Engine split: AI terminal = xterm.js+WebGL, user shells = ghostty-web WASM | ✅ |
 | 5000-line scrollback | ✅ |
 
 #### Recently Closed Terminal Gaps (2026-02-27)
@@ -420,7 +426,7 @@ All 5 high-priority terminal gaps from the gap analysis have been implemented:
 
 #### Remaining Terminal Gaps
 
-See `docs/archive/TERMINAL-GAP-ANALYSIS.md` for the complete 33-item gap list. The top 5 high-priority items are now closed. Remaining gaps are medium/low priority (shell integration, broadcast input, font zoom, etc.).
+The top 5 high-priority terminal gaps are now closed. Remaining gaps are medium/low priority (shell integration, broadcast input, font zoom, etc.).
 
 ---
 
@@ -539,11 +545,11 @@ See `docs/archive/TERMINAL-GAP-ANALYSIS.md` for the complete 33-item gap list. T
 | ~~10~~ | ~~**Indent guides**~~ | ~~Editor~~ | ~~Medium~~ | ~~Small~~ | ✅ Done — `@replit/codemirror-indentation-markers` + status bar toggle. §15 |
 | ~~11~~ | ~~**Navigate to next/prev diff file**~~ | ~~Diff~~ | ~~Medium~~ | ~~Small~~ | ✅ Done — Alt+F5/Shift+Alt+F5, toolbar buttons, command palette. §12 |
 | 12 | **Interactive diff minimap** | Diff | Low | Small | Click minimap to jump to chunk. §12 |
-| 13 | **Workspace symbols** | LSP | Medium | Medium | Cross-project symbol search in command palette |
-| 14 | **Inlay hints** | LSP | Medium | Medium | Inline type annotations for TS/Rust |
+| ~~13~~ | ~~**Workspace symbols**~~ | ~~LSP~~ | ~~Medium~~ | ~~Medium~~ | ✅ Backend + API complete (no dedicated UI panel yet). LSP-GAP §2 |
+| ~~14~~ | ~~**Inlay hints**~~ | ~~LSP~~ | ~~Medium~~ | ~~Medium~~ | ✅ Done — CM ViewPlugin extension. LSP-GAP §2 |
 | 15 | **Breadcrumbs** | Editor | Low | Small | File path segments above editor |
 | ~~16~~ | ~~**Code minimap**~~ | ~~Editor~~ | ~~Low~~ | ~~Large~~ | ✅ Done — `@replit/codemirror-minimap` in file editor + `DiffMinimap.svelte` |
-| 17 | **Window capture (universal app vision)** | Vision | **Medium-High** | Medium | Capture any window for AI vision — unique differentiator. §17 |
+| ~~17~~ | ~~**Window capture (universal app vision)**~~ | ~~Vision~~ | ~~Medium-High~~ | ~~Medium~~ | ✅ Done — shipped as the see-and-drive App Preview / sandbox (WGC + CDP/UIA + window-follow + `sandbox_*`), Windows-only. §17 |
 | 18 | **Debug adapter (DAP)** | Editor | Low | Massive | AI terminal handles debugging better |
 | -- | **Extensions / Plugins** | System | None | Massive | MCP servers are our extension model |
 
@@ -561,11 +567,11 @@ The gap list above looks daunting, but Voice Mirror doesn't need to close every 
 
 The strategy: close the top gaps so Lens is **comfortable enough** for real coding, then double down on the voice+AI features no one else has.
 
-6. **Universal app vision** (planned) — capture any running window (games, CAD, spreadsheets) so the AI can see it. No other tool does this.
+6. **Universal app vision** ✓ shipped (Windows) — see *and drive* any running window (games, CAD, spreadsheets) via the App Preview / sandbox (WGC capture + CDP/UIA). No other tool does this.
 
 **Done:** find/replace ✓, multi-cursor ✓, global search ✓, git stage+commit+push ✓, branch management ✓, dynamic sync ✓, document formatting ✓, signature help ✓, split editor ✓, command palette ✓, file tree git decorations ✓, LSP diagnostics in tree ✓, code minimap ✓, terminal tab close ✓, terminal grid splits (H+V) ✓, terminal find (Ctrl+F) ✓, terminal clickable links (Ctrl+click) ✓, terminal persistence ✓, inline gutter change indicators ✓, closed tab history + Ctrl+Shift+T ✓, mouse wheel scroll on tab bar ✓, back/forward navigation (Alt+Left/Right) ✓, Ctrl+hover definition underline ✓, Ctrl+PageUp/PageDown tab cycling ✓, tab drag to split zones ✓, Problems panel (Ctrl+Shift+M) ✓, code actions lightbulb gutter ✓, font zoom (Ctrl+=/−/0) ✓, LSP server management Phase 1 ✓, LSP crash recovery + health monitoring + idle shutdown (Phase 2) ✓, LSP project scanning + multi-server routing + native binary support (Phase 3) ✓, project output channels (build logs + browser console → MCP) ✓, keyboard tree navigation (arrow keys) ✓, drag-to-move files in tree ✓.
 
-**Next wave:** hunk-level staging (stage individual diff chunks from the gutter). This is the remaining high-impact gap that separates "usable" from "daily driver." The file tree is now feature-compete for navigation (keyboard + drag-to-move). The terminal is feature-compete with VS Code for core workflows. LSP infrastructure is feature-compete — remaining LSP gaps are Tier 2 features (inlay hints, workspace symbols, semantic tokens).
+**Next wave:** hunk-level staging (stage individual diff chunks from the gutter). This is the remaining high-impact gap that separates "usable" from "daily driver." The file tree is now feature-compete for navigation (keyboard + drag-to-move). The terminal is feature-compete with VS Code for core workflows. LSP is now feature-compete across the full 37-feature matrix (inlay hints, workspace symbols, semantic tokens, code lens, document colors, etc. all shipped) — the only remaining LSP work is surfacing a few backend-only features (workspace symbols, call/type hierarchy) in dedicated UI panels. See [`LSP-GAP.md`](LSP-GAP.md).
 
 ---
 
@@ -589,7 +595,8 @@ The strategy: close the top gaps so Lens is **comfortable enough** for real codi
 | Zoom (per-tab) | ✅ | Zoom in/out/reset with live % display |
 | Find on Page | ✅ | Ctrl+F in browser, match navigation |
 | Design mode | ✅ | Click elements → annotated screenshot → AI |
-| Console capture | ✅ | `lens-console://` URI scheme, patched console.* methods |
+| Element Inspector | ✅ | `ElementInspector.svelte` — Onlook-style rendered-element → source inspection panel |
+| Console capture | ✅ | `lens-console://` URI scheme, patched console.* methods (`ConsolePanel.svelte`) |
 | Device preview | ✅ | Side-by-side responsive preview with emulation |
 
 #### Gaps vs Chrome/Edge
@@ -605,11 +612,27 @@ The strategy: close the top gaps so Lens is **comfortable enough** for real codi
 
 ---
 
-### 17. Window Capture — Universal App Vision
+### 17. Window Capture — Universal App Vision — SHIPPED ✓ (Windows)
 
-> **Status:** Concept / not started. This is the "third unlock" for Voice Mirror.
+> **Status:** Shipped as the **see-and-drive App Preview / sandbox subsystem** (Windows-only for v1). The AI can now both *see* and *drive* a running app.
 
-**The vision:** Voice Mirror has unlocked voice (stable) and web vision (browser panel). The next unlock is **universal app vision** — the AI can see any running application (games, CAD, spreadsheets, etc.) the same way it sees websites in the browser panel.
+**What shipped:** The "third unlock" is live. Voice Mirror captures any running
+window via **Windows Graphics Capture (WGC)**, streams it as **MJPEG** on a stable
+localhost port into the App Preview panel (`SandboxPreview.svelte`), and lets the
+AI drive it through one unified `@ref` element model — **CDP** (Chrome DevTools
+Protocol over a remote-debugging port) for WebView2/Tauri/Electron/Chromium apps,
+and **UI Automation (UIA)** for native non-CDP Windows apps (Notepad, Calculator,
+Win32/WinForms/WPF/Qt/UWP). An **event-driven window-follow** service arbitrates
+between user focus and AI actions so the preview tracks the right window.
+
+**Backend:** `commands/sandbox.rs` (10 commands), `services/sandbox.rs` (CDP),
+`services/uia.rs` (UIA worker), `services/window_follow.rs`, `services/window_stream.rs`.
+**MCP:** `sandbox_start`, `sandbox_attach`, `sandbox_snapshot`, `sandbox_screenshot`,
+`sandbox_click`, `sandbox_type`, `sandbox_close_window` (capture group).
+
+**Original vision (for context):** Voice Mirror unlocked voice (stable) and web
+vision (browser panel); universal app vision lets the AI see/drive any running
+application (games, CAD, spreadsheets) the same way it does websites.
 
 **Why it matters:** Today, if you're modding Stardew Valley, Claude can help with the code but can't *see* the running game to verify your changes. You'd have to screenshot manually. The same applies to Excel formulas, Blender models, AutoCAD drawings, WoW addon development — anything outside the browser. Closing this loop means Voice Mirror works for *every* workflow, not just web development.
 

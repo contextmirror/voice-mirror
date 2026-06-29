@@ -1,5 +1,9 @@
 # Voice Mirror — Architecture
 
+> Voice Mirror is a **Windows-first** voice-native IDE. The cross-platform basics (chat, editor, terminal, full-screen capture) work everywhere, but the see-and-drive App Preview / native-app driving, push-to-talk/dictation injection, and WebView2 browser bridge are **Windows-only** for v1. Launch gaps are tracked in [`docs/internal/LAUNCH-READINESS.md`](../internal/LAUNCH-READINESS.md).
+>
+> Last verified against code: 2026-06-29.
+
 ## System Overview
 
 ```
@@ -10,19 +14,21 @@
 |  ┌─ Svelte 5 Frontend (WebView) ────────────────────────┐ |
 |  │  Orb overlay (draggable, animated states)            │ |
 |  │  Chat panel (conversation history, markdown)         │ |
+|  │  Title-bar menu bar (File/Edit/…/Help) + command reg │ |
 |  │  Lens workspace (editor, preview, file tree, term)   │ |
-|  │  Terminal panel (ghostty-web WASM, fullscreen PTY)   │ |
-|  │  Settings panel (9 tabs)                             │ |
+|  │  App Preview / sandbox (see-and-drive running apps)  │ |
+|  │  Terminal: AI tab (xterm.js+WebGL) + shells (ghostty)│ |
+|  │  Settings panel + onboarding wizard + Get-Started    │ |
 |  │  Sidebar (navigation, chat list, project strip)      │ |
 |  │  Theme engine (8 presets + custom themes)            │ |
-|  │  18 reactive stores (Svelte 5 runes)                 │ |
+|  │  31 reactive stores (Svelte 5 runes)                 │ |
 |  │  API layer: invoke('command', { args }) → Rust       │ |
 |  └──────────────────────────────────────────────────────┘ |
 |                         │ invoke()                        |
 |                         ▼                                 |
 |  ┌─ Rust Backend (Tauri commands) ──────────────────────┐ |
 |  │                                                      │ |
-|  │  commands/     Tauri command handlers (14 modules)    │ |
+|  │  commands/     Tauri command handlers (~20 modules)   │ |
 |  │  ├── config    Config CRUD (get, set, reset)         │ |
 |  │  ├── window    Window management (pos, bounds, quit) │ |
 |  │  ├── voice     Voice pipeline control                │ |
@@ -30,12 +36,16 @@
 |  │  ├── chat      Chat persistence (list, load, save)   │ |
 |  │  ├── tools     Tool/dependency management            │ |
 |  │  ├── shortcuts  Global shortcut registration         │ |
-|  │  ├── files     File operations (read, write, tree)   │ |
+|  │  ├── files/    File ops + git (split submodules)     │ |
 |  │  ├── screenshot Screen/window/monitor capture        │ |
-|  │  ├── shell     Shell PTY spawning                    │ |
-|  │  ├── lens      WebView2 browser preview              │ |
+|  │  ├── terminal  Shell PTY spawning                    │ |
+|  │  ├── lens/     WebView2 browser preview (submodules) │ |
 |  │  ├── lsp       Language server protocol              │ |
-|  │  └── dev_server Dev server detection                 │ |
+|  │  ├── sandbox   See-and-drive App Preview (CDP/UIA)   │ |
+|  │  ├── dev_server Dev server detection                 │ |
+|  │  ├── output    Output panel channels                 │ |
+|  │  ├── project / mcp / onboarding / workspace_state    │ |
+|  │  └── design    Element-capture design mode           │ |
 |  │                                                      │ |
 |  │  providers/    AI provider implementations           │ |
 |  │  ├── cli       PTY providers (portable-pty)          │ |
@@ -52,14 +62,15 @@
 |  │                                                      │ |
 |  │  mcp/          Native Rust MCP server                │ |
 |  │  ├── server    stdio JSON-RPC transport              │ |
-|  │  ├── tools     Tool registry (5 groups)             │ |
-|  │  ├── handlers  5 handler modules                     │ |
+|  │  ├── tools     Tool registry (5 groups, 45 tools)    │ |
+|  │  ├── handlers  7 handler modules                     │ |
 |  │  └── pipe_router Concurrent pipe message routing     │ |
 |  │                                                      │ |
 |  │  ipc/          Named pipe server (Win) / Unix socket │ |
 |  │  config/       Config schema + persistence (serde)   │ |
-|  │  services/     8 services (browser bridge, file      │ |
-|  │                watcher, input hook, logger, etc.)     │ |
+|  │  services/     browser bridge, sandbox (CDP), uia,   │ |
+|  │                window_follow, window_stream, file    │ |
+|  │                watcher, input hook, logger, etc.      │ |
 |  └──────────────────────────────────────────────────────┘ |
 +-----------------------------------------------------------+
 ```
@@ -85,7 +96,11 @@ The Rust backend manages the lifecycle of all child processes (PTY terminals, MC
 
 ## Tauri Commands
 
-116 commands across 14 modules. The frontend communicates with the backend by calling `invoke('command_name', { args })`, which routes to a `#[tauri::command]` Rust function that returns `Result<T, String>`.
+**231 commands** registered in `lib.rs`, spread across ~20 top-level command modules plus the `files/` and `lens/` submodule trees. The frontend communicates with the backend by calling `invoke('command_name', { args })`, which routes to a `#[tauri::command]` Rust function (most return an `IpcResponse` envelope).
+
+Approximate per-module counts: `lsp` 45, `files/` (git + fs) 33, `lens/` 40, `voice` 19, `ai` 13, `window` 11, `sandbox` 10, `screenshot` 10, `output` 7, `chat` 6, `terminal` 6, `config` 5, `design`/`shortcuts`/`project` 4 each, `dev_server`/`mcp`/`onboarding` 3 each, `workspace_state` 2.
+
+The per-module tables below cover the most-used modules; some counts are illustrative and may lag the headline total.
 
 ### commands/config.rs (5 commands)
 | Command | Purpose |
@@ -111,7 +126,7 @@ The Rust backend manages the lifecycle of all child processes (PTY terminals, MC
 | `quit_app` | Quit application |
 | `get_process_stats` | Get memory/CPU usage stats |
 
-### commands/voice.rs (17 commands)
+### commands/voice.rs (19 commands)
 | Command | Purpose |
 |---------|---------|
 | `start_voice` | Start voice pipeline |
@@ -158,7 +173,11 @@ The Rust backend manages the lifecycle of all child processes (PTY terminals, MC
 | `export_chat_to_file` | Export chat to file |
 | `chat_rename` | Rename a chat session |
 
-### commands/files.rs (13 commands)
+### commands/files/ (33 commands across submodules)
+
+Split into `read_write`, `directory`, `filesystem`, `search`, and `git` (20 git
+commands: stage/unstage, commit, push/pull/fetch, branches, stash, …).
+Representative commands:
 | Command | Purpose |
 |---------|---------|
 | `list_directory` | List directory contents |
@@ -175,7 +194,7 @@ The Rust backend manages the lifecycle of all child processes (PTY terminals, MC
 | `reveal_in_explorer` | Open in OS file manager |
 | `search_files` | Search files in project |
 
-### commands/screenshot.rs (6 commands)
+### commands/screenshot.rs (10 commands)
 | Command | Purpose |
 |---------|---------|
 | `take_screenshot` | Capture primary screen |
@@ -184,17 +203,36 @@ The Rust backend manages the lifecycle of all child processes (PTY terminals, MC
 | `capture_monitor` | Capture specific monitor |
 | `capture_window` | Capture specific window |
 | `lens_capture_browser` | Capture lens browser preview |
+| … | plus region/window-region capture + helpers |
 
-### commands/shell.rs (5 commands)
+### commands/sandbox.rs (10 commands) — See-and-Drive App Preview
+
+Launch, attach, snapshot, screenshot, click, type, and close a running app
+inside the live App Preview. Uses **CDP** (Chrome DevTools Protocol over a
+remote-debugging port) for WebView2/Tauri/Electron/Chromium apps and **UI
+Automation (UIA)** for native non-CDP Windows apps — both producing one unified
+`@ref` element model. Backed by `services/sandbox.rs` (CDP), `services/uia.rs`
+(UIA worker), `services/window_follow.rs` (event-driven window-follow), and
+`services/window_stream.rs` (WGC → MJPEG streaming). **Windows-only.**
+
+### commands/output.rs (7 commands)
+
+Output-panel channel registration, project-channel lifecycle, and log push for
+the VS Code-style Output panel (system + dynamic project channels).
+
+### commands/terminal.rs (shell PTY commands)
 | Command | Purpose |
 |---------|---------|
-| `shell_spawn` | Spawn a shell PTY |
-| `shell_input` | Send input to shell |
-| `shell_resize` | Resize shell PTY |
-| `shell_kill` | Kill shell process |
-| `shell_list` | List active shells |
+| `terminal_spawn` | Spawn a shell PTY |
+| `terminal_input` | Send input to shell |
+| `terminal_resize` | Resize shell PTY |
+| `terminal_kill` | Kill shell process |
+| `terminal_list` | List active shells |
 
-### commands/lens.rs (14 commands)
+### commands/lens/ (~40 commands across submodules)
+
+Split into `navigation`, `tabs`, `find`, `zoom`, `device_preview`, `downloads`,
+`history`, `devtools`, and `webview_setup`. Representative commands:
 | Command | Purpose |
 |---------|---------|
 | `lens_create_tab` | Create browser tab |
@@ -211,7 +249,10 @@ The Rust backend manages the lifecycle of all child processes (PTY terminals, MC
 | `lens_hard_refresh` | Hard refresh (bypass cache) |
 | `lens_clear_cache` | Clear WebView2 cache |
 
-### commands/lsp.rs (15 commands)
+### commands/lsp.rs (45 commands)
+
+The 15 most-used are listed below; the full set (45) covers the entire LSP feature matrix — type/declaration/implementation navigation, document highlight, inlay hints, code lens, semantic tokens, document colors, folding ranges, workspace symbols, call/type hierarchy, selection range, on-type/range formatting, linked editing, server management, etc. See [`LSP-GAP.md`](LSP-GAP.md) and [`LSP-WIRING-AUDIT.md`](LSP-WIRING-AUDIT.md).
+
 | Command | Purpose |
 |---------|---------|
 | `lsp_open_file` | Notify LSP of file open |
@@ -244,10 +285,16 @@ The Rust backend manages the lifecycle of all child processes (PTY terminals, MC
 | `check_npm_versions` | Check npm package versions |
 | `update_npm_package` | Update an npm package |
 
-### commands/design.rs (1 command)
+### commands/design.rs (4 commands)
 | Command | Purpose |
 |---------|---------|
-| `design_command` | Execute design tool commands |
+| `design_command` | Execute design tool commands (element capture, etc.) |
+
+### Other modules
+
+`project.rs` (4 — project add/remove/list), `mcp.rs` (3 — MCP server management),
+`onboarding.rs` (3 — first-run wizard), `workspace_state.rs` (2 — layout
+persistence). The `git` commands live under `files/git.rs` (20).
 
 ### commands/shortcuts.rs (4 commands)
 | Command | Purpose |
@@ -263,7 +310,9 @@ The Rust backend manages the lifecycle of all child processes (PTY terminals, MC
 
 The frontend is a Svelte 5 application built with Vite. It runs inside the Tauri WebView — there is no Node.js context, no preload script, and no `window.voiceMirror` bridge. All backend communication goes through `invoke()` calls defined in `src/lib/api.js`.
 
-### Components (63 files, 7 directories)
+### Components (102 files, 8 directories)
+
+> The tables below are representative, not exhaustive — the component set has grown well past the originals. Notable additions since this doc was first written: terminal split (`AiTerminal.svelte` = xterm.js+WebGL for the AI provider PTY, `Terminal.svelte` = ghostty-web for user shells, plus `TerminalSidebar`/`TerminalTabStrip`/`TerminalPanel`/`TerminalActionBar`/`TerminalSearch`/`TerminalContextMenu`/colour+icon pickers), the App Preview (`SandboxPreview.svelte`), browser polish (`BrowserMenu`, `DownloadsPanel`, `HistoryPanel`, `DevicePreview`, `ElementInspector`, `ConsolePanel`, `FindBar`), LSP panels, `ProblemsPanel`, `StatusBar`, `EditorPane`/`GroupTabBar`, MCP server settings, `onboarding/WelcomeWizard.svelte`, and `shared/GettingStarted.svelte`.
 
 **Chat** (7 components):
 | Component | Purpose |
@@ -334,12 +383,27 @@ The frontend is a Svelte 5 application built with Vite. It runs inside the Tauri
 | `Orb.svelte` | Animated orb with state-driven visuals |
 | `OverlayPanel.svelte` | Overlay container for orb + expanded panel |
 
-**Terminal** (3 components):
+**Terminal** (11 components — engine split):
 | Component | Purpose |
 |-----------|---------|
-| `Terminal.svelte` | ghostty-web terminal for AI PTY providers |
-| `ShellTerminal.svelte` | Shell PTY terminal (user shells) |
+| `AiTerminal.svelte` | **xterm.js + WebGL** terminal for the AI provider PTY (Claude Code, etc.) |
+| `Terminal.svelte` | **ghostty-web** (WASM) terminal for user shell PTY sessions |
 | `TerminalTabs.svelte` | Tabbed container: AI tab + shell tabs + unified toolbar |
+| `TerminalPanel.svelte` | Shell terminal panel host (grid splits) |
+| `TerminalSidebar.svelte` | Terminal instance tree (drag-to-reorder) |
+| `TerminalTabStrip.svelte` | Shell tab strip |
+| `TerminalActionBar.svelte` | Terminal toolbar actions |
+| `TerminalSearch.svelte` | Find-in-terminal (Ctrl+F) |
+| `TerminalContextMenu.svelte` | Terminal right-click menu |
+| `TerminalColorPicker.svelte` / `TerminalIconPicker.svelte` | Tab colour / icon pickers |
+
+**App Preview / Sandbox + Onboarding:**
+| Component | Purpose |
+|-----------|---------|
+| `lens/SandboxPreview.svelte` | Live see-and-drive preview of a running app (CDP/UIA, window-follow) |
+| `onboarding/WelcomeWizard.svelte` | First-run provider detection/install/auth wizard |
+| `shared/GettingStarted.svelte` | 9-step Get-Started tutorial (auto-shows once; Help → Get Started) |
+| `shared/TitleBar.svelte` | Frameless title bar + menu bar (File/Edit/Selection/View/Go/Run/Terminal/Help) wired to the command registry |
 
 **Shared** (11 components):
 | Component | Purpose |
@@ -356,7 +420,7 @@ The frontend is a Svelte 5 application built with Vite. It runs inside the Tauri
 | `ResizeEdges.svelte` | Frameless window resize handles |
 | `StatsBar.svelte` | Process statistics bar |
 
-### Stores (18 reactive stores using Svelte 5 runes)
+### Stores (31 reactive stores using Svelte 5 runes)
 
 All stores live in `src/lib/stores/` and use `.svelte.js` extension for rune support:
 
@@ -380,10 +444,20 @@ All stores live in `src/lib/stores/` and use `.svelte.js` extension for rune sup
 | `attachments.svelte.js` | Chat attachment management |
 | `lsp-diagnostics.svelte.js` | LSP diagnostic state |
 | `dev-server-manager.svelte.js` | Dev server detection and management |
+| `diagnostics.svelte.js` | Runtime self-diagnostics + health-contract registry (`EXPECTED_SUBSYSTEMS`) |
+| `sandbox-preview.svelte.js` | App Preview / see-and-drive state |
+| `status-bar.svelte.js` | Bottom status-bar slots (git, diagnostics, cursor, language, LSP, dev server) |
+| `editor-groups.svelte.js` | Split-editor group tree |
+| `workspace-state.svelte.js` | Workspace layout persistence |
+| `onboarding.svelte.js` | First-run wizard state |
+| `terminal-profiles.svelte.js` | Shell profile detection |
+| `browser-history.svelte.js` / `downloads.svelte.js` / `device-preview.svelte.js` / `navigation-history.svelte.js` / `search.svelte.js` | Browser history, downloads, device preview, editor back/forward, content search |
+
+(31 total — the rows above the line are the originals; this group lists the major additions.)
 
 ### API Layer (`src/lib/api.js`)
 
-102+ `invoke()` wrapper functions that map to Tauri commands. The frontend never calls `invoke()` directly — all calls go through this module, which handles serialization, error formatting, and typing.
+130+ `invoke()` wrapper functions that map to Tauri commands. The frontend never calls `invoke()` directly — all calls go through this module, which handles serialization, error formatting, and typing.
 
 ```javascript
 // Example: api.js wraps Tauri invoke() calls
@@ -404,7 +478,9 @@ export async function startVoice() {
 
 | Module | Purpose |
 |--------|---------|
-| `api.js` | 102+ invoke() wrappers for all Tauri commands |
+| `api.js` | 130+ invoke() wrappers for all Tauri commands |
+| `commands.svelte.js` | Central command registry (70 commands) shared by the menu bar + command palette |
+| `health-contracts.js` | Health-check contracts wired into the diagnostics store |
 | `markdown.js` | Secure markdown rendering (marked + DOMPurify) |
 | `utils.js` | Utility functions (deepMerge, formatTime, uid) |
 | `orb-presets.js` | Orb animation presets |
@@ -452,6 +528,17 @@ OpenAI-compatible HTTP API providers using Rust's async HTTP client:
 | Jan | Local | Auto-detected on localhost:1337 |
 | OpenAI | Cloud | Requires API key |
 | Groq | Cloud | Requires API key |
+| Gemini | Cloud | `gemini-2.0-flash` |
+| Grok (xAI) | Cloud | `grok-2` |
+| Mistral | Cloud | `mistral-small-latest` |
+| OpenRouter | Cloud | aggregator |
+| DeepSeek | Cloud | `deepseek-chat` |
+
+> **Frontend exposure:** the backend supports all the providers above, but the
+> frontend provider selector (`src/lib/providers.js`) currently surfaces a
+> curated subset — `claude` + `opencode` (CLI), the three local servers
+> (Ollama / LM Studio / Jan), and a `dictation` (voice-only) pseudo-provider.
+> The other cloud/CLI providers are backend-capable but not in the UI picker.
 
 These providers:
 - Use streaming HTTP responses (SSE)
@@ -479,18 +566,21 @@ The voice pipeline is implemented entirely in Rust (`voice/`).
 Manages the voice state machine:
 
 ```
-Idle → [Wake Word / PTT / Call Mode] → Recording → Transcribing → Processing → Speaking → Idle
+Idle → [PTT / Toggle / Dictation] → Recording → Transcribing → Processing → Speaking → Idle
 ```
 
-Three activation modes:
-- **Wake Word**: Always listening for keyword detection
-- **Push-to-Talk (PTT)**: Records while key is held
-- **Call Mode**: Continuous conversation (records after each TTS response)
+Activation modes (`VoiceMode` enum in `voice/mod.rs`):
+- **Push-to-Talk (PTT)** — records while a key is held (**default**)
+- **Toggle** — press once to start, again to stop
+- **Wake Word** — keyword detection (enum variant exists; **not yet implemented** — the deprecated `continuous`/`hybrid` values map onto it)
+- **Dictation** — a separate insert-text-at-cursor path with its own keybinding, used for the standalone dictation flow
+
+PTT and dictation key injection are **Windows-only** for v1.
 
 ### Speech-to-Text (`voice/stt.rs`)
 
-- **Engine**: Whisper ONNX via `whisper-rs`
-- **Models**: tiny, base, small, medium (configurable)
+- **Engine**: Whisper (GGML) via `whisper-rs`, with **CUDA GPU** acceleration when available
+- **Models**: tiny, base, small, large-v3-turbo, large-v3 (configurable; default `base`)
 - **Input**: Raw PCM audio from system microphone
 - **Output**: Transcribed text string
 
@@ -528,6 +618,8 @@ Tauri app backend (Rust)
     │
     ├── Voice pipeline (speak, listen)
     ├── Browser bridge (WebView2 control)
+    ├── Sandbox / App Preview (CDP + UIA see-and-drive)
+    ├── Window/screen capture
     ├── Memory system
     ├── Config access
     └── Chat history
@@ -538,23 +630,27 @@ Tauri app backend (Rust)
 | Module | Purpose |
 |--------|---------|
 | `mcp/server.rs` | JSON-RPC transport, request routing |
-| `mcp/tools.rs` | Tool registry (50 tools, 5 groups, dynamic load/unload) |
+| `mcp/tools.rs` | Tool registry (45 tools, 5 groups, dynamic load/unload) |
 | `mcp/pipe_router.rs` | Concurrent pipe message routing (oneshot for browser responses, mpsc for user messages) |
-| `mcp/handlers/core.rs` | Core voice communication handlers |
-| `mcp/handlers/browser.rs` | Browser control via named pipe to WebView2 |
+| `mcp/handlers/core.rs` | Core voice communication + `get_logs` |
+| `mcp/handlers/browser.rs` | Browser control (`browser_action`) via named pipe to WebView2 |
 | `mcp/handlers/memory.rs` | Persistent memory system |
+| `mcp/handlers/capture.rs` | Window/screen capture + `list_ports` |
+| `mcp/handlers/sandbox.rs` | See-and-drive sandbox (`sandbox_*`) via pipe IPC |
 | `mcp/handlers/n8n.rs` | n8n workflow automation |
-| `mcp/handlers/capture.rs` | Screen/window capture handlers |
 
-### Tool Groups (5)
+### Tool Groups (5, 45 tools total)
 
 | Group | Tools | Always Loaded | Description |
 |-------|-------|---------------|-------------|
-| `core` | 4 | Yes | Voice communication (send, inbox, listen, status) |
-| `memory` | 6 | No | Persistent memory (search, remember, forget, stats, flush) |
-| `browser` | 16 | No | Chrome browser control and web research |
-| `capture` | 2 | No | Window/screen capture |
+| `core` | 5 | Yes | Voice communication (`voice_send`, `voice_inbox`, `voice_listen`, `voice_status`) + `get_logs` |
+| `memory` | 6 | No | Persistent memory (search, get, remember, forget, stats, flush) |
+| `browser` | 1 | No | `browser_action` — one unified tool with 30+ parameterized actions (navigate, screenshot, snapshot, click, fill, cookies, storage, auth, search, fetch, …) |
+| `capture` | 11 | Yes | Window/screen capture + the see-and-drive sandbox: `capture_list_windows`, `capture_window`, `capture_browser`, `list_ports`, and `sandbox_start`/`sandbox_attach`/`sandbox_snapshot`/`sandbox_screenshot`/`sandbox_click`/`sandbox_type`/`sandbox_close_window` |
 | `n8n` | 22 | No | n8n workflow automation |
+
+`core` + `capture` (16 tools) are always loaded at startup; `memory`, `browser`,
+and `n8n` load on demand or via tool profiles.
 
 ### Communication
 
@@ -591,8 +687,16 @@ pub struct AppConfig {
     pub system: SystemConfig,
     pub ai: AiConfig,
     pub projects: ProjectsConfig,
+    pub editor: EditorConfig,          // incl. font_size, indent_guides
+    pub lsp_servers: HashMap<String, serde_json::Value>,
+    pub device_preview: DevicePreviewConfig,
+    pub browser: BrowserConfig,        // download_ask_location, download_path
+    pub terminal_layout: Option<serde_json::Value>,
 }
 ```
+
+(18 top-level fields — the trailing five were added since this doc was first
+written; see the config-schema-drift section of [`AUDIT-TRACKER.md`](AUDIT-TRACKER.md).)
 
 ### Persistence (`config/persistence.rs`)
 
@@ -656,11 +760,16 @@ Features:
 | Service | Purpose |
 |---------|---------|
 | `browser_bridge.rs` | Dispatches browser actions to WebView2 (navigate, click, fill, screenshot, snapshot, evaluate JS) |
+| `sandbox.rs` | CDP backend for the see-and-drive App Preview (remote-debugging port, AX tree → `@ref` model) — **Windows** |
+| `uia.rs` | UI Automation backend for driving native non-CDP apps (MTA worker thread) — **Windows** |
+| `window_follow.rs` | Event-driven window-follow (OS focus hook arbitration: user focus vs AI action) — **Windows** |
+| `window_stream.rs` | WGC → MJPEG streaming of a captured window for the preview — **Windows** |
+| `output.rs` | Output-panel ring buffers + JSONL log files (`LogFileWriter`) |
 | `file_watcher.rs` | Watches project files for changes (notifies frontend of external edits) |
 | `inbox_watcher.rs` | Watches inbox directory for new voice messages |
 | `input_hook.rs` | Global keyboard/mouse hook for PTT and shortcuts |
 | `text_injector.rs` | OS-level text injection (simulates typing) |
-| `dev_server.rs` | Dev server detection (Vite, Next.js, Parcel, Expo, etc.) |
+| `dev_server.rs` | Dev server detection (Vite, Next.js, Astro, Parcel, Expo, etc.) |
 | `logger.rs` | Structured logging via tracing crate |
 | `platform.rs` | Platform detection and OS utilities |
 
@@ -766,7 +875,7 @@ npm run test:rust    # cargo test --bin voice-mirror-mcp
 
 Unit tests for MCP handlers, IPC protocol, and tool registry. Note: `cargo test --lib` fails on Windows due to WebView2 DLL issues — use `cargo check --tests` for compilation verification.
 
-### JavaScript Tests (3400+)
+### JavaScript Tests (6700+)
 
 ```bash
 npm test
@@ -784,7 +893,7 @@ Uses `node:test` + `node:assert/strict`. Two patterns:
 npm install          # Install frontend dependencies
 npm run dev          # Tauri dev mode with HMR (also rebuilds MCP binary)
 npm run build        # Build production Tauri app (also rebuilds MCP binary)
-npm test             # Run JS test suite (3400+ tests)
+npm test             # Run JS test suite (6700+ tests)
 npm run test:rust    # Run Rust tests (cargo test --bin voice-mirror-mcp)
 npm run test:all     # Run both JS and Rust tests
 npm run check        # Svelte type checking

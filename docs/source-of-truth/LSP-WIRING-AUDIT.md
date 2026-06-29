@@ -1,7 +1,7 @@
 # LSP Frontend Wiring Audit
 
 > Source of truth for LSP backend-to-frontend wiring completeness.
-> Last updated: 2026-03-05
+> Last updated: 2026-03-05 · verified current 2026-06-29 (`commands/lsp.rs` still 45 commands)
 
 ---
 
