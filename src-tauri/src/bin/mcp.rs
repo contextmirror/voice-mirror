@@ -1,3 +1,5 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 //! Standalone MCP server binary for Voice Mirror.
 //!
 //! This binary is spawned by Claude Code as an MCP tool server. It communicates:

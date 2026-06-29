@@ -50,6 +50,21 @@ pub fn strip_ansi_codes(input: &str) -> String {
     out
 }
 
+/// CREATE_NO_WINDOW — keep a spawned console process from flashing a console
+/// window in the GUI (windows_subsystem="windows") release build.
+#[cfg(windows)]
+pub const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+/// Apply CREATE_NO_WINDOW to a std::process::Command on Windows (no-op elsewhere).
+pub fn hidden(cmd: &mut std::process::Command) -> &mut std::process::Command {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    cmd
+}
+
 /// Escape a string for safe embedding inside a JS single-quoted string literal.
 pub fn escape_js_string(s: &str) -> String {
     s.replace('\\', "\\\\")

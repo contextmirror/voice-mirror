@@ -42,18 +42,20 @@ pub fn detect_node() -> NodeStatus {
     let npm_path = which::which("npm").ok();
 
     let node_version = node_path.as_ref().and_then(|p| {
-        std::process::Command::new(p)
-            .arg("--version")
-            .output()
+        let mut cmd = std::process::Command::new(p);
+        cmd.arg("--version");
+        crate::util::hidden(&mut cmd);
+        cmd.output()
             .ok()
             .and_then(|o| String::from_utf8(o.stdout).ok())
             .map(|s| s.trim().to_string())
     });
 
     let npm_version = npm_path.as_ref().and_then(|p| {
-        std::process::Command::new(p)
-            .arg("--version")
-            .output()
+        let mut cmd = std::process::Command::new(p);
+        cmd.arg("--version");
+        crate::util::hidden(&mut cmd);
+        cmd.output()
             .ok()
             .and_then(|o| String::from_utf8(o.stdout).ok())
             .map(|s| s.trim().to_string())
@@ -179,8 +181,11 @@ pub async fn install_server(
     }
 
     // Run npm install
-    let output = tokio::process::Command::new(npm_cmd)
-        .args(&args)
+    let mut cmd = tokio::process::Command::new(npm_cmd);
+    cmd.args(&args);
+    #[cfg(windows)]
+    cmd.creation_flags(crate::util::CREATE_NO_WINDOW);
+    let output = cmd
         .output()
         .await
         .map_err(|e| format!("Failed to run npm: {}", e))?;

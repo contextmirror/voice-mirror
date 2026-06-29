@@ -27,14 +27,15 @@ pub(crate) fn detect_tool(name: &str) -> ToolInfo {
     };
 
     // Detect path using `where` (Windows) or `which` (Unix)
-    let path_cmd = if cfg!(target_os = "windows") {
-        Command::new("where")
-            .arg(name)
-            .output()
-    } else {
-        Command::new("which")
-            .arg(name)
-            .output()
+    let path_cmd = {
+        let mut c = if cfg!(target_os = "windows") {
+            Command::new("where")
+        } else {
+            Command::new("which")
+        };
+        c.arg(name);
+        crate::util::hidden(&mut c);
+        c.output()
     };
 
     if let Ok(output) = path_cmd {
@@ -65,19 +66,23 @@ pub(crate) fn detect_tool(name: &str) -> ToolInfo {
     let is_exe = info.path.as_ref().is_some_and(|p| p.ends_with(".exe"));
     let needs_shell = cfg!(target_os = "windows") && !is_exe;
 
-    let version_result = if needs_shell {
-        Command::new("cmd")
-            .args(["/C", &format!("{} --version", name)])
-            .output()
-    } else if let Some(ref exe_path) = info.path {
-        // Use the full path for .exe files to avoid PATH issues
-        Command::new(exe_path)
-            .arg("--version")
-            .output()
-    } else {
-        Command::new(name)
-            .arg("--version")
-            .output()
+    let version_result = {
+        let mut c = if needs_shell {
+            let mut c = Command::new("cmd");
+            c.args(["/C", &format!("{} --version", name)]);
+            c
+        } else if let Some(ref exe_path) = info.path {
+            // Use the full path for .exe files to avoid PATH issues
+            let mut c = Command::new(exe_path);
+            c.arg("--version");
+            c
+        } else {
+            let mut c = Command::new(name);
+            c.arg("--version");
+            c
+        };
+        crate::util::hidden(&mut c);
+        c.output()
     };
 
     if let Ok(output) = version_result {
@@ -198,9 +203,10 @@ pub async fn scan_cli_tools() -> IpcResponse {
 fn run_npm(args: &[&str]) -> Result<String, String> {
     let output = if cfg!(target_os = "windows") {
         let cmd_str = format!("npm {}", args.join(" "));
-        Command::new("cmd")
-            .args(["/C", &cmd_str])
-            .output()
+        let mut cmd = Command::new("cmd");
+        cmd.args(["/C", &cmd_str]);
+        crate::util::hidden(&mut cmd);
+        cmd.output()
     } else {
         Command::new("npm")
             .args(args)

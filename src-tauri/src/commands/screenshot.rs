@@ -1341,8 +1341,10 @@ Write-Output ("{{0}} {{1}} {{2}}" -f $w, $h, $b64)
                 crop_h = crop_h,
             );
 
-            let output = std::process::Command::new("powershell")
-                .args(["-NoProfile", "-NonInteractive", "-Command", &ps_script])
+            let mut ps_cmd = std::process::Command::new("powershell");
+            ps_cmd.args(["-NoProfile", "-NonInteractive", "-Command", &ps_script]);
+            crate::util::hidden(&mut ps_cmd);
+            let output = ps_cmd
                 .output()
                 .map_err(|e| format!("Failed to run PowerShell: {}", e))?;
 

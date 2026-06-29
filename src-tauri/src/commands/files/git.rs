@@ -9,10 +9,10 @@ async fn run_git(args: &[&str], cwd: &std::path::Path) -> Result<std::process::O
     let args: Vec<String> = args.iter().map(|s| s.to_string()).collect();
     let cwd = cwd.to_path_buf();
     tokio::task::spawn_blocking(move || {
-        std::process::Command::new("git")
-            .args(&args)
-            .current_dir(&cwd)
-            .output()
+        let mut cmd = std::process::Command::new("git");
+        cmd.args(&args).current_dir(&cwd);
+        crate::util::hidden(&mut cmd);
+        cmd.output()
             .map_err(|e| format!("Failed to run git: {}", e))
     })
     .await
@@ -23,10 +23,10 @@ async fn run_git(args: &[&str], cwd: &std::path::Path) -> Result<std::process::O
 async fn run_git_owned(args: Vec<String>, cwd: &std::path::Path) -> Result<std::process::Output, String> {
     let cwd = cwd.to_path_buf();
     tokio::task::spawn_blocking(move || {
-        std::process::Command::new("git")
-            .args(&args)
-            .current_dir(&cwd)
-            .output()
+        let mut cmd = std::process::Command::new("git");
+        cmd.args(&args).current_dir(&cwd);
+        crate::util::hidden(&mut cmd);
+        cmd.output()
             .map_err(|e| format!("Failed to run git: {}", e))
     })
     .await

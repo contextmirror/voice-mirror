@@ -419,10 +419,10 @@ pub fn detect_gpu() -> IpcResponse {
     let cuda_compiled = cfg!(feature = "cuda");
 
     // Try NVIDIA first via nvidia-smi
-    if let Ok(output) = std::process::Command::new("nvidia-smi")
-        .args(["--query-gpu=name,memory.total,driver_version", "--format=csv,noheader"])
-        .output()
-    {
+    let mut smi_cmd = std::process::Command::new("nvidia-smi");
+    smi_cmd.args(["--query-gpu=name,memory.total,driver_version", "--format=csv,noheader"]);
+    crate::util::hidden(&mut smi_cmd);
+    if let Ok(output) = smi_cmd.output() {
         if output.status.success() {
             let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
             // Parse "NVIDIA GeForce RTX 5070 Ti, 16303 MiB, 581.80"
@@ -485,10 +485,10 @@ fn detect_gpu_fallback() -> Option<(String, String)> {
         // wmic lists all video controllers including integrated graphics.
         // We filter for discrete GPUs (AMD Radeon, Intel Arc) over generic
         // "Microsoft Basic" or "Intel UHD" integrated adapters.
-        if let Ok(output) = std::process::Command::new("wmic")
-            .args(["path", "win32_VideoController", "get", "name"])
-            .output()
-        {
+        let mut wmic_cmd = std::process::Command::new("wmic");
+        wmic_cmd.args(["path", "win32_VideoController", "get", "name"]);
+        crate::util::hidden(&mut wmic_cmd);
+        if let Ok(output) = wmic_cmd.output() {
             if output.status.success() {
                 let text = String::from_utf8_lossy(&output.stdout);
                 for line in text.lines() {

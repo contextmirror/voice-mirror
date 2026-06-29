@@ -97,10 +97,10 @@ pub struct TerminalManager {
 #[cfg(target_os = "windows")]
 fn find_git_bash() -> Option<String> {
     // Try to find git.exe via PATH
-    if let Ok(output) = std::process::Command::new("where")
-        .arg("git.exe")
-        .output()
-    {
+    let mut where_cmd = std::process::Command::new("where");
+    where_cmd.arg("git.exe");
+    crate::util::hidden(&mut where_cmd);
+    if let Ok(output) = where_cmd.output() {
         if output.status.success() {
             let stdout = String::from_utf8_lossy(&output.stdout);
             if let Some(git_path) = stdout.lines().next() {
@@ -183,7 +183,10 @@ impl TerminalManager {
             }
 
             // PowerShell Core (pwsh)
-            if let Ok(output) = std::process::Command::new("where").arg("pwsh.exe").output() {
+            let mut pwsh_cmd = std::process::Command::new("where");
+            pwsh_cmd.arg("pwsh.exe");
+            crate::util::hidden(&mut pwsh_cmd);
+            if let Ok(output) = pwsh_cmd.output() {
                 if output.status.success() {
                     let stdout = String::from_utf8_lossy(&output.stdout);
                     if let Some(path) = stdout.lines().next() {
@@ -203,7 +206,10 @@ impl TerminalManager {
 
             // Windows PowerShell (fallback — only if no PowerShell Core found)
             if !profiles.iter().any(|p| p.id.starts_with("powershell")) {
-                if let Ok(output) = std::process::Command::new("where").arg("powershell.exe").output() {
+                let mut ps_cmd = std::process::Command::new("where");
+                ps_cmd.arg("powershell.exe");
+                crate::util::hidden(&mut ps_cmd);
+                if let Ok(output) = ps_cmd.output() {
                     if output.status.success() {
                         let stdout = String::from_utf8_lossy(&output.stdout);
                         if let Some(path) = stdout.lines().next() {
@@ -581,9 +587,10 @@ impl TerminalManager {
         #[cfg(windows)]
         if let Some(p) = pid {
             info!("Killing process tree for PID {} (session '{}')", p, id);
-            let _ = std::process::Command::new("taskkill")
-                .args(["/PID", &p.to_string(), "/T", "/F"])
-                .output();
+            let mut kill_cmd = std::process::Command::new("taskkill");
+            kill_cmd.args(["/PID", &p.to_string(), "/T", "/F"]);
+            crate::util::hidden(&mut kill_cmd);
+            let _ = kill_cmd.output();
         }
 
         if let Some(mut child) = session.child.take() {

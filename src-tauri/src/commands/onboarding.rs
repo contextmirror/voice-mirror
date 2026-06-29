@@ -183,10 +183,11 @@ pub fn detect_providers() -> IpcResponse {
 /// stdin is nulled so a misbehaving CLI can't hang waiting for input.
 fn run_capture(cmdline: &str) -> Option<(bool, String)> {
     let output = if cfg!(target_os = "windows") {
-        std::process::Command::new("cmd")
-            .args(["/C", cmdline])
-            .stdin(std::process::Stdio::null())
-            .output()
+        let mut cmd = std::process::Command::new("cmd");
+        cmd.args(["/C", cmdline])
+            .stdin(std::process::Stdio::null());
+        crate::util::hidden(&mut cmd);
+        cmd.output()
     } else {
         std::process::Command::new("sh")
             .args(["-c", cmdline])
@@ -356,9 +357,10 @@ pub async fn install_provider(params: InstallProviderParams) -> IpcResponse {
         };
         // npm/pip are shims on Windows → must run through cmd.
         if cfg!(target_os = "windows") {
-            std::process::Command::new("cmd")
-                .args(["/C", &install_args])
-                .output()
+            let mut cmd = std::process::Command::new("cmd");
+            cmd.args(["/C", &install_args]);
+            crate::util::hidden(&mut cmd);
+            cmd.output()
         } else {
             std::process::Command::new("sh")
                 .args(["-c", &install_args])
