@@ -286,6 +286,12 @@ pub fn set_active_hwnd(hwnd: Option<i64>) {
     if let Ok(mut g) = active_hwnd_cell().lock() {
         *g = hwnd;
     }
+    // Timestamp this as an `ai_action` intent for the window-follow arbiter, so a
+    // freshly-driven window can win against a stale human-focus event (and vice
+    // versa). A no-op when the follow thread isn't running.
+    if let Some(h) = hwnd {
+        crate::services::window_follow::record_ai_action(h);
+    }
 }
 
 /// The OS window Claude is currently driving, for the live preview to mirror.
@@ -363,6 +369,10 @@ pub(crate) fn clear_active_target() {
             g.remove(&p);
         }
     }
+
+    // Stop the event-driven window-follow — the app is gone, so its focus hook +
+    // arbiter must be torn down (a stale hook would keep firing for a dead PID).
+    crate::services::window_follow::stop();
 
     // Stop the live preview so latest_frame()/is_external() stop serving the dead
     // app's last frame (also resets running/external + clears FRAME_BUFFER).
@@ -1377,7 +1387,7 @@ pub async fn type_text(port: u16, ref_str: &str, text: &str) -> Result<Value, St
 /// alive (its process is resolvable). Lets the live preview re-point deterministically
 /// to a live window instead of nulling the target (which races the WGC teardown).
 #[cfg(windows)]
-fn surviving_app_window(closing: i64) -> Option<i64> {
+pub(crate) fn surviving_app_window(closing: i64) -> Option<i64> {
     let windows = crate::commands::screenshot::list_visible_windows_metadata().ok()?;
     let proc = windows
         .iter()

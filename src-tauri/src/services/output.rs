@@ -28,17 +28,19 @@ pub enum Channel {
     Mcp,
     Browser,
     Frontend,
+    Preview,
 }
 
 impl Channel {
     /// All channels, in definition order.
-    pub const ALL: [Channel; 6] = [
+    pub const ALL: [Channel; 7] = [
         Channel::App,
         Channel::Cli,
         Channel::Voice,
         Channel::Mcp,
         Channel::Browser,
         Channel::Frontend,
+        Channel::Preview,
     ];
 
     /// String label for the channel.
@@ -50,6 +52,7 @@ impl Channel {
             Channel::Mcp => "mcp",
             Channel::Browser => "browser",
             Channel::Frontend => "frontend",
+            Channel::Preview => "preview",
         }
     }
 
@@ -62,6 +65,7 @@ impl Channel {
             "mcp" => Some(Channel::Mcp),
             "browser" => Some(Channel::Browser),
             "frontend" => Some(Channel::Frontend),
+            "preview" => Some(Channel::Preview),
             _ => None,
         }
     }
@@ -80,6 +84,13 @@ impl Channel {
             Channel::Mcp
         } else if target.starts_with("voice_mirror_lib::services::browser") {
             Channel::Browser
+        } else if target.starts_with("voice_mirror_lib::services::window_stream")
+            || target.starts_with("voice_mirror_lib::services::sandbox_stream")
+            || target == "preview"
+        {
+            // Live App Preview: WGC/CDP streaming + the event-driven window-follow
+            // decisions (logged via the `preview` target).
+            Channel::Preview
         } else {
             Channel::App
         }
@@ -336,6 +347,7 @@ impl OutputStore {
             Channel::Mcp => 3,
             Channel::Browser => 4,
             Channel::Frontend => 5,
+            Channel::Preview => 6,
         }
     }
 
@@ -1288,7 +1300,7 @@ mod tests {
         store.inject(Channel::Cli, "TRACE", "noise");
 
         let summaries = store.summary();
-        assert_eq!(summaries.len(), 6);
+        assert_eq!(summaries.len(), 7);
 
         let app_sum = &summaries[0];
         assert_eq!(app_sum.channel, Channel::App);
@@ -1426,7 +1438,7 @@ mod tests {
         writer.append(&make_entry(4, "DEBUG", Channel::Cli, "d1"));
 
         let summaries = LogFileWriter::read_summary(&dir);
-        assert_eq!(summaries.len(), 6);
+        assert_eq!(summaries.len(), 7);
 
         let app = &summaries[0];
         assert_eq!(app.channel, Channel::App);

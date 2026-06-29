@@ -196,15 +196,26 @@ describe('sandbox-preview: multi-window', () => {
     assert.ok(/switchTo\(hwnd\)/.test(src), 'Should expose switchTo(hwnd)');
   });
 
-  it('follows the window Claude is driving (active-window model)', () => {
-    assert.ok(src.includes('setInterval'), 'Should poll on an interval');
-    assert.ok(src.includes('refreshWindows'), 'Should have a refreshWindows loop');
-    // Unified model: mirror whatever window Claude's snapshot published as active.
+  it('follows the backend event-driven window-follow (sandbox-follow-target)', () => {
+    // The backend `window_follow` service (OS focus hook + AI-vs-user arbiter)
+    // emits `sandbox-follow-target`; the store obeys it by re-targeting the stream.
     assert.ok(
-      src.includes('sandboxActiveHwnd') && src.includes('startStream('),
-      'Should follow the active window (sandbox_active_hwnd) by re-targeting the stream',
+      src.includes("listen('sandbox-follow-target'") ||
+        src.includes('listen("sandbox-follow-target"'),
+      'Should listen for the sandbox-follow-target event',
     );
+    assert.ok(src.includes('startStream('), 'Should re-target the stream to the followed window');
+    // The follow listener is torn down on close (unlisten handle).
+    assert.ok(src.includes('followUnlisten'), 'Should hold an unlisten handle for the follow event');
     // Manual switcher choice pins the view so it stops auto-following.
     assert.ok(src.includes('userPinned'), 'Switcher choice should pin via userPinned');
+  });
+
+  it('keeps a slow reconciliation poll for the switcher list + disconnect detection', () => {
+    assert.ok(src.includes('setInterval'), 'Should keep a reconciliation interval');
+    assert.ok(src.includes('refreshWindows'), 'Should keep a refreshWindows loop');
+    assert.ok(src.includes('listFailCount'), 'Should keep dead-port disconnect detection');
+    // The per-tick active-hwnd follow query was removed (event-driven now).
+    assert.ok(!src.includes('sandboxActiveHwnd'), 'Should NOT poll sandbox_active_hwnd per tick');
   });
 });

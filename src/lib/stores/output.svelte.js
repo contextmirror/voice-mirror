@@ -4,15 +4,16 @@
  * Listens to `output-log` Tauri events and maintains per-channel arrays.
  * Tracks active channel, level filter, and auto-scroll state.
  *
- * Supports both fixed system channels (app, cli, voice, mcp, browser, frontend)
- * and dynamic project channels (registered at runtime by dev server manager).
+ * Supports both fixed system channels (app, cli, voice, mcp, browser, frontend,
+ * preview) and dynamic project channels (registered at runtime by dev server
+ * manager).
  */
 
 import { listen } from '@tauri-apps/api/event';
 import { getOutputLogs, registerProjectChannel as apiRegister, unregisterProjectChannel as apiUnregister } from '../api.js';
 
 const MAX_ENTRIES = 2000;
-const SYSTEM_CHANNELS = ['app', 'cli', 'voice', 'mcp', 'browser', 'frontend'];
+const SYSTEM_CHANNELS = ['app', 'cli', 'voice', 'mcp', 'browser', 'frontend', 'preview'];
 const CHANNEL_LABELS = {
   app: 'Voice Mirror',
   cli: 'CLI Provider',
@@ -20,6 +21,7 @@ const CHANNEL_LABELS = {
   mcp: 'MCP Server',
   browser: 'Browser Bridge',
   frontend: 'Frontend Errors',
+  preview: 'App Preview',
 };
 
 let entries = $state({
@@ -29,6 +31,7 @@ let entries = $state({
   mcp: [],
   browser: [],
   frontend: [],
+  preview: [],
 });
 
 /** Dynamic project channel entries: label -> LogEntry[] */

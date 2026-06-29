@@ -132,15 +132,7 @@ pub fn export_diagnostics(
     let _ = writeln!(out, "lines per channel: {}", last);
 
     // In-memory system channels (the app process).
-    let system_channels = [
-        Channel::App,
-        Channel::Cli,
-        Channel::Voice,
-        Channel::Mcp,
-        Channel::Browser,
-        Channel::Frontend,
-    ];
-    for channel in system_channels {
+    for channel in Channel::ALL {
         let (entries, total) = output_store.query(channel, None, Some(last), None);
         let _ = writeln!(
             out,

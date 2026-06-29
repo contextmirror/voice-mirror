@@ -835,6 +835,10 @@ pub fn run() {
                     let host_title = window.title().ok();
                     services::sandbox::set_host_identity(host_hwnd, host_title);
 
+                    // Give the event-driven window-follow an AppHandle so it can
+                    // emit `sandbox-follow-target` decisions to the frontend.
+                    services::window_follow::set_app_handle(app.handle().clone());
+
                     // Watch the main window for UI-thread hangs ("Not Responding"):
                     // on a sustained freeze, dump the stuck main-thread stack so the
                     // hang is diagnosable (faults/panics are handled separately).

@@ -385,7 +385,7 @@ fn dispatch_message(msg: McpToApp, app_handle: &AppHandle) {
                                         format!(" Project: {}", project_labels.join(", "))
                                     };
                                     format!(
-                                        "Unknown channel: {}. System: app, cli, voice, mcp, browser, frontend.{}",
+                                        "Unknown channel: {}. System: app, cli, voice, mcp, browser, frontend, preview.{}",
                                         ch_str, available
                                     )
                                 }

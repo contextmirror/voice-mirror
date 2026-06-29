@@ -50,7 +50,7 @@ pub struct AppWindow {
 
 /// True when `hwnd` is presentable: shown (`IsWindowVisible`) and non-zero size.
 #[cfg(windows)]
-fn is_hwnd_presentable(hwnd: i64) -> bool {
+pub(crate) fn is_hwnd_presentable(hwnd: i64) -> bool {
     use windows::Win32::Foundation::{HWND, RECT};
     use windows::Win32::UI::WindowsAndMessaging::{GetWindowRect, IsWindowVisible};
     unsafe {
@@ -67,7 +67,7 @@ fn is_hwnd_presentable(hwnd: i64) -> bool {
 }
 
 #[cfg(not(windows))]
-fn is_hwnd_presentable(_hwnd: i64) -> bool {
+pub(crate) fn is_hwnd_presentable(_hwnd: i64) -> bool {
     true
 }
 
@@ -89,6 +89,7 @@ pub async fn start(cdp_port: u16, hwnd: Option<i64>) -> Result<(u16, Option<i64>
     // Explicit window from the switcher → always WGC (the user picked it).
     if let Some(h) = hwnd {
         let port = crate::services::window_stream::start(h, 30)?;
+        ensure_follow(h);
         info!(
             "[sandbox_stream] mirroring app window hwnd={} via WGC (CDP :{}) -> MJPEG :{}",
             h, cdp_port, port
@@ -99,6 +100,7 @@ pub async fn start(cdp_port: u16, hwnd: Option<i64>) -> Result<(u16, Option<i64>
     // Auto: try WGC of the resolved app window first (transparent-safe).
     if let Some(h) = find_app_hwnd(cdp_port).await {
         let port = crate::services::window_stream::start(h, 30)?;
+        ensure_follow(h);
         // Wait briefly for the FIRST frame. A visible window (the pill) presents
         // promptly (the present-nudge fires at ~400ms); an opaque window that's
         // occluded/not-presenting yields nothing — then we fall back to CDP.
@@ -337,8 +339,19 @@ pub async fn list_windows(cdp_port: u16) -> Result<Vec<AppWindow>, String> {
     Ok(result)
 }
 
-/// Stop mirroring (stops the underlying window stream).
+/// Start (or re-target) the event-driven window-follow for the app that owns
+/// `hwnd`. Resolves the app PID from the window and hands it to `window_follow`,
+/// which installs the OS focus hook + arbiter. Idempotent for the same PID; a
+/// no-op on non-Windows or when the PID can't be resolved.
+fn ensure_follow(hwnd: i64) {
+    if let Some(pid) = crate::services::sandbox::pid_of_hwnd(hwnd) {
+        crate::services::window_follow::start(pid);
+    }
+}
+
+/// Stop mirroring (stops the underlying window stream + the window-follow thread).
 pub fn stop(_cdp_port: u16) {
+    crate::services::window_follow::stop();
     let _ = crate::services::window_stream::stop();
 }
 

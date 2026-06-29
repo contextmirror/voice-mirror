@@ -56,7 +56,8 @@ describe('export_diagnostics command', () => {
   });
 
   it('iterates all system channels and project channels', () => {
-    assert.ok(cmd.includes('Channel::App') && cmd.includes('Channel::Frontend'), 'Should cover system channels');
+    // Iterates Channel::ALL so every system channel (incl. App Preview) is exported.
+    assert.ok(cmd.includes('Channel::ALL'), 'Should cover all system channels via Channel::ALL');
     assert.ok(cmd.includes('list_project_channels'), 'Should include project channels');
   });
 

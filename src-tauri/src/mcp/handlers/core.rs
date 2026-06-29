@@ -1039,7 +1039,7 @@ fn handle_get_logs_via_files(args: &Value) -> McpToolResult {
                         )
                     };
                     McpToolResult::error(format!(
-                        "Unknown channel: {}. System: app, cli, voice, mcp, browser, frontend. {}",
+                        "Unknown channel: {}. System: app, cli, voice, mcp, browser, frontend, preview. {}",
                         ch_str, available
                     ))
                 }
