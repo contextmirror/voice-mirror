@@ -3,7 +3,16 @@
 > Living checklist of codebase audits. Each section tracks scope, status, and findings.
 > Run periodically (monthly or before releases) to catch regressions.
 
-**Last updated:** 2026-03-11
+**Last updated:** 2026-03-11 · counts spot-checked 2026-06-29
+
+> **Note (2026-06-29):** The license/security/quality findings below are from the
+> 2026-03-11 run and remain a useful baseline, but the codebase has grown
+> (now **231 Tauri commands**, 102 components, 31 stores). A fresh pre-launch
+> sweep was done separately — its blockers/highs (CUDA-forced release build, MCP
+> bundling, CDP :9222 exposure, named-pipe ACL, dump secrets, the window-follow
+> freeze, LSP multibyte-rename panic) live in
+> [`docs/internal/LAUNCH-READINESS.md`](../internal/LAUNCH-READINESS.md), which is
+> the authoritative launch checklist. Re-run the sections here before release.
 
 ---
 
@@ -72,7 +81,7 @@
 
 ### 2.3 IPC / Tauri Command Surface
 
-**140 commands registered** in `lib.rs`. Full audit completed.
+**231 commands registered** in `lib.rs` (was 140 at the 2026-03-11 audit). The findings below were validated against the 140-command surface; the newer commands (sandbox, terminal, output, project, mcp, onboarding, workspace_state, expanded lens/files submodules) need a follow-up validation pass.
 
 | Item | Status | Last Run | Notes |
 |------|--------|----------|-------|

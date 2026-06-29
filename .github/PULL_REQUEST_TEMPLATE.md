@@ -8,7 +8,7 @@
 ## Test plan
 <!-- How was this tested? -->
 - [ ] `npm test` passes
-- [ ] `cargo test` passes (in src-tauri/)
+- [ ] `cargo check --tests --manifest-path src-tauri/Cargo.toml` passes (`cargo test --lib` fails on Windows due to a WebView2 DLL — see CONTRIBUTING.md)
 - [ ] Manual testing completed
 
 ## Screenshots

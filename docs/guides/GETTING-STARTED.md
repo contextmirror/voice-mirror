@@ -11,7 +11,7 @@ npm install
 # Run in development mode (rebuilds MCP binary + Vite HMR + Rust auto-rebuild)
 npm run dev
 
-# Run JS tests (3400+ tests)
+# Run JS tests (6700+ tests)
 npm test
 
 # Run Rust tests
@@ -27,7 +27,9 @@ npm run check
 cd src-tauri && cargo check
 ```
 
-**Important:** Always use `npm run dev` instead of `tauri dev` directly. The npm script rebuilds the `voice-mirror-mcp` binary first, which `tauri dev` does not do. A stale MCP binary silently loses new features due to serde dropping unknown fields.
+**Important:** Always use `npm run dev` instead of `tauri dev` directly. The npm script first kills any stale `voice-mirror-mcp.exe` (the `predev` step) and then rebuilds the `voice-mirror-mcp` binary (`cargo build --manifest-path src-tauri/Cargo.toml --bin voice-mirror-mcp`), which `tauri dev` does not do. A stale MCP binary silently loses new features due to serde dropping unknown fields.
+
+> Voice Mirror's own Vite dev server runs on **port 31420** (HMR on **31421**) -- deliberately moved off the default Tauri/Vite `1420` so apps you build and preview inside Voice Mirror (which default to `1420`) never collide with it. See `vite.config.js` and `tauri.conf.json` (`devUrl: http://localhost:31420`).
 
 ---
 
@@ -39,7 +41,7 @@ voice-mirror/
 │   ├── src/
 │   │   ├── main.rs                     # App entry, window creation
 │   │   ├── lib.rs                      # Tauri plugin + command registration, lens-bridge URI scheme
-│   │   ├── commands/                   # 14 Tauri command modules (116 commands)
+│   │   ├── commands/                   # Tauri command modules (20+ modules; tree below is illustrative, not exhaustive)
 │   │   │   ├── mod.rs
 │   │   │   ├── config.rs               # get_config, set_config, reset_config, get_platform_info, migrate
 │   │   │   ├── window.rs               # Window management (11 commands)
@@ -57,7 +59,7 @@ voice-mirror/
 │   │   │   └── design.rs              # Design tool commands (1 command)
 │   │   ├── config/                     # Config system
 │   │   │   ├── mod.rs
-│   │   │   ├── schema.rs               # Config struct definitions (AppConfig + 13 sub-structs)
+│   │   │   ├── schema.rs               # Config struct definitions (AppConfig + sub-structs)
 │   │   │   ├── persistence.rs          # File I/O (atomic writes: tmp + rename)
 │   │   │   └── migration.rs            # Electron config migration
 │   │   ├── providers/                  # AI provider implementations
@@ -69,27 +71,28 @@ voice-mirror/
 │   │   │   └── tool_calling.rs         # Tool calling for API providers
 │   │   ├── voice/                      # Voice pipeline (fully Rust-native)
 │   │   │   ├── mod.rs
-│   │   │   ├── pipeline.rs             # Pipeline orchestration
-│   │   │   ├── stt.rs                  # Speech-to-text (Whisper ONNX)
-│   │   │   ├── tts.rs                  # Text-to-speech (Kokoro ONNX / Edge TTS)
+│   │   │   ├── pipeline/               # Pipeline orchestration (mod, ring_buffer, playback)
+│   │   │   ├── stt.rs                  # Speech-to-text (Whisper via whisper-rs / whisper.cpp GGML, optional CUDA)
+│   │   │   ├── tts/                    # Text-to-speech (Kokoro ONNX / Edge TTS; mod, kokoro_impl, edge_tts, ...)
 │   │   │   └── vad.rs                  # Voice activity detection
 │   │   ├── mcp/                        # Native Rust MCP server
 │   │   │   ├── mod.rs
 │   │   │   ├── server.rs               # stdio JSON-RPC server
 │   │   │   ├── tools.rs                # Tool registry (5 groups, dynamic load/unload)
 │   │   │   ├── pipe_router.rs          # Concurrent pipe message routing
-│   │   │   └── handlers/               # 5 tool handler modules
+│   │   │   └── handlers/               # 6 tool handler modules (5 tool groups)
 │   │   │       ├── mod.rs
 │   │   │       ├── core.rs             # voice_send, voice_inbox, voice_listen, voice_status
 │   │   │       ├── memory.rs           # search, get, remember, forget, stats, flush
 │   │   │       ├── browser.rs          # Browser automation via named pipe to WebView2
-│   │   │       ├── capture.rs          # Screen/window capture
+│   │   │       ├── capture.rs          # Screen/window/sandbox capture
+│   │   │       ├── sandbox.rs          # Sandbox preview (drive external app via CDP)
 │   │   │       └── n8n.rs              # n8n workflow management
 │   │   ├── ipc/                        # Named pipe IPC (MCP binary <-> Tauri app)
 │   │   │   ├── protocol.rs             # McpToApp / AppToMcp message enums
 │   │   │   ├── pipe_server.rs          # Named pipe server (Tauri side)
 │   │   │   └── pipe_client.rs          # Named pipe client (MCP side)
-│   │   ├── services/                   # 8 platform services
+│   │   ├── services/                   # Platform services (browser bridge, watchers, input hook, CDP, sandbox, crash/hang handlers, ...)
 │   │   │   ├── mod.rs
 │   │   │   ├── browser_bridge.rs       # WebView2 browser bridge (JS eval, screenshot, navigation)
 │   │   │   ├── file_watcher.rs         # Project file change watcher
@@ -127,7 +130,7 @@ voice-mirror/
 │   │   ├── editor-theme.js             # CodeMirror theme (Voice Mirror custom)
 │   │   ├── editor-lsp.svelte.js        # LSP integration for CodeMirror editor
 │   │   ├── local-llm-instructions.js   # System prompt for API providers
-│   │   └── stores/                     # 18 reactive stores (Svelte 5 runes)
+│   │   └── stores/                     # Reactive stores (Svelte 5 runes; 30+ stores -- list below is a subset)
 │   │       ├── config.svelte.js        # DEFAULT_CONFIG, config state
 │   │       ├── theme.svelte.js         # PRESETS, deriveTheme(), theme state
 │   │       ├── ai-status.svelte.js     # AI provider status
@@ -156,7 +159,7 @@ voice-mirror/
 │       ├── orb.css                     # Orb animation styles
 │       ├── notifications.css           # Toast notification styles
 │       └── animations.css              # Shared animations
-├── test/                               # Frontend tests (3400+)
+├── test/                               # Frontend tests (6700+)
 │   ├── unit/                           # Direct-import tests (.mjs)
 │   ├── stores/                         # Source-inspection tests for stores
 │   ├── api/                            # API wrapper tests
@@ -175,11 +178,12 @@ voice-mirror/
 
 | Script | Command | Purpose |
 |--------|---------|---------|
-| `dev` | Builds MCP binary + `tauri dev` | Development mode (Vite HMR + Rust hot-reload) |
+| `predev` | `taskkill /F /IM voice-mirror-mcp.exe` | Kills any stale MCP process before `dev` (auto-run) |
+| `dev` | Builds MCP binary + `tauri dev` | Development mode (Vite HMR on :31420 + Rust hot-reload) |
 | `build` | Builds MCP binary (release) + `tauri build` | Production build |
-| `preview` | `vite preview` | Preview production build |
+| `preview` | `vite build` + `vite preview --port 31420` + `cargo run --features native-ml,cuda` | Run a production frontend against the native backend |
 | `check` | `svelte-check` | Svelte type checking |
-| `test` | `node --test "test/**/*.test.cjs" "test/**/*.test.mjs"` | Run all JS tests (3400+) |
+| `test` | `node --test "test/**/*.test.cjs" "test/**/*.test.mjs"` | Run all JS tests (6700+) |
 | `test:rust` | `cd src-tauri && cargo test` | Run Rust tests |
 | `test:all` | `npm test && npm run test:rust` | Run both JS and Rust tests |
 
@@ -224,8 +228,10 @@ Additional commands via Cargo:
 | svelte (v5) | UI framework with runes |
 | @sveltejs/vite-plugin-svelte | Svelte Vite integration |
 | vite | Build tool + dev server |
-| ghostty-web | WASM terminal emulator (WebGL) |
+| ghostty-web | WASM terminal emulator (WebGL) -- user-shell terminal |
+| @xterm/xterm + addons | Terminal emulator (WebGL) -- AI agent (Voice Agent) terminal |
 | codemirror + @codemirror/* | Code editor (Lens file editor) |
+| highlight.js + marked-highlight | Syntax highlighting in chat markdown |
 | marked | Markdown rendering |
 | dompurify | HTML sanitization |
 | fuzzysort | Fuzzy search (command palette) |
@@ -240,11 +246,12 @@ The Rust backend has optional features controlled via `Cargo.toml` and `tauri.co
 
 | Feature | Crates | Purpose |
 |---------|--------|---------|
-| `whisper` | whisper-rs | Local STT via Whisper C++ |
+| `whisper` | whisper-rs | Local STT via Whisper C++ (whisper.cpp GGML) |
+| `cuda` | whisper-rs/cuda | GPU (CUDA) acceleration for Whisper STT |
 | `onnx` | ort, zip, byteorder | Local TTS via Kokoro ONNX |
 | `native-ml` | whisper + onnx | Both local ML features |
 
-Development builds enable `native-ml` by default (configured in `tauri.conf.json` under `build.features`).
+The default feature set is empty. Development and release builds enable `native-ml` **and** `cuda` (configured in `tauri.conf.json` under `build.features: ["native-ml", "cuda"]`). CUDA acceleration lets Whisper run large models (e.g. `large-v3`) in real time on an NVIDIA GPU; it falls back to CPU when no GPU is available.
 
 ---
 
@@ -264,7 +271,7 @@ Development builds enable `native-ml` by default (configured in `tauri.conf.json
 ### Running Tests
 
 ```bash
-# All JS tests (3400+)
+# All JS tests (6700+)
 npm test
 
 # Single JS test file
@@ -358,7 +365,7 @@ Log output goes to:
 
 ### Frontend Debugging
 
-- Vite dev server runs on `http://localhost:1420` with HMR
+- Vite dev server runs on `http://localhost:31420` with HMR (websocket on `31421`)
 - Open DevTools in the Tauri window (right-click > Inspect, or the Tauri dev menu)
 - Svelte DevTools browser extension works with Tauri's WebView
 
@@ -419,16 +426,18 @@ Stores are imported by components and api.js. The `.svelte.js` extension is requ
 Two categories of AI providers:
 
 **CLI Agent Providers** (PTY-based via `portable-pty`):
-- Claude Code, OpenCode, Codex, Gemini CLI, Kimi CLI
-- Full terminal access with streaming output
-- Managed in `src-tauri/src/providers/cli.rs`
+- Claude Code (`claude`), OpenCode (`opencode`)
+- Full terminal access with streaming output, MCP tool groups
+- Managed in `src-tauri/src/providers/cli/`
 
 **HTTP API Providers** (streaming via `reqwest`):
-- Ollama, LM Studio, Jan, OpenAI, Groq
+- Ollama, LM Studio, Jan (auto-detected local LLM servers)
 - OpenAI-compatible `/v1/chat/completions` endpoint
 - Managed in `src-tauri/src/providers/api.rs`
 
-Provider lifecycle is managed by `src-tauri/src/providers/manager.rs`, which handles starting, stopping, and switching between providers.
+There is also a **Dictation Only** provider (`src-tauri/src/providers/dictation.rs`) -- speech-to-text with no AI, injecting transcribed text into the focused window.
+
+The active provider is chosen by **right-clicking the "Voice Agent" tab** (or in Settings > AI Provider). Provider metadata lives in `src/lib/providers.js`; lifecycle (start/stop/switch) is managed by `src-tauri/src/providers/manager.rs`.
 
 ### Voice Pipeline
 
@@ -438,8 +447,8 @@ The voice pipeline is fully Rust-native (no separate child process):
 |-----------|---------------|----------|
 | Audio capture | cpal | `voice/pipeline.rs` |
 | Audio playback | rodio | `voice/tts.rs` |
-| STT | whisper-rs (Whisper ONNX) | `voice/stt.rs` |
-| TTS | Kokoro ONNX / Edge TTS | `voice/tts.rs` |
+| STT | whisper-rs (whisper.cpp GGML, optional CUDA) | `voice/stt.rs` |
+| TTS | Kokoro ONNX / Edge TTS | `voice/tts/mod.rs` |
 | VAD | Energy-based detection | `voice/vad.rs` |
 
 ### MCP Server
@@ -447,8 +456,8 @@ The voice pipeline is fully Rust-native (no separate child process):
 The MCP server is a native Rust binary (`voice-mirror-mcp`) that communicates via stdio JSON-RPC:
 
 - Entry point: `src-tauri/src/bin/mcp.rs`
-- Tool registry: `src-tauri/src/mcp/tools.rs` (5 groups, dynamic load/unload)
-- Handlers: `src-tauri/src/mcp/handlers/` (5 handler modules)
+- Tool registry: `src-tauri/src/mcp/tools.rs` (5 groups: core, memory, browser, capture, n8n; dynamic load/unload)
+- Handlers: `src-tauri/src/mcp/handlers/` (6 handler modules)
 - Pipe router: `src-tauri/src/mcp/pipe_router.rs` (concurrent oneshot/mpsc routing)
 - Named pipe IPC connects the MCP binary to the running Tauri app for real-time communication
 
@@ -457,7 +466,7 @@ The MCP server is a native Rust binary (`voice-mirror-mcp`) that communicates vi
 Configuration flows through two layers:
 
 1. **Frontend** (`config.svelte.js`): `DEFAULT_CONFIG` provides defaults, `deepMerge(DEFAULT_CONFIG, saved)` fills missing fields
-2. **Backend** (`config/`): `schema.rs` defines the Rust struct (13 sub-configs), `persistence.rs` handles file I/O (atomic writes), `migration.rs` handles Electron config migration
+2. **Backend** (`config/`): `schema.rs` defines the Rust struct (`AppConfig` + sub-configs), `persistence.rs` handles file I/O (atomic writes), `crypto.rs` encrypts API keys (AES-256-GCM), `migration.rs` handles Electron config migration
 
 Config is stored at:
 - Windows: `%APPDATA%/voice-mirror/config.json`
@@ -496,7 +505,7 @@ Config is stored at:
 ### Voice pipeline not working
 
 - Ensure the `native-ml` feature is enabled (default in `tauri.conf.json`)
-- Check that Whisper ONNX model is downloaded
+- Check that the Whisper GGML model is downloaded (auto-downloads from HuggingFace on first use)
 - Check audio device permissions on your OS
 
 ### No audio output

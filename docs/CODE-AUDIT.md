@@ -1,9 +1,18 @@
 # Voice Mirror Code Audit
 
-Last updated: 2026-03-04
+Last updated: 2026-03-04 · reviewed 2026-06-29
 
 Systematic audit of duplication, file sizing, naming, and organization issues.
 Work items are grouped by priority and area. Check items off as they're resolved.
+
+> **Note (2026-06-29):** The completed (`[x]`) items remain accurate. The open
+> (`[ ]`) Rust-dedup / large-file / naming / directory items are still valid
+> direction, but specific **line counts and line-number references predate the
+> codebase growth** (the command surface is now 231 commands; `commands/lsp.rs`
+> has 45 commands, not 12; `lens.rs`/`files.rs` are now submodule trees). Re-measure
+> before acting on a specific "N lines" target. One naming item is already partly
+> resolved: the command registry exports `commandRegistry` from
+> `src/lib/commands.svelte.js`.
 
 ---
 

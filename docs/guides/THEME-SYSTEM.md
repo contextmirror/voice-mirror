@@ -182,11 +182,20 @@ fontFamily: "'Segoe UI', system-ui, -apple-system, sans-serif"
 fontMono:   "'Cascadia Code', 'Fira Code', monospace"
 ```
 
-Exception: **Claude Gray** uses a different system font order:
+Exceptions:
 
-```
-fontFamily: "system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
-```
+- **Claude Gray** uses a different system font order:
+
+  ```
+  fontFamily: "system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
+  ```
+
+- **Vim** uses a monospace stack for *both* `fontFamily` and `fontMono`:
+
+  ```
+  fontFamily: "'Hack', 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace"
+  fontMono:   "'Hack', 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace"
+  ```
 
 ---
 

@@ -18,8 +18,8 @@ Config is stored in platform-appropriate locations:
 {
     wakeWord: {
         enabled: true,
-        phrase: "hey_claude",      // Currently only hey_claude supported
-        sensitivity: 0.5           // 0.1 - 0.9 (0.98 threshold internally)
+        phrase: "hey_claude",      // NOTE: phrase detection is not yet implemented --
+        sensitivity: 0.5           // wakeWord mode currently runs always-on VAD recording
     },
     voice: {
         ttsAdapter: "kokoro",      // "kokoro", "qwen", "piper", "edge", "openai-tts", "elevenlabs", "custom-api"
@@ -32,14 +32,16 @@ Config is stored in platform-appropriate locations:
         ttsModelPath: null,        // Local model file path (Piper)
         sttAdapter: "whisper-local",  // "whisper-local", "openai-whisper-api", "custom-api-stt"
         sttModel: "whisper-local",    // Legacy alias for sttAdapter (frontend only)
-        sttModelSize: "base",      // Whisper model size: "tiny", "base" (recommended), "small"
+        sttModelSize: "base",      // Whisper model size: "tiny", "base" (default), "small", "large-v3", "large-v3-turbo"
+        sttUseGpu: false,          // Use CUDA GPU acceleration for Whisper (requires `cuda` build feature)
         sttApiKey: null,           // API key for cloud STT
         sttEndpoint: null,         // Custom STT endpoint URL
         sttModelName: null,        // Specific model name (e.g. "large-v3")
         inputDevice: null,         // Audio input device name (null = system default)
         outputDevice: null,        // Audio output device name (null = system default)
         announceStartup: true,     // Speak greeting on startup
-        announceProviderSwitch: true  // Speak notification on provider switch
+        announceProviderSwitch: true, // Speak notification on provider switch
+        dictionary: []             // Custom dictation word replacements / spellings
     },
     appearance: {
         orbSize: 80,               // 32 - 256
@@ -48,7 +50,11 @@ Config is stored in platform-appropriate locations:
         panelHeight: 700,          // 200 - 4000
         colors: null,              // null = use preset from theme, object = custom overrides (see below)
         fonts: null,               // null = use preset defaults, object = { fontFamily, fontMono }
-        messageCard: null,         // null = use defaults, object = { aiAvatar, userAvatar, customAvatars }
+        messageCard: {             // Chat avatar config (default object, not null)
+            aiAvatar: "cube",
+            userAvatar: "person",
+            customAvatars: null
+        },
         orb: null                  // null = use defaults, object = { preset, overrides, customPresets }
     },
     behavior: {
@@ -56,7 +62,7 @@ Config is stored in platform-appropriate locations:
         startWithSystem: false,
         hotkey: "CommandOrControl+Shift+V",    // Toggle panel hotkey
         statsHotkey: "CommandOrControl+Shift+M", // Toggle performance stats bar
-        activationMode: "wakeWord",  // "wakeWord", "pushToTalk"
+        activationMode: "wakeWord",  // "wakeWord", "pushToTalk", "toggle"
         pttKey: "MouseButton4",      // Push-to-talk key: MouseButton4, MouseButton5, or keyboard keys
         dictationKey: "MouseButton5", // Dictation key: hold to record, release to type into focused window
         showToasts: true             // Show toast notifications
@@ -77,9 +83,25 @@ Config is stored in platform-appropriate locations:
         showDependencies: false    // Hidden flag -- enables Dependencies settings tab
     },
     sidebar: {
-        collapsed: false,          // Sidebar collapsed state
-        mode: "mirror"             // Sidebar mode: "mirror", "lens"
+        collapsed: false           // Sidebar collapsed state
     },
+    editor: {
+        markdownPreview: true,     // Show markdown preview in Lens editor
+        formatOnSave: false,       // Run formatter on save
+        fontSize: 14,              // Editor font size (px)
+        indentGuides: true         // Show indent guide lines
+    },
+    devicePreview: {
+        customDevices: [],         // User-defined device frames for preview
+        lastDevices: [],           // Recently used device frames
+        syncEnabled: true,         // Sync scroll/interaction across previews
+        orientation: "portrait"    // "portrait" | "landscape"
+    },
+    browser: {
+        downloadAskLocation: false, // Prompt for download location each time
+        downloadPath: ""            // Default download directory ("" = OS default)
+    },
+    lspServers: {},                // Per-language LSP server overrides (keyed by language)
     workspace: {
         showChat: false,           // Show chat panel in lens workspace
         showTerminal: false,       // Show terminal panel in lens workspace
@@ -96,30 +118,29 @@ Config is stored in platform-appropriate locations:
     system: {
         acceptedDisclaimer: false, // Set true after user accepts first-launch disclaimer
         firstLaunchDone: false,    // Set true after first-ever launch greeting
+        onboardingCompleted: false, // Set true after the welcome wizard completes
         lastGreetingPeriod: null,  // e.g. "morning-2026-01-29" to avoid repeat greetings
         lastSeenVersion: null      // Tracks app version for "What's New" after updates
     },
     ai: {
-        provider: "claude",        // "claude", "opencode", "ollama", "lmstudio", "jan"
+        provider: "claude",        // "claude", "opencode", "ollama", "lmstudio", "jan", "dictation"
         autoStart: false,          // Auto-start AI provider on app launch
+        autoVoiceLoop: true,       // Auto-inject the voice-loop command on provider startup
         model: null,               // Specific model ID or null (auto-detected for local providers)
-        autoDetect: true,          // Auto-detect local LLM servers on startup
         contextLength: 32768,      // Context window size for local models (tokens, 1024 - 1048576)
+        autoDetect: true,          // Auto-detect local LLM servers on startup
         systemPrompt: null,        // Custom system prompt / persona (optional)
-        toolProfile: "voice-assistant",  // Active tool profile name (Claude Code only)
+        toolProfile: "voice-assistant",  // Active tool profile name (CLI agent providers only)
         toolProfiles: {            // Saved tool profiles (which MCP groups to pre-load)
             "voice-assistant":      { groups: ["core", "memory", "browser"] },
-            "n8n-workflows":        { groups: ["core", "n8n"] },
-            "web-browser":          { groups: ["core", "browser"] },
-            "full-toolbox":         { groups: ["core", "memory", "browser", "n8n"] },
-            "minimal":              { groups: ["core"] }
+            "full-toolbox":         { groups: ["core", "memory", "browser", "n8n"] }
         },
         endpoints: {
             ollama: "http://127.0.0.1:11434",
             lmstudio: "http://127.0.0.1:1234",
             jan: "http://127.0.0.1:1337"
         },
-        apiKeys: {                 // API keys for cloud providers (stored locally, auto-detected from env on startup)
+        apiKeys: {                 // API keys for cloud providers (AES-256-GCM encrypted at rest; auto-detected from env on startup)
             openai: null,
             anthropic: null,
             gemini: null,
@@ -142,8 +163,8 @@ Settings is a full page accessible via the sidebar.
 
 | Section | Options |
 |---------|---------|
-| **AI Provider** | Provider selector (claude, opencode, ollama, lmstudio, jan), model selector, endpoint/API key, auto-start |
-| **Activation Mode** | Wake Word, Push to Talk |
+| **AI Provider** | Provider selector (claude, opencode, ollama, lmstudio, jan, dictation), model selector, endpoint/API key, auto-start |
+| **Activation Mode** | Wake Word, Push to Talk, Toggle |
 | **Keyboard Shortcuts** | Toggle Panel hotkey, Toggle Stats hotkey, PTT key, Dictation key (supports mouse buttons) |
 | **Wake Word** | Phrase selection, sensitivity slider |
 | **Voice** | TTS adapter, voice, speed, volume, model size (Qwen), STT adapter, STT model size |
@@ -156,15 +177,16 @@ Settings is a full page accessible via the sidebar.
 
 ## Supported AI Providers
 
-| Provider | Type | Auth | Features |
-|----------|------|------|----------|
-| **Claude Code** | CLI agent (PTY) | CLI | MCP tools, vision, full terminal |
-| **OpenCode** | CLI agent (PTY) | CLI | Alternative CLI agent |
-| **Ollama** | Local HTTP | None | Auto-detect, vision |
-| **LM Studio** | Local HTTP | None | Auto-detect |
-| **Jan** | Local HTTP | None | Auto-detect |
+| Provider | `ai.provider` value | Type | Auth | Features |
+|----------|---------------------|------|------|----------|
+| **Claude Code** | `claude` | CLI agent (PTY) | CLI | MCP tools, vision, full terminal |
+| **OpenCode** | `opencode` | CLI agent (PTY) | CLI | Alternative CLI agent, MCP tools |
+| **Ollama** | `ollama` | Local HTTP | None | Auto-detect, vision |
+| **LM Studio** | `lmstudio` | Local HTTP | None | Auto-detect |
+| **Jan** | `jan` | Local HTTP | None | Auto-detect |
+| **Dictation Only** | `dictation` | Voice input | None | Speech-to-text only, no AI; types into the focused window |
 
-The validator restricts `ai.provider` to: `claude`, `opencode`, `ollama`, `lmstudio`, `jan`.
+Select the active provider by **right-clicking the "Voice Agent" tab** (or in Settings > AI Provider). Provider metadata lives in `src/lib/providers.js` (`CLI_PROVIDERS`, `LOCAL_PROVIDERS`).
 
 CLI agent providers (claude, opencode) use PTY mode with full terminal rendering via ghostty-web. Local providers use the OpenAI-compatible `/v1/chat/completions` HTTP API.
 
@@ -289,6 +311,10 @@ The toggle panel and toggle stats shortcuts are registered as global hotkeys via
 | `tiny` | Fastest, lowest accuracy |
 | `base` | Recommended balance (default) |
 | `small` | Better accuracy, slower |
+| `large-v3` | Highest accuracy; practical with CUDA GPU (`sttUseGpu: true`) |
+| `large-v3-turbo` | Near-large accuracy, faster; quantized GGML |
+
+GGML model files auto-download from HuggingFace on first use. Setting `sttUseGpu: true` runs Whisper on an NVIDIA GPU via CUDA (requires the `cuda` build feature, enabled by default), falling back to CPU when no GPU is present.
 
 ---
 
@@ -331,12 +357,9 @@ Tool profiles control which MCP tool groups are pre-loaded when using a CLI agen
 | Profile | Groups | Use Case |
 |---------|--------|----------|
 | **voice-assistant** | core, memory, browser | General voice assistant (default) |
-| **n8n-workflows** | core, n8n | Workflow automation focus |
-| **web-browser** | core, browser | Web research focus |
-| **full-toolbox** | core, memory, browser, n8n | Everything enabled |
-| **minimal** | core | Bare minimum tools |
+| **full-toolbox** | core, memory, browser, n8n | Everything enabled (adds n8n workflow tools) |
 
-Custom profiles can be created through the Settings UI.
+These two profiles ship by default. The available MCP tool groups are `core`, `memory`, `browser`, `capture`, and `n8n`. Custom profiles can be created through the Settings UI.
 
 ---
 
@@ -360,8 +383,9 @@ All runtime data stored in the app config directory (e.g., `%APPDATA%/voice-mirr
 
 | Path | Purpose |
 |------|---------|
-| `config.json` | Main configuration |
+| `config.json` | Main configuration (API keys stored as `ENC:<base64>`, AES-256-GCM encrypted) |
 | `config.json.bak` | Automatic backup of previous config |
+| `.vault_key` | AES-256 key for API-key/secret encryption (DPAPI-protected on Windows) |
 | `data/inbox.json` | Message queue (max 100 messages) |
 | `data/status.json` | Instance presence tracking |
 | `data/listener_lock.json` | Exclusive listener mutex |
@@ -388,3 +412,7 @@ Configuration uses atomic writes with automatic backup:
 3. The temp file is renamed to `config.json` (atomic on all platforms)
 4. On load, if `config.json` is corrupt, falls back to `config.json.bak`
 5. If both are corrupt or missing, defaults are used
+
+### Secret Encryption
+
+API keys (`ai.apiKeys.*`, `voice.ttsApiKey`, `voice.sttApiKey`) are encrypted at rest with **AES-256-GCM** before being written to `config.json`, using a key stored in `.vault_key` (DPAPI-protected on Windows). Encrypted values carry an `ENC:` prefix. When the config is read back through `get_config`, keys are returned **masked** (e.g. `sk-ant-•••••c123`); the Settings UI fetches the plaintext for editing via the separate `get_api_key` command.

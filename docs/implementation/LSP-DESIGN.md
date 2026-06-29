@@ -1,6 +1,18 @@
 # LSP Integration — Design & Status
 
-> Internal design doc.
+> Internal design doc — **architecture / data-flow reference**.
+>
+> **Feature-status note (2026-06-29):** This doc's original "Not Implemented" /
+> "Tier 2 not planned" framing is **out of date**. The LSP now covers the **full
+> 37-feature matrix** (all 5 implementation waves + frontend CodeMirror wiring
+> complete) — inlay hints, workspace symbols, semantic tokens, code lens,
+> document colors, folding ranges, type/declaration/implementation navigation,
+> linked editing, on-type/range formatting, call/type hierarchy, selection
+> range, and pull diagnostics are all shipped. The **current source of truth for
+> feature status is [`docs/source-of-truth/LSP-GAP.md`](../source-of-truth/LSP-GAP.md)**
+> and [`LSP-WIRING-AUDIT.md`](../source-of-truth/LSP-WIRING-AUDIT.md). The
+> command count is now **45** (not 15/24). The architecture, data-flow, and
+> design-decision sections below remain accurate.
 
 ---
 
@@ -42,8 +54,8 @@ Content-Length: 52\r\n
 | Rust LSP infrastructure | Done | `src-tauri/src/lsp/` (7 files, ~3,500 lines) |
 | Server auto-detection (7 servers, 10+ languages) | Done | `lsp/detection.rs` |
 | JSON-RPC framing (Content-Length) | Done | `lsp/client.rs` |
-| 24 Tauri commands | Done | `commands/lsp.rs` |
-| 24 API wrappers | Done | `src/lib/api.js` |
+| 45 Tauri commands | Done | `commands/lsp.rs` |
+| 45 API wrappers | Done | `src/lib/api.js` |
 | Diagnostics (squiggly underlines) | Done | `FileEditor.svelte` → `@codemirror/lint` |
 | Rich completions | Done | `FileEditor.svelte` → `@codemirror/autocomplete` |
 | Hover tooltips | Done | `FileEditor.svelte` → `@codemirror/view` hoverTooltip |
@@ -78,29 +90,31 @@ Content-Length: 52\r\n
 | Tests | Done | 200+ tests across 20+ test files, all passing |
 | Documentation | Done | This file + `IDE-GAPS.md` |
 
-### Not Implemented
+### Now Implemented (formerly "Not Implemented" — closed in Waves 4–6)
 
-These are standard LSP capabilities that we **do not** currently support. Listed roughly by value:
+Every capability previously listed here as unsupported has since shipped. They
+are kept below for historical context; see [`LSP-GAP.md`](../source-of-truth/LSP-GAP.md)
+for the authoritative status and CodeMirror wiring details.
 
-| Feature | LSP Method | Value | Notes |
-|---------|-----------|-------|-------|
-| **Inlay hints** | `textDocument/inlayHint` | Medium | Inline type annotations (e.g., showing inferred types). Can be noisy. |
-| **Workspace symbols** | `workspace/symbol` | Medium | Search for symbols across the entire project. Feeds into Command Palette. |
-| **Document highlight** | `textDocument/documentHighlight` | Medium | Highlights all occurrences of symbol under cursor. |
-| **Semantic highlighting** | `textDocument/semanticTokens` | Low | Token-based highlighting (more accurate than syntax regex). Marginal visual improvement. |
-| **Code lens** | `textDocument/codeLens` | Low | Inline annotations above functions (e.g., "3 references", "Run test"). |
-| **Type definition** | `textDocument/typeDefinition` | Low | Jump to the type of a symbol (vs the symbol's definition). |
-| **Go-to-declaration** | `textDocument/declaration` | Low | Jump to declaration of interfaces/abstract methods. |
-| **Go-to-implementation** | `textDocument/implementation` | Low | Jump to concrete implementation. |
-| **Linked editing** | `textDocument/linkedEditingRange` | Low | Edit matching pairs simultaneously (e.g., HTML open/close tags). |
-| **On-type formatting** | `textDocument/onTypeFormatting` | Low | Auto-format as you type (e.g., indent after `{`). |
-| **Range formatting** | `textDocument/rangeFormatting` | Low | Format selection only. Backend ready, needs UI. |
-| **Document colors** | `textDocument/documentColor` | Low | Color picker for CSS/style values. |
-| **Call hierarchy** | `callHierarchy/incomingCalls` | Very low | "Who calls this function?" tree view. Niche use case. |
-| **Type hierarchy** | `typeHierarchy/subtypes` | Very low | Class inheritance tree. |
-| **Folding ranges** | `textDocument/foldingRange` | Very low | LSP-aware code folding. CodeMirror already has syntax-based folding. |
-| **Selection range** | `textDocument/selectionRange` | Very low | Smart expand selection. CodeMirror has built-in. |
-| **Pull diagnostics** | `textDocument/diagnostic` | Low | Server-initiated diagnostic refresh. |
+| Feature | LSP Method | Status |
+|---------|-----------|--------|
+| Inlay hints | `textDocument/inlayHint` | ✅ Done (CM ViewPlugin) |
+| Workspace symbols | `workspace/symbol` | ✅ Backend + API (no dedicated UI panel yet) |
+| Document highlight | `textDocument/documentHighlight` | ✅ Done (CM extension) |
+| Semantic tokens | `textDocument/semanticTokens` | ✅ Done (CM mark decorations, 10 token types) |
+| Code lens | `textDocument/codeLens` | ✅ Done (CM CodeLensWidget) |
+| Type definition | `textDocument/typeDefinition` | ✅ Done (+ context menu) |
+| Go-to-declaration | `textDocument/declaration` | ✅ Backend (no menu for JS/TS, matching VS Code) |
+| Go-to-implementation | `textDocument/implementation` | ✅ Done (Ctrl-F12 + context menu) |
+| Linked editing | `textDocument/linkedEditingRange` | ✅ Done (CM transactionFilter) |
+| On-type formatting | `textDocument/onTypeFormatting` | ✅ Done (triggers `;` `}` `\n`) |
+| Range formatting | `textDocument/rangeFormatting` | ✅ Done (Shift+Alt+F + context menu) |
+| Document colors | `textDocument/documentColor` | ✅ Done (CM swatch widget) |
+| Call hierarchy | `callHierarchy/incomingCalls` | ✅ Backend + API (no UI panel yet) |
+| Type hierarchy | `typeHierarchy/subtypes` | ✅ Backend + API (no UI panel yet) |
+| Folding ranges | `textDocument/foldingRange` | ✅ Done (CM foldService) |
+| Selection range | `textDocument/selectionRange` | ✅ Done |
+| Pull diagnostics | `textDocument/diagnostic` | ✅ Done |
 
 ---
 
@@ -422,9 +436,14 @@ All 5 high-value features from the gap analysis have been implemented:
 4. ~~Rename symbol~~ — **Done.** F2 + context menu + inline input + multi-file workspace edits.
 5. ~~Document symbols / outline~~ — **Done.** Third tab in FileTree, recursive symbol tree, click-to-navigate.
 
-### Tier 2 Candidates (not yet planned)
+### Tier 2 Candidates — now ALL SHIPPED
 
-Ranked by value for Voice Mirror:
+> These were the candidates at the time of the Zed comparison. All four (and the
+> "deep polish" set below) have since been implemented — see the top-of-doc note
+> and [`LSP-GAP.md`](../source-of-truth/LSP-GAP.md). The Zed feature table above
+> still shows the historical "No" column; treat `LSP-GAP.md` as authoritative.
+
+Ranked by value for Voice Mirror (all now done):
 
 1. **Signature help** — Show parameter info as you type `(`. Useful for unfamiliar APIs.
 2. **Inlay hints** — Inline type annotations. Nice for TS but can be noisy.

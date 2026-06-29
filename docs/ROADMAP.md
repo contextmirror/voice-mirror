@@ -4,18 +4,27 @@ Voice Mirror is a voice-controlled AI agent IDE for your desktop. It starts as a
 
 ---
 
-## Where We Are Now (v0.1.x, February 2026)
+## Where We Are Now (v0.1.0, mid-2026 — Windows-first launch prep)
 
-Voice Mirror is a fully functional AI-native IDE built on **Tauri 2 + Rust + Svelte 5**:
+Voice Mirror is a fully functional AI-native IDE built on **Tauri 2 + Rust + Svelte 5**, now in **Windows-first public-launch prep**:
 
-- **116 Rust commands** across 14 backend modules
-- **63 Svelte components**, 18 reactive stores, 102 API wrappers
-- **50 MCP tools** (browser control, memory, n8n, capture)
-- **4100+ JS tests**, cargo check clean
-- **Voice pipeline**: Whisper STT (CUDA GPU), Kokoro TTS, energy VAD
-- **Lens workspace**: CodeMirror 6 editor, file tree, terminal (ghostty-web WASM), browser preview (native WebView2), split editor, command palette (48 commands), LSP Tier 1 (12/29 features)
-- **Design mode**: Element capture with hidden context, parent chain, pseudo-class CSS extraction
-- **MCP binary**: Separate Rust binary, stdio JSON-RPC, named pipe IPC
+- **231 Rust commands** across ~20 backend command modules (+ `files/` & `lens/` submodule trees)
+- **102 Svelte components**, 31 reactive stores, 130+ API wrappers
+- **45 MCP tools** in 5 groups (core/voice, memory, browser, capture+sandbox, n8n)
+- **6700+ JS tests**, cargo check clean
+- **Voice pipeline**: Whisper STT (CUDA GPU, large-v3), Kokoro + Edge TTS, energy VAD; PTT / Toggle / Dictation modes
+- **Lens workspace**: CodeMirror 6 editor, file tree, terminal **engine split** (AI terminal = xterm.js+WebGL, user shells = ghostty-web WASM), browser preview (native WebView2), split editor, command palette + **title-bar menu bar** sharing one **command registry** (`commands.svelte.js`, 70 commands), **LSP 37/37 feature matrix**
+- **App Preview / see-and-drive (Windows)**: live preview + driving of a running app via **CDP** (web/Tauri/Electron) and **UI Automation** (native non-CDP), WGC capture + MJPEG streaming + event-driven window-follow, `sandbox_*` MCP tools
+- **First-run**: onboarding wizard + Get-Started tutorial (Help → Get Started)
+- **Design mode + Element Inspector**: element capture with hidden context, parent chain, pseudo-class CSS extraction
+- **MCP binary**: Separate Rust binary (`voice-mirror-mcp`), stdio JSON-RPC, named pipe IPC
+- **Output panel** (VS Code-style channels) + runtime **diagnostics / health-contracts** self-check
+
+> **Launch status:** Windows-first by decision (2026-06-29). The see-and-drive
+> loop, native-app driving, and push-to-talk/dictation are Windows-only for v1;
+> mac/Linux get a basic build. Remaining blockers (CUDA-forced release build, MCP
+> binary bundling, code signing, updater) are tracked in
+> [`docs/internal/LAUNCH-READINESS.md`](internal/LAUNCH-READINESS.md).
 
 See `docs/source-of-truth/IDE-GAPS.md` for detailed feature comparison vs VS Code / Zed / Cursor.
 
@@ -50,16 +59,17 @@ From `IDE-GAPS.md`:
 
 | Feature | Status | Priority |
 |---------|--------|----------|
-| Workspace symbols (cross-project search) | Not started | Medium |
-| Inlay hints (inline type annotations) | Not started | Medium |
-| Persist split editor layout | Not started | Medium |
-| Terminal search (Ctrl+Shift+F in scrollback) | Not started | Low |
+| Workspace symbols (cross-project search) | Backend + API done; needs UI panel | Medium |
+| Inlay hints (inline type annotations) | ✅ Done | — |
+| Persist split editor layout | Workspace-state store + `workspace_state` commands exist (verify split-tree coverage) | Medium |
+| Terminal search (Ctrl+F in scrollback) | ✅ Done | — |
 | Breadcrumbs | Not started | Low |
-| Clickable links/file paths in terminal | Not started | Low |
+| Clickable links/file paths in terminal | ✅ Done (Ctrl+click overlay) | — |
+| Hunk-level git staging | Not started | High |
 | Debug adapter (DAP) | Not started | Low — AI handles this |
 
 ### Select Element v3
-Ideas from real-world testing (see `docs/plans/2026-02-26-select-element-v2-design.md`):
+Ideas from real-world testing:
 
 - **Accessibility attributes** — capture `aria-*`, `role`, `tabindex`, `alt`, `lang`
 - **Responsive breakpoints** — scan `@media` rules matching the selected element
