@@ -19,6 +19,7 @@
   import { devServerManager } from './lib/stores/dev-server-manager.svelte.js';
   import { diagnosticsStore } from './lib/stores/diagnostics.svelte.js';
   import { registerAllContracts } from './lib/health-contracts.js';
+  import { updaterStore } from './lib/stores/updater.svelte.js';
   import { restoreState, startAutoSave, saveCurrentState, stopAutoSave, notifyChange } from './lib/stores/workspace-state.svelte.js';
   import { editorGroupsStore } from './lib/stores/editor-groups.svelte.js';
   import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -33,6 +34,7 @@
   import AboutDialog from './components/shared/AboutDialog.svelte';
   import KeyboardShortcutsDialog from './components/shared/KeyboardShortcutsDialog.svelte';
   import GettingStarted from './components/shared/GettingStarted.svelte';
+  import UpdateNotesDialog from './components/shared/UpdateNotesDialog.svelte';
   import { layoutStore } from './lib/stores/layout.svelte.js';
   import OverlayPanel from './components/overlay/OverlayPanel.svelte';
   import WelcomeWizard from './components/onboarding/WelcomeWizard.svelte';
@@ -109,6 +111,44 @@
     if (configStore.loaded && !voiceStarted) {
       voiceStarted = true;
       startVoiceEngine();
+    }
+  });
+
+  // Start background auto-update checking once config is loaded (one-shot).
+  // Gated on the updates.autoCheck config flag (default on). No-op outside a
+  // packaged Tauri app — startAutoCheck() guards internally.
+  let updaterStarted = $state(false);
+  $effect(() => {
+    if (configStore.loaded && !updaterStarted) {
+      updaterStarted = true;
+      if (configStore.value?.updates?.autoCheck !== false) {
+        updaterStore.startAutoCheck();
+      }
+    }
+  });
+
+  // Sticky "Restart to apply" toast — only for the `ready` state, gated by the
+  // don't-nag throttle (suppressed for 5 days after first learning of a version).
+  // The badge + status-bar entry persist regardless ("Later" just dismisses).
+  let updateReadyToastId = null;
+  $effect(() => {
+    const s = updaterStore.state;
+    const v = updaterStore.version;
+    if (s === 'ready' && updaterStore.shouldNotify(v)) {
+      updaterStore.recordNotified(v);
+      updateReadyToastId = toastStore.addToast({
+        message: `Voice Mirror ${v || ''} is ready — restart to apply.`,
+        severity: 'info',
+        duration: 0, // sticky
+        key: 'update-ready',
+        actions: [
+          { label: 'Restart now', callback: () => updaterStore.restartToApply() },
+          { label: 'Release notes', callback: () => updaterStore.showReleaseNotes() },
+        ],
+      });
+    } else if (s !== 'ready' && updateReadyToastId) {
+      toastStore.dismissToast(updateReadyToastId);
+      updateReadyToastId = null;
     }
   });
 
@@ -641,6 +681,7 @@
 <AboutDialog />
 <KeyboardShortcutsDialog />
 <GettingStarted />
+<UpdateNotesDialog />
 <ToastContainer />
 
 <style>

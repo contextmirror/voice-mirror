@@ -10,6 +10,7 @@
  */
 
 import { diagnosticsStore } from './stores/diagnostics.svelte.js';
+import { updaterStore } from './stores/updater.svelte.js';
 
 /**
  * Register all health contracts with the diagnostics store.
@@ -114,6 +115,32 @@ export function registerAllContracts(deps) {
         return { healthy: true, message: `${runningCount} dev server(s) running` };
       }
       return { healthy: true, message: 'No dev server detected' };
+    },
+  });
+
+  // ── Updater ──
+  diagnosticsStore.registerHealthContract({
+    name: 'updater',
+    description: 'Auto-update state machine (check / download / restart)',
+    check() {
+      const state = updaterStore.state;
+      // 'disabled' is the normal state outside a packaged build (dev/browser).
+      if (state === 'disabled') {
+        return { healthy: true, message: 'Updater disabled (not a packaged build)' };
+      }
+      // An error is only ever set on an explicit, user-initiated check — surface it.
+      if (state === 'error') {
+        return {
+          healthy: false,
+          message: `Updater error: ${updaterStore.error || 'unknown'}`,
+          details: { state, channel: updaterStore.channel },
+        };
+      }
+      return {
+        healthy: true,
+        message: `Updater: ${state} (channel: ${updaterStore.channel})`,
+        details: { state, version: updaterStore.version },
+      };
     },
   });
 

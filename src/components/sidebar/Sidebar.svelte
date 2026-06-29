@@ -2,11 +2,15 @@
   import { navigationStore } from '../../lib/stores/navigation.svelte.js';
   import { voiceStore } from '../../lib/stores/voice.svelte.js';
   import { configStore } from '../../lib/stores/config.svelte.js';
+  import { updaterStore } from '../../lib/stores/updater.svelte.js';
   import { setConfig } from '../../lib/api.js';
   import ProjectStrip from './ProjectStrip.svelte';
 
   const collapsed = $derived(navigationStore.sidebarCollapsed);
   const activeView = $derived(navigationStore.activeView);
+
+  // Badge dot on the settings gear when an update is available/staged.
+  const hasUpdate = $derived(updaterStore.hasUpdate);
 
   function handleTabClick(tabId) {
     if (activeView === tabId) {
@@ -57,6 +61,9 @@
     aria-label="Settings"
   >
     <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    {#if hasUpdate}
+      <span class="update-badge" title="Update available" aria-label="Update available"></span>
+    {/if}
     {#if !collapsed}
       <span class="nav-label">Settings</span>
     {/if}
@@ -259,6 +266,25 @@
     width: calc(100% - 8px);
     border-top: none;
     padding-top: 4px;
+  }
+
+  /* Update-available badge dot on the settings gear */
+  .update-badge {
+    position: absolute;
+    top: 10px;
+    left: 26px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 1.5px solid var(--bg-elevated);
+    pointer-events: none;
+  }
+
+  .collapsed .update-badge {
+    left: auto;
+    right: 8px;
+    top: 4px;
   }
 
   /* ========== Footer ========== */

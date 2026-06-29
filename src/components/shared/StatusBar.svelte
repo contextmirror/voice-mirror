@@ -13,6 +13,7 @@
   import { lspDiagnosticsStore } from '../../lib/stores/lsp-diagnostics.svelte.js';
   import { devServerManager } from '../../lib/stores/dev-server-manager.svelte.js';
   import { toastStore } from '../../lib/stores/toast.svelte.js';
+  import { updaterStore } from '../../lib/stores/updater.svelte.js';
   import { configStore, updateConfig } from '../../lib/stores/config.svelte.js';
   import { formatRelativeTime, unwrapResult } from '../../lib/utils.js';
   import { detectDevServers } from '../../lib/api.js';
@@ -97,6 +98,29 @@
   function openFullServerManager() {
     devServerPanelOpen = false;
     window.dispatchEvent(new CustomEvent('vm-open-server-manager'));
+  }
+
+  // -- Updater status item --
+  // The status-bar update entry is a pure function of the updater store's
+  // state machine. Click: available → download, ready/downloaded → restart.
+  let updaterState = $derived(updaterStore.state);
+  let showUpdaterItem = $derived(
+    updaterState === 'checking' ||
+    updaterState === 'available' ||
+    updaterState === 'downloading' ||
+    updaterState === 'downloaded' ||
+    updaterState === 'ready'
+  );
+
+  function handleUpdaterClick() {
+    const s = updaterStore.state;
+    if (s === 'available') {
+      updaterStore.downloadAndInstall();
+    } else if (s === 'downloaded' || s === 'ready') {
+      updaterStore.restartToApply();
+    } else if (s === 'checking' || s === 'downloading') {
+      // In-flight — no-op (let it finish).
+    }
   }
 
   // -- Notification panel --
@@ -319,6 +343,41 @@
 
   <!-- ════════ RIGHT SIDE ════════ -->
   <div class="status-bar-right">
+    <!-- R0: Update status (hidden when idle/disabled/error) -->
+    {#if showUpdaterItem}
+      <button
+        class="sb-item updater-item"
+        class:updater-ready={updaterState === 'ready' || updaterState === 'downloaded'}
+        title="Software updates"
+        onclick={handleUpdaterClick}
+      >
+        {#if updaterState === 'checking'}
+          <svg class="sb-icon lsp-spinner" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="8" cy="8" r="6" stroke-opacity="0.25"/>
+            <path d="M8 2a6 6 0 0 1 6 6" stroke-linecap="round"/>
+          </svg>
+          <span>Checking for updates…</span>
+        {:else if updaterState === 'available'}
+          <svg class="sb-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M8 10V2M5 6l3 3 3-3M3 13h10"/>
+          </svg>
+          <span>Update available</span>
+        {:else if updaterState === 'downloading'}
+          <svg class="sb-icon lsp-spinner" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="8" cy="8" r="6" stroke-opacity="0.25"/>
+            <path d="M8 2a6 6 0 0 1 6 6" stroke-linecap="round"/>
+          </svg>
+          <span>Downloading update… {updaterStore.progress}%</span>
+        {:else}
+          <!-- ready / downloaded -->
+          <svg class="sb-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2v3h-3"/>
+          </svg>
+          <span>Update ready — restart</span>
+        {/if}
+      </button>
+    {/if}
+
     {#if showEditorInfo}
       <!-- R1: Cursor position (click → Go to Line dialog) -->
       <button class="sb-item sb-clickable" title="Go to Line"
@@ -637,6 +696,20 @@
 
   .lsp-failed-icon {
     color: var(--danger);
+  }
+
+  /* ========== R0: Updater ========== */
+  .updater-item {
+    gap: 4px;
+  }
+
+  /* When an update is staged, draw attention with the accent colour. */
+  .updater-item.updater-ready {
+    color: var(--accent);
+  }
+
+  .updater-item.updater-ready:hover {
+    color: var(--text);
   }
 
   /* ========== R2: Indentation dropdown ========== */
