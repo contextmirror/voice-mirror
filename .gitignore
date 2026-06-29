@@ -8,6 +8,9 @@ stats.html
 # Rust
 src-tauri/target/
 
+# Staged MCP sidecar for externalBin bundling (built artifact, copied at build time)
+src-tauri/binaries/
+
 # Ghostty WASM (downloaded at build time)
 ghostty-vt.wasm
 

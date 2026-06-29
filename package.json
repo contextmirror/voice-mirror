@@ -8,7 +8,7 @@
   "scripts": {
     "predev": "taskkill /F /IM voice-mirror-mcp.exe >nul 2>&1 & exit /b 0",
     "dev": "cargo build --manifest-path src-tauri/Cargo.toml --bin voice-mirror-mcp && tauri dev",
-    "build": "cargo build --manifest-path src-tauri/Cargo.toml --release --bin voice-mirror-mcp && tauri build",
+    "build": "cargo build --manifest-path src-tauri/Cargo.toml --release --bin voice-mirror-mcp && node -e \"const fs=require('fs');fs.mkdirSync('src-tauri/binaries',{recursive:true});fs.copyFileSync('src-tauri/target/release/voice-mirror-mcp.exe','src-tauri/binaries/voice-mirror-mcp-x86_64-pc-windows-msvc.exe')\" && tauri build",
     "preview": "npx vite build && start \"vite-preview\" /B npx vite preview --port 31420 && timeout /T 2 /NOBREAK >nul && cargo run --manifest-path src-tauri/Cargo.toml --features native-ml,cuda",
     "check": "svelte-check --tsconfig ./jsconfig.json",
     "test": "node --test \"test/**/*.test.cjs\" \"test/**/*.test.mjs\"",
