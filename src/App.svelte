@@ -30,6 +30,8 @@
   import SettingsPanel from './components/settings/SettingsPanel.svelte';
   import LensWorkspace from './components/lens/LensWorkspace.svelte';
   import CommandPalette from './components/lens/CommandPalette.svelte';
+  import AboutDialog from './components/shared/AboutDialog.svelte';
+  import KeyboardShortcutsDialog from './components/shared/KeyboardShortcutsDialog.svelte';
   import { layoutStore } from './lib/stores/layout.svelte.js';
   import OverlayPanel from './components/overlay/OverlayPanel.svelte';
   import WelcomeWizard from './components/onboarding/WelcomeWizard.svelte';
@@ -621,6 +623,8 @@
 
 <StatsBar bind:visible={statsVisible} />
 <CommandPalette bind:visible={commandPaletteVisible} initialMode={commandPaletteMode} onClose={() => { commandPaletteVisible = false; }} />
+<AboutDialog />
+<KeyboardShortcutsDialog />
 <ToastContainer />
 
 <style>

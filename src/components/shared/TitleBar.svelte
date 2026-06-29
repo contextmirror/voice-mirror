@@ -2,6 +2,7 @@
   import { overlayStore } from '../../lib/stores/overlay.svelte.js';
   import { navigationStore } from '../../lib/stores/navigation.svelte.js';
   import { projectStore } from '../../lib/stores/project.svelte.js';
+  import { commandRegistry } from '../../lib/commands.svelte.js';
   import { open } from '@tauri-apps/plugin-dialog';
   import Orb from '../overlay/Orb.svelte';
 
@@ -81,56 +82,69 @@
     { id: 'help', label: 'Help' },
   ];
 
+  // Menu items wire to the central command registry (commands.svelte.js) via
+  // `cmd`, so the title-bar menu and the command palette share one source of
+  // truth. A few File items keep a local `action` (they need a native dialog).
   const menuDefinitions = {
     file: [
+      { label: 'New File', kbd: 'Ctrl+N', cmd: 'file.newUntitled' },
+      { separator: true },
       { label: 'Open File', kbd: 'Ctrl+O', action: handleOpenFile },
       { label: 'Open Project', action: handleOpenProject },
+      { separator: true },
+      { label: 'Save', kbd: 'Ctrl+S', cmd: 'file.save' },
+      { label: 'Close Tab', kbd: 'Ctrl+W', cmd: 'file.closeTab' },
       { separator: true },
       { label: 'Settings', kbd: 'Ctrl+,', action: handleSettings },
     ],
     edit: [
-      { label: 'Undo', kbd: 'Ctrl+Z' },
-      { label: 'Redo', kbd: 'Ctrl+Shift+Z' },
+      { label: 'Undo', kbd: 'Ctrl+Z', cmd: 'editor.undo' },
+      { label: 'Redo', kbd: 'Ctrl+Shift+Z', cmd: 'editor.redo' },
       { separator: true },
-      { label: 'Cut', kbd: 'Ctrl+X' },
-      { label: 'Copy', kbd: 'Ctrl+C' },
-      { label: 'Paste', kbd: 'Ctrl+V' },
+      { label: 'Cut', kbd: 'Ctrl+X', cmd: 'editor.cut' },
+      { label: 'Copy', kbd: 'Ctrl+C', cmd: 'editor.copy' },
+      { label: 'Paste', kbd: 'Ctrl+V', cmd: 'editor.paste' },
       { separator: true },
-      { label: 'Find', kbd: 'Ctrl+F' },
+      { label: 'Find', kbd: 'Ctrl+F', cmd: 'editor.find' },
+      { label: 'Format Document', kbd: 'Shift+Alt+F', cmd: 'lsp.formatDocument' },
     ],
     selection: [
-      { label: 'Select All', kbd: 'Ctrl+A' },
-      { label: 'Expand Selection' },
-      { label: 'Shrink Selection' },
+      { label: 'Select All', kbd: 'Ctrl+A', cmd: 'editor.selectAll' },
+      { label: 'Expand Selection', kbd: 'Shift+Alt+Right', cmd: 'editor.expandSelection' },
+      { label: 'Shrink Selection', kbd: 'Shift+Alt+Left', cmd: 'editor.shrinkSelection' },
     ],
     view: [
-      { label: 'Command Palette', kbd: 'Ctrl+P' },
+      { label: 'Command Palette', kbd: 'Ctrl+Shift+P', cmd: 'view.commandPalette' },
       { separator: true },
-      { label: 'Sidebar' },
-      { label: 'Terminal' },
-      { label: 'File Tree' },
+      { label: 'Toggle Sidebar', kbd: 'Ctrl+B', cmd: 'view.toggleSidebar' },
+      { label: 'Toggle Chat Panel', cmd: 'view.toggleChat' },
+      { label: 'Toggle Terminal', cmd: 'view.toggleTerminal' },
+      { label: 'Toggle File Tree', cmd: 'view.toggleFileTree' },
     ],
     go: [
-      { label: 'Go to File', kbd: 'Ctrl+P' },
-      { label: 'Go to Symbol' },
-      { label: 'Go to Line', kbd: 'Ctrl+G' },
+      { label: 'Go to File', kbd: 'Ctrl+P', cmd: 'view.goToFile' },
+      { label: 'Go to Symbol', kbd: 'Ctrl+Shift+O', cmd: 'search.goToSymbol' },
+      { label: 'Go to Line', kbd: 'Ctrl+G', cmd: 'search.goToLine' },
+      { separator: true },
+      { label: 'Go to Definition', kbd: 'F12', cmd: 'lsp.goToDefinition' },
+      { label: 'Find References', kbd: 'Shift+F12', cmd: 'lsp.findReferences' },
     ],
     run: [
-      { label: 'Start' },
-      { label: 'Stop' },
-      { label: 'Restart' },
+      { label: 'Start', cmd: 'run.start' },
+      { label: 'Stop', cmd: 'run.stop' },
+      { label: 'Restart', cmd: 'run.restart' },
     ],
     terminal: [
-      { label: 'New Terminal' },
-      { label: 'Split Terminal' },
+      { label: 'New Terminal', cmd: 'terminal.newTerminal' },
+      { label: 'Split Terminal', cmd: 'terminal.split' },
       { separator: true },
-      { label: 'Clear Terminal' },
+      { label: 'Clear Terminal', cmd: 'terminal.clear' },
     ],
     help: [
-      { label: 'Documentation' },
-      { label: 'Keyboard Shortcuts' },
+      { label: 'Documentation', cmd: 'help.documentation' },
+      { label: 'Keyboard Shortcuts', kbd: 'Ctrl+K Ctrl+S', cmd: 'help.keyboardShortcuts' },
       { separator: true },
-      { label: 'About Voice Mirror' },
+      { label: 'About Voice Mirror', cmd: 'help.about' },
     ],
   };
 
@@ -159,7 +173,10 @@
   }
 
   function handleSubmenuAction(item) {
-    if (item.action) {
+    closeAppMenu();
+    if (item.cmd) {
+      commandRegistry.execute(item.cmd);
+    } else if (item.action) {
       item.action();
     }
   }
@@ -244,9 +261,9 @@
       {:else}
         <button
           class="submenu-item"
-          class:disabled={!item.action}
+          class:disabled={!item.action && !item.cmd}
           onclick={() => handleSubmenuAction(item)}
-          disabled={!item.action}
+          disabled={!item.action && !item.cmd}
           role="menuitem"
         >
           <span>{item.label}</span>

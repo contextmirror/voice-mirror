@@ -30,6 +30,7 @@
   import { lspDiagnosticsStore } from '../../lib/stores/lsp-diagnostics.svelte.js';
   import { severityLabel } from '../../lib/lsp-severity.js';
   import { formatLogTime, unwrapResult } from '../../lib/utils.js';
+  import { layoutStore } from '../../lib/stores/layout.svelte.js';
 
   // ---- Bottom panel mode: ai | output | terminal | problems ----
   let bottomPanelMode = $state('ai');
@@ -84,6 +85,27 @@
   function handlePaste() {
     termActions['ai']?.paste();
   }
+
+  // Menu-bar / command-palette terminal commands.
+  // - `terminal-clear`: when the AI terminal is showing, clear it here. The
+  //   user-shell terminals clear themselves in TerminalPanel (only mounted in
+  //   'terminal' mode), so this guard avoids double-handling.
+  // - `command:show-terminal-tab`: reveal the bottom panel on the Terminal tab.
+  $effect(() => {
+    function onTerminalClear() {
+      if (bottomPanelMode === 'ai') handleClear();
+    }
+    function onShowTerminalTab() {
+      layoutStore.setShowTerminal(true);
+      bottomPanelMode = 'terminal';
+    }
+    window.addEventListener('terminal-clear', onTerminalClear);
+    window.addEventListener('command:show-terminal-tab', onShowTerminalTab);
+    return () => {
+      window.removeEventListener('terminal-clear', onTerminalClear);
+      window.removeEventListener('command:show-terminal-tab', onShowTerminalTab);
+    };
+  });
 
   // ---- Voice button (AI tab only, CLI provider only) ----
 

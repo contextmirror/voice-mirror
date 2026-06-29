@@ -78,14 +78,26 @@ describe('TitleBar: Zed-style menu bar', () => {
     assert.ok(src.includes("action: handleSettings"), 'File menu should have Settings action');
   });
 
-  it('non-File menus have disabled placeholder items', () => {
-    // Edit menu items should NOT have action properties
-    assert.ok(src.includes("{ label: 'Undo', kbd: 'Ctrl+Z' }"), 'Edit items should be placeholders (no action)');
+  it('non-File menus wire to the command registry via cmd', () => {
+    // Edit/Selection/View/Go/Run/Terminal/Help items now dispatch real commands
+    // through the central registry instead of being inert placeholders.
+    assert.ok(src.includes('commandRegistry'), 'Should import the command registry');
+    assert.ok(src.includes("cmd: 'editor.undo'"), 'Edit should wire Undo → editor.undo');
+    assert.ok(src.includes("cmd: 'editor.selectAll'"), 'Selection should wire Select All');
+    assert.ok(src.includes("cmd: 'view.toggleTerminal'"), 'View should wire Toggle Terminal');
+    assert.ok(src.includes("cmd: 'view.goToFile'"), 'Go should wire Go to File');
+    assert.ok(src.includes("cmd: 'run.start'"), 'Run should wire Start');
+    assert.ok(src.includes("cmd: 'terminal.clear'"), 'Terminal should wire Clear');
+    assert.ok(src.includes("cmd: 'help.about'"), 'Help should wire About');
   });
 
-  it('submenu item disabled class for items without action', () => {
-    assert.ok(src.includes('class:disabled={!item.action}'), 'Should disable items without action');
-    assert.ok(src.includes('disabled={!item.action}'), 'Should set disabled attribute');
+  it('menu actions execute via the command registry', () => {
+    assert.ok(src.includes('commandRegistry.execute(item.cmd)'), 'handleSubmenuAction should execute commands by id');
+  });
+
+  it('submenu item disabled class for items without action or command', () => {
+    assert.ok(src.includes('class:disabled={!item.action && !item.cmd}'), 'Should disable items without action or cmd');
+    assert.ok(src.includes('disabled={!item.action && !item.cmd}'), 'Should set disabled attribute');
   });
 
   it('submenu dropdown has no-drag for Tauri frameless', () => {

@@ -16,6 +16,10 @@ import { terminalTabsStore } from './stores/terminal-tabs.svelte.js';
 import { editorGroupsStore } from './stores/editor-groups.svelte.js';
 import { overlayStore } from './stores/overlay.svelte.js';
 import { getActionHandler } from './stores/shortcuts.svelte.js';
+import { projectStore } from './stores/project.svelte.js';
+import { devServerManager } from './stores/dev-server-manager.svelte.js';
+import { open as openExternal } from '@tauri-apps/plugin-shell';
+import { unwrapResult } from './utils.js';
 import {
   gitStageAll,
   gitUnstageAll,
@@ -23,6 +27,7 @@ import {
   revealInExplorer,
   captureMonitor,
   detectGpu,
+  detectDevServers,
 } from './api.js';
 
 // ============ MRU History ============
@@ -520,7 +525,10 @@ commandRegistry.registerMany([
     id: 'terminal.newTerminal',
     label: 'New Terminal',
     category: 'Terminal',
-    execute: () => terminalTabsStore.addTerminalTab(),
+    execute: () => {
+      window.dispatchEvent(new CustomEvent('command:show-terminal-tab'));
+      terminalTabsStore.addTerminalTab();
+    },
   },
   {
     id: 'terminal.nextTab',
@@ -606,5 +614,176 @@ commandRegistry.registerMany([
     label: 'Reload Window',
     category: 'System',
     execute: () => location.reload(),
+  },
+]);
+
+// ============ Menu-bar commands (Edit / Selection / Go / Run / Help) ============
+// These power the title-bar menu *and* appear in the command palette. Editor
+// actions are delivered to the active CodeMirror view via `command:editor-*`
+// window events (FileEditor.svelte listens and runs them on its `view`).
+
+// Edit
+commandRegistry.registerMany([
+  {
+    id: 'editor.undo',
+    label: 'Undo',
+    category: 'Editor',
+    keybinding: 'Ctrl+Z',
+    execute: () => window.dispatchEvent(new CustomEvent('command:editor-undo')),
+  },
+  {
+    id: 'editor.redo',
+    label: 'Redo',
+    category: 'Editor',
+    keybinding: 'Ctrl+Shift+Z',
+    execute: () => window.dispatchEvent(new CustomEvent('command:editor-redo')),
+  },
+  {
+    id: 'editor.cut',
+    label: 'Cut',
+    category: 'Editor',
+    keybinding: 'Ctrl+X',
+    execute: () => window.dispatchEvent(new CustomEvent('command:editor-cut')),
+  },
+  {
+    id: 'editor.copy',
+    label: 'Copy',
+    category: 'Editor',
+    keybinding: 'Ctrl+C',
+    execute: () => window.dispatchEvent(new CustomEvent('command:editor-copy')),
+  },
+  {
+    id: 'editor.paste',
+    label: 'Paste',
+    category: 'Editor',
+    keybinding: 'Ctrl+V',
+    execute: () => window.dispatchEvent(new CustomEvent('command:editor-paste')),
+  },
+  {
+    id: 'editor.find',
+    label: 'Find',
+    category: 'Editor',
+    keybinding: 'Ctrl+F',
+    execute: () => window.dispatchEvent(new CustomEvent('command:editor-find')),
+  },
+]);
+
+// Selection
+commandRegistry.registerMany([
+  {
+    id: 'editor.selectAll',
+    label: 'Select All',
+    category: 'Selection',
+    keybinding: 'Ctrl+A',
+    execute: () => window.dispatchEvent(new CustomEvent('command:editor-select-all')),
+  },
+  {
+    id: 'editor.expandSelection',
+    label: 'Expand Selection',
+    category: 'Selection',
+    keybinding: 'Shift+Alt+Right',
+    execute: () => window.dispatchEvent(new CustomEvent('command:editor-expand-selection')),
+  },
+  {
+    id: 'editor.shrinkSelection',
+    label: 'Shrink Selection',
+    category: 'Selection',
+    keybinding: 'Shift+Alt+Left',
+    execute: () => window.dispatchEvent(new CustomEvent('command:editor-shrink-selection')),
+  },
+]);
+
+// View / Go additions
+commandRegistry.registerMany([
+  {
+    id: 'view.toggleSidebar',
+    label: 'Toggle Sidebar',
+    category: 'View',
+    keybinding: 'Ctrl+B',
+    execute: () => navigationStore.toggleSidebar(),
+  },
+  {
+    id: 'search.goToSymbol',
+    label: 'Go to Symbol in File',
+    category: 'Search',
+    keybinding: 'Ctrl+Shift+O',
+    execute: () => window.dispatchEvent(new CustomEvent('command:open-palette', { detail: { mode: 'goto-symbol' } })),
+  },
+]);
+
+// Run (dev server for the active project)
+async function runStartActiveProject() {
+  const projectPath = projectStore.root;
+  if (!projectPath) return;
+  try {
+    const result = await detectDevServers(projectPath);
+    const servers = unwrapResult(result)?.servers || [];
+    if (servers.length > 0) {
+      devServerManager.startServer(servers[0], projectPath, null);
+    }
+  } catch (err) {
+    console.error('[commands] run.start failed:', err);
+  }
+}
+commandRegistry.registerMany([
+  {
+    id: 'run.start',
+    label: 'Run: Start Dev Server',
+    category: 'Run',
+    execute: () => { runStartActiveProject(); },
+  },
+  {
+    id: 'run.stop',
+    label: 'Run: Stop Dev Server',
+    category: 'Run',
+    execute: () => { const p = projectStore.root; if (p) devServerManager.stopServer(p); },
+  },
+  {
+    id: 'run.restart',
+    label: 'Run: Restart Dev Server',
+    category: 'Run',
+    execute: () => { const p = projectStore.root; if (p) devServerManager.restartServer(p); },
+  },
+]);
+
+// Terminal additions (New Terminal already registered above)
+commandRegistry.registerMany([
+  {
+    id: 'terminal.split',
+    label: 'Split Terminal',
+    category: 'Terminal',
+    execute: () => {
+      window.dispatchEvent(new CustomEvent('command:show-terminal-tab'));
+      terminalTabsStore.splitInstance({ direction: 'horizontal' });
+    },
+  },
+  {
+    id: 'terminal.clear',
+    label: 'Clear Terminal',
+    category: 'Terminal',
+    execute: () => window.dispatchEvent(new CustomEvent('terminal-clear')),
+  },
+]);
+
+// Help
+commandRegistry.registerMany([
+  {
+    id: 'help.documentation',
+    label: 'Help: Documentation',
+    category: 'Help',
+    execute: () => { openExternal('https://www.contextmirror.com').catch((e) => console.error('[commands] open docs failed:', e)); },
+  },
+  {
+    id: 'help.keyboardShortcuts',
+    label: 'Help: Keyboard Shortcuts',
+    category: 'Help',
+    keybinding: 'Ctrl+K Ctrl+S',
+    execute: () => window.dispatchEvent(new CustomEvent('show-keyboard-shortcuts')),
+  },
+  {
+    id: 'help.about',
+    label: 'Help: About Voice Mirror',
+    category: 'Help',
+    execute: () => window.dispatchEvent(new CustomEvent('show-about-dialog')),
   },
 ]);
