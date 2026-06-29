@@ -31,7 +31,11 @@ macro_rules! lock_manager {
 ///
 /// Creates and starts the appropriate provider (CLI/PTY or API).
 #[allow(clippy::too_many_arguments)]
-#[tauri::command]
+// `(async)` runs this on a worker thread instead of the main/UI thread. Starting a
+// CLI provider spawns a PTY, resolves the CLI, and writes MCP config — ~1s of
+// synchronous work that otherwise froze the window ("Not Responding") during
+// "Claude Code is starting". The body stays synchronous; Tauri just off-threads it.
+#[tauri::command(async)]
 pub fn start_ai(
     state: State<'_, AiManagerState>,
     cols: Option<u16>,

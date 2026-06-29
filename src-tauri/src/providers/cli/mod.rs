@@ -100,10 +100,15 @@ pub fn is_cli_available(command: &str) -> bool {
         "which"
     };
 
-    std::process::Command::new(which_cmd)
-        .arg(command)
+    let mut cmd = std::process::Command::new(which_cmd);
+    cmd.arg(command)
         .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
+    // CREATE_NO_WINDOW: stop `where`/`which` from flashing a console window.
+    // Detection probes every provider (and start-up resolves the active CLI the
+    // same way), so without this you get a burst of console windows when opening
+    // AI & Tools / on the startup scan / when launching the Voice Agent.
+    crate::util::hidden(&mut cmd)
         .status()
         .map(|s| s.success())
         .unwrap_or(false)
