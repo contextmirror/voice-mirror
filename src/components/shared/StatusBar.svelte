@@ -14,7 +14,8 @@
   import { devServerManager } from '../../lib/stores/dev-server-manager.svelte.js';
   import { toastStore } from '../../lib/stores/toast.svelte.js';
   import { configStore, updateConfig } from '../../lib/stores/config.svelte.js';
-  import { formatRelativeTime } from '../../lib/utils.js';
+  import { formatRelativeTime, unwrapResult } from '../../lib/utils.js';
+  import { detectDevServers } from '../../lib/api.js';
   import ServersTab from '../lens/ServersTab.svelte';
 
   // -- Derived state --
@@ -65,6 +66,25 @@
 
   // -- Dev server control popover (click the :PORT item to start/stop) --
   let devServerPanelOpen = $state(false);
+  // A dev server DETECTED for the active project (may be stopped). Lets the bar show
+  // a ▷ start affordance even when nothing is running yet — not just once it's up.
+  let detectedServer = $state(null);
+
+  // Re-detect whenever the active project changes.
+  $effect(() => {
+    const root = projectStore.root;
+    if (!root) { detectedServer = null; return; }
+    let cancelled = false;
+    detectDevServers(root)
+      .then((res) => {
+        if (cancelled) return;
+        const data = unwrapResult(res) || {};
+        const list = data.servers || (Array.isArray(data) ? data : []);
+        detectedServer = Array.isArray(list) && list.length > 0 ? list[0] : null;
+      })
+      .catch(() => { if (!cancelled) detectedServer = null; });
+    return () => { cancelled = true; };
+  });
 
   function toggleDevServerPanel(e) {
     e.stopPropagation();
@@ -227,7 +247,7 @@
       </button>
 
       <!-- L3: Dev server (click → start/stop/restart popover) -->
-      {#if statusBarStore.devServerStatus && statusBarStore.devServerStatus !== 'stopped'}
+      {#if (statusBarStore.devServerStatus && statusBarStore.devServerStatus !== 'stopped') || detectedServer}
         <div class="dev-server-anchor">
           <button class="sb-item dev-server" title="Dev server — click to start / stop" onclick={toggleDevServerPanel} aria-expanded={devServerPanelOpen}>
             {#if statusBarStore.devServerStatus === 'running' || statusBarStore.devServerStatus === 'idle'}
@@ -239,6 +259,10 @@
             {:else if statusBarStore.devServerStatus === 'crashed'}
               <span class="dev-icon dev-crashed">&#9632;</span>
               <span>crashed</span>
+            {:else if detectedServer}
+              <!-- Detected but not running → a start affordance -->
+              <span class="dev-icon dev-stopped">&#9655;</span>
+              <span>:{detectedServer.port}</span>
             {/if}
           </button>
 
@@ -536,6 +560,10 @@
 
   .dev-crashed {
     color: var(--danger);
+  }
+
+  .dev-stopped {
+    color: var(--muted);
   }
 
   .dev-server-anchor {
