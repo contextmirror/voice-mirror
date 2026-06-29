@@ -83,6 +83,19 @@
     searchQuery = '';
   }
 
+  // The bottom status bar's dev-server popover routes its "Manage servers" button
+  // here — open this dropdown at the Servers tab in the full manage view.
+  $effect(() => {
+    function onOpenManager() {
+      open = true;
+      activeTab = 'servers';
+      managing = true;
+      updatePopoverPosition();
+    }
+    window.addEventListener('vm-open-server-manager', onOpenManager);
+    return () => window.removeEventListener('vm-open-server-manager', onOpenManager);
+  });
+
   // Close on click outside
   function handleWindowClick(e) {
     if (!open) return;

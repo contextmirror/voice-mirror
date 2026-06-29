@@ -15,6 +15,7 @@
   import { toastStore } from '../../lib/stores/toast.svelte.js';
   import { configStore, updateConfig } from '../../lib/stores/config.svelte.js';
   import { formatRelativeTime } from '../../lib/utils.js';
+  import ServersTab from '../lens/ServersTab.svelte';
 
   // -- Derived state --
   let hasProject = $derived(!!projectStore.root);
@@ -62,6 +63,22 @@
     closeIndentDropdown();
   }
 
+  // -- Dev server control popover (click the :PORT item to start/stop) --
+  let devServerPanelOpen = $state(false);
+
+  function toggleDevServerPanel(e) {
+    e.stopPropagation();
+    devServerPanelOpen = !devServerPanelOpen;
+  }
+  function closeDevServerPanel() {
+    devServerPanelOpen = false;
+  }
+  // "Manage servers" → hand off to the full top-right Status dropdown.
+  function openFullServerManager() {
+    devServerPanelOpen = false;
+    window.dispatchEvent(new CustomEvent('vm-open-server-manager'));
+  }
+
   // -- Notification panel --
   let notifPanelOpen = $state(false);
 
@@ -80,6 +97,7 @@
   function handleDocumentClick() {
     if (notifPanelOpen) closeNotifPanel();
     if (indentDropdownOpen) closeIndentDropdown();
+    if (devServerPanelOpen) closeDevServerPanel();
   }
 
 
@@ -208,20 +226,29 @@
         </span>
       </button>
 
-      <!-- L3: Dev server -->
+      <!-- L3: Dev server (click → start/stop/restart popover) -->
       {#if statusBarStore.devServerStatus && statusBarStore.devServerStatus !== 'stopped'}
-        <button class="sb-item dev-server" title="Dev Server">
-          {#if statusBarStore.devServerStatus === 'running' || statusBarStore.devServerStatus === 'idle'}
-            <span class="dev-icon dev-running">&#9654;</span>
-            <span>:{statusBarStore.devServerPort}</span>
-          {:else if statusBarStore.devServerStatus === 'starting'}
-            <span class="dev-icon dev-starting">&#9654;</span>
-            <span>starting...</span>
-          {:else if statusBarStore.devServerStatus === 'crashed'}
-            <span class="dev-icon dev-crashed">&#9632;</span>
-            <span>crashed</span>
+        <div class="dev-server-anchor">
+          <button class="sb-item dev-server" title="Dev server — click to start / stop" onclick={toggleDevServerPanel} aria-expanded={devServerPanelOpen}>
+            {#if statusBarStore.devServerStatus === 'running' || statusBarStore.devServerStatus === 'idle'}
+              <span class="dev-icon dev-running">&#9654;</span>
+              <span>:{statusBarStore.devServerPort}</span>
+            {:else if statusBarStore.devServerStatus === 'starting'}
+              <span class="dev-icon dev-starting">&#9654;</span>
+              <span>starting...</span>
+            {:else if statusBarStore.devServerStatus === 'crashed'}
+              <span class="dev-icon dev-crashed">&#9632;</span>
+              <span>crashed</span>
+            {/if}
+          </button>
+
+          {#if devServerPanelOpen}
+            <div class="dev-server-popover" role="menu" tabindex="-1" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
+              <div class="dev-server-popover-title">Dev servers</div>
+              <ServersTab onManage={openFullServerManager} />
+            </div>
           {/if}
-        </button>
+        </div>
       {/if}
 
       <!-- L4: LSP health -->
@@ -509,6 +536,35 @@
 
   .dev-crashed {
     color: var(--danger);
+  }
+
+  .dev-server-anchor {
+    position: relative;
+    height: 100%;
+  }
+
+  /* Opens UPWARD (bottom bar) and aligned to the LEFT (the item is left-side). */
+  .dev-server-popover {
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    margin-bottom: 4px;
+    min-width: 280px;
+    max-width: 360px;
+    padding: 6px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+    border-radius: 6px;
+    box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.4);
+    z-index: 10000;
+    animation: notif-in 0.12s ease-out;
+  }
+
+  .dev-server-popover-title {
+    padding: 2px 8px 6px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--muted);
   }
 
   /* ========== L4: LSP Health ========== */
