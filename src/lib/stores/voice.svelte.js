@@ -92,6 +92,11 @@ function createVoiceStore() {
           stuck = null;
           // Clear the waveform once we leave the recording state.
           if (state !== 'recording') levels = [];
+          // A dictation session ends when we return to idle. Clear isDictating here
+          // (not only on a successful transcription, line ~140) so a silent/empty
+          // recording can't leave it stuck true — which would wedge the next toggle
+          // and misroute a later voice transcription into the dictation injector.
+          if (state === 'idle') isDictating = false;
           break;
         case 'audio_level': {
           // Append the incoming amplitude bars and keep a fixed rolling window

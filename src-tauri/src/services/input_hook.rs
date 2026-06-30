@@ -248,27 +248,42 @@ fn modifiers_held() -> bool {
 /// Handle a press/release for a key binding. Emits Tauri events and
 /// suppresses key repeats (only emits on first press, not held repeats).
 #[cfg(target_os = "windows")]
+/// Returns `true` if the key event should be SUPPRESSED (swallowed so it doesn't
+/// reach the focused app). A press of the bound key is always suppressed; a release
+/// is suppressed only if we captured the matching press (otherwise we'd eat an
+/// unrelated key-up and leave the app thinking the key is still down).
 fn handle_binding_event(
     binding: &KeyBinding,
     event_pressed: &str,
     event_released: &str,
     is_press: bool,
-) {
-    if let Some(app) = HOOK_APP_HANDLE.get() {
-        if is_press {
-            // Only emit on first press (not repeats)
-            if !binding.active.swap(true, Ordering::Relaxed) {
-                info!("Input hook: emitting {}", event_pressed);
+) -> bool {
+    if is_press {
+        // Only emit on first press (not auto-repeat).
+        if !binding.active.swap(true, Ordering::Relaxed) {
+            info!("Input hook: emitting {}", event_pressed);
+            if let Some(app) = HOOK_APP_HANDLE.get() {
                 if let Err(e) = app.emit(event_pressed, ()) {
                     warn!("Input hook: failed to emit {}: {}", event_pressed, e);
                 }
             }
-        } else if binding.active.swap(false, Ordering::Relaxed) {
-            info!("Input hook: emitting {}", event_released);
+        }
+        true
+    } else if binding.active.swap(false, Ordering::Relaxed) {
+        // Release of a key whose press we captured → emit + suppress. The callback
+        // routes releases here even when a modifier is held, so a modifier-during-
+        // release can't leave `active` stuck true and permanently wedge the binding.
+        info!("Input hook: emitting {}", event_released);
+        if let Some(app) = HOOK_APP_HANDLE.get() {
             if let Err(e) = app.emit(event_released, ()) {
                 warn!("Input hook: failed to emit {}: {}", event_released, e);
             }
         }
+        true
+    } else {
+        // Release of a key we didn't capture (its press passed through as a modifier
+        // combo) → let the key-up pass through untouched.
+        false
     }
 }
 
@@ -287,27 +302,33 @@ unsafe extern "system" fn low_level_keyboard_proc(
 
         let is_keydown = msg == win32::WM_KEYDOWN || msg == win32::WM_SYSKEYDOWN;
 
-        // Only match single keys — pass through modifier combos (Ctrl+4, Alt+Tab, etc.)
-        if !modifiers_held() {
+        // Key-DOWN: only match when no modifier is held, so chords like Ctrl+9 /
+        // Alt+Tab pass through untouched. Key-UP: ALWAYS check (regardless of
+        // modifiers) so a release while a modifier is held still resets the binding's
+        // `active` flag. handle_binding_event suppresses the up only if we captured
+        // the down, so we never eat an unrelated key-up.
+        if (is_keydown && !modifiers_held()) || !is_keydown {
             // Check PTT binding
-            if PTT_BINDING.matches_keyboard(vkey) {
-                handle_binding_event(
+            if PTT_BINDING.matches_keyboard(vkey)
+                && handle_binding_event(
                     &PTT_BINDING,
                     "ptt-key-pressed",
                     "ptt-key-released",
                     is_keydown,
-                );
-                return 1; // Suppress the key (prevent "4444" in text fields)
+                )
+            {
+                return 1; // Suppress the key (prevent "9999" in text fields)
             }
 
             // Check dictation binding
-            if DICTATION_BINDING.matches_keyboard(vkey) {
-                handle_binding_event(
+            if DICTATION_BINDING.matches_keyboard(vkey)
+                && handle_binding_event(
                     &DICTATION_BINDING,
                     "dictation-key-pressed",
                     "dictation-key-released",
                     is_keydown,
-                );
+                )
+            {
                 return 1; // Suppress
             }
         }

@@ -247,18 +247,35 @@
   // ---- Dictation handler (toggle-only: press to start, press again to stop) ----
 
   function handleDictationPress() {
-    // Dictation only works in toggle mode
-    const mode = configStore.value?.behavior?.activationMode;
-    if (mode !== 'toggle') return;
+    // The dictation key is a self-contained toggle: press to start dictating,
+    // press again to stop (STT → inject text into the focused field). It works in
+    // ANY activation mode — it's independent of the voice-loop mode. Previously it
+    // early-returned unless `activationMode === 'toggle'`, so in the DEFAULT
+    // wake-word mode it silently did nothing — the core "dictation doesn't fire" bug.
+    if (!voiceStore.running) {
+      // Voice engine isn't running — log instead of failing silently.
+      console.warn('[dictation] key press ignored — voice engine not running');
+      return;
+    }
 
-    if (voiceStore.isRecording && voiceStore.isDictating) {
-      // Currently dictating → stop recording, triggers STT → inject text
+    // Drive the start/stop decision off the pipeline STATE, not the
+    // isRecording/isDictating flag combo — that combo had a dead zone
+    // (recording-but-not-dictating) that silently swallowed the press, and a stale
+    // isDictating flag could wedge it. State is the single source of truth.
+    const st = voiceStore.state;
+    if (st === 'recording') {
+      // Any active recording → stop it (also recovers a pipeline wedged in
+      // 'recording'); if it was a dictation recording, STT then injects the text.
       pttRelease();
-    } else if (!voiceStore.isRecording) {
-      // Not recording → start dictation recording
+      overlayStore.setDictatingMode(false);
+    } else if (st === 'idle' || st === 'listening') {
+      // Idle → start a dictation recording.
       voiceStore.startDictation();
       overlayStore.setDictatingMode(true);
       pttPress();
+    } else {
+      // processing/speaking — pipeline busy; ignore but log (never a silent no-op).
+      console.warn(`[dictation] key press ignored — pipeline busy (state=${st})`);
     }
   }
 
