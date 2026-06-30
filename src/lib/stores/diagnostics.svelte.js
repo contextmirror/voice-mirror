@@ -24,6 +24,7 @@ const EXPECTED_SUBSYSTEMS = [
   'file-watcher',
   'dev-server',
   'editor',
+  'file-viewer',
   'updater',
   'tts',
   'provider',

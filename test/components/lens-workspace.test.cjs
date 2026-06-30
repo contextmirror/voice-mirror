@@ -77,8 +77,8 @@ describe('LensWorkspace.svelte', () => {
   it('renders GroupTabBar component', () => {
     assert.ok(editorPaneSrc.includes('<GroupTabBar'), 'Should render GroupTabBar in EditorPane');
   });
-  it('renders FileEditor conditionally', () => {
-    assert.ok(editorPaneSrc.includes('<FileEditor'), 'Should render FileEditor in EditorPane');
+  it('routes file tabs through FileViewer (multi-format viewer router)', () => {
+    assert.ok(editorPaneSrc.includes('<FileViewer'), 'Should render FileViewer in EditorPane');
   });
   it('uses CSS visibility for browser layer (no destroy/recreate)', () => {
     assert.ok(src.includes('preview-layer'), 'Should have preview-layer wrapper');

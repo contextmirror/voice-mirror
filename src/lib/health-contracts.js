@@ -11,7 +11,8 @@
 
 import { diagnosticsStore } from './stores/diagnostics.svelte.js';
 import { updaterStore } from './stores/updater.svelte.js';
-import { detectEspeak, detectGpu, detectProviders, listSttModels } from './api.js';
+import { detectEspeak, detectGpu, detectProviders, listSttModels, readFileBase64 } from './api.js';
+import { resolveViewerType } from './viewer-type.js';
 
 /**
  * Register all health contracts with the diagnostics store.
@@ -159,6 +160,31 @@ export function registerAllContracts(deps) {
         healthy: true,
         message: `${tabs.length} file(s) open, ${dirty} unsaved`,
       };
+    },
+  });
+
+  // ── File Viewer ──
+  // The multi-format viewer router (text/image/pdf/office/binary). A broken
+  // wiring here means non-text files dead-end at a raw read error, so verify the
+  // resolver and the base64 reader wrapper are both present and behaving.
+  diagnosticsStore.registerHealthContract({
+    name: 'file-viewer',
+    description: 'Multi-format file viewer router (text / image / pdf / office / binary)',
+    check() {
+      const resolverOk = typeof resolveViewerType === 'function'
+        && resolveViewerType('a.pdf') === 'pdf'
+        && resolveViewerType('a.png') === 'image'
+        && resolveViewerType('a.docx') === 'office'
+        && resolveViewerType('a.js') === 'text';
+      const readerOk = typeof readFileBase64 === 'function';
+      if (!resolverOk || !readerOk) {
+        return {
+          healthy: false,
+          message: `File viewer wiring broken (resolver: ${resolverOk ? 'ok' : 'FAILED'}, readFileBase64: ${readerOk ? 'ok' : 'MISSING'})`,
+          details: { resolverOk, readerOk },
+        };
+      }
+      return { healthy: true, message: 'File viewer router wired (text/image/pdf/office/binary)' };
     },
   });
 

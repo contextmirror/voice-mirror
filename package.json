@@ -1,7 +1,7 @@
 {
   "name": "voice-mirror",
   "private": true,
-  "version": "0.12.10",
+  "version": "0.12.11",
   "description": "Voice-controlled AI agent overlay for your desktop",
   "license": "MIT",
   "type": "module",
@@ -44,6 +44,7 @@
     "fuzzysort": "^3.1.0",
     "ghostty-web": "github:contextmirror/ghostty-web",
     "highlight.js": "^11.11.1",
+    "mammoth": "^1.8.0",
     "marked": "^15.0.0",
     "marked-highlight": "^2.2.3"
   },

@@ -27,6 +27,86 @@ fn image_data_url(path: &str, bytes: &[u8]) -> Option<String> {
     Some(format!("data:{};base64,{}", mime, b64))
 }
 
+/// Best-effort MIME type from a file extension (for the base64 reader).
+fn mime_for_ext(path: &str) -> &'static str {
+    let ext = path.rsplit('.').next().unwrap_or("").to_lowercase();
+    match ext.as_str() {
+        "pdf" => "application/pdf",
+        "docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "doc" => "application/msword",
+        "xlsx" => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "pptx" => "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "svg" => "image/svg+xml",
+        _ => "application/octet-stream",
+    }
+}
+
+/// Read a file's raw bytes as a base64 string for in-app viewers (PDF iframe,
+/// docx → mammoth, …). Reuses `read_file`'s canonicalize + path-traversal guard.
+///
+/// `path` is relative to the project root (or the provided `root`).
+/// Returns `{ base64, mime, size }` on success. Capped at 25 MB.
+#[tauri::command]
+pub fn read_file_base64(path: String, root: Option<String>) -> IpcResponse {
+    const MAX_SIZE: u64 = 25 * 1024 * 1024; // 25 MB
+
+    let root = match root {
+        Some(r) => PathBuf::from(r),
+        None => match find_project_root() {
+            Some(r) => r,
+            None => return IpcResponse::err("Could not find project root"),
+        },
+    };
+
+    let target = root.join(&path);
+
+    // Security: canonicalize both paths and verify target is within root
+    let canon_root = match root.canonicalize() {
+        Ok(p) => p,
+        Err(e) => return IpcResponse::err(format!("Failed to resolve project root: {}", e)),
+    };
+    let canon_target = match target.canonicalize() {
+        Ok(p) => p,
+        Err(e) => return IpcResponse::err(format!("File not found: {}", e)),
+    };
+
+    if !canon_target.starts_with(&canon_root) {
+        warn!(
+            "Path traversal blocked: {} is outside project root {}",
+            canon_target.display(),
+            canon_root.display()
+        );
+        return IpcResponse::err("Path is outside the project root");
+    }
+
+    let size = match std::fs::metadata(&canon_target) {
+        Ok(m) => m.len(),
+        Err(e) => return IpcResponse::err(format!("Failed to get file metadata: {}", e)),
+    };
+
+    if size > MAX_SIZE {
+        return IpcResponse::err(format!(
+            "File too large for in-app preview ({:.1} MB, max 25 MB)",
+            size as f64 / (1024.0 * 1024.0)
+        ));
+    }
+
+    let bytes = match std::fs::read(&canon_target) {
+        Ok(b) => b,
+        Err(e) => return IpcResponse::err(format!("Failed to read file: {}", e)),
+    };
+
+    let base64 = crate::voice::tts::crypto::base64_encode(&bytes);
+    let mime = mime_for_ext(&path);
+
+    info!("read_file_base64: {} ({} bytes)", path, size);
+    IpcResponse::ok(serde_json::json!({ "base64": base64, "mime": mime, "size": size }))
+}
+
 /// Read a file's contents as UTF-8 text.
 ///
 /// `path` is relative to the project root (or the provided `root`).

@@ -738,6 +738,16 @@ export async function readExternalFile(path) {
   return invoke('read_external_file', { path });
 }
 
+/**
+ * Read a file's raw bytes as base64 for in-app viewers (PDF iframe, docx preview).
+ * Returns `{ base64, mime, size }`. Capped at 25 MB by the backend.
+ * @param {string} path - File path relative to project root
+ * @param {string} [root] - Optional project root override
+ */
+export async function readFileBase64(path, root) {
+  return invoke('read_file_base64', { path, root: root || null });
+}
+
 export async function writeFile(path, content, root) {
   return invoke('write_file', { path, content, root: root || null });
 }

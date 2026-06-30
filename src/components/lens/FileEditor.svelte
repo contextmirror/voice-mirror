@@ -8,6 +8,7 @@
   import { chatStore } from '../../lib/stores/chat.svelte.js';
   import { aiStatusStore } from '../../lib/stores/ai-status.svelte.js';
   import EditorContextMenu from './EditorContextMenu.svelte';
+  import BinaryFilePanel from './BinaryFilePanel.svelte';
   import ReferencesPanel from './ReferencesPanel.svelte';
   import CodeActionsMenu from './CodeActionsMenu.svelte';
   import RenameInput from './RenameInput.svelte';
@@ -33,7 +34,6 @@
   let loading = $state(true);
   let error = $state(null);
   let isBinary = $state(false);
-  let imageDataUrl = $state(null);
   let fileSize = $state(0);
   let currentPath = $state(null);
 
@@ -360,7 +360,6 @@
     loading = true;
     error = null;
     isBinary = false;
-    imageDataUrl = null;
     conflictDetected = false;
     showPreview = markdownPreviewDefault;
 
@@ -393,8 +392,10 @@
         }
 
         if (data?.binary) {
+          // A file routed here as 'text' turned out to be binary (non-UTF8 bytes
+          // with an unknown/code-ish extension). Hand it to the binary panel
+          // instead of a dead end. Images/pdf/office are routed away by FileViewer.
           isBinary = true;
-          imageDataUrl = data.dataUrl || null;
           fileSize = data.size || 0;
           loading = false;
           return;
@@ -1037,20 +1038,8 @@
   });
 </script>
 
-{#if isBinary && imageDataUrl}
-  <div class="editor-image-preview">
-    <img src={imageDataUrl} alt={currentPath?.split('/').pop() || 'Image preview'} />
-    <span class="image-detail">{(fileSize / 1024).toFixed(1)} KB</span>
-  </div>
-{:else if isBinary}
-  <div class="editor-binary">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="32" height="32">
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-      <polyline points="14 2 14 8 20 8"/>
-    </svg>
-    <span class="binary-title">Binary file</span>
-    <span class="binary-detail">{(fileSize / 1024).toFixed(1)} KB — This file is not displayed because it is binary.</span>
-  </div>
+{#if isBinary}
+  <BinaryFilePanel {tab} size={fileSize} />
 {:else if error}
   <div class="editor-error">
     <span class="error-text">{error}</span>
@@ -1267,8 +1256,7 @@
     font-family: var(--font-family);
   }
 
-  .editor-error,
-  .editor-image-preview {
+  .editor-error {
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -1279,46 +1267,8 @@
     background: var(--checkerboard, repeating-conic-gradient(#1a1a1a 0% 25%, #222 0% 50%) 50% / 16px 16px);
   }
 
-  .editor-image-preview img {
-    max-width: 100%;
-    max-height: calc(100% - 32px);
-    object-fit: contain;
-    border-radius: 4px;
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
-  }
-
-  .image-detail {
-    margin-top: 8px;
-    color: var(--muted);
-    font-size: 12px;
-    font-family: var(--font-family);
-  }
-
-  .editor-binary {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    height: 100%;
-    color: var(--muted);
-    font-size: 13px;
-    font-family: var(--font-family);
-  }
-
   .error-text {
     color: var(--danger);
-  }
-
-  .binary-title {
-    font-weight: 600;
-    color: var(--text);
-    font-size: 14px;
-  }
-
-  .binary-detail {
-    color: var(--muted);
-    font-size: 12px;
   }
 
   .file-editor :global(.lsp-hover-tooltip) {

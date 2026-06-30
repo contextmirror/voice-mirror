@@ -2,7 +2,7 @@
   import { tabsStore } from '../../lib/stores/tabs.svelte.js';
   import { editorGroupsStore } from '../../lib/stores/editor-groups.svelte.js';
   import GroupTabBar from './GroupTabBar.svelte';
-  import FileEditor from './FileEditor.svelte';
+  import FileViewer from './FileViewer.svelte';
   import DiffViewer from './DiffViewer.svelte';
   import DropZoneOverlay from './DropZoneOverlay.svelte';
 
@@ -158,7 +158,7 @@
 
   <div class="pane-content" class:hidden={showBrowser}>
     {#if activeTab?.type === 'file'}
-      <FileEditor tab={activeTab} {groupId} />
+      <FileViewer tab={activeTab} {groupId} />
     {:else if activeTab?.type === 'diff'}
       <DiffViewer tab={activeTab} />
     {:else}

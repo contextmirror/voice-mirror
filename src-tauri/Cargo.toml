@@ -1,6 +1,6 @@
 [package]
 name = "voice-mirror"
-version = "0.12.10"
+version = "0.12.11"
 description = "Voice-controlled AI agent overlay for your desktop"
 license = "MIT"
 authors = [""]

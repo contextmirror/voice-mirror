@@ -41,8 +41,8 @@ describe('EditorPane.svelte: component structure', () => {
     assert.ok(src.includes('GroupTabBar'), 'Should import GroupTabBar');
   });
 
-  it('imports FileEditor', () => {
-    assert.ok(src.includes('FileEditor'), 'Should import FileEditor');
+  it('imports FileViewer (multi-format viewer router)', () => {
+    assert.ok(src.includes('FileViewer'), 'Should import FileViewer');
   });
 
   it('imports DiffViewer', () => {

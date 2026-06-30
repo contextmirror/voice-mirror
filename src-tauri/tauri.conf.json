@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicobao/tauri/refs/tags/tauri-v2.0.0/crates/tauri-utils/schema.json",
   "productName": "Voice Mirror",
-  "version": "0.12.10",
+  "version": "0.12.11",
   "identifier": "com.voicemirror.app",
   "build": {
     "beforeDevCommand": "npx vite dev",
@@ -29,7 +29,7 @@
     ],
     "withGlobalTauri": true,
     "security": {
-      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' http://127.0.0.1:* http://localhost:* https:; media-src 'self' blob:"
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' http://127.0.0.1:* http://localhost:* https:; media-src 'self' blob:; frame-src 'self' blob:; object-src 'self' blob:"
     }
   },
   "bundle": {
