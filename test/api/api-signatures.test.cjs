@@ -338,6 +338,7 @@ describe('api.js -- exported async functions', () => {
     'lensEvalDeviceJs',
     'lensSetDeviceEmulation',
     // GPU / Model Management
+    'detectEspeak',
     'detectGpu',
     'listSttModels',
     'deleteSttModel',

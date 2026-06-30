@@ -695,6 +695,10 @@ export async function killPortProcess(port) {
 
 // ============ GPU / Model Management ============
 
+export async function detectEspeak() {
+  return invoke('detect_espeak');
+}
+
 export async function detectGpu() {
   return invoke('detect_gpu');
 }

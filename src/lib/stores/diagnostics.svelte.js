@@ -25,6 +25,7 @@ const EXPECTED_SUBSYSTEMS = [
   'dev-server',
   'editor',
   'updater',
+  'tts',
 ];
 
 /**

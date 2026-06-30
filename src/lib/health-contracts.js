@@ -11,6 +11,7 @@
 
 import { diagnosticsStore } from './stores/diagnostics.svelte.js';
 import { updaterStore } from './stores/updater.svelte.js';
+import { detectEspeak } from './api.js';
 
 /**
  * Register all health contracts with the diagnostics store.
@@ -158,6 +159,32 @@ export function registerAllContracts(deps) {
         healthy: true,
         message: `${tabs.length} file(s) open, ${dirty} unsaved`,
       };
+    },
+  });
+
+  // ── Text-to-Speech ──
+  // The local Kokoro voice needs espeak-ng to turn text into phonemes; without it
+  // every phrase is silently skipped (no spoken reply). This contract turns that
+  // silent failure into a caught, visible one — the gap that shipped in early builds.
+  diagnosticsStore.registerHealthContract({
+    name: 'tts',
+    description: 'Text-to-speech — espeak-ng phonemizer for the local Kokoro voice',
+    async check() {
+      try {
+        const res = await detectEspeak();
+        const d = res?.data ?? res ?? {};
+        if (d.found) {
+          return { healthy: true, message: `espeak-ng found (${d.source || 'ok'})`, details: d };
+        }
+        return {
+          healthy: false,
+          message: 'espeak-ng not found — local (Kokoro) TTS will be silent. Reinstall, or switch to Edge TTS.',
+          details: d,
+        };
+      } catch (e) {
+        // Outside Tauri / command unavailable (dev/browser/test) → not applicable.
+        return { healthy: true, message: `TTS check unavailable: ${e?.message || e}` };
+      }
     },
   });
 }

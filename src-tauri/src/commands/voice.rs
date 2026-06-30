@@ -405,6 +405,53 @@ pub fn restart_voice(
     }
 }
 
+/// Detect whether espeak-ng (required by the local Kokoro TTS voice to phonemize
+/// text) is available, and where. Mirrors `KokoroTts::find_espeak_ng`'s lookup
+/// (PATH → dev `tools/espeak-ng/` → packaged `{exe}/espeak-ng/`). Backs the TTS
+/// health contract so a missing espeak — which makes Kokoro silently skip every
+/// phrase (no spoken reply) — is caught by diagnostics instead of failing silently.
+#[tauri::command]
+pub fn detect_espeak() -> IpcResponse {
+    // 1. On PATH?
+    let mut version_cmd = std::process::Command::new("espeak-ng");
+    version_cmd.arg("--version");
+    crate::util::hidden(&mut version_cmd);
+    if let Ok(output) = version_cmd.output() {
+        if output.status.success() {
+            return IpcResponse::ok(serde_json::json!({
+                "found": true, "path": "espeak-ng", "source": "path"
+            }));
+        }
+    }
+    // 2. Dev: walk up from the exe for tools/espeak-ng/espeak-ng.exe
+    if let Ok(exe_path) = std::env::current_exe() {
+        let mut dir = exe_path.parent();
+        for _ in 0..5 {
+            if let Some(d) = dir {
+                let tools_exe = d.join("tools").join("espeak-ng").join("espeak-ng.exe");
+                if tools_exe.exists() {
+                    return IpcResponse::ok(serde_json::json!({
+                        "found": true, "path": tools_exe.to_string_lossy(), "source": "dev-tools"
+                    }));
+                }
+                dir = d.parent();
+            }
+        }
+    }
+    // 3. Packaged: {exe_dir}/espeak-ng/espeak-ng.exe (bundled via tauri.conf resources)
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(exe_dir) = exe_path.parent() {
+            let packaged = exe_dir.join("espeak-ng").join("espeak-ng.exe");
+            if packaged.exists() {
+                return IpcResponse::ok(serde_json::json!({
+                    "found": true, "path": packaged.to_string_lossy(), "source": "packaged"
+                }));
+            }
+        }
+    }
+    IpcResponse::ok(serde_json::json!({ "found": false, "path": "", "source": "" }))
+}
+
 /// Detect available GPU for Whisper acceleration.
 ///
 /// Runs `nvidia-smi` to check for NVIDIA GPUs and returns GPU name,
