@@ -205,6 +205,76 @@ describe('Phase 4: polish — re-run, a11y, edge cases', () => {
   });
 });
 
+describe('Phase 3: multi-step setup checklist', () => {
+  const wiz = read('src/components/onboarding/WelcomeWizard.svelte');
+
+  it('models a multi-step checklist (provider → stt → tts → gpu)', () => {
+    assert.ok(wiz.includes('const STEPS'), 'Should define a STEPS array');
+    for (const id of ['provider', 'stt', 'tts', 'gpu']) {
+      assert.ok(wiz.includes(`id: '${id}'`), `Steps should include the ${id} step`);
+    }
+    assert.ok(wiz.includes('currentStep'), 'Should track the active step index');
+  });
+
+  it('renders an "X of Y complete" progress header', () => {
+    assert.ok(wiz.includes('completeCount'), 'Should compute completeCount');
+    assert.ok(/of \{STEPS\.length\} complete/.test(wiz), 'Should render X of Y complete');
+  });
+
+  it('auto-completes each step from detection (not click-to-complete)', () => {
+    assert.ok(wiz.includes('statusFor'), 'Should compute per-step status');
+    assert.ok(wiz.includes("'done'") && wiz.includes("'attention'"), 'Steps carry done/attention status');
+    // Status is derived, not set on click.
+    assert.ok(wiz.includes('$derived'), 'Step status should be derived from detection');
+  });
+
+  it('collapses to "You\'re all set" when every step is complete', () => {
+    assert.ok(wiz.includes('allComplete'), 'Should compute allComplete');
+    assert.ok(wiz.includes("You're all set"), 'Should show the all-set state');
+  });
+
+  it('STT step detects models and offers a download with live progress', () => {
+    assert.ok(wiz.includes('listSttModels'), 'Should detect installed STT models');
+    assert.ok(wiz.includes('ensureSttModel'), 'Should download a model');
+    assert.ok(wiz.includes("listen('stt-download-progress'"), 'Should listen to download progress');
+    assert.ok(wiz.includes('downloadedMb') && wiz.includes('totalMb'), 'Should surface download progress');
+    assert.ok(wiz.includes('suggestedSttSize'), 'Should suggest a size by VRAM');
+    assert.ok(wiz.includes('vramMb'), 'Suggestion should consider VRAM');
+  });
+
+  it('TTS step verifies espeak-ng and warns (skippable) when missing', () => {
+    assert.ok(wiz.includes('detectEspeak'), 'Should verify espeak-ng');
+    assert.ok(/espeak-ng ready/i.test(wiz), 'Should show the ready state');
+    assert.ok(/Edge TTS/i.test(wiz), 'Should mention Edge TTS as the fallback');
+    assert.ok(wiz.includes('ttsSkipped'), 'TTS step should be skippable');
+    assert.ok(wiz.includes('Skip this step'), 'Should offer to skip the TTS step');
+  });
+
+  it('GPU step is advisory and offers a persisted CUDA toggle', () => {
+    assert.ok(wiz.includes('detectGpu'), 'Should detect the GPU');
+    assert.ok(wiz.includes('cudaCompiled'), 'Should read the CUDA-compiled flag');
+    assert.ok(wiz.includes("updateConfig({ voice: { sttUseGpu:"), 'GPU toggle should persist via updateConfig');
+    // GPU never blocks — always counts complete.
+    assert.ok(/gpu:\s*'done'/.test(wiz), 'GPU step should always be complete');
+  });
+
+  it('re-check re-runs every step\'s detection', () => {
+    assert.ok(wiz.includes('recheckAll'), 'Should expose a recheckAll');
+    assert.ok(wiz.includes('detectStt') && wiz.includes('detectTts') && wiz.includes('detectGpuStep'), 'Should re-detect each step');
+  });
+
+  it('finish hands off to the GettingStarted tutorial', () => {
+    assert.ok(wiz.includes("new CustomEvent('show-tutorial')"), 'Finishing should dispatch show-tutorial');
+    assert.ok(wiz.includes('onboardingCompleted: true'), 'Finishing should still persist completion');
+  });
+
+  it('never traps — Back/Skip/Esc all available', () => {
+    assert.ok(wiz.includes('goBack') && wiz.includes('goNext'), 'Should offer Back/Next navigation');
+    assert.ok(/Skip for now/i.test(wiz), 'Should still offer Skip for now');
+    assert.ok(wiz.includes("e.key === 'Escape'"), 'Escape should skip');
+  });
+});
+
 describe('App.svelte: first-run gating', () => {
   const app = read('src/App.svelte');
 

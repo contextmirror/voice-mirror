@@ -4,36 +4,78 @@
    *
    * Adaptive by design (see docs/research): it detects the AI coding CLIs on the
    * machine and their auth state, then EITHER collapses to a one-screen
-   * "You're all set" for users who already have a provider ready, OR expands
-   * into a guided checklist for new users (install / sign in / connect).
+   * "You're all set" for users who already have everything ready, OR expands
+   * into a guided multi-step checklist for new users (install / sign in /
+   * download model / verify voice / GPU).
    *
    * Principles baked in:
-   * - Never gate the core loop: "Skip for now" is always available.
+   * - Never gate the core loop: "Skip for now" + Escape are always available.
    * - Passive detection only (backend reads credential files; never runs a CLI).
-   * - Re-check instead of "click when done" — the user fixes something, we
-   *   re-detect.
+   * - Re-check instead of "click when done" — each step auto-marks done when its
+   *   detection says it's satisfied; the user fixes something, we re-detect.
    *
-   * Phase 1 scope: detect + adaptive UI + connect a ready provider + skip.
-   * One-click install (Phase 2) and live auth/sign-in (Phase 3) replace the
-   * copy-the-command guidance shown here.
+   * Phase 3 scope: reshape the single provider screen into a checklist of steps
+   *   1. AI Provider     (provider contract — install / sign-in / connect)
+   *   2. Speech-to-Text  (stt contract — listSttModels + ensureSttModel download)
+   *   3. Text-to-Speech  (tts contract — detectEspeak verify + warn, skippable)
+   *   4. GPU             (gpu contract — advisory, optional CUDA toggle)
+   * then hand off to the GettingStarted tutorial on finish.
    */
   import { onMount } from 'svelte';
-  import { detectProviders, installProvider, probeProviderAuth } from '../../lib/api.js';
+  import {
+    detectProviders,
+    installProvider,
+    probeProviderAuth,
+    listSttModels,
+    ensureSttModel,
+    detectEspeak,
+    detectGpu,
+  } from '../../lib/api.js';
+  import { listen } from '@tauri-apps/api/event';
   import { unwrapResult } from '../../lib/utils.js';
-  import { updateConfig } from '../../lib/stores/config.svelte.js';
+  import { configStore, updateConfig } from '../../lib/stores/config.svelte.js';
   import { navigationStore } from '../../lib/stores/navigation.svelte.js';
   import { onboardingStore } from '../../lib/stores/onboarding.svelte.js';
   import { toastStore } from '../../lib/stores/toast.svelte.js';
+  import { STT_REGISTRY } from '../../lib/voice-adapters.js';
   import Button from '../shared/Button.svelte';
 
   let { onDone = () => {} } = $props();
 
+  // ── Step model ────────────────────────────────────────────────────────────
+  // A fixed list of checklist steps; each step's status is *computed* from its
+  // detection result (never click-to-complete).
+  const STEPS = [
+    { id: 'provider', title: 'AI Provider' },
+    { id: 'stt', title: 'Speech-to-Text' },
+    { id: 'tts', title: 'Text-to-Speech' },
+    { id: 'gpu', title: 'GPU Acceleration' },
+  ];
+  let currentStep = $state(0);
+  const activeStep = $derived(STEPS[currentStep]);
+  const isLastStep = $derived(currentStep === STEPS.length - 1);
+
+  // ── Provider step state (KEPT from the original single-screen wizard) ───────
   /** @type {Array<{providerType:string,displayName:string,command:string,installed:boolean,version:?string,path:?string,authState:string,ready:boolean}>} */
   let providers = $state([]);
   let loading = $state(true);
   let busy = $state(false);
   /** providerType currently being installed, or null. */
   let installing = $state(null);
+
+  // ── STT step state ──────────────────────────────────────────────────────────
+  let sttModels = $state([]);
+  let sttDownloading = $state(false);
+  let sttProgress = $state(0);
+  let sttChosenSize = $state('base');
+
+  // ── TTS step state ──────────────────────────────────────────────────────────
+  let espeak = $state(null);
+  let ttsSkipped = $state(false);
+
+  // ── GPU step state ──────────────────────────────────────────────────────────
+  let gpu = $state(null);
+  let gpuAccel = $state(false);
 
   // Verified, exact sign-in commands per provider (for guidance copy).
   const LOGIN_CMDS = {
@@ -47,6 +89,8 @@
   // Stable, sensible display order.
   const ORDER = ['claude', 'opencode', 'codex', 'gemini-cli', 'kimi-cli'];
 
+  const STT_SIZES = STT_REGISTRY['whisper-local']?.modelSizes ?? [];
+
   const sorted = $derived(
     [...providers].sort((a, b) => {
       // ready first, then installed, then by preferred order
@@ -58,7 +102,39 @@
 
   const readyProviders = $derived(providers.filter((p) => p.ready));
   const anyReady = $derived(readyProviders.length > 0);
+  const anyInstalled = $derived(providers.some((p) => p.installed));
 
+  // Recommend a Whisper size from available VRAM (CUDA only). Bigger = more
+  // accurate but heavier; default to "base" on CPU / unknown.
+  const suggestedSttSize = $derived.by(() => {
+    const vram = Number(gpu?.vramMb) || 0;
+    const cuda = gpu?.available && gpu?.cudaCompiled && gpu?.vendor === 'nvidia';
+    if (cuda && vram >= 8000) return 'large-v3-turbo';
+    if (cuda && vram >= 4000) return 'small';
+    return 'base';
+  });
+
+  // ── Per-step status (computed from detection — auto-completes) ──────────────
+  const statusFor = $derived.by(() => ({
+    // Done when ≥1 provider is ready, or at least installed (auth is fixable).
+    provider: anyReady || anyInstalled ? 'done' : 'attention',
+    // Done when ≥1 Whisper model is present on disk.
+    stt: sttModels.length > 0 ? 'done' : 'attention',
+    // Done when espeak-ng is found; skippable (Edge TTS works without it).
+    tts: espeak?.found ? 'done' : ttsSkipped ? 'skipped' : 'attention',
+    // Advisory — never blocks; always counts as complete.
+    gpu: 'done',
+  }));
+
+  const steps = $derived(
+    STEPS.map((s) => ({ ...s, status: statusFor[s.id] }))
+  );
+  const completeCount = $derived(
+    steps.filter((s) => s.status === 'done' || s.status === 'skipped').length
+  );
+  const allComplete = $derived(completeCount === STEPS.length);
+
+  // ── Detection ───────────────────────────────────────────────────────────────
   async function loadProviders() {
     loading = true;
     try {
@@ -102,10 +178,64 @@
     });
   }
 
+  async function detectStt() {
+    try {
+      const data = unwrapResult(await listSttModels());
+      sttModels = Array.isArray(data?.models) ? data.models : [];
+    } catch (err) {
+      console.warn('[onboarding] listSttModels failed:', err);
+      sttModels = [];
+    }
+  }
+
+  async function detectTts() {
+    try {
+      const res = await detectEspeak();
+      espeak = unwrapResult(res) ?? res ?? {};
+    } catch (err) {
+      // Outside Tauri / command unavailable (dev/browser) → treat as unknown.
+      console.warn('[onboarding] detectEspeak failed:', err);
+      espeak = null;
+    }
+  }
+
+  async function detectGpuStep() {
+    try {
+      gpu = unwrapResult(await detectGpu()) ?? null;
+    } catch (err) {
+      console.warn('[onboarding] detectGpu failed:', err);
+      gpu = null;
+    }
+  }
+
+  /** Re-run every step's detection (the "Re-check" action). */
+  async function recheckAll() {
+    if (busy) return;
+    await Promise.all([loadProviders(), detectStt(), detectTts(), detectGpuStep()]);
+    // Default the STT choice to the VRAM-suggested size (only if user hasn't
+    // already deviated from a prior suggestion).
+    sttChosenSize = suggestedSttSize;
+    // Mirror the persisted GPU-acceleration preference.
+    gpuAccel = configStore.value?.voice?.sttUseGpu === true;
+  }
+
   onMount(() => {
-    loadProviders();
+    recheckAll();
   });
 
+  // ── Step navigation ─────────────────────────────────────────────────────────
+  function goBack() {
+    if (currentStep > 0) currentStep -= 1;
+  }
+  function goNext() {
+    if (currentStep < STEPS.length - 1) currentStep += 1;
+  }
+  function skipStep() {
+    if (activeStep.id === 'tts') ttsSkipped = true;
+    goNext();
+  }
+
+  // ── Provider actions (KEPT) ─────────────────────────────────────────────────
   /** Status pill descriptor for a provider row. */
   function statusInfo(p) {
     if (!p.installed) return { cls: 'missing', label: 'Not found' };
@@ -125,10 +255,13 @@
     busy = true;
     try {
       await updateConfig({ ai: { provider: p.providerType } });
-      await finish(`Connected ${p.displayName}.`);
+      toastStore.addToast({ message: `Selected ${p.displayName}.`, severity: 'success' });
+      // Don't finish the whole wizard — advance to the next setup step.
+      goNext();
     } catch (err) {
       console.warn('[onboarding] connect failed:', err);
       toastStore.addToast({ message: `Couldn't connect: ${err}`, severity: 'error' });
+    } finally {
       busy = false;
     }
   }
@@ -161,6 +294,61 @@
     }
   }
 
+  // ── STT download (pattern lifted from VoiceSettings.svelte) ──────────────────
+  async function downloadSttModel(size) {
+    if (sttDownloading) return;
+    sttDownloading = true;
+    sttProgress = 0;
+    const downloadToastId = toastStore.addToast({
+      message: `Downloading Whisper model (${size})...`,
+      severity: 'info',
+      duration: 0,
+      key: 'stt-model-download',
+      progress: 0,
+    });
+
+    const unlisten = await listen('stt-download-progress', (event) => {
+      const { percent, downloadedMb, totalMb } = event.payload;
+      sttProgress = percent;
+      if (downloadToastId) {
+        toastStore.updateToast(downloadToastId, {
+          message: `Downloading model... ${percent}% (${Math.round(downloadedMb)} / ${Math.round(totalMb)} MB)`,
+          progress: percent,
+        });
+      }
+    });
+
+    try {
+      await ensureSttModel(size);
+      unlisten();
+      toastStore.dismissToast(downloadToastId);
+      toastStore.addToast({ message: 'Model ready', severity: 'success' });
+      await detectStt();
+    } catch (dlErr) {
+      unlisten();
+      toastStore.dismissToast(downloadToastId);
+      toastStore.addToast({ message: `Model download failed: ${dlErr}`, severity: 'error' });
+    } finally {
+      sttDownloading = false;
+    }
+  }
+
+  // ── GPU toggle (persisted) ───────────────────────────────────────────────────
+  async function setGpuAccel(v) {
+    gpuAccel = v;
+    try {
+      await updateConfig({ voice: { sttUseGpu: v } });
+      toastStore.addToast({
+        message: v ? 'GPU acceleration enabled' : 'GPU acceleration disabled',
+        severity: 'info',
+      });
+    } catch (err) {
+      console.warn('[onboarding] GPU toggle failed:', err);
+      toastStore.addToast({ message: `Couldn't save GPU setting: ${err}`, severity: 'error' });
+    }
+  }
+
+  // ── Exit paths ───────────────────────────────────────────────────────────────
   async function skip() {
     if (busy) return;
     busy = true;
@@ -178,12 +366,14 @@
       });
     }
     navigationStore.setView('chat');
+    // Hand off to the GettingStarted tutorial (it waits on onboardingCompleted).
+    window.dispatchEvent(new CustomEvent('show-tutorial'));
     onDone();
   }
 
   function handleKeydown(e) {
     // Escape skips (never trap the user), unless mid-operation.
-    if (e.key === 'Escape' && !busy && !installing) {
+    if (e.key === 'Escape' && !busy && !installing && !sttDownloading) {
       skip();
     }
   }
@@ -195,6 +385,12 @@
     } catch (err) {
       console.warn('[onboarding] copy failed:', err);
     }
+  }
+
+  function stepIcon(status) {
+    if (status === 'done') return '✓';
+    if (status === 'skipped') return '–';
+    return '○';
   }
 </script>
 
@@ -210,59 +406,163 @@
     {:else}
       <header class="welcome-header">
         <h1>Welcome to Voice Mirror</h1>
-        <p class="subtitle">Build by voice. Voice Mirror drives the AI coding CLI you already use.</p>
+        <p class="subtitle">Build by voice. Let's get your tools ready.</p>
       </header>
 
-      {#if anyReady}
-        <!-- Adaptive: ready user -> collapse to "you're all set" -->
+      {#if allComplete}
         <div class="ready-banner">
           <span class="ready-check">✓</span>
           <div>
             <p class="ready-title">You're all set</p>
-            <p class="ready-sub">
-              {readyProviders.length === 1
-                ? `${readyProviders[0].displayName} is installed and signed in.`
-                : `${readyProviders.length} providers are ready.`}
-            </p>
+            <p class="ready-sub">Every setup step is complete. Press Finish to start building.</p>
           </div>
-        </div>
-
-        <div class="provider-list">
-          {#each readyProviders as p (p.providerType)}
-            {@const s = statusInfo(p)}
-            <div class="provider-row">
-              <div class="provider-meta">
-                <span class="provider-name">{p.displayName}</span>
-                <span class="status-pill {s.cls}">{s.label}</span>
-              </div>
-              <Button small onClick={() => connect(p)} disabled={busy}>Start with {p.displayName}</Button>
-            </div>
-          {/each}
-        </div>
-
-        <details class="more-providers">
-          <summary>Set up a different provider</summary>
-          <div class="provider-list">
-            {#each sorted.filter((p) => !p.ready) as p (p.providerType)}
-              {@render providerRow(p)}
-            {/each}
-          </div>
-        </details>
-      {:else if providers.length === 0}
-        <!-- Detection failed entirely -->
-        <p class="guide-intro">Couldn't detect your AI tools. Try Re-check, or skip and set one up later in Settings.</p>
-      {:else}
-        <!-- Guided: new user -> checklist -->
-        <p class="guide-intro">Connect an AI coding CLI to get started:</p>
-        <div class="provider-list">
-          {#each sorted as p (p.providerType)}
-            {@render providerRow(p)}
-          {/each}
         </div>
       {/if}
 
+      <!-- Checklist: X of Y complete -->
+      <div class="checklist">
+        <div class="checklist-header">
+          <span class="progress-label">{completeCount} of {STEPS.length} complete</span>
+        </div>
+        <ol class="step-list">
+          {#each steps as s, i (s.id)}
+            <li>
+              <button
+                type="button"
+                class="step-item {s.status}"
+                class:active={i === currentStep}
+                onclick={() => (currentStep = i)}
+              >
+                <span class="step-icon {s.status}">{stepIcon(s.status)}</span>
+                <span class="step-title">{s.title}</span>
+              </button>
+            </li>
+          {/each}
+        </ol>
+      </div>
+
+      <!-- Active step panel -->
+      <div class="step-panel">
+        {#if activeStep.id === 'provider'}
+          {#if anyReady}
+            <div class="provider-list">
+              {#each readyProviders as p (p.providerType)}
+                {@const s = statusInfo(p)}
+                <div class="provider-row">
+                  <div class="provider-meta">
+                    <span class="provider-name">{p.displayName}</span>
+                    <span class="status-pill {s.cls}">{s.label}</span>
+                  </div>
+                  <Button small onClick={() => connect(p)} disabled={busy}>Use {p.displayName}</Button>
+                </div>
+              {/each}
+            </div>
+            <details class="more-providers">
+              <summary>Set up a different provider</summary>
+              <div class="provider-list">
+                {#each sorted.filter((p) => !p.ready) as p (p.providerType)}
+                  {@render providerRow(p)}
+                {/each}
+              </div>
+            </details>
+          {:else if providers.length === 0}
+            <p class="guide-intro">Couldn't detect your AI tools. Try Re-check, or skip and set one up later in Settings.</p>
+          {:else}
+            <p class="guide-intro">Connect an AI coding CLI to get started:</p>
+            <div class="provider-list">
+              {#each sorted as p (p.providerType)}
+                {@render providerRow(p)}
+              {/each}
+            </div>
+          {/if}
+
+        {:else if activeStep.id === 'stt'}
+          <p class="guide-intro">Voice input needs a Whisper model to transcribe what you say.</p>
+          {#if sttModels.length > 0}
+            <div class="ok-line">
+              <span class="status-pill ready">Ready</span>
+              <span>{sttModels.length} model{sttModels.length === 1 ? '' : 's'} installed: {sttModels.map((m) => m.modelSize).join(', ')}</span>
+            </div>
+          {:else}
+            <p class="guide-intro">No model found yet. Download one to enable dictation
+              {#if suggestedSttSize !== 'base'}<span class="hint-note"> (suggested for your GPU)</span>{/if}:
+            </p>
+            <div class="stt-download">
+              <select class="size-select" bind:value={sttChosenSize} disabled={sttDownloading}>
+                {#each STT_SIZES as opt (opt.value)}
+                  <option value={opt.value}>{opt.label}{opt.value === suggestedSttSize ? ' — suggested' : ''}</option>
+                {/each}
+              </select>
+              <Button small onClick={() => downloadSttModel(sttChosenSize)} disabled={sttDownloading}>
+                {sttDownloading ? `Downloading… ${sttProgress}%` : 'Download'}
+              </Button>
+            </div>
+            {#if sttDownloading}
+              <div class="progress-bar"><div class="progress-fill" style="width:{sttProgress}%"></div></div>
+            {/if}
+          {/if}
+
+        {:else if activeStep.id === 'tts'}
+          <p class="guide-intro">Spoken replies use the local Kokoro voice, which needs <code>espeak-ng</code> to turn text into speech.</p>
+          {#if espeak?.found}
+            <div class="ok-line">
+              <span class="status-pill ready">Ready</span>
+              <span>espeak-ng ready{espeak.source ? ` (${espeak.source})` : ''}.</span>
+            </div>
+          {:else}
+            <div class="warn-box">
+              <strong>espeak-ng not found.</strong>
+              <p>The local Kokoro voice will be silent. Reinstalling Voice Mirror bundles espeak-ng,
+                or you can switch to Edge TTS (no espeak needed) in Settings → Voice. You can skip this step.</p>
+            </div>
+          {/if}
+
+        {:else if activeStep.id === 'gpu'}
+          <p class="guide-intro">GPU acceleration speeds up transcription. This is optional — CPU works fine.</p>
+          {#if gpu?.available}
+            <div class="gpu-info">
+              <span class="gpu-name">{gpu.name || gpu.vendor}</span>
+              {#if gpu.vramMb}<span class="gpu-vram">{gpu.vramMb} MB VRAM</span>{/if}
+              {#if gpu.available && gpu.cudaCompiled && gpu.vendor === 'nvidia'}
+                <span class="status-pill ready">CUDA accelerated</span>
+              {:else}
+                <span class="status-pill neutral">CPU inference</span>
+              {/if}
+            </div>
+            {#if gpu.cudaCompiled && gpu.vendor === 'nvidia'}
+              <label class="gpu-toggle">
+                <input type="checkbox" checked={gpuAccel} onchange={(e) => setGpuAccel(e.currentTarget.checked)} />
+                <span>Use GPU acceleration for faster transcription</span>
+              </label>
+            {:else}
+              <p class="hint-note">CUDA acceleration requires an NVIDIA GPU — CPU transcription still works.</p>
+            {/if}
+          {:else}
+            <div class="ok-line">
+              <span class="status-pill neutral">CPU inference</span>
+              <span>No discrete GPU detected — Voice Mirror will use the CPU.</span>
+            </div>
+          {/if}
+        {/if}
+      </div>
+
+      <!-- Step navigation -->
+      <div class="step-nav">
+        <button class="link-btn" onclick={goBack} disabled={busy || currentStep === 0}>← Back</button>
+        <div class="step-nav-right">
+          {#if activeStep.id === 'tts' && !espeak?.found}
+            <button class="link-btn" onclick={skipStep} disabled={busy}>Skip this step</button>
+          {/if}
+          {#if isLastStep}
+            <Button onClick={() => finish('Setup complete.')} disabled={busy}>Finish</Button>
+          {:else}
+            <Button onClick={goNext} disabled={busy}>Next</Button>
+          {/if}
+        </div>
+      </div>
+
       <footer class="welcome-footer">
-        <button class="link-btn" onclick={loadProviders} disabled={busy}>↻ Re-check</button>
+        <button class="link-btn" onclick={recheckAll} disabled={busy}>↻ Re-check</button>
         <button class="link-btn" onclick={skip} disabled={busy}>Skip for now</button>
       </footer>
     {/if}
@@ -351,7 +651,7 @@
   }
 
   .subtitle {
-    margin: 0 0 20px 0;
+    margin: 0 0 18px 0;
     font-size: 13px;
     color: var(--muted);
     line-height: 1.5;
@@ -386,10 +686,181 @@
     color: var(--muted);
   }
 
+  /* ── Checklist ── */
+  .checklist {
+    margin-bottom: 18px;
+  }
+
+  .checklist-header {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 8px;
+  }
+
+  .progress-label {
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .step-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .step-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    text-align: left;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md, 8px);
+    padding: 8px 12px;
+    cursor: pointer;
+    color: var(--text);
+    font-size: 13px;
+  }
+
+  .step-item.active {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 8%, var(--bg));
+  }
+
+  .step-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    font-size: 12px;
+    flex: none;
+    border: 1px solid var(--border);
+    color: var(--muted);
+  }
+
+  .step-icon.done {
+    background: color-mix(in srgb, var(--ok) 18%, transparent);
+    border-color: color-mix(in srgb, var(--ok) 40%, transparent);
+    color: var(--ok);
+  }
+
+  .step-icon.skipped {
+    color: var(--muted);
+  }
+
+  .step-icon.attention {
+    border-color: color-mix(in srgb, var(--warn) 50%, transparent);
+    color: var(--warn);
+  }
+
+  .step-title {
+    font-weight: 500;
+  }
+
+  /* ── Step panel ── */
+  .step-panel {
+    min-height: 96px;
+    padding: 4px 2px 6px;
+  }
+
+  .ok-line {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    color: var(--text);
+  }
+
+  .stt-download {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 10px;
+  }
+
+  .size-select {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm, 4px);
+    color: var(--text);
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+
+  .progress-bar {
+    margin-top: 10px;
+    height: 6px;
+    background: var(--border);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: var(--accent);
+    transition: width 0.2s ease;
+  }
+
+  .warn-box {
+    border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent);
+    background: color-mix(in srgb, var(--warn) 10%, transparent);
+    border-radius: var(--radius-md, 8px);
+    padding: 12px 14px;
+    font-size: 13px;
+    color: var(--text);
+  }
+
+  .warn-box p {
+    margin: 6px 0 0 0;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
+  .gpu-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    font-size: 13px;
+  }
+
+  .gpu-name {
+    font-weight: 500;
+    color: var(--text);
+  }
+
+  .gpu-vram {
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  .gpu-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--text);
+    cursor: pointer;
+  }
+
+  .hint-note {
+    color: var(--muted);
+    font-size: 12px;
+  }
+
   .guide-intro {
     font-size: 13px;
     color: var(--text);
     margin: 0 0 12px 0;
+    line-height: 1.5;
   }
 
   .provider-list {
@@ -475,10 +946,23 @@
     margin-bottom: 8px;
   }
 
+  .step-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 16px;
+  }
+
+  .step-nav-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
   .welcome-footer {
     display: flex;
     justify-content: space-between;
-    margin-top: 22px;
+    margin-top: 16px;
     padding-top: 16px;
     border-top: 1px solid var(--border);
   }
