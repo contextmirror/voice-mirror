@@ -665,9 +665,11 @@ async fn stuck_watchdog(shared: Arc<PipelineShared>) {
     const PROCESSING_STUCK_SECS: u64 = 30;
     /// A toggle-mode recording running this long was almost certainly forgotten.
     const RECORDING_LONG_SECS: u64 = 5 * 60;
-    /// TTS synthesis/playback wedged (e.g. a network stall) — normal speech is
-    /// seconds; this is the previously-uncovered "stuck while Speaking" case.
-    const SPEAKING_STUCK_SECS: u64 = 60;
+    /// TTS synthesis/playback wedged. A *healthy* long spoken reply can legit-
+    /// imately run 70-90s, so the old 60s threshold false-fired on real speech.
+    /// Raised to 180s; the real safety net is the active auto-recovery below
+    /// (which also cancels the wedged synthesis/playback), not this timer.
+    const SPEAKING_STUCK_SECS: u64 = 180;
 
     let mut last_state = VoiceState::Idle;
     let mut secs_in_state: u64 = 0;
@@ -706,13 +708,46 @@ async fn stuck_watchdog(shared: Arc<PipelineShared>) {
                     secs_in_state,
                     "Pipeline stuck/long-running — notifying frontend"
                 );
-                let _ = shared.app_handle.emit(
-                    "voice-event",
-                    VoiceEvent::Stuck {
-                        state: state.to_string(),
-                        elapsed_secs: secs_in_state,
-                    },
-                );
+
+                // A wedged Speaking state is the one we can actively recover:
+                // cancel the stalled synthesis/playback and force the pipeline
+                // back to its resting state so the audio loop re-arms and the
+                // user can talk again. (Processing/Recording recovery is left to
+                // the user via the toast — STT can't be safely interrupted, and a
+                // long Recording is usually intentional/forgotten, not wedged.)
+                // For Speaking we recover SILENTLY — no user-facing notification.
+                // A long spoken reply or a brief stall fixes itself; surfacing a
+                // scary "may be stuck" toast when nothing is actually broken is just
+                // noise (per user feedback). The recovery + a tracing log are enough.
+                if state == VoiceState::Speaking {
+                    tracing::warn!("Auto-recovering from stuck Speaking state");
+                    // Trip both cancel flags: the shared flag the synthesis loop
+                    // polls, and the per-request playback token the rodio drain
+                    // loops poll. This unblocks A1/A2's cooperative exits.
+                    shared.tts_cancel.store(true, Ordering::SeqCst);
+                    if let Ok(guard) = shared.active_playback_cancel.lock() {
+                        if let Some(ref cancel) = *guard {
+                            cancel.store(true, Ordering::SeqCst);
+                        }
+                    }
+                    // Force out of Speaking back to the resting state (mirrors
+                    // finish_speaking: WakeWord -> Listening, PTT/Toggle -> Idle).
+                    // The wedged speak() task, once its await unwinds, will find
+                    // the state already moved and no-op its own finish_speaking,
+                    // and will restore the TTS engine into shared.tts_engine.
+                    playback::finish_speaking(&shared);
+                    // Intentionally NO Stuck event here — silent recovery.
+                } else {
+                    // Processing (wedged STT) / Recording (forgotten toggle) genuinely
+                    // need the user, so surface the toast for those only.
+                    let _ = shared.app_handle.emit(
+                        "voice-event",
+                        VoiceEvent::Stuck {
+                            state: state.to_string(),
+                            elapsed_secs: secs_in_state,
+                        },
+                    );
+                }
             }
         }
     }

@@ -350,6 +350,16 @@
           duration: 0,
           key: 'voice-stuck',
         });
+      } else if (s.state === 'speaking') {
+        // The backend auto-recovers a wedged Speaking state (cancels the stalled
+        // synthesis/playback and re-arms the loop), so this is informational and
+        // will dismiss itself on the next state_change.
+        stuckToastId = toastStore.addToast({
+          message: `Voice playback has been running ${dur} — recovering…`,
+          severity: 'warning',
+          duration: 0,
+          key: 'voice-stuck',
+        });
       } else {
         stuckToastId = toastStore.addToast({
           message: `Voice transcription has been running ${dur} — it may be stuck.`,

@@ -190,7 +190,10 @@ pub fn list_audio_devices() -> IpcResponse {
 /// Accepts text to synthesize and play via the voice pipeline's TTS engine.
 /// Requires the voice engine to be running. Spawns TTS on a background task
 /// and returns immediately.
-#[tauri::command]
+// `(async)` keeps this off the UI thread: it locks the shared voice_state, and a
+// sync command that blocks on that lock during a TTS wedge/restart would freeze the
+// whole window. The body has no awaits, so holding the std Mutex guard is fine.
+#[tauri::command(async)]
 pub fn speak_text(
     text: String,
     voice_state: State<'_, VoiceEngineState>,
@@ -214,7 +217,8 @@ pub fn speak_text(
 ///
 /// Sets the cancellation flag on the TTS engine, causing any
 /// queued or playing audio to stop.
-#[tauri::command]
+// `(async)` — off the UI thread (locks voice_state; must not freeze the window).
+#[tauri::command(async)]
 pub fn stop_speaking(voice_state: State<'_, VoiceEngineState>) -> IpcResponse {
     let engine = match voice_state.lock() {
         Ok(guard) => guard,
@@ -372,7 +376,10 @@ pub async fn ensure_kokoro_model(app_handle: AppHandle) -> IpcResponse {
 /// stops the pipeline if running, updates the engine config, then starts
 /// again. This picks up any config changes (STT model, TTS adapter, etc.)
 /// without requiring an app restart. Works for both AI voice and dictation modes.
-#[tauri::command]
+// `(async)` — off the UI thread. This is the recovery path: it stops + restarts the
+// engine while holding voice_state; a sync version could freeze the window if stop()
+// is slow during a TTS wedge. Body is sync (no await), so the lock is safe.
+#[tauri::command(async)]
 pub fn restart_voice(
     app_handle: AppHandle,
     voice_state: State<'_, VoiceEngineState>,

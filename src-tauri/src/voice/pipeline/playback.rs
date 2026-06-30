@@ -5,7 +5,7 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use cpal::traits::{DeviceTrait, HostTrait};
 use rodio::{OutputStream, Sink};
@@ -16,6 +16,24 @@ use crate::voice::tts::{self, TtsEngine};
 use crate::voice::VoiceState;
 
 use super::{state_to_u8, VoiceMode};
+
+/// Max time to wait for a single phrase to synthesize before giving up.
+///
+/// Synthesis returns no length info until it completes, so we can't size this
+/// from expected audio. A healthy phrase synthesizes in well under a second
+/// (even cloud TTS); 60s means the engine (or its network call) has wedged.
+/// On timeout we abort THIS phrase and continue, so the pipeline never hangs
+/// indefinitely in Speaking.
+const SYNTH_TIMEOUT: Duration = Duration::from_secs(60);
+
+/// Compute a generous playback cap from the known audio length:
+/// `max(30s, expected * 3 + 10s)`. Used to bound the rodio drain loops so a
+/// stalled audio device can't hang the Speaking state forever.
+fn playback_cap(samples_len: usize, sample_rate: u32) -> Duration {
+    let expected_secs = samples_len as f64 / sample_rate.max(1) as f64;
+    let cap_secs = (expected_secs * 3.0 + 10.0).max(30.0);
+    Duration::from_secs_f64(cap_secs)
+}
 
 /// Transition to Speaking state and emit events.
 pub(crate) fn set_speaking_state(shared: &Arc<PipelineShared>, text: &str) {
@@ -184,8 +202,8 @@ pub(super) async fn speak(shared: &Arc<PipelineShared>, text: &str) -> Result<()
             break;
         }
 
-        match engine.synthesize(phrase).await {
-            Ok(samples) if !samples.is_empty() => {
+        match tokio::time::timeout(SYNTH_TIMEOUT, engine.synthesize(phrase)).await {
+            Ok(Ok(samples)) if !samples.is_empty() => {
                 tracing::debug!(
                     phrase = i + 1,
                     samples = samples.len(),
@@ -197,12 +215,21 @@ pub(super) async fn speak(shared: &Arc<PipelineShared>, text: &str) -> Result<()
                     break;
                 }
             }
-            Ok(_) => {
+            Ok(Ok(_)) => {
                 tracing::debug!(phrase = i + 1, "Phrase produced no audio, skipping");
             }
-            Err(e) => {
+            Ok(Err(e)) => {
                 tracing::warn!(phrase = i + 1, error = %e, "Phrase synthesis failed, skipping");
                 // Continue with remaining phrases
+            }
+            Err(_) => {
+                // Synthesis wedged past SYNTH_TIMEOUT — abort this phrase and
+                // continue so Speaking can't hang forever.
+                tracing::warn!(
+                    phrase = i + 1,
+                    timeout_secs = SYNTH_TIMEOUT.as_secs(),
+                    "Phrase synthesis timed out, skipping"
+                );
             }
         }
     }
@@ -245,7 +272,20 @@ async fn speak_oneshot(
     output_device: Option<String>,
     request_cancel: Arc<AtomicBool>,
 ) -> Result<(), String> {
-    let synthesize_result = engine.synthesize(text).await;
+    let synthesize_result = match tokio::time::timeout(SYNTH_TIMEOUT, engine.synthesize(text)).await
+    {
+        Ok(result) => result,
+        Err(_) => {
+            // Synthesis wedged — abort, restore engine, and finish cleanly so
+            // the pipeline never hangs in Speaking.
+            tracing::warn!(
+                timeout_secs = SYNTH_TIMEOUT.as_secs(),
+                "TTS synthesis timed out, aborting speech"
+            );
+            restore_tts_engine(shared, engine);
+            return Ok(());
+        }
+    };
 
     match synthesize_result {
         Ok(samples) => {
@@ -425,22 +465,32 @@ fn play_samples_rodio(
     // Set volume (rodio volume: 1.0 = normal)
     sink.set_volume(volume.clamp(0.0, 2.0));
 
+    // Cap how long we'll wait for this known-length buffer to drain, so a
+    // stalled audio device can't hang the Speaking state forever.
+    let cap = playback_cap(samples.len(), sample_rate);
+
     // Create a rodio source from the f32 samples (mono, engine sample rate)
     let source = rodio::buffer::SamplesBuffer::new(1, sample_rate, samples);
     sink.append(source);
 
     // Poll for completion or cancellation
+    let start = Instant::now();
     while !sink.empty() {
         if is_cancelled(cancel) {
             tracing::info!("TTS playback cancelled");
             sink.stop();
             return Ok(());
         }
+        if start.elapsed() > cap {
+            tracing::warn!(
+                cap_secs = cap.as_secs(),
+                "TTS playback exceeded expected duration, stopping (audio device stalled?)"
+            );
+            sink.stop();
+            return Ok(());
+        }
         std::thread::sleep(Duration::from_millis(50));
     }
-
-    // Wait for any remaining buffered audio
-    sink.sleep_until_end();
 
     Ok(())
 }
@@ -471,6 +521,18 @@ fn play_chunks_rodio(
     let rt = tokio::runtime::Handle::current();
     let mut rx = rx;
 
+    // Poll the channel with a short timeout so we keep re-checking the cancel
+    // flag during gaps between phrases, and bail if synthesis goes silent for
+    // too long (a wedged engine) instead of blocking on recv() forever.
+    const RECV_POLL: Duration = Duration::from_millis(250);
+    /// Max time to wait for the next chunk before assuming synthesis is wedged.
+    /// Must comfortably exceed SYNTH_TIMEOUT (60s) so a slow-but-healthy phrase
+    /// is never cut off.
+    const RECV_MAX_IDLE: Duration = Duration::from_secs(75);
+
+    let mut total_samples: usize = 0;
+    let mut idle = Duration::ZERO;
+
     // Receive and play chunks as they arrive
     loop {
         if is_cancelled(cancel) {
@@ -479,28 +541,53 @@ fn play_chunks_rodio(
             return Ok(());
         }
 
-        match rt.block_on(rx.recv()) {
-            Some(samples) => {
+        match rt.block_on(async { tokio::time::timeout(RECV_POLL, rx.recv()).await }) {
+            Ok(Some(samples)) => {
+                idle = Duration::ZERO;
+                total_samples += samples.len();
                 let source = rodio::buffer::SamplesBuffer::new(1, sample_rate, samples);
                 sink.append(source);
             }
-            None => {
+            Ok(None) => {
                 // Channel closed — all chunks sent, wait for playback to finish
                 break;
+            }
+            Err(_) => {
+                // No chunk this interval — keep looping (re-checks cancel) until
+                // synthesis has been silent past RECV_MAX_IDLE.
+                idle += RECV_POLL;
+                if idle >= RECV_MAX_IDLE {
+                    tracing::warn!(
+                        idle_secs = idle.as_secs(),
+                        "Streaming TTS received no audio chunk, stopping (synthesis wedged?)"
+                    );
+                    sink.stop();
+                    return Ok(());
+                }
             }
         }
     }
 
-    // Wait for all queued audio to finish playing
+    // Wait for all queued audio to finish playing, bounded by the expected
+    // duration so a stalled audio device can't hang Speaking forever.
+    let cap = playback_cap(total_samples, sample_rate);
+    let start = Instant::now();
     while !sink.empty() {
         if is_cancelled(cancel) {
             tracing::info!("Streaming TTS playback cancelled during drain");
             sink.stop();
             return Ok(());
         }
+        if start.elapsed() > cap {
+            tracing::warn!(
+                cap_secs = cap.as_secs(),
+                "Streaming TTS drain exceeded expected duration, stopping (audio device stalled?)"
+            );
+            sink.stop();
+            return Ok(());
+        }
         std::thread::sleep(Duration::from_millis(50));
     }
-    sink.sleep_until_end();
 
     Ok(())
 }
