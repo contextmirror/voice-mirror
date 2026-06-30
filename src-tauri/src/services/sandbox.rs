@@ -494,6 +494,14 @@ fn get_target(port: u16) -> Option<String> {
     target_store().lock().ok().and_then(|g| g.get(&port).cloned())
 }
 
+/// Drop the cached target for a port — used when the app has exited so a stale
+/// page-id (from a now-dead instance) isn't reused across restarts.
+fn clear_target(port: u16) {
+    if let Ok(mut g) = target_store().lock() {
+        g.remove(&port);
+    }
+}
+
 /// Resolve the CDP target for a follow-up action: the window the last snapshot
 /// used, falling back to the first page target.
 async fn action_target(port: u16) -> Result<String, String> {
@@ -509,6 +517,14 @@ async fn action_target(port: u16) -> Result<String, String> {
 /// the active window (an opaque window that's hidden/occluded/not-presenting), the
 /// preview screencasts THIS target instead of erroring.
 pub(crate) async fn active_target_ws(port: u16) -> Result<String, String> {
+    // Liveness gate: if the app's CDP port is dead (it exited), don't hand back a
+    // stale cached target — connecting a screencast to a dead socket would hang the
+    // live preview on "Starting live preview…" forever. Drop the stale entry and
+    // fail fast so the preview can fall to a clean "app not running" state.
+    if !is_cdp_port_alive(port).await {
+        clear_target(port);
+        return Err(format!("app on CDP port {} is not running", port));
+    }
     action_target(port).await
 }
 

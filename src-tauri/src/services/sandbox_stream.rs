@@ -157,9 +157,15 @@ async fn start_cdp_screencast(cdp_port: u16) -> Result<u16, String> {
     // page target. This is the OPAQUE window we want to show live.
     let ws_url = crate::services::sandbox::active_target_ws(cdp_port).await?;
 
-    let (mut ws, _) = connect_async(&ws_url)
-        .await
-        .map_err(|e| format!("CDP screencast connect failed: {}", e))?;
+    // Bound the connect so a stale/half-dead target can't stall the stream start
+    // (which would leave the preview spinning on "Starting live preview…"). 3s is
+    // ample for a local CDP socket; on timeout we error and the preview shows a
+    // clean state instead of hanging.
+    let (mut ws, _) =
+        tokio::time::timeout(std::time::Duration::from_secs(3), connect_async(&ws_url))
+            .await
+            .map_err(|_| format!("CDP screencast connect to {} timed out", ws_url))?
+            .map_err(|e| format!("CDP screencast connect failed: {}", e))?;
 
     // Enable the page domain and start the screencast BEFORE we claim the stream
     // (so a failure here doesn't leave the buffer cleared with no producer).
