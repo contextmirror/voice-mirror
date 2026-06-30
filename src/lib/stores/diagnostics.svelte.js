@@ -26,6 +26,9 @@ const EXPECTED_SUBSYSTEMS = [
   'editor',
   'updater',
   'tts',
+  'provider',
+  'stt',
+  'gpu',
 ];
 
 /**

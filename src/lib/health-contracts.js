@@ -11,7 +11,7 @@
 
 import { diagnosticsStore } from './stores/diagnostics.svelte.js';
 import { updaterStore } from './stores/updater.svelte.js';
-import { detectEspeak } from './api.js';
+import { detectEspeak, detectGpu, detectProviders, listSttModels } from './api.js';
 
 /**
  * Register all health contracts with the diagnostics store.
@@ -184,6 +184,72 @@ export function registerAllContracts(deps) {
       } catch (e) {
         // Outside Tauri / command unavailable (dev/browser/test) → not applicable.
         return { healthy: true, message: `TTS check unavailable: ${e?.message || e}` };
+      }
+    },
+  });
+
+  // ── AI Provider ──
+  // At least one CLI provider (Claude Code / OpenCode / …) must be installed for the
+  // Voice Agent to run. Auth is the setup wizard's job (probing it every 30s would be
+  // wasteful), so this only checks installation.
+  diagnosticsStore.registerHealthContract({
+    name: 'provider',
+    description: 'AI provider availability (Claude Code / OpenCode / …)',
+    async check() {
+      try {
+        const d = (await detectProviders())?.data ?? {};
+        const list = Array.isArray(d.providers) ? d.providers : [];
+        const installed = list.filter((p) => p.installed);
+        const ready = list.filter((p) => p.ready);
+        if (installed.length === 0) {
+          return { healthy: false, message: 'No AI provider detected — install one (e.g. Claude Code) via setup.' };
+        }
+        return {
+          healthy: true,
+          message: `${installed.length} provider(s) installed${ready.length ? `, ${ready.length} signed in` : ''}`,
+          details: { installed: installed.map((p) => p.provider_type ?? p.providerType ?? p.command) },
+        };
+      } catch (e) {
+        return { healthy: true, message: `Provider check unavailable: ${e?.message || e}` };
+      }
+    },
+  });
+
+  // ── Speech-to-Text ──
+  // Voice input needs a Whisper model on disk to transcribe.
+  diagnosticsStore.registerHealthContract({
+    name: 'stt',
+    description: 'Speech-to-text — Whisper model availability',
+    async check() {
+      try {
+        const d = (await listSttModels())?.data ?? {};
+        const models = Array.isArray(d.models) ? d.models : [];
+        if (models.length === 0) {
+          return { healthy: false, message: 'No Whisper STT model installed — voice input won’t transcribe. Download one in setup/Settings.' };
+        }
+        return { healthy: true, message: `${models.length} STT model(s): ${models.map((m) => m.modelSize).join(', ')}`, details: { models } };
+      } catch (e) {
+        return { healthy: true, message: `STT check unavailable: ${e?.message || e}` };
+      }
+    },
+  });
+
+  // ── GPU / CUDA (advisory — never blocks; CPU inference works without it) ──
+  diagnosticsStore.registerHealthContract({
+    name: 'gpu',
+    description: 'GPU / CUDA acceleration (advisory)',
+    async check() {
+      try {
+        const d = (await detectGpu())?.data ?? {};
+        if (d.available && d.cudaCompiled && d.vendor === 'nvidia') {
+          return { healthy: true, message: `GPU: ${d.name} (CUDA accelerated)`, details: d };
+        }
+        if (d.available) {
+          return { healthy: true, message: `GPU: ${d.name || d.vendor} (CPU inference — no CUDA)`, details: d };
+        }
+        return { healthy: true, message: 'No discrete GPU — CPU inference', details: d };
+      } catch (e) {
+        return { healthy: true, message: `GPU check unavailable: ${e?.message || e}` };
       }
     },
   });
