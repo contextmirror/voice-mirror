@@ -9,6 +9,7 @@
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
+use tauri::{AppHandle, Emitter};
 
 use super::IpcResponse;
 use crate::commands::tools::detect_tool;
@@ -284,6 +285,104 @@ pub async fn probe_provider_auth(params: InstallProviderParams) -> IpcResponse {
 }
 
 // ---------------------------------------------------------------------------
+// API-key validation (Phase 4)
+// ---------------------------------------------------------------------------
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ValidateApiKeyParams {
+    /// Provider family: "anthropic"/"claude" or "openai"/"codex". CLI-auth
+    /// providers (no API key model) short-circuit to valid.
+    pub provider: String,
+    pub key: String,
+}
+
+/// Minimal, read-only authenticated probe so a bad API key is caught at setup
+/// rather than first use. Anthropic: a 1-token POST /v1/messages; OpenAI-style:
+/// GET /v1/models. Returns `{ valid, message }`. Fully defensive — network
+/// errors map to `{ valid:false, message:.. }` and it never panics.
+async fn validate_key(provider: &str, key: &str) -> (bool, String) {
+    let key = key.trim();
+    // Providers that authenticate via the CLI/OAuth have no API key to check.
+    let needs_key = matches!(
+        provider,
+        "anthropic" | "claude" | "openai" | "codex" | "openai-tts"
+    );
+    if !needs_key {
+        return (true, "CLI auth".to_string());
+    }
+    if key.is_empty() {
+        return (false, "No API key provided".to_string());
+    }
+
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => return (false, format!("HTTP client error: {}", e)),
+    };
+
+    match provider {
+        "anthropic" | "claude" => {
+            let resp = client
+                .post("https://api.anthropic.com/v1/messages")
+                .header("x-api-key", key)
+                .header("anthropic-version", "2023-06-01")
+                .header("content-type", "application/json")
+                .json(&serde_json::json!({
+                    "model": "claude-3-5-haiku-latest",
+                    "max_tokens": 1,
+                    "messages": [{ "role": "user", "content": "Hi" }],
+                }))
+                .send()
+                .await;
+            match resp {
+                Ok(r) => {
+                    let status = r.status();
+                    if status.is_success() {
+                        (true, "API key valid".to_string())
+                    } else if status.as_u16() == 401 || status.as_u16() == 403 {
+                        (false, "Invalid API key".to_string())
+                    } else {
+                        (false, format!("Unexpected response: HTTP {}", status.as_u16()))
+                    }
+                }
+                Err(e) => (false, format!("Network error: {}", e)),
+            }
+        }
+        // OpenAI-style key check (also used for Codex's OPENAI_API_KEY).
+        _ => {
+            let resp = client
+                .get("https://api.openai.com/v1/models")
+                .header("authorization", format!("Bearer {}", key))
+                .send()
+                .await;
+            match resp {
+                Ok(r) => {
+                    let status = r.status();
+                    if status.is_success() {
+                        (true, "API key valid".to_string())
+                    } else if status.as_u16() == 401 || status.as_u16() == 403 {
+                        (false, "Invalid API key".to_string())
+                    } else {
+                        (false, format!("Unexpected response: HTTP {}", status.as_u16()))
+                    }
+                }
+                Err(e) => (false, format!("Network error: {}", e)),
+            }
+        }
+    }
+}
+
+/// Validate an API key with a minimal authenticated probe (see `validate_key`).
+#[tauri::command]
+pub async fn validate_api_key(params: ValidateApiKeyParams) -> IpcResponse {
+    let (valid, message) = validate_key(&params.provider, &params.key).await;
+    IpcResponse::ok(serde_json::json!({ "valid": valid, "message": message }))
+}
+
+// ---------------------------------------------------------------------------
 // One-click install (Phase 2)
 // ---------------------------------------------------------------------------
 
@@ -320,7 +419,7 @@ pub struct InstallProviderParams {
 /// Only if the package manager itself was just installed would a restart be
 /// needed — the `detected` flag in the response tells the UI which case it is.
 #[tauri::command]
-pub async fn install_provider(params: InstallProviderParams) -> IpcResponse {
+pub async fn install_provider(app_handle: AppHandle, params: InstallProviderParams) -> IpcResponse {
     let ptype = params.provider_type;
     let Some(spec) = install_spec(&ptype) else {
         return IpcResponse::err(format!("No install method known for '{}'", ptype));
@@ -345,43 +444,88 @@ pub async fn install_provider(params: InstallProviderParams) -> IpcResponse {
     }
 
     let ptype_log = ptype.clone();
+    let provider_for_event = ptype.clone();
     let tool_owned = tool.to_string();
     let pkg_owned = pkg.to_string();
+    let app_for_blocking = app_handle.clone();
 
-    // Run the (potentially slow) installer off the async runtime.
-    let output = tokio::task::spawn_blocking(move || {
+    // Run the (potentially slow) installer off the async runtime, streaming its
+    // output line-by-line as `provider-install-progress` events so the UI shows
+    // live state instead of a frozen button.
+    let result = tokio::task::spawn_blocking(move || -> std::io::Result<(bool, String)> {
+        use std::io::{BufRead, BufReader};
+        use std::process::Stdio;
+
+        // Merge stderr into stdout (2>&1) so a single reader sees everything in
+        // order without risking a pipe deadlock.
         let install_args = if tool_owned == "npm" {
-            format!("{} install -g {}", tool_owned, pkg_owned)
+            format!("{} install -g {} 2>&1", tool_owned, pkg_owned)
         } else {
-            format!("{} install {}", tool_owned, pkg_owned)
+            format!("{} install {} 2>&1", tool_owned, pkg_owned)
         };
+
         // npm/pip are shims on Windows → must run through cmd.
-        if cfg!(target_os = "windows") {
-            let mut cmd = std::process::Command::new("cmd");
-            cmd.args(["/C", &install_args]);
-            crate::util::hidden(&mut cmd);
-            cmd.output()
+        let mut cmd = if cfg!(target_os = "windows") {
+            let mut c = std::process::Command::new("cmd");
+            c.args(["/C", &install_args]);
+            crate::util::hidden(&mut c);
+            c
         } else {
-            std::process::Command::new("sh")
-                .args(["-c", &install_args])
-                .output()
+            let mut c = std::process::Command::new("sh");
+            c.args(["-c", &install_args]);
+            c
+        };
+        cmd.stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .stdin(Stdio::null());
+
+        let mut child = cmd.spawn()?;
+        let mut combined = String::new();
+        let mut line_count: u32 = 0;
+
+        if let Some(stdout) = child.stdout.take() {
+            let reader = BufReader::new(stdout);
+            for line in reader.lines() {
+                let line = match line {
+                    Ok(l) => l,
+                    Err(_) => break,
+                };
+                tracing::info!(target: "voice_mirror_lib::mcp::install", "[install {}] {}", ptype_log, line);
+                line_count += 1;
+                // npm/pip emit no clean percentage — synthesise a slow climb
+                // that never hits 100 until the process actually exits.
+                let percent = line_count.saturating_mul(7).min(95) as u8;
+                let _ = app_for_blocking.emit(
+                    "provider-install-progress",
+                    serde_json::json!({
+                        "provider": provider_for_event,
+                        "status": line,
+                        "percent": percent,
+                    }),
+                );
+                combined.push_str(&line);
+                combined.push('\n');
+            }
         }
+
+        let status = child.wait()?;
+        let _ = app_for_blocking.emit(
+            "provider-install-progress",
+            serde_json::json!({
+                "provider": provider_for_event,
+                "status": if status.success() { "Done" } else { "Failed" },
+                "percent": 100,
+            }),
+        );
+        Ok((status.success(), combined))
     })
     .await;
 
-    let output = match output {
+    let (success, combined) = match result {
         Ok(Ok(o)) => o,
         Ok(Err(e)) => return IpcResponse::err(format!("Failed to launch installer: {}", e)),
         Err(e) => return IpcResponse::err(format!("Install task failed: {}", e)),
     };
-
-    let mut combined = String::from_utf8_lossy(&output.stdout).to_string();
-    combined.push_str(&String::from_utf8_lossy(&output.stderr));
-    for line in combined.lines() {
-        tracing::info!(target: "voice_mirror_lib::mcp::install", "[install {}] {}", ptype_log, line);
-    }
-
-    let success = output.status.success();
     // Re-detect: usually succeeds immediately (existing global bin dir on PATH).
     let detected = detect_tool(&command).available;
     // Last few lines as a tail for the UI.

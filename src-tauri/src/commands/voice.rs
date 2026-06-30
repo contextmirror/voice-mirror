@@ -346,6 +346,26 @@ pub async fn ensure_stt_model(app_handle: AppHandle, model_size: String) -> IpcR
     }
 }
 
+/// Ensure the local Kokoro TTS model is downloaded and ready.
+///
+/// Downloads `kokoro-v1.0.onnx` (~325 MB) and `voices-v1.0.bin` (~28 MB) from
+/// GitHub releases into the exact directory Kokoro loads from
+/// (`get_data_dir()/models/kokoro`). Skips any file already present. Emits
+/// `kokoro-download-progress` events for live UI feedback. Returns immediately
+/// if both files already exist.
+#[tauri::command]
+pub async fn ensure_kokoro_model(app_handle: AppHandle) -> IpcResponse {
+    let model_dir = crate::services::platform::get_data_dir()
+        .join("models")
+        .join("kokoro");
+    match crate::voice::tts::ensure_kokoro_model_exists(&model_dir, Some(&app_handle)).await {
+        Ok(path) => IpcResponse::ok(json!({
+            "path": path.display().to_string(),
+        })),
+        Err(e) => IpcResponse::err(format!("{}", e)),
+    }
+}
+
 /// Restart the voice pipeline with the current configuration.
 ///
 /// Reads the latest saved app config, builds a fresh `VoiceEngineConfig`,

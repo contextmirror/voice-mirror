@@ -26,8 +26,10 @@
     detectProviders,
     installProvider,
     probeProviderAuth,
+    validateApiKey,
     listSttModels,
     ensureSttModel,
+    ensureKokoroModel,
     detectEspeak,
     detectGpu,
   } from '../../lib/api.js';
@@ -72,6 +74,21 @@
   // ── TTS step state ──────────────────────────────────────────────────────────
   let espeak = $state(null);
   let ttsSkipped = $state(false);
+  let kokoroDownloading = $state(false);
+  let kokoroProgress = $state(0);
+
+  // ── Install progress (live npm/pip output) ──────────────────────────────────
+  let installProgress = $state(0);
+  let installStatus = $state('');
+
+  // ── Provider API-key validation ──────────────────────────────────────────────
+  // Map a CLI provider to the API-key family used to validate a pasted key.
+  // CLI/OAuth providers (no API key) are absent → no key field shown.
+  const KEY_PROVIDER = { claude: 'anthropic', codex: 'openai' };
+  /** providerType -> pasted key string */
+  let apiKeys = $state({});
+  /** providerType -> { valid, message } | 'checking' */
+  let keyValidation = $state({});
 
   // ── GPU step state ──────────────────────────────────────────────────────────
   let gpu = $state(null);
@@ -254,6 +271,15 @@
     if (busy) return;
     busy = true;
     try {
+      // If the user pasted an API key for a key-based provider, validate it
+      // before saving so a bad key is caught here, not at first use.
+      if (KEY_PROVIDER[p.providerType] && (apiKeys[p.providerType] || '').trim()) {
+        const data = await validateProviderKey(p);
+        if (data && !data.valid) {
+          busy = false;
+          return; // keep the user on the step; feedback already shown
+        }
+      }
       await updateConfig({ ai: { provider: p.providerType } });
       toastStore.addToast({ message: `Selected ${p.displayName}.`, severity: 'success' });
       // Don't finish the whole wizard — advance to the next setup step.
@@ -269,6 +295,15 @@
   async function install(p) {
     if (busy || installing) return;
     installing = p.providerType;
+    installProgress = 0;
+    installStatus = '';
+    // Show live npm/pip output while the (slow) install runs.
+    const unlistenInstall = await listen('provider-install-progress', (event) => {
+      const { provider, status, percent } = event.payload || {};
+      if (provider && provider !== p.providerType) return;
+      if (typeof percent === 'number') installProgress = percent;
+      if (status) installStatus = status;
+    });
     try {
       const result = await installProvider(p.providerType);
       if (result?.success === false) {
@@ -290,7 +325,10 @@
       console.warn('[onboarding] install failed:', err);
       toastStore.addToast({ message: `Install failed: ${err}`, severity: 'error', duration: 0 });
     } finally {
+      unlistenInstall();
       installing = null;
+      installProgress = 0;
+      installStatus = '';
     }
   }
 
@@ -330,6 +368,69 @@
       toastStore.addToast({ message: `Model download failed: ${dlErr}`, severity: 'error' });
     } finally {
       sttDownloading = false;
+    }
+  }
+
+  // ── Kokoro voice download (mirrors the STT download flow) ────────────────────
+  async function downloadKokoroModel() {
+    if (kokoroDownloading) return;
+    kokoroDownloading = true;
+    kokoroProgress = 0;
+    const toastId = toastStore.addToast({
+      message: 'Downloading Kokoro voice (~350 MB)...',
+      severity: 'info',
+      duration: 0,
+      key: 'kokoro-model-download',
+      progress: 0,
+    });
+
+    const unlisten = await listen('kokoro-download-progress', (event) => {
+      const { model, percent, downloadedMb, totalMb } = event.payload;
+      kokoroProgress = percent;
+      if (toastId) {
+        toastStore.updateToast(toastId, {
+          message: `Downloading ${model}... ${percent}% (${Math.round(downloadedMb)} / ${Math.round(totalMb)} MB)`,
+          progress: percent,
+        });
+      }
+    });
+
+    try {
+      await ensureKokoroModel();
+      unlisten();
+      toastStore.dismissToast(toastId);
+      toastStore.addToast({ message: 'Kokoro voice ready', severity: 'success' });
+      // Re-run TTS detection (espeak-ng is the remaining requirement).
+      await detectTts();
+    } catch (dlErr) {
+      unlisten();
+      toastStore.dismissToast(toastId);
+      toastStore.addToast({ message: `Kokoro download failed: ${dlErr}`, severity: 'error' });
+    } finally {
+      kokoroDownloading = false;
+    }
+  }
+
+  // ── Provider API-key validation ──────────────────────────────────────────────
+  /** Validate a pasted API key for a provider; returns {valid,message} or null. */
+  async function validateProviderKey(p) {
+    const family = KEY_PROVIDER[p.providerType];
+    if (!family) return null;
+    const key = (apiKeys[p.providerType] || '').trim();
+    if (!key) return null;
+    keyValidation = { ...keyValidation, [p.providerType]: 'checking' };
+    try {
+      const data = unwrapResult(await validateApiKey(family, key)) ?? {};
+      keyValidation = { ...keyValidation, [p.providerType]: data };
+      toastStore.addToast({
+        message: data?.valid ? 'API key valid.' : `API key invalid: ${data?.message || 'unknown'}`,
+        severity: data?.valid ? 'success' : 'error',
+      });
+      return data;
+    } catch (err) {
+      const data = { valid: false, message: String(err) };
+      keyValidation = { ...keyValidation, [p.providerType]: data };
+      return data;
     }
   }
 
@@ -517,6 +618,17 @@
             </div>
           {/if}
 
+          <!-- Kokoro voice model download (the ~350 MB voice files aren't bundled). -->
+          <div class="kokoro-download">
+            <p class="guide-intro">The local Kokoro voice also needs its model files (~350 MB). Download them once for offline, natural-sounding speech.</p>
+            <Button small onClick={downloadKokoroModel} disabled={kokoroDownloading}>
+              {kokoroDownloading ? `Downloading… ${kokoroProgress}%` : 'Download Kokoro voice (~350 MB)'}
+            </Button>
+            {#if kokoroDownloading}
+              <div class="progress-bar"><div class="progress-fill" style="width:{kokoroProgress}%"></div></div>
+            {/if}
+          </div>
+
         {:else if activeStep.id === 'gpu'}
           <p class="guide-intro">GPU acceleration speeds up transcription. This is optional — CPU works fine.</p>
           {#if gpu?.available}
@@ -571,6 +683,7 @@
 
 {#snippet providerRow(p)}
   {@const s = statusInfo(p)}
+  {@const kv = keyValidation[p.providerType]}
   <div class="provider-row">
     <div class="provider-meta">
       <span class="provider-name">{p.displayName}</span>
@@ -592,6 +705,31 @@
       {/if}
     </div>
   </div>
+  {#if installing === p.providerType}
+    <!-- Live install progress (provider-install-progress events). -->
+    <div class="install-progress">
+      <div class="progress-bar"><div class="progress-fill" style="width:{installProgress}%"></div></div>
+      {#if installStatus}<span class="install-status">{installStatus}</span>{/if}
+    </div>
+  {/if}
+  {#if KEY_PROVIDER[p.providerType]}
+    <!-- Optional: paste an API key and validate it before connecting. -->
+    <div class="api-key-row">
+      <input
+        class="api-key-input"
+        type="password"
+        placeholder="Paste an API key (optional) — validated before saving"
+        bind:value={apiKeys[p.providerType]}
+        disabled={busy}
+      />
+      <button class="hint-btn" onclick={() => validateProviderKey(p)} disabled={busy || kv === 'checking' || !(apiKeys[p.providerType] || '').trim()}>
+        {kv === 'checking' ? 'Checking…' : 'Validate'}
+      </button>
+      {#if kv && kv !== 'checking'}
+        <span class="status-pill {kv.valid ? 'ready' : 'warn'}">{kv.valid ? 'Key valid' : 'Key invalid'}</span>
+      {/if}
+    </div>
+  {/if}
 {/snippet}
 
 <style>
@@ -792,6 +930,50 @@
     color: var(--text);
     padding: 6px 8px;
     font-size: 13px;
+  }
+
+  .kokoro-download {
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+  }
+
+  .install-progress {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 6px 2px 2px;
+  }
+
+  .install-progress .progress-bar {
+    flex: 1;
+    margin-top: 0;
+  }
+
+  .install-status {
+    font-size: 11px;
+    color: var(--muted);
+    max-width: 55%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .api-key-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 4px 2px 8px;
+  }
+
+  .api-key-input {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm, 4px);
+    color: var(--text);
+    padding: 6px 8px;
+    font-size: 12px;
   }
 
   .progress-bar {

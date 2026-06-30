@@ -1,7 +1,7 @@
 {
   "name": "voice-mirror",
   "private": true,
-  "version": "0.12.8",
+  "version": "0.12.9",
   "description": "Voice-controlled AI agent overlay for your desktop",
   "license": "MIT",
   "type": "module",

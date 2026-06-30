@@ -233,6 +233,7 @@ describe('api.js -- exported async functions', () => {
     'stopVoice',
     'restartVoice',
     'ensureSttModel',
+    'ensureKokoroModel',
     'getVoiceStatus',
     'setVoiceMode',
     'listAudioDevices',
@@ -446,6 +447,7 @@ describe('api.js -- exported async functions', () => {
     'detectProviders',
     'installProvider',
     'probeProviderAuth',
+    'validateApiKey',
     'logFrontendError',
     // Browser History
     'lensAddHistoryEntry',

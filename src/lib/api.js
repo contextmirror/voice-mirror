@@ -97,6 +97,11 @@ export async function ensureSttModel(modelSize) {
   return invoke('ensure_stt_model', { modelSize });
 }
 
+/** Download the local Kokoro TTS voice model (~350 MB) with progress events. */
+export async function ensureKokoroModel() {
+  return invoke('ensure_kokoro_model');
+}
+
 export async function getVoiceStatus() {
   return invoke('get_voice_status');
 }
@@ -1154,6 +1159,11 @@ export async function installProvider(providerType) {
 /** Live-probe a provider's auth state via its read-only `status` subcommand. */
 export async function probeProviderAuth(providerType) {
   return invoke('probe_provider_auth', { params: { providerType } });
+}
+
+/** Validate an API key via a minimal authenticated probe. Returns { valid, message }. */
+export async function validateApiKey(provider, key) {
+  return invoke('validate_api_key', { params: { provider, key } });
 }
 
 export async function logFrontendError(params) {

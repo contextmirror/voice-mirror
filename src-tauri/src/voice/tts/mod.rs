@@ -200,6 +200,150 @@ pub fn create_tts_engine(
     }
 }
 
+// ── Kokoro model auto-download ──────────────────────────────────────
+
+/// Progress event emitted while downloading a Kokoro model file.
+///
+/// Mirrors `SttDownloadProgress` so the wizard can reuse the same
+/// progress-bar UI. `model` is the file being fetched.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KokoroDownloadProgress {
+    /// The file currently downloading (e.g. "kokoro-v1.0.onnx").
+    pub model: String,
+    pub percent: u8,
+    pub downloaded_mb: f64,
+    pub total_mb: f64,
+}
+
+/// The two files Kokoro loads from `model_dir`, with their verified
+/// (HEAD-checked, HTTP 200) download URLs. Kept in sync with
+/// `kokoro_impl::KokoroTts::new`, which joins these exact filenames.
+const KOKORO_FILES: &[(&str, &str)] = &[
+    (
+        "kokoro-v1.0.onnx",
+        "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx",
+    ),
+    (
+        "voices-v1.0.bin",
+        "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin",
+    ),
+];
+
+/// Ensure the Kokoro ONNX model + voice embeddings exist in `model_dir`,
+/// downloading any missing file from GitHub releases.
+///
+/// `model_dir` MUST be the directory `KokoroTts::new` reads from — i.e.
+/// `get_data_dir()/models/kokoro` — so the files land where inference loads
+/// them. Downloads each file to a `.tmp` sibling first, then renames
+/// atomically (mirrors the STT `ensure_model_exists` pattern). Emits
+/// `kokoro-download-progress` events (per file) every ~5%.
+pub async fn ensure_kokoro_model_exists(
+    model_dir: &std::path::Path,
+    app_handle: Option<&tauri::AppHandle>,
+) -> Result<std::path::PathBuf, TtsError> {
+    use futures_util::StreamExt;
+    use tauri::Emitter;
+    use tokio::io::AsyncWriteExt;
+
+    tokio::fs::create_dir_all(model_dir).await.map_err(|e| {
+        TtsError::NetworkError(format!("Failed to create Kokoro model dir: {}", e))
+    })?;
+
+    for (filename, url) in KOKORO_FILES {
+        let dest = model_dir.join(filename);
+        if dest.exists() {
+            tracing::info!(path = %dest.display(), "Kokoro file already present");
+            continue;
+        }
+
+        tracing::info!(url = %url, dest = %dest.display(), "Downloading Kokoro file");
+
+        let client = reqwest::Client::new();
+        let resp = client.get(*url).send().await.map_err(|e| {
+            TtsError::NetworkError(format!("HTTP request failed for {}: {}", filename, e))
+        })?;
+        if !resp.status().is_success() {
+            return Err(TtsError::NetworkError(format!(
+                "HTTP {} from {}",
+                resp.status(),
+                url
+            )));
+        }
+
+        let total_size = resp.content_length();
+        let tmp_path = dest.with_extension("tmp");
+        let mut file = tokio::fs::File::create(&tmp_path).await.map_err(|e| {
+            TtsError::NetworkError(format!("Failed to create temp file: {}", e))
+        })?;
+
+        let mut downloaded: u64 = 0;
+        let mut last_progress: u8 = 0;
+        let mut stream = resp.bytes_stream();
+
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk.map_err(|e| {
+                TtsError::NetworkError(format!("Download stream error: {}", e))
+            })?;
+            file.write_all(&chunk).await.map_err(|e| {
+                TtsError::NetworkError(format!("Write error: {}", e))
+            })?;
+            downloaded += chunk.len() as u64;
+
+            if let Some(total) = total_size {
+                let pct = ((downloaded as f64 / total as f64) * 100.0) as u8;
+                if pct >= last_progress + 5 {
+                    last_progress = pct;
+                    let downloaded_mb = downloaded as f64 / 1_048_576.0;
+                    let total_mb = total as f64 / 1_048_576.0;
+                    tracing::info!(
+                        "Downloading Kokoro {}... {}% ({:.1} MB / {:.1} MB)",
+                        filename, pct, downloaded_mb, total_mb
+                    );
+                    if let Some(handle) = app_handle {
+                        let _ = handle.emit(
+                            "kokoro-download-progress",
+                            KokoroDownloadProgress {
+                                model: filename.to_string(),
+                                percent: pct,
+                                downloaded_mb,
+                                total_mb,
+                            },
+                        );
+                    }
+                }
+            }
+        }
+
+        file.flush().await.map_err(|e| {
+            TtsError::NetworkError(format!("Flush error: {}", e))
+        })?;
+        drop(file);
+
+        tokio::fs::rename(&tmp_path, &dest).await.map_err(|e| {
+            TtsError::NetworkError(format!("Rename failed: {}", e))
+        })?;
+
+        // Emit a final 100% for this file so the UI settles.
+        if let Some(handle) = app_handle {
+            let total_mb = total_size.map(|t| t as f64 / 1_048_576.0).unwrap_or(0.0);
+            let _ = handle.emit(
+                "kokoro-download-progress",
+                KokoroDownloadProgress {
+                    model: filename.to_string(),
+                    percent: 100,
+                    downloaded_mb: total_mb,
+                    total_mb,
+                },
+            );
+        }
+
+        tracing::info!(path = %dest.display(), "Kokoro file downloaded");
+    }
+
+    Ok(model_dir.to_path_buf())
+}
+
 // ── Tests ───────────────────────────────────────────────────────────
 
 #[cfg(test)]

@@ -275,6 +275,83 @@ describe('Phase 3: multi-step setup checklist', () => {
   });
 });
 
+describe('Phase 4: provisioning polish', () => {
+  it('backend: ensure_kokoro_model downloads to the dir Kokoro loads from', () => {
+    const tts = read('src-tauri/src/voice/tts/mod.rs');
+    assert.ok(tts.includes('pub async fn ensure_kokoro_model_exists'), 'Should define the download fn');
+    assert.ok(tts.includes('kokoro-v1.0.onnx') && tts.includes('voices-v1.0.bin'), 'Should fetch both model files');
+    assert.ok(
+      tts.includes('thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx'),
+      'Should use the verified ONNX URL'
+    );
+    assert.ok(tts.includes('kokoro-download-progress'), 'Should emit a kokoro-download-progress event');
+    assert.ok(tts.includes('.with_extension("tmp")') || tts.includes('tmp_path'), 'Should download atomically via a temp file');
+
+    const voice = read('src-tauri/src/commands/voice.rs');
+    assert.ok(voice.includes('pub async fn ensure_kokoro_model'), 'Should define the ensure_kokoro_model command');
+    // Must target get_data_dir()/models/kokoro — exactly where KokoroTts::new reads.
+    assert.ok(
+      voice.includes('get_data_dir()') && voice.includes('.join("models")') && voice.includes('.join("kokoro")'),
+      'Command should download into get_data_dir()/models/kokoro'
+    );
+
+    const lib = read('src-tauri/src/lib.rs');
+    assert.ok(lib.includes('voice_cmds::ensure_kokoro_model'), 'Should register ensure_kokoro_model');
+  });
+
+  it('backend: validate_api_key probes Anthropic + OpenAI defensively', () => {
+    const src = read('src-tauri/src/commands/onboarding.rs');
+    assert.ok(src.includes('pub async fn validate_api_key'), 'Should define validate_api_key');
+    assert.ok(src.includes('api.anthropic.com/v1/messages'), 'Should probe Anthropic messages');
+    assert.ok(src.includes('api.openai.com/v1/models'), 'Should probe OpenAI models');
+    assert.ok(src.includes('"valid"') && src.includes('"message"'), 'Should return { valid, message }');
+    assert.ok(src.includes('CLI auth'), 'CLI-auth providers should short-circuit to valid');
+
+    const lib = read('src-tauri/src/lib.rs');
+    assert.ok(lib.includes('onboarding_cmds::validate_api_key'), 'Should register validate_api_key');
+  });
+
+  it('backend: install_provider streams provider-install-progress', () => {
+    const src = read('src-tauri/src/commands/onboarding.rs');
+    assert.ok(src.includes('provider-install-progress'), 'Should emit a provider-install-progress event');
+    assert.ok(src.includes('app_handle: AppHandle'), 'Should take the AppHandle for emitting');
+    assert.ok(src.includes('BufReader'), 'Should stream output line-by-line');
+    // Must preserve the existing return shape + re-detect behaviour.
+    assert.ok(src.includes('detect_tool(&command).available'), 'Should still re-detect post-install');
+    assert.ok(src.includes('"detected"'), 'Should still return the detected flag');
+  });
+
+  it('frontend: api.js exposes the two new commands', () => {
+    const api = read('src/lib/api.js');
+    assert.ok(api.includes('export async function ensureKokoroModel'), 'Should expose ensureKokoroModel');
+    assert.ok(api.includes('export async function validateApiKey'), 'Should expose validateApiKey');
+  });
+
+  it('wizard: TTS step offers a Kokoro download with live progress', () => {
+    const wiz = read('src/components/onboarding/WelcomeWizard.svelte');
+    assert.ok(wiz.includes('ensureKokoroModel'), 'Should call ensureKokoroModel');
+    assert.ok(wiz.includes("listen('kokoro-download-progress'"), 'Should listen to kokoro-download-progress');
+    assert.ok(/Download Kokoro voice/i.test(wiz), 'Should label the download button');
+    assert.ok(wiz.includes('kokoroProgress'), 'Should track download percent for the progress bar');
+    assert.ok(wiz.includes('detectTts()'), 'Should re-run TTS detection on success');
+  });
+
+  it('wizard: provider step validates an API key before saving', () => {
+    const wiz = read('src/components/onboarding/WelcomeWizard.svelte');
+    assert.ok(wiz.includes('validateApiKey'), 'Should call validateApiKey');
+    assert.ok(wiz.includes('KEY_PROVIDER'), 'Should map providers to a key family');
+    assert.ok(wiz.includes('keyValidation'), 'Should track validation feedback');
+    // connect() must block on an invalid key.
+    assert.ok(wiz.includes('!data.valid'), 'Connect should not save an invalid key');
+  });
+
+  it('wizard: install shows live provider-install-progress', () => {
+    const wiz = read('src/components/onboarding/WelcomeWizard.svelte');
+    assert.ok(wiz.includes("listen('provider-install-progress'"), 'Should listen to provider-install-progress');
+    assert.ok(wiz.includes('installProgress'), 'Should track install progress');
+  });
+});
+
 describe('App.svelte: first-run gating', () => {
   const app = read('src/App.svelte');
 
