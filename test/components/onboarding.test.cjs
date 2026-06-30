@@ -163,8 +163,9 @@ describe('frontend: WelcomeWizard', () => {
     assert.ok(wiz.includes('onboardingCompleted: true'), 'Finishing should set onboardingCompleted');
   });
 
-  it('navigates into the app after finishing', () => {
-    assert.ok(wiz.includes("navigationStore.setView('chat')"), 'Should land the user in chat');
+  it('navigates into the full Lens IDE after finishing (not the bare chat view)', () => {
+    assert.ok(wiz.includes("navigationStore.setView('lens')"), 'Should land the user in the Lens IDE');
+    assert.ok(!wiz.includes("navigationStore.setView('chat')"), "Must NOT use 'chat' (bare panel, no way back to IDE)");
   });
 });
 

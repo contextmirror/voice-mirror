@@ -304,13 +304,14 @@
         cwd: (isCLI && selectedWorkspace) ? selectedWorkspace : undefined,
       });
 
-      // 3. Auto-switch view: Terminal for CLI, Chat for API, stay for dictation
+      // 3. Auto-switch view: Terminal for CLI, the Lens IDE (which has the chat) for
+      // API, stay for dictation. NOT 'chat' — it's now a bare panel with no way back.
       if (isDictation) {
         // Dictation-only: stay on current view
       } else if (CLI_PROVIDERS.includes(provider)) {
         navigationStore.setView('terminal');
       } else {
-        navigationStore.setView('chat');
+        navigationStore.setView('lens');
       }
 
       toastStore.addToast({ message: 'AI settings saved', severity: 'success' });

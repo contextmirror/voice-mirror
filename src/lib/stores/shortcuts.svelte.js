@@ -257,7 +257,7 @@ const actionHandlers = {
     navigationStore.setView('settings');
   },
   'new-chat': () => {
-    navigationStore.setView('chat');
+    navigationStore.setView('lens'); // the IDE hosts the chat; 'chat' is a bare panel
     // Dispatch a custom DOM event that ChatPanel can listen for
     window.dispatchEvent(new CustomEvent('shortcut:new-chat'));
   },
@@ -265,9 +265,9 @@ const actionHandlers = {
     navigationStore.setView('terminal');
   },
   'close-panel': () => {
-    // If settings is open, go back to chat; otherwise do nothing
+    // If settings is open, go back to the main IDE; otherwise do nothing
     if (navigationStore.activeView === 'settings') {
-      navigationStore.setView('chat');
+      navigationStore.setView('lens');
     }
     // Dispatch for modal handling
     window.dispatchEvent(new CustomEvent('shortcut:close-panel'));

@@ -466,7 +466,10 @@
         severity: 'success',
       });
     }
-    navigationStore.setView('chat');
+    // Restore the full Lens IDE (the normal default view). NOT 'chat' — since the
+    // "remove Mirror mode" refactor, 'chat' is a bare chat-only panel with no way
+    // back to the IDE, so finishing/skipping the wizard used to strand the user there.
+    navigationStore.setView('lens');
     // Hand off to the GettingStarted tutorial (it waits on onboardingCompleted).
     window.dispatchEvent(new CustomEvent('show-tutorial'));
     onDone();
