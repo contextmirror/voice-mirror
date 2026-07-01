@@ -58,6 +58,40 @@ describe('TerminalTabs.svelte -- structure', () => {
   });
 });
 
+describe('TerminalTabs.svelte -- output level picker', () => {
+  it('defines LEVEL_OPTIONS with error/warn/info/debug/trace', () => {
+    assert.ok(src.includes('LEVEL_OPTIONS'), 'Should define LEVEL_OPTIONS');
+    for (const lvl of ['error', 'warn', 'info', 'debug', 'trace']) {
+      assert.ok(src.includes(`'${lvl}'`), `LEVEL_OPTIONS should include ${lvl}`);
+    }
+  });
+
+  it('wires level selection to per-channel setLevelFilter', () => {
+    assert.ok(
+      src.includes('outputStore.setLevelFilter(outputStore.activeChannel'),
+      'selectLevel should call setLevelFilter(activeChannel, level)'
+    );
+  });
+
+  it('has an Errors only shortcut', () => {
+    assert.ok(src.includes('Errors only'), 'Should offer an Errors only shortcut');
+  });
+
+  it('shows per-level counts via countsByLevel', () => {
+    assert.ok(src.includes('countsByLevel'), 'Should use countsByLevel for badges');
+    assert.ok(src.includes('level-count'), 'Should render level-count spans');
+  });
+
+  it('has a Copy visible output button', () => {
+    assert.ok(src.includes('copyVisibleOutput'), 'Should define copyVisibleOutput');
+    assert.ok(src.includes('Copy visible output'), 'Should title the copy button');
+    assert.ok(
+      src.includes('outputStore.filteredEntries'),
+      'copyVisibleOutput should copy the filtered (visible) entries'
+    );
+  });
+});
+
 describe('TerminalTabs.svelte -- 3 pinned tabs', () => {
   it('has Voice Agent tab label', () => {
     assert.ok(src.includes('Voice Agent'), 'Should have Voice Agent tab');

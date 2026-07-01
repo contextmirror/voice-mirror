@@ -132,16 +132,69 @@ fn find_git_bash() -> Option<String> {
     None
 }
 
+/// Detect an HTTP 4xx/5xx status code appearing as a standalone whitespace token.
+///
+/// Matches exactly-3-digit tokens starting with `4` or `5` (e.g. `404`, `500`).
+/// Deliberately conservative: `5173` (4 digits, a port) and `450ms` (not pure
+/// digits) are rejected so durations/ports don't masquerade as errors.
+fn has_http_error_status(line: &str) -> bool {
+    line.split(char::is_whitespace).any(|tok| {
+        tok.len() == 3
+            && matches!(tok.as_bytes()[0], b'4' | b'5')
+            && tok.bytes().all(|b| b.is_ascii_digit())
+    })
+}
+
 /// Classify a terminal output line into a log level based on content heuristics.
+///
+/// Recognizes a handful of solid framework/tooling signals rather than a broad
+/// `contains("error")` guess (which flagged benign lines like "0 errors").
 pub(crate) fn classify_terminal_line(line: &str) -> &'static str {
-    let lower = line.to_ascii_lowercase();
-    if lower.contains("error") || lower.contains("failed") || lower.starts_with("✘") {
-        "ERROR"
-    } else if lower.contains("warn") || lower.contains("deprecat") {
-        "WARN"
-    } else {
-        "INFO"
+    // Leading LEVEL token, tolerating a leading '[' (e.g. "[ERROR]", "WARN:", "DEBUG ...").
+    let head = line.trim_start().trim_start_matches('[');
+    let head_upper: String = head.chars().take(6).collect::<String>().to_ascii_uppercase();
+    if head_upper.starts_with("ERROR") || head_upper.starts_with("FATAL") {
+        return "ERROR";
     }
+    if head_upper.starts_with("WARN") {
+        return "WARN";
+    }
+    if head_upper.starts_with("DEBUG") {
+        return "DEBUG";
+    }
+    if head_upper.starts_with("TRACE") {
+        return "TRACE";
+    }
+
+    let lower = line.to_ascii_lowercase();
+
+    // Strong ERROR signals from common frameworks/toolchains.
+    if lower.contains("panicked at")      // Rust panic
+        || lower.contains("error[e")      // rustc diagnostic code, e.g. error[E0308]
+        || lower.contains("err!")         // npm ERR!
+        || lower.contains("[error]")
+        || lower.contains(" error ")
+        || lower.contains("error:")
+        || lower.contains("failed")
+        || lower.contains("unhandled")
+        || lower.contains("uncaught")
+        || line.trim_start().starts_with('✘')
+        || has_http_error_status(line)
+    {
+        return "ERROR";
+    }
+
+    // WARN signals (covers "WARN", "warning:", "[vite] warning", "deprecated").
+    if lower.contains("warn") || lower.contains("deprecat") {
+        return "WARN";
+    }
+
+    // Noisy vite/HMR chatter → DEBUG so it can be filtered out with the level picker.
+    if lower.contains("[vite]") || lower.contains("[hmr]") || lower.contains("hmr update") {
+        return "DEBUG";
+    }
+
+    "INFO"
 }
 
 impl TerminalManager {
@@ -636,5 +689,57 @@ impl TerminalManager {
 impl Default for TerminalManager {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{classify_terminal_line, has_http_error_status};
+
+    #[test]
+    fn error_signals() {
+        assert_eq!(classify_terminal_line("thread 'main' panicked at src/x.rs:1"), "ERROR");
+        assert_eq!(classify_terminal_line("error[E0308]: mismatched types"), "ERROR");
+        assert_eq!(classify_terminal_line("npm ERR! code ELIFECYCLE"), "ERROR");
+        assert_eq!(classify_terminal_line("[ERROR] build failed"), "ERROR");
+        assert_eq!(classify_terminal_line("Error: cannot find module"), "ERROR");
+        assert_eq!(classify_terminal_line("Uncaught TypeError: x is undefined"), "ERROR");
+        assert_eq!(classify_terminal_line("GET /api/users 500 12ms"), "ERROR");
+        assert_eq!(classify_terminal_line("POST /login 404 3ms"), "ERROR");
+        assert_eq!(classify_terminal_line("✘ [ERROR] Build failed"), "ERROR");
+    }
+
+    #[test]
+    fn warn_signals() {
+        assert_eq!(classify_terminal_line("WARN something is off"), "WARN");
+        assert_eq!(classify_terminal_line("warning: unused variable"), "WARN");
+        assert_eq!(classify_terminal_line("[vite] warning: deprecated api"), "WARN");
+        assert_eq!(classify_terminal_line("package is deprecated"), "WARN");
+    }
+
+    #[test]
+    fn leading_level_token() {
+        assert_eq!(classify_terminal_line("DEBUG connecting to db"), "DEBUG");
+        assert_eq!(classify_terminal_line("TRACE entering fn"), "TRACE");
+        assert_eq!(classify_terminal_line("[INFO] listening on 5173"), "INFO");
+    }
+
+    #[test]
+    fn benign_lines_are_info_or_debug() {
+        // "0 errors" no longer trips the ERROR heuristic (it uses precise signals).
+        assert_eq!(classify_terminal_line("Compiled successfully, 0 errors"), "INFO");
+        assert_eq!(classify_terminal_line("Local:   http://localhost:5173/"), "INFO");
+        // Vite/HMR chatter is demoted to DEBUG so it can be filtered out.
+        assert_eq!(classify_terminal_line("[vite] hmr update /src/App.svelte"), "DEBUG");
+    }
+
+    #[test]
+    fn http_status_detection_is_conservative() {
+        assert!(has_http_error_status("GET / 404"));
+        assert!(has_http_error_status("500 internal"));
+        // Ports (4 digits) and durations (not pure digits) must NOT match.
+        assert!(!has_http_error_status("listening on 5173"));
+        assert!(!has_http_error_status("took 450ms"));
+        assert!(!has_http_error_status("200 OK"));
     }
 }

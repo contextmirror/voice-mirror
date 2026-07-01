@@ -40,6 +40,28 @@ describe('output.svelte.js store', () => {
     assert.ok(src.includes('setLevelFilter'));
   });
 
+  it('models level filter per-channel (not a single global)', () => {
+    assert.ok(src.includes('levelFilterByChannel'), 'Should store level filter per channel');
+    // setLevelFilter must take (channel, level)
+    assert.ok(
+      /function setLevelFilter\(channel, level\)/.test(src),
+      'setLevelFilter should accept (channel, level)'
+    );
+  });
+
+  it('exports getLevelFilter and countsByLevel helpers', () => {
+    assert.ok(src.includes('getLevelFilter'), 'Should export getLevelFilter');
+    assert.ok(src.includes('countsByLevel'), 'Should export countsByLevel');
+  });
+
+  it('filters active channel by its own level', () => {
+    // getFilteredEntries reads the per-channel level via getLevelFilter(activeChannel)
+    assert.ok(
+      src.includes('getLevelFilter(activeChannel)'),
+      'getFilteredEntries should use the active channel level'
+    );
+  });
+
   it('exports clearChannel function', () => {
     assert.ok(src.includes('clearChannel'));
   });

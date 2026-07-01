@@ -337,43 +337,73 @@ fn dispatch_message(msg: McpToApp, app_handle: &AppHandle) {
                 }
             });
         }
-        McpToApp::GetLogs { request_id, channel, level, last, search } => {
+        McpToApp::GetLogs { request_id, channel, level, last, search, errors_only, structured } => {
             info!("[PipeServer] GetLogs request: id={}, channel={:?}", request_id, channel);
             let app = app_handle.clone();
             tauri::async_runtime::spawn(async move {
                 use tauri::Manager;
+                use crate::services::output::{format_logs_header, entries_to_structured_json};
+                // Effective minimum level: errors_only wins, else given level, else default info.
+                let min_level = if errors_only.unwrap_or(false) {
+                    "error".to_string()
+                } else {
+                    level.clone().unwrap_or_else(|| "info".to_string())
+                };
+                let structured = structured.unwrap_or(false);
                 let text = if let Some(store) = app.try_state::<std::sync::Arc<crate::services::output::OutputStore>>() {
                     match &channel {
                         Some(ch_str) => {
                             if let Some(ch) = crate::services::output::Channel::from_str(ch_str) {
                                 let (entries, total) = store.query(
                                     ch,
-                                    level.as_deref(),
+                                    Some(min_level.as_str()),
                                     last.or(Some(100)),
                                     search.as_deref(),
                                 );
-                                let lines: Vec<String> = entries.iter().map(|e| e.format_line()).collect();
-                                let count = lines.len();
-                                let mut result = lines.join("\n");
-                                result.push_str(&format!("\n\n--- {} entries (filtered from {} total) ---", count, total));
-                                result
+                                if structured {
+                                    entries_to_structured_json(&entries, ch_str)
+                                } else {
+                                    let (err_c, warn_c, info_c) = store.summary()
+                                        .iter()
+                                        .find(|s| s.channel == ch)
+                                        .map(|s| (s.error, s.warn, s.info))
+                                        .unwrap_or((0, 0, 0));
+                                    let lines: Vec<String> = entries.iter().map(|e| e.format_line()).collect();
+                                    let count = lines.len();
+                                    let mut result = format_logs_header(ch_str, err_c, warn_c, info_c, count, &min_level);
+                                    result.push('\n');
+                                    result.push_str(&lines.join("\n"));
+                                    result.push_str(&format!("\n\n--- {} entries (filtered from {} total) ---", count, total));
+                                    result
+                                }
                             } else {
                                 // Try project channel
                                 let (entries, total) = store.query_project(
                                     ch_str,
-                                    level.as_deref(),
+                                    Some(min_level.as_str()),
                                     last.or(Some(100)),
                                     search.as_deref(),
                                 );
                                 if total > 0 {
-                                    let lines: Vec<String> = entries.iter().map(|e| e.format_line()).collect();
-                                    let count = lines.len();
-                                    let mut result = lines.join("\n");
-                                    result.push_str(&format!(
-                                        "\n\n--- {} entries (filtered from {} total, project channel) ---",
-                                        count, total
-                                    ));
-                                    result
+                                    if structured {
+                                        entries_to_structured_json(&entries, ch_str)
+                                    } else {
+                                        let (err_c, warn_c, info_c) = store.project_summary()
+                                            .iter()
+                                            .find(|s| s.label == *ch_str)
+                                            .map(|s| (s.error, s.warn, s.info))
+                                            .unwrap_or((0, 0, 0));
+                                        let lines: Vec<String> = entries.iter().map(|e| e.format_line()).collect();
+                                        let count = lines.len();
+                                        let mut result = format_logs_header(ch_str, err_c, warn_c, info_c, count, &min_level);
+                                        result.push('\n');
+                                        result.push_str(&lines.join("\n"));
+                                        result.push_str(&format!(
+                                            "\n\n--- {} entries (filtered from {} total, project channel) ---",
+                                            count, total
+                                        ));
+                                        result
+                                    }
                                 } else {
                                     let project_labels: Vec<String> = store.project_summary()
                                         .iter()

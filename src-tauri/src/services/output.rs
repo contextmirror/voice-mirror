@@ -138,6 +138,46 @@ impl LogEntry {
 }
 
 // ---------------------------------------------------------------------------
+// get_logs formatting helpers (shared by pipe + file-fallback paths)
+// ---------------------------------------------------------------------------
+
+/// Build the one-line count-summary header prepended to `get_logs` output.
+///
+/// `showing` is the number of entries actually returned after filtering;
+/// `min_level` is the effective minimum level applied.
+/// e.g. `"[cli] 12 errors, 40 warnings, 210 info (showing last 100 at level≥info)"`.
+pub fn format_logs_header(
+    channel_label: &str,
+    error: usize,
+    warn: usize,
+    info: usize,
+    showing: usize,
+    min_level: &str,
+) -> String {
+    format!(
+        "[{}] {} errors, {} warnings, {} info (showing last {} at level≥{})",
+        channel_label, error, warn, info, showing, min_level
+    )
+}
+
+/// Serialize log entries as a compact JSON array of `{ts, level, channel, msg}`.
+/// Used by the `structured: true` variant of `get_logs`.
+pub fn entries_to_structured_json(entries: &[LogEntry], channel_label: &str) -> String {
+    let arr: Vec<serde_json::Value> = entries
+        .iter()
+        .map(|e| {
+            serde_json::json!({
+                "ts": e.timestamp,
+                "level": e.level,
+                "channel": channel_label,
+                "msg": e.message,
+            })
+        })
+        .collect();
+    serde_json::to_string(&arr).unwrap_or_else(|_| "[]".to_string())
+}
+
+// ---------------------------------------------------------------------------
 // Level priority helper
 // ---------------------------------------------------------------------------
 

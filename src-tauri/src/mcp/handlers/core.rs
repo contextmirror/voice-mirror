@@ -941,6 +941,8 @@ async fn handle_get_logs_via_pipe(
     let level = args.get("level").and_then(|v| v.as_str()).map(String::from);
     let last = args.get("last").and_then(|v| v.as_u64()).map(|n| n as usize);
     let search = args.get("search").and_then(|v| v.as_str()).map(String::from);
+    let errors_only = args.get("errors_only").and_then(|v| v.as_bool());
+    let structured = args.get("structured").and_then(|v| v.as_bool());
 
     // Register waiter BEFORE sending (same pattern as browser/capture tools)
     let rx = router.wait_for_browser_response(&request_id).await;
@@ -951,6 +953,8 @@ async fn handle_get_logs_via_pipe(
         level,
         last,
         search,
+        errors_only,
+        structured,
     };
 
     if let Err(e) = router.send(&msg).await {
@@ -987,6 +991,11 @@ fn handle_get_logs_via_files(args: &Value) -> McpToolResult {
     let level = args.get("level").and_then(|v| v.as_str());
     let last = args.get("last").and_then(|v| v.as_u64()).map(|n| n as usize);
     let search = args.get("search").and_then(|v| v.as_str());
+    let errors_only = args.get("errors_only").and_then(|v| v.as_bool()).unwrap_or(false);
+    let structured = args.get("structured").and_then(|v| v.as_bool()).unwrap_or(false);
+
+    // Effective minimum level: errors_only wins, else the given level, else default info.
+    let min_level = if errors_only { "error" } else { level.unwrap_or("info") };
 
     match channel {
         Some(ch_str) => {
@@ -995,13 +1004,28 @@ fn handle_get_logs_via_files(args: &Value) -> McpToolResult {
                 let (entries, total) = LogFileWriter::read_channel(
                     &logs_dir,
                     ch,
-                    level,
+                    Some(min_level),
                     last.or(Some(100)),
                     search,
                 );
+                if structured {
+                    return McpToolResult::text(
+                        crate::services::output::entries_to_structured_json(&entries, ch_str),
+                    );
+                }
+                // Whole-channel counts for the summary header (via file summary).
+                let (err_c, warn_c, info_c) = LogFileWriter::read_summary(&logs_dir)
+                    .iter()
+                    .find(|s| s.channel == ch)
+                    .map(|s| (s.error, s.warn, s.info))
+                    .unwrap_or((0, 0, 0));
                 let lines: Vec<String> = entries.iter().map(|e| e.format_line()).collect();
                 let count = lines.len();
-                let mut result = lines.join("\n");
+                let mut result = crate::services::output::format_logs_header(
+                    ch_str, err_c, warn_c, info_c, count, min_level,
+                );
+                result.push('\n');
+                result.push_str(&lines.join("\n"));
                 result.push_str(&format!(
                     "\n\n--- {} entries (filtered from {} total, via file fallback) ---",
                     count, total
@@ -1012,15 +1036,37 @@ fn handle_get_logs_via_files(args: &Value) -> McpToolResult {
                 let (entries, total) = LogFileWriter::read_project_channel(
                     &logs_dir,
                     ch_str,
-                    level,
+                    Some(min_level),
                     last.or(Some(100)),
                     search,
                 );
                 if total > 0 {
+                    if structured {
+                        return McpToolResult::text(
+                            crate::services::output::entries_to_structured_json(&entries, ch_str),
+                        );
+                    }
+                    // Count whole project channel from an unfiltered read.
+                    let (all_entries, _) = LogFileWriter::read_project_channel(
+                        &logs_dir, ch_str, None, None, None,
+                    );
+                    let (mut err_c, mut warn_c, mut info_c) = (0usize, 0usize, 0usize);
+                    for e in &all_entries {
+                        match e.level.as_str() {
+                            "ERROR" => err_c += 1,
+                            "WARN" => warn_c += 1,
+                            "INFO" => info_c += 1,
+                            _ => {}
+                        }
+                    }
                     let lines: Vec<String> =
                         entries.iter().map(|e| e.format_line()).collect();
                     let count = lines.len();
-                    let mut result = lines.join("\n");
+                    let mut result = crate::services::output::format_logs_header(
+                        ch_str, err_c, warn_c, info_c, count, min_level,
+                    );
+                    result.push('\n');
+                    result.push_str(&lines.join("\n"));
                     result.push_str(&format!(
                         "\n\n--- {} entries (filtered from {} total, project channel via file fallback) ---",
                         count, total

@@ -70,6 +70,52 @@
     };
   });
 
+  // ---- Output level picker (per-channel minimum level, VS Code style) ----
+  // Ordered most→least severe; each acts as a MINIMUM level.
+  const LEVEL_OPTIONS = [
+    { value: 'error', label: 'Error' },
+    { value: 'warn', label: 'Warning' },
+    { value: 'info', label: 'Info' },
+    { value: 'debug', label: 'Debug' },
+    { value: 'trace', label: 'Trace' },
+  ];
+  let levelDropdownOpen = $state(false);
+
+  function toggleLevelDropdown() {
+    levelDropdownOpen = !levelDropdownOpen;
+  }
+
+  function selectLevel(level) {
+    outputStore.setLevelFilter(outputStore.activeChannel, level);
+    levelDropdownOpen = false;
+  }
+
+  // Trace = show-all is the default; label the trigger accordingly.
+  let activeLevelLabel = $derived(
+    (LEVEL_OPTIONS.find(o => o.value === outputStore.levelFilter) || LEVEL_OPTIONS[4]).label
+  );
+
+  // Close level dropdown on outside click
+  $effect(() => {
+    if (!levelDropdownOpen) return;
+    function handleClick() { levelDropdownOpen = false; }
+    const timer = setTimeout(() => {
+      window.addEventListener('click', handleClick);
+    }, 0);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('click', handleClick);
+    };
+  });
+
+  // Copy all currently-visible (filtered) output lines to the clipboard.
+  function copyVisibleOutput() {
+    const lines = outputStore.filteredEntries.map(e =>
+      `${formatLogTime(e.timestamp)} [${e.level}] ${e.message}`
+    );
+    navigator.clipboard.writeText(lines.join('\n')).catch(() => {});
+  }
+
 
   // ---- Terminal action registration ----
   let termActions = {};
@@ -613,6 +659,44 @@
           {/if}
         </div>
 
+        <!-- Level picker dropdown (per-channel minimum level) -->
+        <div class="channel-dropdown-wrapper">
+          <button
+            class="channel-dropdown-trigger"
+            onclick={(e) => { e.stopPropagation(); toggleLevelDropdown(); }}
+            title="Minimum log level for this channel"
+          >
+            <span>{activeLevelLabel}</span>
+            <svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.5">
+              <polyline points="3 4.5 6 7.5 9 4.5"/>
+            </svg>
+          </button>
+          {#if levelDropdownOpen}
+            {@const counts = outputStore.countsByLevel(outputStore.activeChannel)}
+            <div class="channel-dropdown-menu">
+              <!-- Errors-only shortcut (sets minimum level to Error) -->
+              <button
+                class="channel-dropdown-item"
+                onclick={(e) => { e.stopPropagation(); selectLevel('error'); }}
+              >
+                Errors only
+                <span class="level-count">{counts.error}</span>
+              </button>
+              <div class="channel-divider"></div>
+              {#each LEVEL_OPTIONS as opt}
+                <button
+                  class="channel-dropdown-item"
+                  class:active={outputStore.levelFilter === opt.value}
+                  onclick={(e) => { e.stopPropagation(); selectLevel(opt.value); }}
+                >
+                  {opt.label}
+                  <span class="level-count">{counts[opt.value]}</span>
+                </button>
+              {/each}
+            </div>
+          {/if}
+        </div>
+
         <!-- Toolbar icon group (VS Code style) -->
         <div class="toolbar-actions">
           <!-- Word wrap toggle -->
@@ -645,6 +729,14 @@
                 <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
               </svg>
             {/if}
+          </button>
+
+          <!-- Copy visible output -->
+          <button class="toolbar-btn" onclick={() => copyVisibleOutput()} title="Copy visible output">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+            </svg>
           </button>
 
           <!-- Clear output -->
@@ -1415,6 +1507,14 @@
     background: var(--muted);
     margin: 4px 8px;
     opacity: 0.3;
+  }
+
+  .level-count {
+    margin-left: 8px;
+    font-size: 11px;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
   }
 
   .error-badge {

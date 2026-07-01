@@ -65,6 +65,12 @@ pub enum McpToApp {
         last: Option<usize>,
         #[serde(skip_serializing_if = "Option::is_none")]
         search: Option<String>,
+        /// Sugar for `level = "error"` (overrides `level` when true).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        errors_only: Option<bool>,
+        /// Return a JSON array of `{ts, level, channel, msg}` instead of text.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        structured: Option<bool>,
     },
 }
 

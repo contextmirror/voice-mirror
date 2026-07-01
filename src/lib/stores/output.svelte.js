@@ -41,7 +41,12 @@ let projectChannelEntries = $state({});
 let projectChannelList = $state([]);
 
 let activeChannel = $state('app');
-let levelFilter = $state('trace'); // show all levels (MCP can still filter)
+/**
+ * Per-channel minimum level filter (VS Code stores log level per channel).
+ * channel label -> level string (ERROR/WARN/INFO/DEBUG/TRACE, case-insensitive).
+ * Missing entry means 'trace' (show all).
+ */
+let levelFilterByChannel = $state({});
 let autoScroll = $state(true);
 let filterText = $state('');
 let wordWrap = $state(true);
@@ -53,10 +58,15 @@ function levelPriority(level) {
   return map[level?.toUpperCase()] || 0;
 }
 
+/** Get the minimum level filter for a channel (defaults to 'trace' = show all) */
+function getLevelFilter(channel) {
+  return levelFilterByChannel[channel] || 'trace';
+}
+
 /** Get filtered entries for the active channel */
 function getFilteredEntries() {
   const channelEntries = entries[activeChannel] || projectChannelEntries[activeChannel] || [];
-  const minPriority = levelPriority(levelFilter);
+  const minPriority = levelPriority(getLevelFilter(activeChannel));
   let filtered = channelEntries.filter(e => levelPriority(e.level) >= minPriority);
 
   // Apply text filter (supports !exclude and comma-separated patterns)
@@ -128,15 +138,20 @@ async function startListening() {
     const { level, message } = event.payload;
     if (!level || !message) return;
 
+    // Normalize so console.warn/console.error reliably map to WARN/ERROR and are
+    // honored by the per-channel level filter (levelPriority is case-insensitive,
+    // but store the canonical uppercase level for consistency + counts).
+    const normLevel = String(level).toUpperCase();
+
     // Route to the active project channel (first one, or based on current project)
     const activeProject = projectChannelList[0]; // TODO: route based on URL/port
     if (activeProject) {
       const entry = {
         id: Date.now() + Math.random(),
         timestamp: Date.now(),
-        level,
+        level: normLevel,
         channel: 'app',
-        message: `[console${level !== 'INFO' ? ':' + level.toLowerCase() : ''}] ${message}`,
+        message: `[console${normLevel !== 'INFO' ? ':' + normLevel.toLowerCase() : ''}] ${message}`,
       };
 
       if (!projectChannelEntries[activeProject.label]) {
@@ -177,9 +192,23 @@ function switchChannel(ch) {
   }
 }
 
-/** Set minimum log level filter */
-function setLevelFilter(level) {
-  levelFilter = level;
+/** Set minimum log level filter for a specific channel (VS Code stores this per channel) */
+function setLevelFilter(channel, level) {
+  levelFilterByChannel = { ...levelFilterByChannel, [channel]: level };
+}
+
+/**
+ * Count entries by level for a channel: { error, warn, info, debug, trace }.
+ * Used to show per-level badges in the level picker.
+ */
+function countsByLevel(channel) {
+  const channelEntries = entries[channel] || projectChannelEntries[channel] || [];
+  const counts = { error: 0, warn: 0, info: 0, debug: 0, trace: 0 };
+  for (const e of channelEntries) {
+    const key = e.level?.toLowerCase();
+    if (key && counts[key] !== undefined) counts[key]++;
+  }
+  return counts;
 }
 
 /** Clear the display for the active channel (frontend only) */
@@ -219,7 +248,8 @@ async function unregisterProjectChannel(label) {
 export const outputStore = {
   get entries() { return entries; },
   get activeChannel() { return activeChannel; },
-  get levelFilter() { return levelFilter; },
+  /** Minimum level filter for the currently-active channel (per-channel model). */
+  get levelFilter() { return getLevelFilter(activeChannel); },
   get autoScroll() { return autoScroll; },
   get filterText() { return filterText; },
   get wordWrap() { return wordWrap; },
@@ -236,6 +266,8 @@ export const outputStore = {
   },
   switchChannel,
   setLevelFilter,
+  getLevelFilter,
+  countsByLevel,
   clearChannel,
   setAutoScroll,
   setFilterText,

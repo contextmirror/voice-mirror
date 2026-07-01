@@ -540,6 +540,10 @@ fn build_all_groups() -> HashMap<String, ToolGroupDef> {
                                 "enum": ["error", "warn", "info", "debug", "trace"],
                                 "description": "Minimum log level to include (default: info)"
                             },
+                            "errors_only": {
+                                "type": "boolean",
+                                "description": "Shortcut for level=error -- return only error entries. Overrides `level` when true."
+                            },
                             "last": {
                                 "type": "number",
                                 "description": "Return the last N entries (default: 100)"
@@ -547,6 +551,10 @@ fn build_all_groups() -> HashMap<String, ToolGroupDef> {
                             "search": {
                                 "type": "string",
                                 "description": "Case-insensitive text filter on log messages"
+                            },
+                            "structured": {
+                                "type": "boolean",
+                                "description": "Return a JSON array of {ts, level, channel, msg} objects instead of preformatted text (channel queries only)."
                             }
                         }
                     }),
