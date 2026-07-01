@@ -95,17 +95,6 @@ fn get_lens_webview(
         .ok_or_else(|| IpcResponse::err("Lens webview not found"))
 }
 
-/// Get the current active tab ID (cloned out of the lock).
-fn get_active_tab_id(
-    state: &tauri::State<'_, LensState>,
-) -> Result<Option<String>, String> {
-    state
-        .active_tab_id
-        .lock()
-        .map(|g| g.clone())
-        .map_err(|e| format!("Lock error: {}", e))
-}
-
 // ── Re-exports ───────────────────────────────────────────────────────────────
 // All pub commands are re-exported so `lib.rs` can use `lens_cmds::lens_*`.
 

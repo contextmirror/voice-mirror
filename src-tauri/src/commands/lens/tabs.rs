@@ -1,8 +1,25 @@
 use tauri::{AppHandle, Emitter, Manager, Position, Size, LogicalPosition, LogicalSize};
 use tracing::info;
 use super::super::IpcResponse;
-use super::{LensState, BrowserTab, get_active_tab_id};
+use super::{LensState, BrowserTab};
 use super::webview_setup::{create_tab_webview, MAX_TABS};
+
+/// Park a webview off-screen and hide it so it cannot paint over the DOM.
+///
+/// Lens tab webviews are native child WebView2 windows layered *above* the DOM;
+/// they ignore CSS visibility, and `webview.hide()` alone can leave a ghost
+/// rectangle that covers whatever is behind it (notably the bottom terminal
+/// panel — the black-void regression). Moving the webview to (-9999, -9999) with
+/// size 0 guarantees it cannot cover any UI even if `hide()` is a no-op for the
+/// platform webview. This mirrors the off-screen trick the frontend uses in
+/// `syncBounds` for CSS-hidden containers.
+fn park_webview_offscreen(app: &AppHandle, label: &str) {
+    if let Some(webview) = app.get_webview(label) {
+        let _ = webview.set_position(Position::Logical(LogicalPosition::new(-9999.0, -9999.0)));
+        let _ = webview.set_size(Size::Logical(LogicalSize::new(0.0, 0.0)));
+        let _ = webview.hide();
+    }
+}
 
 #[tauri::command]
 pub async fn lens_create_tab(
@@ -26,17 +43,14 @@ pub async fn lens_create_tab(
         }
     }
 
-    // Hide the currently active tab's webview (don't close it)
+    // Park every existing tab's webview off-screen so none can paint over the
+    // DOM (e.g. the bottom terminal panel) once the new tab becomes active.
+    // Enforces the invariant: only the active tab's webview is ever on-screen.
     {
-        let active_id = get_active_tab_id(&state)?;
-        if let Some(ref aid) = active_id {
-            let tabs = state.tabs.lock()
-                .map_err(|e| format!("Lock error: {}", e))?;
-            if let Some(tab) = tabs.get(aid) {
-                if let Some(webview) = app.get_webview(&tab.webview_label) {
-                    let _ = webview.hide();
-                }
-            }
+        let tabs = state.tabs.lock()
+            .map_err(|e| format!("Lock error: {}", e))?;
+        for tab in tabs.values() {
+            park_webview_offscreen(&app, &tab.webview_label);
         }
     }
 
@@ -126,30 +140,25 @@ pub fn switch_tab_impl(
 ) -> Result<(), String> {
     info!("[lens] Switching to tab {}", tab_id);
 
-    // Get old active and verify new tab exists
-    let (old_label, new_label) = {
+    // Verify the target tab exists and collect every tab's webview label.
+    let (all_labels, new_label) = {
         let tabs = state.tabs.lock()
             .map_err(|e| format!("Lock error: {}", e))?;
-        let new_tab = tabs.get(tab_id)
-            .ok_or_else(|| format!("Tab {} not found", tab_id))?;
-        let new_label = new_tab.webview_label.clone();
-
-        let active_id = state.active_tab_id.lock()
-            .map(|g| g.clone())
-            .unwrap_or(None);
-        let old_label = active_id.and_then(|aid| {
-            tabs.get(&aid).map(|t| t.webview_label.clone())
-        });
-
-        (old_label, new_label)
+        let new_label = tabs.get(tab_id)
+            .ok_or_else(|| format!("Tab {} not found", tab_id))?
+            .webview_label.clone();
+        let all_labels: Vec<String> = tabs.values().map(|t| t.webview_label.clone()).collect();
+        (all_labels, new_label)
     };
 
-    // Hide old active webview
-    if let Some(ref old_lbl) = old_label {
-        if *old_lbl != new_label {
-            if let Some(webview) = app.get_webview(old_lbl) {
-                let _ = webview.hide();
-            }
+    // Park every non-active tab's webview off-screen + hidden. Native child
+    // WebView2 windows ignore CSS visibility, so an inactive tab left at real
+    // bounds would cover the DOM behind it (the bottom terminal panel). Parking
+    // ALL other tabs (not just the previously-active one) makes the invariant
+    // "exactly one visible Lens webview" hold regardless of prior state.
+    for label in &all_labels {
+        if *label != new_label {
+            park_webview_offscreen(app, label);
         }
     }
 

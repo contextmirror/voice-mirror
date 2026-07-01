@@ -37,7 +37,9 @@
   export function createNewTab(url = 'about:blank') {
     const bounds = getAbsoluteBounds();
     if (bounds && bounds.width > 0 && bounds.height > 0) {
-      browserTabsStore.openTab(url, bounds);
+      // Re-clamp the newly-active webview to the current browser-pane rect so a
+      // tab created mid-layout can never keep bounds that span the bottom panel.
+      browserTabsStore.openTab(url, bounds).then(() => syncBounds());
     }
   }
 
@@ -370,7 +372,7 @@
       if (url) {
         const bounds = getAbsoluteBounds();
         if (bounds && bounds.width > 0 && bounds.height > 0) {
-          browserTabsStore.openTab(url, bounds);
+          browserTabsStore.openTab(url, bounds).then(() => syncBounds());
         }
       }
     });
@@ -391,7 +393,8 @@
       if (!uri || uri === 'about:blank') return;
       const bounds = getAbsoluteBounds();
       if (bounds && bounds.width > 0 && bounds.height > 0) {
-        browserTabsStore.openTab(uri, bounds);
+        // Re-clamp popup tab to the browser pane so it can't cover the panel.
+        browserTabsStore.openTab(uri, bounds).then(() => syncBounds());
       }
     });
 
