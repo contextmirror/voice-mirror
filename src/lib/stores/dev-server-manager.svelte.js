@@ -270,6 +270,32 @@ function createDevServerManager() {
       : null;
     if (cdpPort) updateState(projectPath, { cdpPort });
 
+    // Free the target port(s) before launching — the fix for the recurring
+    // "Port X already in use" restart failure. taskkill /T of the tracked shell only
+    // cleans up processes VM still knows about; when VM crashed/hung last time,
+    // kill_all never ran and an orphaned vite (+ Tauri app.exe) keeps the port bound.
+    // The servers Map is empty on the next launch, so without this we'd spawn straight
+    // into a held port → `npm run dev` dies → the preview stays empty and the user has
+    // to hunt down and kill processes by hand. killPortProcess (netstat→PID→taskkill
+    // /F) makes every launch self-healing regardless of what VM tracked.
+    try {
+      const probe = await probePort(server.port);
+      if (probe?.data?.listening) {
+        console.info(`[dev-server] freeing held dev port ${server.port} before launch`);
+        await killPortProcess(server.port);
+      }
+      // A Tauri app.exe binds the CDP debug port; free it too so the new app can bind
+      // it (else the live preview's CDP attach fails against a stale instance).
+      if (cdpPort) {
+        const cdpProbe = await probePort(cdpPort);
+        if (cdpProbe?.data?.listening) await killPortProcess(cdpPort);
+      }
+      // Let the OS release the sockets before the new process tries to bind.
+      await new Promise((r) => setTimeout(r, 350));
+    } catch (e) {
+      console.warn('[dev-server] pre-launch port free failed (continuing):', e);
+    }
+
     // Spawn PTY
     try {
       const result = await terminalSpawn({ cwd: projectPath, outputChannel: channelLabel, env: spawnEnv });
