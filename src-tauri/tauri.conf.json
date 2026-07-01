@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicobao/tauri/refs/tags/tauri-v2.0.0/crates/tauri-utils/schema.json",
   "productName": "Voice Mirror",
-  "version": "0.12.15",
+  "version": "0.12.16",
   "identifier": "com.voicemirror.app",
   "build": {
     "beforeDevCommand": "npx vite dev",

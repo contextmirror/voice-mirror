@@ -435,6 +435,124 @@ pub(super) fn register_custom_scheme_handler(app: &AppHandle, webview: &tauri::W
     });
 }
 
+/// Register a `NewWindowRequested` handler on a child WebView2 so that
+/// `window.open()` popups (e.g. an OAuth "Continue with Google" flow) open as a
+/// new Lens browser tab instead of being silently dropped.
+///
+/// The Lens tab webview is hosted directly inside the main window (it is not a
+/// standalone browser window), so WebView2 has no surface to place a popup and
+/// drops the request — the originating button appears to do nothing. We
+/// intercept the event, mark it handled (so WebView2 doesn't try to open its
+/// own window), extract the target URI, and emit a `lens-new-window` Tauri event
+/// that the frontend turns into a new tab.
+pub(super) fn register_new_window_handler(app: &AppHandle, webview: &tauri::Webview) {
+    let app_handle = app.clone();
+    let _ = webview.with_webview(move |platform_webview| {
+        #[cfg(windows)]
+        {
+            use webview2_com::{NewWindowRequestedEventHandler, take_pwstr};
+
+            unsafe {
+                let controller = platform_webview.controller();
+                let core_webview = match controller.CoreWebView2() {
+                    Ok(wv) => wv,
+                    Err(e) => {
+                        warn!("[lens] Failed to get CoreWebView2 for new-window handler: {:?}", e);
+                        return;
+                    }
+                };
+
+                let app_for_events = app_handle.clone();
+                let handler = NewWindowRequestedEventHandler::create(Box::new(
+                    move |_sender, args| {
+                        let args = match args {
+                            Some(a) => a,
+                            None => return Ok(()),
+                        };
+
+                        // Prevent WebView2 from trying to open its own popup window.
+                        args.SetHandled(true)?;
+
+                        // Extract the requested URI (owned PWSTR — free via take_pwstr).
+                        let mut uri_pwstr = windows_core::PWSTR::null();
+                        args.Uri(&mut uri_pwstr)?;
+                        let uri = take_pwstr(uri_pwstr);
+
+                        if !uri.is_empty() {
+                            info!("[lens] NewWindowRequested -> opening as tab: {}", uri);
+                            let _ = app_for_events.emit(
+                                "lens-new-window",
+                                serde_json::json!({ "uri": uri }),
+                            );
+                        }
+
+                        Ok(())
+                    },
+                ));
+
+                let mut token: i64 = 0;
+                if let Err(e) = core_webview.add_NewWindowRequested(&handler, &mut token) {
+                    warn!("[lens] Failed to register NewWindowRequested handler: {:?}", e);
+                } else {
+                    info!("[lens] NewWindowRequested handler registered (token={})", token);
+                }
+            }
+        }
+    });
+}
+
+/// Override the child WebView2's user-agent with a current desktop-Chrome UA so
+/// identity providers (notably Google, which 403s embedded webviews) don't
+/// reject OAuth flows.
+///
+/// Uses `ICoreWebView2Settings2::put_UserAgent` (`SetUserAgent`), which applies
+/// to subsequent navigations. `ICoreWebView2Settings2` ships with every modern
+/// WebView2 runtime (Edge 85+); if the cast fails on an unexpectedly old runtime
+/// we log a warning and leave the default UA in place rather than failing.
+fn set_desktop_user_agent(webview: &tauri::Webview) {
+    const DESKTOP_CHROME_UA: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+    let _ = webview.with_webview(|platform_webview| {
+        #[cfg(windows)]
+        {
+            use webview2_com::Microsoft::Web::WebView2::Win32::*;
+            use windows_core::{HSTRING, Interface};
+
+            unsafe {
+                let controller = platform_webview.controller();
+                let core_webview = match controller.CoreWebView2() {
+                    Ok(wv) => wv,
+                    Err(e) => {
+                        warn!("[lens] Failed to get CoreWebView2 for user-agent override: {:?}", e);
+                        return;
+                    }
+                };
+
+                let settings = match core_webview.Settings() {
+                    Ok(s) => s,
+                    Err(e) => {
+                        warn!("[lens] Failed to get WebView2 settings: {:?}", e);
+                        return;
+                    }
+                };
+
+                let settings2: ICoreWebView2Settings2 = match settings.cast() {
+                    Ok(s) => s,
+                    Err(e) => {
+                        warn!("[lens] ICoreWebView2Settings2 unavailable — keeping default UA: {:?}", e);
+                        return;
+                    }
+                };
+
+                if let Err(e) = settings2.SetUserAgent(&HSTRING::from(DESKTOP_CHROME_UA)) {
+                    warn!("[lens] Failed to set desktop user agent: {:?}", e);
+                } else {
+                    info!("[lens] Desktop-Chrome user agent applied to child webview");
+                }
+            }
+        }
+    });
+}
+
 /// Hook the WebView2 `DownloadStarting` event so file downloads are tracked
 /// and progress is emitted to the frontend.  Called once per newly-created
 /// child webview.
@@ -760,6 +878,8 @@ pub(super) async fn create_tab_webview(
                 info!("[lens] Webview created successfully: {} (tab {})", label_clone, tab_id_clone);
                 register_custom_scheme_handler(&app_for_download, &webview_ref);
                 register_download_handler(&app_for_download, &webview_ref, downloads);
+                register_new_window_handler(&app_for_download, &webview_ref);
+                set_desktop_user_agent(&webview_ref);
                 Ok(label_clone)
             }
             Err(e) => {

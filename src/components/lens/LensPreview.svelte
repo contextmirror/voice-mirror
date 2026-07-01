@@ -16,6 +16,7 @@
   let unlistenOpenTab = null;
   let unlistenTitle = null;
   let unlistenFocusTab = null;
+  let unlistenNewWindow = null;
   let setupDone = false;
   const LOADING_TIMEOUT_MS = 15000;
   let loadingTimer = null;
@@ -383,6 +384,17 @@
       }
     });
 
+    // Listen for window.open()/OAuth popups from child WebView2 instances —
+    // the Rust NewWindowRequested handler emits these so we can open them as tabs.
+    unlistenNewWindow = await listen('lens-new-window', (event) => {
+      const uri = event.payload?.uri;
+      if (!uri || uri === 'about:blank') return;
+      const bounds = getAbsoluteBounds();
+      if (bounds && bounds.width > 0 && bounds.height > 0) {
+        browserTabsStore.openTab(uri, bounds);
+      }
+    });
+
     // Listen for MCP-initiated tab switches (browser_action tab_switch)
     unlistenFocusTab = await listen('lens-focus-tab', (event) => {
       const tabId = event.payload?.tabId;
@@ -437,6 +449,10 @@
     if (unlistenFocusTab) {
       unlistenFocusTab();
       unlistenFocusTab = null;
+    }
+    if (unlistenNewWindow) {
+      unlistenNewWindow();
+      unlistenNewWindow = null;
     }
     lensCloseAllTabs().catch(() => {});
     browserTabsStore.clearAll();

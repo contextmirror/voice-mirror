@@ -129,6 +129,24 @@ describe('LensPreview.svelte: page title tracking', () => {
   });
 });
 
+describe('LensPreview.svelte: window.open()/OAuth popups', () => {
+  it('listens for lens-new-window events', () => {
+    assert.ok(src.includes('lens-new-window'), 'Should listen for lens-new-window event');
+  });
+
+  it('opens the popup URI as a new browser tab', () => {
+    const idx = src.indexOf("listen('lens-new-window'");
+    assert.ok(idx !== -1, 'Should register a lens-new-window listener');
+    const fn = src.slice(idx, idx + 400);
+    assert.ok(fn.includes('browserTabsStore.openTab'), 'Should open popup URI as a tab');
+    assert.ok(fn.includes('about:blank'), 'Should guard against about:blank/empty URIs');
+  });
+
+  it('cleans up the new-window listener on destroy', () => {
+    assert.ok(src.includes('unlistenNewWindow'), 'Should have unlistenNewWindow cleanup');
+  });
+});
+
 describe('LensPreview.svelte: dev server detection', () => {
   it('imports detectDevServers', () => {
     assert.ok(src.includes('detectDevServers'), 'Should import detectDevServers');
