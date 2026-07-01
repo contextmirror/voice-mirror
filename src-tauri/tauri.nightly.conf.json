@@ -1,0 +1,10 @@
+{
+  "$schema": "https://raw.githubusercontent.com/nicobao/tauri/refs/tags/tauri-v2.0.0/crates/tauri-utils/schema.json",
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/contextmirror/voice-mirror/releases/download/nightly/latest.json"
+      ]
+    }
+  }
+}
